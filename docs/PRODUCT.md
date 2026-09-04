@@ -142,11 +142,13 @@ Os motivos são concretos:
 
 ### Stack
 
-**C# com .NET 10 (LTS), WPF para toda a UI, WinForms apenas para o `NotifyIcon` da bandeja.**
+**C# com .NET 10 (LTS), WPF puro. Sem WinForms.**
 
 Versão fixa em vez de "8 ou superior": alvo flutuante faz o CI divergir da máquina de desenvolvimento, e sempre no pior momento.
 
-WinForms entra por um motivo só — o WPF não tem API de ícone de bandeja. Overlay é WPF com `WS_EX_NOACTIVATE`. Carregar dois stacks de renderização por conveniência custa tempo de startup, que é exatamente o que este produto não pode pagar.
+O WPF não tem API de ícone de bandeja, e o caminho óbvio seria trazer o WinForms só pelo `NotifyIcon`. **Medimos o preço disso e ele é alto demais para um wrapper.** Ter os dois stacks no mesmo projeto torna ambíguos quase todos os nomes de UI — `Application`, `TextBox`, `ListBox`, `Orientation`, `Color`, `Brushes` — e exige uma lista de aliases em *todo* arquivo que toca interface, o que incluiria os doze módulos. Custa ainda uma assembly a mais no startup.
+
+A bandeja é chamada direto: `Shell_NotifyIcon` pelo CsWin32. O spike de latência confirmou que o CsWin32 acerta as assinaturas sem ajuste manual, que era o risco que justificava o wrapper.
 
 Justificativa por critério:
 
@@ -609,7 +611,7 @@ Clips, Freeze (com OCR), Shelf, Mic, Links, Kill, Timer. Ordem por interesse.
 | 9 | Zero telemetria e zero rede | É a resposta pra "por que eu confiaria isso com meu clipboard?" |
 | 10 | Sem token de warning | Três cores semânticas bastam num app deste tamanho |
 | 11 | .NET 10 fixo, não "8 ou superior" | Alvo flutuante faz o CI divergir da máquina de dev |
-| 12 | WinForms só para o `NotifyIcon` | WPF não tem tray icon; dois stacks de render custam startup |
+| 12 | WPF puro, sem WinForms — bandeja por `Shell_NotifyIcon` | O wrapper `NotifyIcon` custaria aliases de desambiguação em todo arquivo de UI, inclusive nos doze módulos. Medido no spike. |
 | 13 | Zip self-contained + winget framework-dependent | Mantém o portable e o argumento de peso, cada um no canal certo |
 | 14 | `Moductus.Core` referencia WPF assumidamente | É base de app Windows, não lib portável; abstração declarativa quebraria no primeiro módulo incomum |
 | 15 | `Enable` separado de `Invoke` | Startup não pode construir a UI de todo módulo ativo |
@@ -642,7 +644,7 @@ Clips, Freeze (com OCR), Shelf, Mic, Links, Kill, Timer. Ordem por interesse.
 Colar no topo de todo prompt de módulo novo. Isso é o que mantém o vibecode dentro do sistema.
 
 ```
-Contexto: projeto Moductus, C# .NET 10, WPF, processo único, WinForms para overlay.
+Contexto: projeto Moductus, C# .NET 10, WPF puro, processo único. Sem WinForms.
 Usar CsWin32 para todo P/Invoke — cite a API do Windows pelo nome exato.
 
 Regras obrigatórias:

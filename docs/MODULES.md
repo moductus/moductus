@@ -70,7 +70,7 @@ Cole no topo de todo prompt de módulo novo. É isso que mantém o código gerad
 
 ```
 Contexto: projeto Moductus, C# .NET 10, WPF, processo único.
-WinForms apenas para o NotifyIcon da bandeja.
+WPF puro — não use WinForms, nem para o ícone de bandeja.
 Usar CsWin32 para todo P/Invoke — cite a API do Windows pelo nome exato.
 
 Regras obrigatórias:

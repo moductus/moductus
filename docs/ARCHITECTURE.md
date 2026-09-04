@@ -342,12 +342,22 @@ As APIs principais por área:
 | Hotkeys | `RegisterHotKey`, `UnregisterHotKey` |
 | Foco | `GetForegroundWindow`, `SetForegroundWindow`, `IsWindow` |
 | Estilo de janela | `GetWindowLong`, `SetWindowLong` (`WS_EX_NOACTIVATE`) |
-| Bandeja | `Shell_NotifyIcon` via `NotifyIcon` do WinForms |
+| Bandeja | `Shell_NotifyIcon`, `RegisterWindowMessage` |
 | Tema | `DwmSetWindowAttribute` (Mica e Acrylic) |
 | Captura | `BitBlt` |
 | Acessibilidade | `SystemParametersInfo` |
 
-WinForms entra **apenas** pelo `NotifyIcon`, porque o WPF não tem API de ícone de bandeja. Todo o resto é WPF. Carregar dois stacks de renderização por conveniência custaria startup, que é o que o produto não pode pagar.
+### A bandeja é chamada direto, sem WinForms
+
+O WPF não tem API de ícone de bandeja, e o caminho fácil seria trazer o `NotifyIcon` do WinForms só para isso. O spike mediu o preço e ele não compensa: com os dois stacks no mesmo projeto, quase todo nome de UI fica ambíguo — `Application`, `TextBox`, `ListBox`, `Orientation`, `Color`, `Brushes` — e cada arquivo que toca interface precisa de uma lista de aliases. Isso incluiria os doze módulos, para sempre.
+
+Então `Shell_NotifyIcon` é chamado direto pelo CsWin32, e a janela oculta da seção 5.2 recebe o callback. **Isso não é de graça**, e o wrapper do WinForms escondia exatamente duas coisas que agora são responsabilidade nossa:
+
+**O Explorer reinicia e leva o ícone junto.** Quando isso acontece, o Windows transmite a mensagem registrada `TaskbarCreated`, e cabe ao app re-adicionar o ícone. Sem tratar isso, o Moductus continua rodando com a única superfície permanente do produto invisível — e o usuário conclui que ele morreu. É o bug clássico desta API e ele só aparece em máquina real, meses depois.
+
+**Menu de contexto exige a dança do foreground.** Antes de exibir o menu é preciso chamar `SetForegroundWindow` na janela dona; sem isso o menu não fecha ao clicar fora e fica preso na tela. O menu em si pode ser um `ContextMenu` do WPF posicionado no cursor, o que mantém o visual dentro dos tokens em vez de usar o menu nativo do Win32.
+
+Em compensação, a geração do ícone fica mais simples, não mais complexa: o Timer e o Mic já exigem desenhar bitmap próprio no tamanho que a bandeja pedir (16, 20, 24 ou 32px conforme o scaling), então o wrapper não estava poupando esse trabalho de qualquer forma.
 
 ---
 
@@ -367,6 +377,42 @@ Orçamentos, do documento de produto:
 | Hover e press | 80ms |
 
 O de 140ms é o que define o produto. **Aparecer sem animação é preferível a aparecer bonito e atrasado** — se a estética custar o orçamento, a estética cede.
+
+### Medições
+
+Os números acima deixaram de ser premissa. Um spike descartável mediu o caminho real: WPF em .NET 10, build Release, framework-dependent, janela representativa com input de 36px e lista de 50 linhas.
+
+| O que | Medido | Orçamento | |
+|---|---|---|---|
+| Processo até ícone de bandeja | **193–208 ms** | 300 ms | dentro |
+| Idem, primeira execução após instalar | **~808 ms** | 300 ms | estourou |
+| Processo frio até pixels da primeira janela | **680–686 ms** | 440 ms | estourou |
+| Janela nova, processo já quente | **4,4 ms** | 140 ms | dentro |
+| Janela reutilizada, processo já quente | **8,1 ms** | 140 ms | dentro |
+
+Três leituras, e a segunda é a que justifica metade deste documento.
+
+**O orçamento de startup se sustenta, menos na primeira vez.** Em execução normal o ícone aparece em torno de 195ms, com o runtime .NET custando ~90ms e o WPF mais ~70ms. Na primeiríssima execução depois de instalar, com cache de disco frio, isso vai a ~808ms. Não é corrigível por código, e é exatamente o momento em que a pessoa está formando a primeira impressão.
+
+**A primeira janela de um processo custa ~490 ms.** É a diferença entre os 685ms até os pixels e os 195ms até a bandeja. Sozinha, ela estouraria o orçamento de invocação em 3,5 vezes.
+
+**Depois que o WPF está de pé, o custo desaba para menos de 10 ms** — cerca de 20 vezes abaixo do orçamento.
+
+### O que isso corrige no desenho
+
+O pré-aquecimento estava certo, mas a razão registrada estava imprecisa. **O custo de ~490ms é do framework WPF subindo, não da construção de cada janela.** Depois que a primeira janela renderiza, uma janela *nova* custa 4,4ms — praticamente o mesmo que reutilizar uma existente.
+
+Duas consequências:
+
+**Uma janela pré-aquecida já paga por todas.** Não é preciso exibir e esconder os quatro arquétipos para ganhar a latência; o primeiro deles paga o custo do framework e os outros três ficam em alguns milissegundos. Manter os quatro como singletons continua valendo pelo estado e pela simplicidade, mas não é mais um requisito de performance.
+
+**Reutilizar não é mais rápido que criar.** A diferença medida entre 8,1ms e 4,4ms está dentro da resolução da métrica — o proxy usado é ligado ao tick de frame do WPF, que tem granularidade de ~16ms — então não dá para concluir que uma seja melhor que a outra. O que dá para afirmar é que **as duas cabem no orçamento com folga de uma ordem de grandeza**, e que a escolha entre elas pode ser feita por clareza de código em vez de por velocidade.
+
+### O que o spike validou de interop
+
+- `RegisterHotKey` via CsWin32 funcionou sem ajuste manual de assinatura
+- **Detecção de conflito funciona**: registrar a mesma combinação duas vezes é recusado pelo Windows, que é a base do registro central da seção 5.3
+- `WS_EX_NOACTIVATE` preservou o foco — a janela apareceu sem tirar o foreground de quem o tinha
 
 ---
 
