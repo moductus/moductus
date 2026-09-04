@@ -79,9 +79,18 @@ O Moductus não é assinado digitalmente. Um certificado de code signing custa e
 
 O que dá para fazer sem dinheiro, e está sendo feito: todo binário é construído pelo GitHub Actions com [attestation](https://docs.github.com/actions/security-guides/using-artifact-attestations), o que permite a qualquer pessoa verificar que o arquivo publicado veio exatamente daquele commit deste repositório.
 
+## Documentação
+
+| Documento | O que responde |
+|---|---|
+| [docs/PRODUCT.md](docs/PRODUCT.md) | O que o produto é, por que existe, e as 20 decisões registradas |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Como funciona por dentro — ciclo de vida, tecla líder, foco, latência |
+| [docs/MODULES.md](docs/MODULES.md) | Como escrever um módulo |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Regras não negociáveis de PR |
+
 ## Contribuindo
 
-Propostas de módulo vão como issue antes do código, usando o [template](.github/ISSUE_TEMPLATE/module.yml). As regras de contribuição são curtas e não negociáveis — leia o [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir um PR, e o [docs/MODULES.md](docs/MODULES.md) antes de escrever um módulo.
+Propostas de módulo vão como issue antes do código, usando o [template](.github/ISSUE_TEMPLATE/module.yml). As regras são curtas e não negociáveis — leia o [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir um PR, e o [docs/MODULES.md](docs/MODULES.md) antes de escrever um módulo.
 
 ## Licença
 
