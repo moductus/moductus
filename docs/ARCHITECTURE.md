@@ -2,7 +2,7 @@
 
 > Documento de arquitetura. O que o produto é e por que existe está em [PRODUCT.md](PRODUCT.md); aqui está **como ele funciona por dentro**.
 >
-> **Status:** pré-código. Este documento descreve o desenho pretendido, não o que já está implementado.
+> **Status:** fase 1 em andamento. As seções 5.3 (registro de hotkeys) e 5.7 (configuração) estão implementadas e testadas; o restante descreve o desenho pretendido, não o que existe.
 
 ## Sumário
 

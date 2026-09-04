@@ -5,11 +5,11 @@
 Suíte de utilitários para Windows, open source, em processo único, acionada por teclado.
 
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-FFB224)](LICENSE)
-[![Status: pré-código](https://img.shields.io/badge/status-pr%C3%A9--c%C3%B3digo-6B717A)](docs/PRODUCT.md#9-roadmap)
+[![Status: fase 1](https://img.shields.io/badge/status-fase%201%20%C2%B7%20esqueleto-6B717A)](docs/PRODUCT.md#9-roadmap)
 
 ---
 
-> **Status: pré-código.** O repositório existe, o produto ainda não. Este README descreve o que está sendo construído, não o que já funciona. O documento de produto completo está em [docs/PRODUCT.md](docs/PRODUCT.md), e o que vem primeiro está no [roadmap](docs/PRODUCT.md#9-roadmap).
+> **Status: fase 1, construindo o esqueleto.** Ainda não há nada instalável. Existem a configuração versionada e o registro central de hotkeys, com testes; falta tudo que aparece na tela. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
 
 ## O que é
 

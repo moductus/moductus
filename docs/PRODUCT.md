@@ -2,7 +2,7 @@
 
 > Suíte de utilitários para Windows, open source, em processo único, acionada por teclado.
 
-**Status:** pré-código. Nome fechado, org criada. Este documento é a fonte de verdade até o primeiro release.
+**Status:** fase 1 em andamento — config e registro de hotkeys prontos, nada de UI ainda. Este documento é a fonte de verdade até o primeiro release.
 **Última revisão:** setembro de 2026
 
 ---

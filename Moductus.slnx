@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Moductus.Core/Moductus.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Moductus.Core.Tests/Moductus.Core.Tests.csproj" />
+  </Folder>
+</Solution>

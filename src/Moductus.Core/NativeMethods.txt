@@ -1,0 +1,3 @@
+RegisterHotKey
+UnregisterHotKey
+HOT_KEY_MODIFIERS
