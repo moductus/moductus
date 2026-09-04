@@ -1,0 +1,71 @@
+name: Proposta de módulo
+description: Propor um utilitário novo para a suíte
+title: "[Módulo] "
+labels: ["proposta de módulo"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Antes de preencher, vale ler os [não-objetivos](../blob/main/docs/PRODUCT.md#não-objetivos) e a lista de [módulos cortados](../blob/main/docs/PRODUCT.md#cortados). Boa parte das propostas já foi avaliada e recusada por um motivo técnico específico.
+
+  - type: input
+    id: nome
+    attributes:
+      label: Nome
+      description: Substantivo curto, um só, em inglês. Precisa ler bem como `Moductus · Ports`.
+      placeholder: Ports
+    validations:
+      required: true
+
+  - type: textarea
+    id: dor
+    attributes:
+      label: Qual dor resolve
+      description: O problema concreto, não a funcionalidade. Descreva a situação em que você hoje perde tempo.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: arquetipo
+    attributes:
+      label: Qual arquétipo usa
+      description: Módulo não desenha UI nova. Se nenhum dos quatro serve, a proposta provavelmente não cabe na suíte.
+      options:
+        - Palette — busca com lista de resultados
+        - HUD — feedback transitório que some sozinho
+        - Panel — conteúdo que fica aberto durante o trabalho
+        - Canvas — operação sobre o desktop congelado
+    validations:
+      required: true
+
+  - type: input
+    id: api
+    attributes:
+      label: Qual API do Windows
+      description: Nome exato da função. Se não souber ainda, escreva o que investigou.
+      placeholder: GetExtendedTcpTable
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternativas
+    attributes:
+      label: O que já existe que faz isso
+      description: Nomeie as ferramentas que já resolvem, e diga por que ainda vale ter isso aqui. "Não existe nada" quase nunca é verdade e enfraquece a proposta.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: tese
+    attributes:
+      label: Cabe na tese
+      description: Um módulo que não cabe nas três não entra na suíte.
+      options:
+        - label: Nasce de tecla — não precisa de clique em ícone para começar
+          required: true
+        - label: Aparece e some — não vira mais uma janela permanente para gerenciar
+          required: true
+        - label: Cabe no processo único — não precisa de processo, serviço ou driver próprio
+          required: true
+        - label: Não faz nenhuma chamada de rede
+          required: true

@@ -1,0 +1,40 @@
+## Build
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+[Ll]og/
+[Ll]ogs/
+artifacts/
+publish/
+*.binlog
+
+## Visual Studio / Rider / VS Code
+.vs/
+.idea/
+*.user
+*.suo
+*.userprefs
+*.DotSettings.user
+.vscode/*
+!.vscode/extensions.json
+
+## NuGet
+*.nupkg
+*.snupkg
+packages/
+!packages/build/
+
+## Resultados de teste
+[Tt]est[Rr]esult*/
+*.coverage
+*.trx
+
+## Sistema operacional
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+## Configuração local do Moductus em modo portable
+portable.txt
+config.json

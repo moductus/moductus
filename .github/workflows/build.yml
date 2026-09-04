@@ -1,0 +1,54 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # O repositório existe antes da solução. Enquanto não houver .sln, o job
+      # passa sem fazer nada, em vez de falhar e deixar o badge vermelho.
+      - name: Procura a solução
+        id: sln
+        shell: pwsh
+        run: |
+          $encontrou = (Get-ChildItem -Recurse -Filter *.sln -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0
+          "found=$($encontrou.ToString().ToLower())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          if (-not $encontrou) {
+            Write-Host "::notice::Nenhuma solução encontrada. Repositório ainda em fase de estrutura."
+          }
+
+      - name: Instala o .NET
+        if: steps.sln.outputs.found == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        if: steps.sln.outputs.found == 'true'
+        run: dotnet restore
+
+      - name: Build
+        if: steps.sln.outputs.found == 'true'
+        run: dotnet build --no-restore --configuration Release
+
+      # Escopo de teste é estreito de propósito: só Moductus.Core.
+      # UI e interop não são testados. Ver CONTRIBUTING.md.
+      - name: Testes
+        if: steps.sln.outputs.found == 'true'
+        run: dotnet test --no-build --configuration Release --verbosity normal

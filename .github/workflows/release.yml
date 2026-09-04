@@ -1,0 +1,79 @@
+name: release
+
+# Dispara com tag: git tag v0.1.0 && git push origin v0.1.0
+#
+# Dois canais, por decisão registrada em docs/PRODUCT.md:
+#   portable  — self-contained, extrai e roda, ~60-70 MB
+#   framework — depende do .NET Desktop Runtime, ~10-15 MB, para winget e scoop
+#
+# Este workflow só funciona depois que src/Moductus.App existir.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+env:
+  PROJETO: src/Moductus.App/Moductus.App.csproj
+
+jobs:
+  publish:
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        include:
+          - canal: portable
+            self_contained: 'true'
+            args: '-p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true'
+          - canal: framework
+            self_contained: 'false'
+            args: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instala o .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          dotnet publish $env:PROJETO `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained ${{ matrix.self_contained }} `
+            ${{ matrix.args }} `
+            --output publish/${{ matrix.canal }}
+
+      - name: Empacota
+        shell: pwsh
+        run: |
+          $versao = "${{ github.ref_name }}"
+          $nome = "moductus-$versao-win-x64-${{ matrix.canal }}.zip"
+          Compress-Archive -Path publish/${{ matrix.canal }}/* -DestinationPath $nome
+          "ARTEFATO=$nome" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "{0:N1} MB" -f ((Get-Item $nome).Length / 1MB) | ForEach-Object {
+            Write-Host "::notice::$nome = $_"
+          }
+
+      # Permite a qualquer pessoa verificar que o binário veio deste commit.
+      # É a única mitigação gratuita que temos contra o aviso do SmartScreen.
+      - name: Attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ env.ARTEFATO }}
+
+      - name: Anexa ao release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARTEFATO }}
+          draft: true
+          generate_release_notes: true
