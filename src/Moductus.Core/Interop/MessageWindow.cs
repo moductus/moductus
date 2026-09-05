@@ -8,17 +8,32 @@ namespace Moductus.Core.Interop;
 public delegate bool WindowMessageHandler(uint message, nint wParam, nint lParam);
 
 /// <summary>
-/// A única janela <c>HWND_MESSAGE</c> do processo: invisível, fora do Alt+Tab,
-/// e alvo de tudo que o Windows manda para o app — <c>WM_HOTKEY</c>, o
-/// callback da bandeja, <c>TaskbarCreated</c>, <c>WM_SETTINGCHANGE</c> e o
-/// pedido de ativação de uma segunda instância.
+/// A única janela oculta do processo: alvo de tudo que o Windows manda para
+/// o app — <c>WM_HOTKEY</c>, o callback da bandeja, <c>TaskbarCreated</c>,
+/// <c>WM_SETTINGCHANGE</c> e o pedido de ativação de uma segunda instância.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>Não é uma janela <c>HWND_MESSAGE</c>, de propósito.</b> Janela
+/// message-only não recebe broadcast, e dois dos itens acima são broadcast:
+/// <c>WM_SETTINGCHANGE</c> (tema mudou) e <c>TaskbarCreated</c> (o Explorer
+/// reiniciou e levou o ícone). Com <c>HWND_MESSAGE</c> o tema nunca
+/// acompanharia o sistema e o ícone nunca voltaria.
+/// </para>
+/// <para>
+/// Então é uma janela top-level comum, só que nunca exibida: <c>WS_POPUP</c>
+/// sem <c>WS_VISIBLE</c>, e <c>WS_EX_TOOLWINDOW</c> para ficar fora do Alt+Tab
+/// e da barra de tarefas.
+/// </para>
+/// </remarks>
 public sealed class MessageWindow : IDisposable
 {
     /// <summary>Título fixo, para que uma segunda instância consiga encontrá-la.</summary>
     public const string Title = "Moductus.Messages";
 
-    private const int HwndMessage = -3;
+    private const int WsPopup = unchecked((int)0x80000000);
+    private const int WsExToolWindow = 0x00000080;
+    private const int WsExNoActivate = 0x08000000;
 
     private readonly HwndSource _source;
     private readonly List<WindowMessageHandler> _handlers = [];
@@ -27,12 +42,20 @@ public sealed class MessageWindow : IDisposable
     {
         _source = new HwndSource(new HwndSourceParameters(Title)
         {
-            ParentWindow = new IntPtr(HwndMessage),
+            WindowStyle = WsPopup,
+            ExtendedWindowStyle = WsExToolWindow | WsExNoActivate,
+            Width = 0,
+            Height = 0,
+            PositionX = 0,
+            PositionY = 0,
             HwndSourceHook = Hook,
         });
     }
 
     public nint Handle => _source.Handle;
+
+    /// <summary>Broadcast do sistema: tema, acessibilidade, métricas.</summary>
+    public static uint SettingChangeMessage => PInvoke.WM_SETTINGCHANGE;
 
     /// <summary>Registra uma mensagem nomeada, válida entre processos.</summary>
     public static uint RegisterMessage(string name) => PInvoke.RegisterWindowMessage(name);
@@ -41,7 +64,7 @@ public sealed class MessageWindow : IDisposable
     /// Procura a janela de mensagens de outra instância. Zero se não houver.
     /// </summary>
     public static unsafe nint FindExisting() =>
-        (nint)PInvoke.FindWindowEx(new HWND(HwndMessage), HWND.Null, null, Title).Value;
+        (nint)PInvoke.FindWindowEx(HWND.Null, HWND.Null, null, Title).Value;
 
     public static void Post(nint window, uint message) =>
         PInvoke.PostMessage((HWND)window, message, default, default);

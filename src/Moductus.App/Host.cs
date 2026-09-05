@@ -5,7 +5,9 @@ using Moductus.Core.Config;
 using Moductus.Core.Hotkeys;
 using Moductus.Core.Interop;
 using Moductus.Core.Startup;
+using Moductus.Core.Theme;
 using Moductus.Core.Tray;
+using Moductus.UI;
 
 namespace Moductus.App;
 
@@ -31,6 +33,7 @@ internal sealed class Host : IDisposable
     private readonly HotkeyRegistry _hotkeys;
     private readonly TrayIcon _tray;
     private readonly Autostart _autostart;
+    private readonly Theme _theme;
 
     private SettingsWindow? _settings;
 
@@ -62,6 +65,10 @@ internal sealed class Host : IDisposable
         _autostart = new Autostart(new Win32AutostartRegistry(), Environment.ProcessPath!);
 
         // Utilizável a partir daqui.
+
+        // 6. Tokens e tema. Depois do ícone de propósito: carregar XAML não
+        //    pertence ao caminho crítico, e nenhuma janela existe ainda.
+        _theme = new Theme(new Win32SystemThemeSource(), _messages, _app.Resources);
     }
 
     private static (ConfigStore, string?) LoadConfig(ConfigLocation location)
@@ -148,6 +155,7 @@ internal sealed class Host : IDisposable
     public void Dispose()
     {
         _settings?.Close();
+        _theme.Dispose();
         _tray.Dispose();
         _hotkeys.UnregisterAll();
         _messages.Dispose();

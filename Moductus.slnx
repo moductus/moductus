@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Moductus.App/Moductus.App.csproj" />
     <Project Path="src/Moductus.Core/Moductus.Core.csproj" />
+    <Project Path="src/Moductus.UI/Moductus.UI.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Moductus.Core.Tests/Moductus.Core.Tests.csproj" />

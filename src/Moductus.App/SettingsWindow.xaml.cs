@@ -25,7 +25,7 @@ public partial class SettingsWindow : Window
         if (configWarning is not null)
         {
             Aviso.Text = configWarning;
-            Aviso.Visibility = Visibility.Visible;
+            AvisoBorda.Visibility = Visibility.Visible;
         }
 
         Rodape.Text = location.Portable

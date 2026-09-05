@@ -1,0 +1,19 @@
+<!--
+  Movimento. Nada acima de 200ms em lugar nenhum; deslocamento máximo de 8px;
+  escala partindo de 0.98. A hotkey é o produto: se a estética custar o
+  orçamento de 140ms, a estética cede.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <Duration x:Key="motion.enter">0:0:0.140</Duration>
+    <Duration x:Key="motion.exit">0:0:0.090</Duration>
+    <Duration x:Key="motion.hover">0:0:0.080</Duration>
+
+    <sys:Double x:Key="motion.offset">8</sys:Double>
+    <sys:Double x:Key="motion.scale">0.98</sys:Double>
+
+    <sys:Boolean x:Key="motion.enabled">True</sys:Boolean>
+
+</ResourceDictionary>

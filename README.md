@@ -9,7 +9,7 @@ Suíte de utilitários para Windows, open source, em processo único, acionada p
 
 ---
 
-> **Status: fase 1, construindo o esqueleto.** Ainda não há nada instalável. O processo já sobe com ícone de bandeja, instância única, configuração versionada, registro central de hotkeys e autostart; faltam os tokens visuais, os arquétipos de janela, a tecla líder e o primeiro módulo. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
+> **Status: fase 1, construindo o esqueleto.** Ainda não há nada instalável. O processo já sobe com ícone de bandeja, instância única, configuração versionada, registro central de hotkeys, autostart e tema que acompanha o sistema; faltam os arquétipos de janela, a tecla líder e o primeiro módulo. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
 
 ## O que é
 

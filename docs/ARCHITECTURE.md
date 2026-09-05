@@ -2,7 +2,7 @@
 
 > Documento de arquitetura. O que o produto é e por que existe está em [PRODUCT.md](PRODUCT.md); aqui está **como ele funciona por dentro**.
 >
-> **Status:** fase 1 em andamento. Implementados: 5.1 (instância única), 5.2 (janela oculta), 5.3 (hotkeys), 5.7 (configuração), a bandeja da 5.8 sem o mecanismo de reivindicação, e o autostart. O restante descreve o desenho pretendido, não o que existe.
+> **Status:** fase 1 em andamento. Implementados: 5.1 (instância única), 5.2 (janela oculta), 5.3 (hotkeys), 5.7 (configuração), a bandeja da 5.8 sem o mecanismo de reivindicação, 5.9 (tema), 6.4 (tokens) e o autostart. O restante descreve o desenho pretendido, não o que existe.
 
 ## Sumário
 
@@ -132,7 +132,9 @@ Isso importa porque o modo de falha silencioso é o pior possível. Sem isso, a 
 
 ### 5.2 A janela oculta
 
-Uma única janela `HWND_MESSAGE`, criada via `HwndSource`, é o alvo de todas as mensagens do Windows que interessam ao app:
+Uma única janela top-level **nunca exibida** — `WS_POPUP` sem `WS_VISIBLE`, com `WS_EX_TOOLWINDOW` para ficar fora do Alt+Tab — criada via `HwndSource`, é o alvo de todas as mensagens do Windows que interessam ao app.
+
+**Não é `HWND_MESSAGE`, e a primeira versão deste documento errou nisso.** Janela message-only não recebe broadcast, e dois itens da tabela abaixo são broadcast: `WM_SETTINGCHANGE` e `TaskbarCreated`. Com `HWND_MESSAGE` o tema nunca acompanharia o sistema e o ícone nunca voltaria depois de o Explorer reiniciar — e nenhum dos dois falha de forma visível; eles simplesmente não acontecem.
 
 | Mensagem | Quem consome |
 |---|---|

@@ -1,0 +1,78 @@
+<!--
+  FONTE ÚNICA de tamanho, tipografia, raio e movimento.
+  Cor vive em Palette.*.xaml e movimento em Motion.*.xaml porque os dois são
+  trocados em tempo de execução pelo Theme; o resto é fixo e mora aqui.
+
+  As chaves seguem os nomes da seção 6 do PRODUCT.md, para que o documento
+  seja a referência. Nenhum literal visual fora destes arquivos.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- ═══ Tipografia ═══════════════════════════════════════════════════ -->
+    <!-- Segoe UI Variable no Win11, Segoe UI no Win10. Zero download. -->
+    <FontFamily x:Key="font.ui">Segoe UI Variable, Segoe UI</FontFamily>
+    <FontFamily x:Key="font.mono">Consolas</FontFamily>
+
+    <FontWeight x:Key="weight.regular">Normal</FontWeight>
+    <FontWeight x:Key="weight.semibold">SemiBold</FontWeight>
+
+    <!-- Tamanho em DIP e line-height já resolvido (1.4 no corpo, 1.2 no título). -->
+    <sys:Double x:Key="type.caption">11</sys:Double>
+    <sys:Double x:Key="type.caption.line">15</sys:Double>
+    <sys:Double x:Key="type.body">13</sys:Double>
+    <sys:Double x:Key="type.body.line">18</sys:Double>
+    <sys:Double x:Key="type.body-lg">15</sys:Double>
+    <sys:Double x:Key="type.body-lg.line">21</sys:Double>
+    <sys:Double x:Key="type.title">20</sys:Double>
+    <sys:Double x:Key="type.title.line">24</sys:Double>
+    <sys:Double x:Key="type.display">28</sys:Double>
+    <sys:Double x:Key="type.display.line">34</sys:Double>
+
+    <!-- ═══ Espaço — grade de 4px ════════════════════════════════════════ -->
+    <sys:Double x:Key="space.4">4</sys:Double>
+    <sys:Double x:Key="space.8">8</sys:Double>
+    <sys:Double x:Key="space.12">12</sys:Double>
+    <sys:Double x:Key="space.16">16</sys:Double>
+    <sys:Double x:Key="space.24">24</sys:Double>
+    <sys:Double x:Key="space.32">32</sys:Double>
+
+    <Thickness x:Key="inset.4">4</Thickness>
+    <Thickness x:Key="inset.8">8</Thickness>
+    <Thickness x:Key="inset.12">12</Thickness>
+    <Thickness x:Key="inset.16">16</Thickness>
+    <Thickness x:Key="inset.24">24</Thickness>
+    <Thickness x:Key="inset.input">12,0</Thickness>
+    <Thickness x:Key="inset.button">16,0</Thickness>
+
+    <!-- ═══ Raio ═════════════════════════════════════════════════════════ -->
+    <!-- O Win11 usa 8 em menu e 12 em janela; isto encaixa sem parecer estrangeiro. -->
+    <CornerRadius x:Key="radius.control">6</CornerRadius>
+    <CornerRadius x:Key="radius.card">10</CornerRadius>
+    <CornerRadius x:Key="radius.window">12</CornerRadius>
+    <CornerRadius x:Key="radius.pill">999</CornerRadius>
+
+    <!-- ═══ Tamanho ══════════════════════════════════════════════════════ -->
+    <sys:Double x:Key="size.row">32</sys:Double>
+    <sys:Double x:Key="size.input">36</sys:Double>
+    <sys:Double x:Key="size.button">32</sys:Double>
+    <sys:Double x:Key="size.icon">16</sys:Double>
+    <sys:Double x:Key="size.palette.width">640</sys:Double>
+    <sys:Double x:Key="size.palette.maxheight">480</sys:Double>
+    <sys:Double x:Key="size.panel.minwidth">320</sys:Double>
+    <sys:Double x:Key="size.panel.minheight">240</sys:Double>
+
+    <!-- Elevação é só isto: borda de 1px em border.strong mais uma sombra suave.
+         Nunca empilhar sombras. -->
+    <Thickness x:Key="border.width">1</Thickness>
+    <sys:Double x:Key="shadow.depth">0</sys:Double>
+    <sys:Double x:Key="shadow.blur">24</sys:Double>
+    <sys:Double x:Key="shadow.opacity">0.35</sys:Double>
+
+    <!-- ═══ Curvas ═══════════════════════════════════════════════════════ -->
+    <!-- Sem mola, sem bounce. -->
+    <CubicEase x:Key="ease.out" EasingMode="EaseOut" />
+    <CubicEase x:Key="ease.in" EasingMode="EaseIn" />
+
+</ResourceDictionary>

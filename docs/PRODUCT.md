@@ -2,7 +2,7 @@
 
 > Suíte de utilitários para Windows, open source, em processo único, acionada por teclado.
 
-**Status:** fase 1 em andamento — config, hotkeys, bandeja, instância única e autostart prontos; faltam tokens, arquétipos, tecla líder e o primeiro módulo. Este documento é a fonte de verdade até o primeiro release.
+**Status:** fase 1 em andamento — config, hotkeys, bandeja, instância única, autostart, tokens e tema prontos; faltam os arquétipos, a tecla líder e o primeiro módulo. Este documento é a fonte de verdade até o primeiro release.
 **Última revisão:** setembro de 2026
 
 ---
@@ -397,6 +397,10 @@ Tudo num `Tokens.xaml` único, um `ResourceDictionary` que todo módulo referenc
 | `text.muted` | `#8A9099` |
 | `accent` | `#FFB224` |
 | `accent.fg` | `#1A1204` |
+| `success` | `#1E9E63` |
+| `danger` | `#D93B35` |
+
+`success` e `danger` são mais escuros que no tema escuro porque os originais somem sobre branco.
 
 Herdar do sistema por padrão, lendo `AppsUseLightTheme` no registro e escutando `WM_SETTINGCHANGE`.
 
@@ -523,11 +527,18 @@ moductus/
 │  │  ├─ Hotkeys/                    # registro central, detecção de conflito
 │  │  ├─ Leader/                     # registro de letras, mesma mecânica
 │  │  ├─ Config/                     # JSON versionado, portable vs instalado
-│  │  ├─ Interop/                    # NativeMethods.txt do CsWin32
+│  │  ├─ Startup/                    # autostart: chave Run + StartupApproved
+│  │  ├─ Tray/                       # Shell_NotifyIcon direto
+│  │  ├─ Theme/                      # decide o modo; a UI aplica
+│  │  ├─ Interop/                    # MessageWindow, NativeMethods.txt
 │  │  └─ Modules/                    # IModule, ModuleArchetype
 │  ├─ Moductus.UI/
-│  │  ├─ Tokens.xaml                 # FONTE ÚNICA DE COR/TAMANHO/DURAÇÃO
-│  │  ├─ Theme.cs                    # claro/escuro, alto contraste
+│  │  ├─ Tokens/
+│  │  │  ├─ Tokens.xaml              # FONTE ÚNICA de tamanho, tipo e raio
+│  │  │  ├─ Palette.*.xaml           # cor: Dark, Light, HighContrast
+│  │  │  ├─ Motion.*.xaml            # duração: normal e reduzida
+│  │  │  └─ Controls.xaml            # estilos implícitos sobre os tokens
+│  │  ├─ Theme.cs                    # troca paleta e movimento ao vivo
 │  │  ├─ LeaderOverlay.xaml          # a superfície da tecla líder (≠ Palette)
 │  │  └─ Archetypes/                 # PaletteWindow, HudWindow,
 │  │                                 # PanelWindow, CanvasWindow
