@@ -2,7 +2,7 @@
 
 > Documento de arquitetura. O que o produto é e por que existe está em [PRODUCT.md](PRODUCT.md); aqui está **como ele funciona por dentro**.
 >
-> **Status:** fase 1 concluída. Tudo das seções 4 a 7 está implementado, com três lacunas deliberadas listadas na seção 12: o mecanismo de reivindicação da bandeja (5.8), o "clique fora fecha" do Panel (6.2) e o Acrylic dos overlays (6.4, hoje `bg.base` sólido — o fallback documentado).
+> **Status:** fases 1 e 2 implementadas. Tudo das seções 4 a 7 existe, mais os quatro primeiros módulos, com três lacunas deliberadas listadas na seção 12: o mecanismo de reivindicação da bandeja (5.8), o "clique fora fecha" do Panel (6.2) e o Acrylic dos overlays (6.4, hoje `bg.base` sólido — o fallback documentado).
 
 ## Sumário
 
@@ -275,6 +275,8 @@ Um efeito colateral que precisa de disciplina: janela reutilizada carrega estado
 | **Canvas** | Tela cheia | Rouba | Borderless, topmost |
 
 `WS_EX_NOACTIVATE` é aplicado via `HwndSourceHook` no `SourceInitialized`, antes da primeira exibição.
+
+**O Panel é compartilhado, e um módulo com digitação precisa de foco.** `WS_EX_NOACTIVATE` impede que clique ou exibição tomem o foco, não impede tomada explícita: o Scratch chama `TakeFocus` ao aparecer, porque o usuário pediu aquela superfície e tomar o foco ali não é interrupção. Peek nunca toma. Como o Panel é um singleton, cada módulo marca `Owner` ao ocupá-lo e checa antes de alternar — a hotkey do Peek não fecha o Scratch. E o evento `Dismissed` é onde o módulo solta o que segurava: a miniatura DWM, o timer de gravação.
 
 O **Canvas** merece nota: ele não é uma janela transparente sobre o desktop ao vivo. Ele captura o desktop como bitmap com `BitBlt`, exibe esse bitmap numa janela fullscreen borderless topmost, e todas as ferramentas — régua, lupa, conta-gotas, OCR — operam sobre o bitmap em memória. Isso deixa a medição precisa e independente do que estava se movendo na tela no instante da captura.
 

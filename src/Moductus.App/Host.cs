@@ -94,6 +94,7 @@ internal sealed class Host : IDisposable
             _archetypes,
             _config.ModuleScope,
             _config.Save,
+            Path.GetDirectoryName(_location.Path)!,
             _theme));
 
         foreach (var module in _modules.Where(IsEnabledInConfig))

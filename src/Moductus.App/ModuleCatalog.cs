@@ -1,5 +1,8 @@
 using Moductus.Core.Modules;
 using Moductus.Modules.Awake;
+using Moductus.Modules.Peek;
+using Moductus.Modules.Ports;
+using Moductus.Modules.Scratch;
 using Moductus.UI.Modules;
 
 namespace Moductus.App;
@@ -14,5 +17,8 @@ internal static class ModuleCatalog
     public static IReadOnlyList<IModule> Create(ModuleContext context) =>
     [
         new AwakeModule(context),
+        new PeekModule(context),
+        new PortsModule(context),
+        new ScratchModule(context),
     ];
 }

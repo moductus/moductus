@@ -7,19 +7,36 @@ using Moductus.Core.Interop;
 
 namespace Moductus.UI.Archetypes;
 
+/// <summary>Onde o Panel aparece na primeira vez.</summary>
+public enum PanelPlacement
+{
+    Center,
+
+    /// <summary>Encostado no topo, como o Scratch que desliza de cima.</summary>
+    Top,
+}
+
 /// <summary>
 /// Panel: flutuante, redimensionável, pode ficar aberto durante o trabalho.
-/// Tem botão de fixar. Nunca rouba foco.
+/// Tem botão de fixar. Nunca rouba foco ao aparecer.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Guarda posição e tamanho enquanto o processo vive: reabrir traz de volta
 /// onde estava. Persistir em disco, e o que fazer quando o monitor some, é
 /// decisão em aberto no ARCHITECTURE.md.
+/// </para>
+/// <para>
+/// <c>WS_EX_NOACTIVATE</c> impede que clique ou exibição tomem o foco, mas
+/// não impede tomada explícita. Módulo que precisa de digitação (Scratch)
+/// chama <see cref="TakeFocus"/>; os outros nunca interrompem o usuário.
+/// </para>
 /// </remarks>
 public class PanelWindow : ArchetypeWindow
 {
-    private readonly TextBlock _title = new();
+    private readonly TextBlock _heading = new();
     private readonly ToggleButton _pin = new();
+    private PanelPlacement _placement;
     private bool _placed;
 
     public PanelWindow() : base(stealsFocus: false)
@@ -39,28 +56,67 @@ public class PanelWindow : ArchetypeWindow
         });
     }
 
-    public string Title2
+    public string Heading
     {
-        get => _title.Text;
-        set => _title.Text = value;
+        get => _heading.Text;
+        set => _heading.Text = value;
     }
 
-    /// <summary>Fixado não fecha ao clicar fora nem quando a hotkey alterna.</summary>
+    /// <summary>Fixado não fecha quando a hotkey do módulo alterna.</summary>
     public bool IsPinned => _pin.IsChecked == true;
+
+    /// <summary>Quem está usando o Panel agora. Módulos checam antes de alternar.</summary>
+    public string? Owner { get; set; }
+
+    public PanelPlacement Placement
+    {
+        get => _placement;
+        set
+        {
+            if (_placement != value)
+            {
+                _placement = value;
+                _placed = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Toma o foco explicitamente, para módulos com digitação. O usuário
+    /// pediu esta superfície, então tomar o foco aqui não é interrupção.
+    /// </summary>
+    public void TakeFocus(IInputElement? element = null)
+    {
+        ForegroundWindow.Take(Handle);
+        Activate();
+
+        if (element is null)
+        {
+            return;
+        }
+
+        // O conteúdo acabou de ser trocado e ainda não passou pelo layout;
+        // focar agora não pega. Depois do Loaded, pega.
+        Dispatcher.BeginInvoke(
+            System.Windows.Threading.DispatcherPriority.Loaded,
+            () => Keyboard.Focus(element));
+    }
 
     protected override FrameworkElement BuildChrome(ContentPresenter slot)
     {
-        _title.SetResourceReference(TextBlock.FontWeightProperty, "weight.semibold");
-        _title.VerticalAlignment = VerticalAlignment.Center;
+        _heading.SetResourceReference(TextBlock.FontWeightProperty, "weight.semibold");
+        _heading.VerticalAlignment = VerticalAlignment.Center;
+        _heading.TextTrimming = TextTrimming.CharacterEllipsis;
+        _heading.TextWrapping = TextWrapping.NoWrap;
 
         _pin.Content = "Fixar";
-        _pin.SetResourceReference(FrameworkElement.StyleProperty, typeof(ToggleButton));
         _pin.Padding = new Thickness(8, 0, 8, 0);
+        _pin.Height = 26;
 
-        var fechar = new Button { Content = "✕", Padding = new Thickness(8, 0, 8, 0) };
+        var fechar = new Button { Content = "✕", Padding = new Thickness(8, 0, 8, 0), Height = 26, Margin = new Thickness(6, 0, 0, 0) };
         fechar.Click += (_, _) => Dismiss();
 
-        var acoes = new StackPanel { Orientation = Orientation.Horizontal };
+        var acoes = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
         acoes.Children.Add(_pin);
         acoes.Children.Add(fechar);
 
@@ -69,8 +125,8 @@ public class PanelWindow : ArchetypeWindow
         cabecalho.SetResourceReference(Panel.BackgroundProperty, "bg.raised");
         DockPanel.SetDock(acoes, Dock.Right);
         cabecalho.Children.Add(acoes);
-        cabecalho.Children.Add(_title);
-        _title.Margin = new Thickness(12, 0, 0, 0);
+        _heading.Margin = new Thickness(12, 0, 0, 0);
+        cabecalho.Children.Add(_heading);
         cabecalho.MouseLeftButtonDown += (_, e) =>
         {
             if (e.ButtonState == MouseButtonState.Pressed)
@@ -89,18 +145,26 @@ public class PanelWindow : ArchetypeWindow
 
     protected override void Place(MonitorArea a)
     {
-        // Só a primeira vez. Depois, fica onde o usuário deixou.
+        // Só a primeira vez para cada posicionamento. Depois, fica onde o usuário deixou.
         if (_placed)
         {
             return;
         }
 
-        var w = a.Px(480);
+        var w = a.Px(560);
         var h = a.Px(360);
         var x = a.WorkLeft + (a.WorkWidth - w) / 2;
-        var y = a.WorkTop + (a.WorkHeight - h) / 2;
+        var y = _placement == PanelPlacement.Top
+            ? a.WorkTop + a.Px(Token("space.16"))
+            : a.WorkTop + (a.WorkHeight - h) / 2;
 
         PlacePhysical(a, x, y, w, h);
         _placed = true;
+    }
+
+    protected override void OnDismissed()
+    {
+        Owner = null;
+        base.OnDismissed();
     }
 }

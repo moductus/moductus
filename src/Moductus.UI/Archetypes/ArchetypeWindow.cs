@@ -71,6 +71,7 @@ public abstract class ArchetypeWindow : Window
         if (!IsVisible)
         {
             Show();
+            Enter();
         }
 
         if (StealsFocus)
@@ -83,6 +84,9 @@ public abstract class ArchetypeWindow : Window
 
         OnPresented();
     }
+
+    /// <summary>Depois de esconder. Módulo solta o que segurava — miniatura, timer, arquivo.</summary>
+    public event Action? Dismissed;
 
     /// <summary>Esconde. Nunca destrói: a janela é reutilizada.</summary>
     public void Dismiss()
@@ -98,6 +102,7 @@ public abstract class ArchetypeWindow : Window
         {
             Hide();
             OnDismissed();
+            Dismissed?.Invoke();
         }
         finally
         {
@@ -160,6 +165,29 @@ public abstract class ArchetypeWindow : Window
     }
 
     protected double Token(string key) => (double)FindResource(key);
+
+    /// <summary>
+    /// Entrada: desliza 8px de cima em 140ms, ease-out. Com animações
+    /// desligadas na acessibilidade os tokens vão a zero e nada se move.
+    /// Nunca atrasa a exibição: a janela já está na tela quando começa.
+    /// </summary>
+    protected virtual void Enter()
+    {
+        var duracao = (Duration)FindResource("motion.enter");
+        var offset = Token("motion.offset");
+
+        if (!duracao.HasTimeSpan || duracao.TimeSpan == TimeSpan.Zero || offset == 0 || double.IsNaN(Top))
+        {
+            return;
+        }
+
+        var destino = Top;
+        BeginAnimation(TopProperty, new System.Windows.Media.Animation.DoubleAnimation(destino - offset, destino, duracao)
+        {
+            EasingFunction = (System.Windows.Media.Animation.IEasingFunction)FindResource("ease.out"),
+            FillBehavior = System.Windows.Media.Animation.FillBehavior.Stop,
+        });
+    }
 
     protected virtual FrameworkElement BuildChrome(ContentPresenter slot)
     {

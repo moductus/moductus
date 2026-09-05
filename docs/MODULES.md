@@ -67,6 +67,29 @@ O construtor recebe um `ModuleContext`, e é tudo que ele tem:
 
 O `AwakeModule` em `src/Moductus.Modules/Awake/` é o exemplo mínimo: dez linhas de lógica, um `Flash` no HUD, e nada no `Enable`.
 
+### Usando o Panel
+
+O Panel é um singleton compartilhado. O padrão que Peek, Ports e Scratch seguem:
+
+```csharp
+var panel = context.Archetypes.Panel;
+
+// Toggle: só fecha se for nosso e não estiver fixado.
+if (panel.IsVisible && panel.Owner == Id && !panel.IsPinned) { panel.Dismiss(); return; }
+
+panel.Owner = Id;
+panel.Heading = "Ports";
+panel.Placement = PanelPlacement.Center;   // ou Top, para deslizar de cima
+panel.SlotContent = corpo;
+panel.Dismissed += Soltar;                 // miniatura, timer, arquivo
+panel.Present();
+panel.TakeFocus(_filtro);                  // só se o módulo tem digitação
+```
+
+`Present` nunca rouba foco. `TakeFocus` é opt-in e deliberado: o usuário pediu esta superfície, então focar o campo dela não é interrupção. Peek não chama; Ports e Scratch chamam.
+
+**Trabalho lento não entra no `Invoke`.** O Ports mostra o Panel com "lendo…" e lê a tabela TCP em `Task.Run`. A superfície aparece antes do dado, sempre.
+
 ## Nomeação
 
 Substantivo curto, um só, em inglês. Lê bem como `Moductus · Ports` e é digitável na paleta.
@@ -119,3 +142,4 @@ Anotações que economizam dias de depuração, por módulo:
 - **Timer** — a bandeja pede o ícone em 16, 20, 24 ou 32px conforme o scaling do monitor. Gere o bitmap no tamanho solicitado, nunca fixo em 16.
 - **Freeze** — capture o desktop como bitmap, jogue numa janela fullscreen borderless topmost, e opere régua, lupa e conta-gotas sobre esse bitmap em memória. Fica preciso e independe do que estava se movendo na tela.
 - **Kill** — pode ser marcado por anti-cheat de jogo. Fica desligado por padrão e documentado no README.
+- **Todo módulo com Panel** — um elemento do WPF só pode ter um pai lógico. Construir um `DockPanel` novo a cada `Invoke` e adicionar nele o mesmo `TextBox` de sempre derruba o app com "já é o filho lógico de outro elemento" — e só na **segunda** abertura, que é quando ninguém está testando. Construa o conteúdo uma vez, no `Enable`, e reutilize.

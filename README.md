@@ -9,7 +9,7 @@ Suíte de utilitários para Windows, open source, em processo único, acionada p
 
 ---
 
-> **Status: fase 2, rumo ao v0.1.** Ainda não há release. O esqueleto está inteiro — bandeja, instância única, configuração, hotkeys, autostart, tema, os quatro arquétipos, a tecla líder e o Awake como primeiro módulo. Faltam Peek, Ports e Scratch para o primeiro release público. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
+> **Status: fase 2 implementada, v0.1 a caminho.** Ainda não há release. Funcionam o esqueleto inteiro e quatro módulos: Awake, Peek, Ports e Scratch. O que falta para o primeiro release público é empacotar, não construir. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
 
 ## O que é
 
