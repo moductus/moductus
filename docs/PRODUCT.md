@@ -2,7 +2,7 @@
 
 > Suíte de utilitários para Windows, open source, em processo único, acionada por teclado.
 
-**Status:** fase 1 em andamento — config e registro de hotkeys prontos, nada de UI ainda. Este documento é a fonte de verdade até o primeiro release.
+**Status:** fase 1 em andamento — config, hotkeys, bandeja, instância única e autostart prontos; faltam tokens, arquétipos, tecla líder e o primeiro módulo. Este documento é a fonte de verdade até o primeiro release.
 **Última revisão:** setembro de 2026
 
 ---
@@ -620,6 +620,7 @@ Clips, Freeze (com OCR), Shelf, Mic, Links, Kill, Timer. Ordem por interesse.
 | 18 | Letra é dado explícito no registro central | Peek, Ports e Palette disputam o `p` |
 | 19 | Um `Moductus.Modules`, pasta por módulo, registro manual | Sem plugins, assembly separada só compra tempo de build; lista explícita é auditável |
 | 20 | Config versionada, chave desconhecida preservada | Downgrade não pode destruir a config de quem testou versão nova |
+| 21 | Autostart por chave `Run` do usuário, não Task Scheduler | É o mecanismo mais auditável e aparece na aba Inicializar, onde o usuário já sabe desligar. Task Scheduler custaria interop COM ou dependência, um UAC, e pontua em heurística de antivírus. A elevação que ele permitiria é armadilha: subir a suíte inteira como admin para o Ports ver algumas portas a mais contradiz "por que eu confiaria isso com meu clipboard". Ler `StartupApproved` junto é obrigatório, senão a configuração mente. |
 
 ---
 

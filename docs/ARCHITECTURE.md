@@ -2,7 +2,7 @@
 
 > Documento de arquitetura. O que o produto é e por que existe está em [PRODUCT.md](PRODUCT.md); aqui está **como ele funciona por dentro**.
 >
-> **Status:** fase 1 em andamento. As seções 5.3 (registro de hotkeys) e 5.7 (configuração) estão implementadas e testadas; o restante descreve o desenho pretendido, não o que existe.
+> **Status:** fase 1 em andamento. Implementados: 5.1 (instância única), 5.2 (janela oculta), 5.3 (hotkeys), 5.7 (configuração), a bandeja da 5.8 sem o mecanismo de reivindicação, e o autostart. O restante descreve o desenho pretendido, não o que existe.
 
 ## Sumário
 
@@ -137,9 +137,13 @@ Uma única janela `HWND_MESSAGE`, criada via `HwndSource`, é o alvo de todas as
 | Mensagem | Quem consome |
 |---|---|
 | `WM_HOTKEY` | `HotkeyRegistry` |
+| `WM_APP+1` | `TrayIcon` — clique no ícone de bandeja |
+| `TaskbarCreated` (registrada) | `TrayIcon` — o Explorer reiniciou, re-adiciona o ícone |
+| `Moductus.Activate` (registrada) | Segunda instância pedindo ativação |
 | `WM_SETTINGCHANGE` | `ThemeWatcher` (claro/escuro, alto contraste) |
 | `WM_DPICHANGED` | Posicionamento dos arquétipos |
-| Mensagem registrada própria | Segunda instância pedindo ativação |
+
+Ela expõe um único ponto de assinatura, `AddHandler`, e cada consumidor filtra o que lhe interessa. É também a única classe que sabe o que é um `HWND` fora do Core: o `Moductus.App` não referencia o CsWin32 e não tem uma linha de Win32 — a conversão acontece na borda, uma vez.
 
 Ela não é visível, não aparece no Alt+Tab e não tem superfície. É infraestrutura pura.
 
@@ -452,7 +456,8 @@ Pontos que este documento **não** resolve, e que precisam de decisão antes ou 
 | 2 | **Prioridade na bandeja** | Timer e Mic podem reivindicar o ícone ao mesmo tempo. A regra de prioridade está desenhada mas os valores não foram atribuídos. |
 | 3 | **Timeout do líder** | Três segundos é chute fundamentado, não medição. Precisa de uso real para calibrar. |
 | 4 | **Persistência de posição do Panel** | Panel é redimensionável e fixável. Se a posição persiste, o que acontece quando o monitor onde ele estava deixa de existir? |
-| 5 | **Autostart** | Chave `Run` no registro ou Task Scheduler. A chave `Run` é mais simples; o Task Scheduler sobrevive melhor a alguns cenários de perfil. Sem decisão. |
+
+O autostart, que constava aqui, foi decidido: chave `Run` — decisão 21 do PRODUCT.md, com a razão de ler `StartupApproved` documentada em `Autostart.cs`.
 
 ---
 

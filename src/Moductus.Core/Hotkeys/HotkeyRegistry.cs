@@ -16,6 +16,9 @@ public sealed class HotkeyRegistry(IHotkeySink sink)
 
     private int _ultimoId;
 
+    /// <summary>A mensagem do Windows que carrega um disparo: <c>WM_HOTKEY</c>.</summary>
+    public static uint WindowsMessage => Windows.Win32.PInvoke.WM_HOTKEY;
+
     /// <summary>Tudo que foi pedido, registrado ou em conflito.</summary>
     public IReadOnlyList<HotkeyRegistration> All =>
         [.. _porId.Values.Select(e => e.Registro)];

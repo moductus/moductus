@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- Per-Monitor DPI V2 é declarado aqui, não em código. Ver ARCHITECTURE.md §6.3. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- O nome do processo no Gerenciador de Tarefas é Moductus.exe. -->
+    <AssemblyName>Moductus</AssemblyName>
+    <RootNamespace>Moductus.App</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Moductus.Core\Moductus.Core.csproj" />
+  </ItemGroup>
+
+</Project>
