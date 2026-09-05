@@ -88,8 +88,10 @@ O framework-dependent resolve isso: fica na casa de 10 a 15 MB, porque o .NET De
 
 | Canal | Formato | Tamanho | Por quê |
 |---|---|---|---|
-| Download do README | Zip portable, self-contained | ~60–70 MB | "Extrai e roda" sem exigir nada instalado |
-| winget e scoop | Framework-dependent | ~10–15 MB | O gerenciador resolve o runtime; é o canal do público-alvo |
+| Download do README | Zip portable, self-contained | **56,6 MB** medidos | "Extrai e roda" sem exigir nada instalado |
+| winget e scoop | Framework-dependent | **0,3 MB** medidos | O gerenciador resolve o runtime; é o canal do público-alvo |
+
+A estimativa original de 10–15 MB para o framework-dependent estava errada para mais: sem o runtime, sobra só o app.
 
 Custa dois jobs no `release.yml` em vez de um. Em troca, o argumento de peso continua verdadeiro no canal onde ele é medido, e a promessa de portable continua verdadeira no canal onde ela importa.
 

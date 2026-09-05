@@ -68,10 +68,10 @@ Ainda não há release. Quando houver, serão dois canais:
 
 | Canal | Formato | Tamanho |
 |---|---|---|
-| Download direto | Zip portable, self-contained | ~60–70 MB |
-| `winget` e `scoop` | Framework-dependent (requer .NET Desktop Runtime) | ~10–15 MB |
+| Download direto | Zip portable, self-contained | ~57 MB |
+| `winget` e `scoop` | Framework-dependent (requer .NET Desktop Runtime) | ~0,3 MB |
 
-O zip é maior porque carrega o runtime inteiro dentro dele — o WPF não pode ser *trimmed*, então não há como encolher isso. Em troca, ele extrai e roda em qualquer máquina, sem instalar nada. Pelo `winget` o runtime vira dependência declarada e o pacote fica pequeno.
+Números medidos no build, não estimados. O zip é maior porque carrega o runtime inteiro dentro dele — o WPF não pode ser *trimmed*, então não há como encolher isso. Em troca, ele extrai e roda em qualquer máquina, sem instalar nada. Pelo `winget` o runtime vira dependência declarada e o pacote é só o app.
 
 ### Sobre o aviso do SmartScreen
 

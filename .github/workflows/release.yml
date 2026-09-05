@@ -50,6 +50,7 @@ jobs:
             --configuration Release `
             --runtime win-x64 `
             --self-contained ${{ matrix.self_contained }} `
+            -p:DebugType=none `
             ${{ matrix.args }} `
             --output publish/${{ matrix.canal }}
 
