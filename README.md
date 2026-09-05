@@ -5,11 +5,11 @@
 Suíte de utilitários para Windows, open source, em processo único, acionada por teclado.
 
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-FFB224)](LICENSE)
-[![Status: fase 1](https://img.shields.io/badge/status-fase%201%20%C2%B7%20esqueleto-6B717A)](docs/PRODUCT.md#9-roadmap)
+[![Status: fase 2](https://img.shields.io/badge/status-fase%202%20%C2%B7%20rumo%20ao%20v0.1-6B717A)](docs/PRODUCT.md#9-roadmap)
 
 ---
 
-> **Status: fase 1, construindo o esqueleto.** Ainda não há nada instalável. O processo já sobe com ícone de bandeja, instância única, configuração versionada, registro central de hotkeys, autostart e tema que acompanha o sistema; faltam os arquétipos de janela, a tecla líder e o primeiro módulo. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
+> **Status: fase 2, rumo ao v0.1.** Ainda não há release. O esqueleto está inteiro — bandeja, instância única, configuração, hotkeys, autostart, tema, os quatro arquétipos, a tecla líder e o Awake como primeiro módulo. Faltam Peek, Ports e Scratch para o primeiro release público. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
 
 ## O que é
 

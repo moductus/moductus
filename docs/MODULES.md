@@ -52,6 +52,21 @@ Essa separação é a regra mais fácil de violar por engano, e a mais cara.
 
 Se você fizer trabalho de `Invoke` dentro de `Enable`, o startup do Moductus passa a carregar a UI de todos os módulos ativos — e é assim que um app de bandeja começa a demorar três segundos para subir.
 
+### O que o módulo recebe
+
+O construtor recebe um `ModuleContext`, e é tudo que ele tem:
+
+| | Para quê |
+|---|---|
+| `Archetypes` | Os quatro singletons. `Archetypes.Hud.Flash("texto")` é o feedback mais barato que existe. |
+| `ConfigScope(id)` | O `JsonObject` sob `modules.<id>`. O módulo não enxerga a raiz. |
+| `SaveConfig()` | Grava tudo, atomicamente. |
+| `Theme` | Modo atual e evento de mudança. |
+
+**O módulo não registra letra nem hotkey.** O host faz isso a partir de `SuggestedLeaderKey`, respeitando o que o usuário configurou, e mostra colisão na tela de configurações. O módulo só implementa `Invoke`.
+
+O `AwakeModule` em `src/Moductus.Modules/Awake/` é o exemplo mínimo: dez linhas de lógica, um `Flash` no HUD, e nada no `Enable`.
+
 ## Nomeação
 
 Substantivo curto, um só, em inglês. Lê bem como `Moductus · Ports` e é digitável na paleta.

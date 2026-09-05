@@ -17,6 +17,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Moductus.Core\Moductus.Core.csproj" />
     <ProjectReference Include="..\Moductus.UI\Moductus.UI.csproj" />
+    <ProjectReference Include="..\Moductus.Modules\Moductus.Modules.csproj" />
   </ItemGroup>
 
 </Project>

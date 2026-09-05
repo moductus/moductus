@@ -1,6 +1,6 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
-using Moductus.Core.Config;
 using Moductus.Core.Hotkeys;
 using Moductus.Core.Startup;
 using Moductus.UI;
@@ -9,53 +9,41 @@ namespace Moductus.App;
 
 public partial class SettingsWindow : Window
 {
-    private readonly Autostart _autostart;
-    private readonly HotkeyRegistry _hotkeys;
-    private readonly Func<HotkeyRegistration> _leader;
-    private readonly Func<HotkeyBinding, HotkeyRegistration> _rebindLeader;
+    private readonly SettingsModel _model;
 
-    internal SettingsWindow(
-        Autostart autostart,
-        HotkeyRegistry hotkeys,
-        ConfigLocation location,
-        Theme theme,
-        string? configWarning,
-        Func<HotkeyRegistration> leader,
-        Func<HotkeyBinding, HotkeyRegistration> rebindLeader)
+    internal SettingsWindow(SettingsModel model)
     {
         InitializeComponent();
+        _model = model;
 
-        _autostart = autostart;
-        _hotkeys = hotkeys;
-        _leader = leader;
-        _rebindLeader = rebindLeader;
+        SourceInitialized += (_, _) => TitleBar.Sync(this, model.Theme);
 
-        SourceInitialized += (_, _) => TitleBar.Sync(this, theme);
-
-        if (configWarning is not null)
+        if (model.ConfigWarning is not null)
         {
-            Aviso.Text = configWarning;
+            Aviso.Text = model.ConfigWarning;
             AvisoBorda.Visibility = Visibility.Visible;
         }
 
-        Rodape.Text = location.Portable
-            ? $"Modo portable — configuração em {location.Path}"
-            : $"Configuração em {location.Path}";
+        Rodape.Text = model.Location.Portable
+            ? $"Modo portable — configuração em {model.Location.Path}"
+            : $"Configuração em {model.Location.Path}";
 
         Refresh();
     }
 
     private sealed record AtalhoItem(string Combinacao, string Detalhe, bool Conflito);
 
+    private sealed record ModuloItem(string Id, string Nome, bool Ativo, string Letra, string Detalhe, bool Conflito);
+
     private void Refresh()
     {
-        var lider = _leader();
+        var lider = _model.Leader();
         Lider.Text = lider.Binding.ToString();
         LiderDetalhe.Text = lider.Active
             ? "Clique no campo e pressione a combinação nova."
             : $"Em conflito: {lider.ConflictDetail}. Clique no campo e pressione outra combinação.";
 
-        var estado = _autostart.State;
+        var estado = _model.Autostart.State;
 
         IniciarComWindows.IsChecked = estado is AutostartState.On or AutostartState.DisabledByUser;
 
@@ -70,12 +58,39 @@ public partial class SettingsWindow : Window
             _ => string.Empty,
         };
 
-        Atalhos.ItemsSource = _hotkeys.All
+        var letras = _model.Letters.All.ToDictionary(r => r.ModuleId);
+
+        Modulos.ItemsSource = _model.Modules
+            .Select(m =>
+            {
+                var ativo = _model.IsModuleEnabled(m.Id);
+                letras.TryGetValue(m.Id, out var letra);
+
+                return new ModuloItem(
+                    m.Id,
+                    m.Name,
+                    ativo,
+                    ativo && letra is not null ? letra.Key.ToString().ToUpperInvariant() : "—",
+                    letra is { Active: false } ? $"em conflito: {letra.ConflictDetail}" : m.Description,
+                    letra is { Active: false });
+            })
+            .ToList();
+
+        Atalhos.ItemsSource = _model.Hotkeys.All
             .Select(r => new AtalhoItem(
                 r.Binding.ToString(),
                 r.Active ? r.Owner : $"{r.Owner} — em conflito: {r.ConflictDetail}",
                 !r.Active))
             .ToList();
+    }
+
+    private void OnModuloClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is CheckBox { Tag: string id } caixa)
+        {
+            _model.SetModuleEnabled(id, caixa.IsChecked == true);
+            Refresh();
+        }
     }
 
     private void OnLiderKeyDown(object sender, KeyEventArgs e)
@@ -104,7 +119,7 @@ public partial class SettingsWindow : Window
             return;
         }
 
-        var resultado = _rebindLeader(binding);
+        var resultado = _model.RebindLeader(binding);
         Refresh();
 
         if (!resultado.Active)
@@ -123,11 +138,11 @@ public partial class SettingsWindow : Window
     {
         if (IniciarComWindows.IsChecked == true)
         {
-            _autostart.Enable();
+            _model.Autostart.Enable();
         }
         else
         {
-            _autostart.Disable();
+            _model.Autostart.Disable();
         }
 
         Refresh();

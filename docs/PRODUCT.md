@@ -2,7 +2,7 @@
 
 > Suíte de utilitários para Windows, open source, em processo único, acionada por teclado.
 
-**Status:** fase 1 em andamento — config, hotkeys, bandeja, instância única, autostart, tokens e tema prontos; faltam os arquétipos, a tecla líder e o primeiro módulo. Este documento é a fonte de verdade até o primeiro release.
+**Status:** fase 1 concluída — esqueleto inteiro de pé, com o Awake como primeiro módulo. Fase 2 (Peek, Ports, Scratch) em andamento rumo ao `v0.1`. Este documento é a fonte de verdade até o primeiro release.
 **Última revisão:** setembro de 2026
 
 ---

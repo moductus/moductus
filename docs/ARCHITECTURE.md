@@ -2,7 +2,7 @@
 
 > Documento de arquitetura. O que o produto é e por que existe está em [PRODUCT.md](PRODUCT.md); aqui está **como ele funciona por dentro**.
 >
-> **Status:** fase 1 em andamento. Implementados: 5.1 (instância única), 5.2 (janela oculta), 5.3 (hotkeys), 5.7 (configuração), a bandeja da 5.8 sem o mecanismo de reivindicação, 5.9 (tema), 6.4 (tokens) e o autostart. O restante descreve o desenho pretendido, não o que existe.
+> **Status:** fase 1 concluída. Tudo das seções 4 a 7 está implementado, com três lacunas deliberadas listadas na seção 12: o mecanismo de reivindicação da bandeja (5.8), o "clique fora fecha" do Panel (6.2) e o Acrylic dos overlays (6.4, hoje `bg.base` sólido — o fallback documentado).
 
 ## Sumário
 
@@ -200,6 +200,8 @@ Antes de exibir qualquer superfície que roube foco, o app guarda o `HWND` retor
 O Windows **bloqueia** mudança de foreground vinda de processo que não é o foreground atual, e o contorno tradicional é `AttachThreadInput`. Aqui isso não é necessário: no momento do fechamento, o Moductus **é** a janela em foreground, então tem o direito de passar o foco adiante. Essa é a razão de a restauração acontecer no fechamento e não em qualquer outro momento.
 
 O handle guardado pode ter morrido enquanto o overlay estava aberto. Verificar com `IsWindow` antes de restaurar; se morreu, não fazer nada e deixar o Windows decidir.
+
+**Tomar o foco é o lado difícil, e a primeira versão deste documento subestimou isso.** A premissa era que receber uma hotkey registrada dá ao processo o direito de chamar `SetForegroundWindow`. O teste de ponta a ponta mostrou o overlay abrindo **sem** o foreground: as teclas iam para o app anterior. `Activate()` do WPF é só `SetForegroundWindow`, e o Windows o recusa em boa parte dos casos. `ForegroundWindow.Take` faz o contorno clássico — `AttachThreadInput` na thread que tem o foreground, `SetForegroundWindow`, desanexa — e só depois disso o overlay passou a receber as letras.
 
 ### 5.6 Registro de letras
 
@@ -461,7 +463,9 @@ Pontos que este documento **não** resolve, e que precisam de decisão antes ou 
 | 1 | **O mark** | O keycap foi escolhido quando o produto se chamava Tecla, e não deriva mais do nome. Bloqueia o desenho dos 16px, que a seção 7 do PRODUCT.md chama de ativo mais importante da identidade. |
 | 2 | **Prioridade na bandeja** | Timer e Mic podem reivindicar o ícone ao mesmo tempo. A regra de prioridade está desenhada mas os valores não foram atribuídos. |
 | 3 | **Timeout do líder** | Três segundos é chute fundamentado, não medição. Precisa de uso real para calibrar. |
-| 4 | **Persistência de posição do Panel** | Panel é redimensionável e fixável. Se a posição persiste, o que acontece quando o monitor onde ele estava deixa de existir? |
+| 4 | **Persistência de posição do Panel** | Panel é redimensionável e fixável. Se a posição persiste, o que acontece quando o monitor onde ele estava deixa de existir? Hoje persiste só enquanto o processo vive. |
+| 5 | **"Clique fora" no Panel** | Panel nunca tem foco (`WS_EX_NOACTIVATE`), então não recebe `Deactivated` como a Palette. Detectar clique fora sem hook global de mouse exige `SetWinEventHook` em `EVENT_SYSTEM_FOREGROUND`, que não pega clique no app que já é foreground. Por ora fecha por Esc, pelo botão e pela hotkey. |
+| 6 | **Acrylic nos overlays** | `DWMWA_SYSTEMBACKDROP_TYPE` exige fundo transparente na janela, e no WPF isso passa por `WindowChrome` com moldura de vidro negativa — fiddly e com custo de GPU. Os arquétipos usam `bg.base` sólido, que é o fallback documentado, e cantos arredondados pelo DWM. O toggle de efeitos reduzidos só faz sentido quando houver efeito. |
 
 O autostart, que constava aqui, foi decidido: chave `Run` — decisão 21 do PRODUCT.md, com a razão de ler `StartupApproved` documentada em `Autostart.cs`.
 

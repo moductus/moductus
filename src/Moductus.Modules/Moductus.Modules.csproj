@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <!-- Um projeto só, uma pasta por módulo. Sem plugins, assembly separada
+       só compraria tempo de build. Decisão 19 do PRODUCT.md. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Moductus.Core\Moductus.Core.csproj" />
+    <ProjectReference Include="..\Moductus.UI\Moductus.UI.csproj" />
+  </ItemGroup>
+
+</Project>

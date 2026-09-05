@@ -39,6 +39,16 @@ public static class Dwm
         }
     }
 
+    /// <summary>
+    /// Cantos arredondados pelo DWM (Win11). Sem transparência de janela, que
+    /// custa GPU: o DWM recorta a região e a borda do conteúdo acompanha.
+    /// </summary>
+    public static unsafe void RoundCorners(nint window)
+    {
+        var preferencia = DWM_WINDOW_CORNER_PREFERENCE.DWMWCP_ROUND;
+        PInvoke.DwmSetWindowAttribute((HWND)window, DWMWINDOWATTRIBUTE.DWMWA_WINDOW_CORNER_PREFERENCE, &preferencia, sizeof(DWM_WINDOW_CORNER_PREFERENCE));
+    }
+
     /// <summary>Devolve a barra de título ao sistema — usado no alto contraste.</summary>
     public static unsafe void ResetCaption(nint window)
     {

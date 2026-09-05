@@ -45,6 +45,14 @@ O escopo de teste é deliberadamente estreito, e isso é decisão registrada, n�
 
 Se o seu módulo tem lógica que dá para separar da UI e da API do Windows, separe e teste essa parte.
 
+### Smoke test manual: não confie em `HasExited`
+
+Quando o app crasha, o diálogo do Windows Error Reporting **segura o processo vivo** até alguém fechá-lo. `Process.HasExited` diz `false`, o pid continua na lista, e um script que só olha isso conclui "subiu sem erro". Três smoke tests deste projeto passaram assim, com o app morto por baixo.
+
+O que funciona: depois de subir, consultar o log de eventos do Windows (`Application`, provedor `.NET Runtime`) por entradas com `Moductus` desde o início do teste. É lá que a exceção e a stack aparecem.
+
+Para exercitar a tecla líder sem tocar na sua configuração real, use o modo portable: um `portable.txt` e um `config.json` na pasta do executável em `bin/`, que já está no `.gitignore`.
+
 ## Estilo
 
 Siga o código vizinho. Nomenclatura, injeção de dependência, separação de camadas e formato de teste devem ser indistinguíveis do que já está no repositório.

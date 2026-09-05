@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Moductus"
         Style="{DynamicResource {x:Type Window}}"
-        Width="520" Height="480"
-        MinWidth="420" MinHeight="360"
+        Width="560" Height="620"
+        MinWidth="440" MinHeight="420"
         WindowStartupLocation="CenterScreen"
         ShowInTaskbar="True"
         KeyDown="OnKeyDown">
@@ -12,33 +12,86 @@
     <!-- Nenhuma cor, tamanho ou raio aqui. Tudo vem dos tokens via os estilos
          implícitos de Controls.xaml; o que sobra é só layout. -->
 
-    <Grid Margin="{DynamicResource inset.24}">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <Window.Resources>
+        <DataTemplate x:Key="LinhaAtalho">
+            <Grid MinHeight="{DynamicResource size.row}" Margin="8,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="{Binding Combinacao}"
+                           FontFamily="{DynamicResource font.mono}"
+                           VerticalAlignment="Center"
+                           Margin="0,0,16,0" />
+                <TextBlock x:Name="Detalhe"
+                           Grid.Column="1"
+                           Text="{Binding Detalhe}"
+                           Style="{DynamicResource text.secondary}"
+                           VerticalAlignment="Center" />
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Conflito}" Value="True">
+                    <Setter TargetName="Detalhe" Property="Foreground" Value="{DynamicResource danger}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
 
-        <TextBlock Grid.Row="0" Text="Moductus" Style="{DynamicResource text.title}" Margin="0,0,0,16" />
+        <DataTemplate x:Key="LinhaModulo">
+            <Grid MinHeight="{DynamicResource size.row}" Margin="8,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <CheckBox Grid.Column="0"
+                          IsChecked="{Binding Ativo, Mode=OneWay}"
+                          Content="{Binding Nome}"
+                          Tag="{Binding Id}"
+                          Click="OnModuloClick"
+                          MinWidth="120" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Letra}"
+                           FontFamily="{DynamicResource font.mono}"
+                           VerticalAlignment="Center"
+                           Margin="16,0" />
+                <TextBlock x:Name="Detalhe"
+                           Grid.Column="2"
+                           Text="{Binding Detalhe}"
+                           Style="{DynamicResource text.secondary}"
+                           VerticalAlignment="Center" />
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Conflito}" Value="True">
+                    <Setter TargetName="Detalhe" Property="Foreground" Value="{DynamicResource danger}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
 
-        <Border x:Name="AvisoBorda"
-                Grid.Row="1"
-                Background="{DynamicResource bg.raised}"
-                BorderBrush="{DynamicResource danger}"
-                BorderThickness="{DynamicResource border.width}"
-                CornerRadius="{DynamicResource radius.card}"
-                Padding="{DynamicResource inset.12}"
-                Margin="0,0,0,16"
-                Visibility="Collapsed">
-            <TextBlock x:Name="Aviso" />
-        </Border>
+        <Style x:Key="Cartao" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource bg.raised}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource border.subtle}" />
+            <Setter Property="BorderThickness" Value="{DynamicResource border.width}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource radius.card}" />
+            <Setter Property="Padding" Value="{DynamicResource inset.8}" />
+        </Style>
+    </Window.Resources>
 
-        <!-- Tecla líder. O campo captura a combinação pressionada; não se digita. -->
-        <StackPanel Grid.Row="2" Margin="0,0,0,16">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="{DynamicResource inset.24}">
+
+            <TextBlock Text="Moductus" Style="{DynamicResource text.title}" Margin="0,0,0,16" />
+
+            <Border x:Name="AvisoBorda"
+                    Style="{StaticResource Cartao}"
+                    BorderBrush="{DynamicResource danger}"
+                    Padding="{DynamicResource inset.12}"
+                    Margin="0,0,0,16"
+                    Visibility="Collapsed">
+                <TextBlock x:Name="Aviso" />
+            </Border>
+
+            <!-- Tecla líder. O campo captura a combinação pressionada; não se digita. -->
             <TextBlock Text="Tecla líder" FontWeight="{DynamicResource weight.semibold}" Margin="0,0,0,8" />
             <TextBox x:Name="Lider"
                      IsReadOnly="True"
@@ -47,58 +100,26 @@
                      PreviewKeyDown="OnLiderKeyDown" />
             <TextBlock x:Name="LiderDetalhe"
                        Style="{DynamicResource text.caption}"
-                       Margin="0,4,0,0" />
-        </StackPanel>
+                       Margin="0,4,0,24" />
 
-        <StackPanel Grid.Row="3" Margin="0,0,0,24">
+            <TextBlock Text="Módulos" FontWeight="{DynamicResource weight.semibold}" Margin="0,0,0,8" />
+            <Border Style="{StaticResource Cartao}" Margin="0,0,0,24">
+                <ItemsControl x:Name="Modulos" ItemTemplate="{StaticResource LinhaModulo}" />
+            </Border>
+
             <CheckBox x:Name="IniciarComWindows"
                       Content="Iniciar com o Windows"
                       Click="OnAutostartClick" />
             <TextBlock x:Name="AutostartDetalhe"
                        Style="{DynamicResource text.caption}"
-                       Margin="24,0,0,0" />
+                       Margin="24,0,0,24" />
+
+            <TextBlock Text="Atalhos globais" FontWeight="{DynamicResource weight.semibold}" Margin="0,0,0,8" />
+            <Border Style="{StaticResource Cartao}" Margin="0,0,0,16">
+                <ItemsControl x:Name="Atalhos" ItemTemplate="{StaticResource LinhaAtalho}" />
+            </Border>
+
+            <TextBlock x:Name="Rodape" Style="{DynamicResource text.caption}" />
         </StackPanel>
-
-        <TextBlock Grid.Row="4" Text="Atalhos" FontWeight="{DynamicResource weight.semibold}" Margin="0,0,0,8" />
-
-        <Border Grid.Row="5"
-                Background="{DynamicResource bg.raised}"
-                BorderBrush="{DynamicResource border.subtle}"
-                BorderThickness="{DynamicResource border.width}"
-                CornerRadius="{DynamicResource radius.card}"
-                Padding="{DynamicResource inset.8}">
-            <ItemsControl x:Name="Atalhos">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Grid MinHeight="{DynamicResource size.row}" Margin="8,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0"
-                                       Text="{Binding Combinacao}"
-                                       FontFamily="{DynamicResource font.mono}"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,16,0" />
-                            <TextBlock x:Name="Detalhe"
-                                       Grid.Column="1"
-                                       Text="{Binding Detalhe}"
-                                       Style="{DynamicResource text.secondary}"
-                                       VerticalAlignment="Center" />
-                        </Grid>
-                        <DataTemplate.Triggers>
-                            <DataTrigger Binding="{Binding Conflito}" Value="True">
-                                <Setter TargetName="Detalhe" Property="Foreground" Value="{DynamicResource danger}" />
-                            </DataTrigger>
-                        </DataTemplate.Triggers>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </Border>
-
-        <TextBlock x:Name="Rodape"
-                   Grid.Row="6"
-                   Style="{DynamicResource text.caption}"
-                   Margin="0,12,0,0" />
-    </Grid>
+    </ScrollViewer>
 </Window>
