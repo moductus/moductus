@@ -2,8 +2,9 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Moductus"
-        Width="520" Height="440"
-        MinWidth="420" MinHeight="320"
+        Style="{DynamicResource {x:Type Window}}"
+        Width="520" Height="480"
+        MinWidth="420" MinHeight="360"
         WindowStartupLocation="CenterScreen"
         ShowInTaskbar="True"
         KeyDown="OnKeyDown">
@@ -13,6 +14,7 @@
 
     <Grid Margin="{DynamicResource inset.24}">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -35,7 +37,20 @@
             <TextBlock x:Name="Aviso" />
         </Border>
 
-        <StackPanel Grid.Row="2" Margin="0,0,0,24">
+        <!-- Tecla líder. O campo captura a combinação pressionada; não se digita. -->
+        <StackPanel Grid.Row="2" Margin="0,0,0,16">
+            <TextBlock Text="Tecla líder" FontWeight="{DynamicResource weight.semibold}" Margin="0,0,0,8" />
+            <TextBox x:Name="Lider"
+                     IsReadOnly="True"
+                     IsReadOnlyCaretVisible="False"
+                     Cursor="Hand"
+                     PreviewKeyDown="OnLiderKeyDown" />
+            <TextBlock x:Name="LiderDetalhe"
+                       Style="{DynamicResource text.caption}"
+                       Margin="0,4,0,0" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="3" Margin="0,0,0,24">
             <CheckBox x:Name="IniciarComWindows"
                       Content="Iniciar com o Windows"
                       Click="OnAutostartClick" />
@@ -44,12 +59,45 @@
                        Margin="24,0,0,0" />
         </StackPanel>
 
-        <TextBlock Grid.Row="3" Text="Atalhos" FontWeight="{DynamicResource weight.semibold}" Margin="0,0,0,8" />
+        <TextBlock Grid.Row="4" Text="Atalhos" FontWeight="{DynamicResource weight.semibold}" Margin="0,0,0,8" />
 
-        <ListBox x:Name="Atalhos" Grid.Row="4" />
+        <Border Grid.Row="5"
+                Background="{DynamicResource bg.raised}"
+                BorderBrush="{DynamicResource border.subtle}"
+                BorderThickness="{DynamicResource border.width}"
+                CornerRadius="{DynamicResource radius.card}"
+                Padding="{DynamicResource inset.8}">
+            <ItemsControl x:Name="Atalhos">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid MinHeight="{DynamicResource size.row}" Margin="8,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding Combinacao}"
+                                       FontFamily="{DynamicResource font.mono}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,16,0" />
+                            <TextBlock x:Name="Detalhe"
+                                       Grid.Column="1"
+                                       Text="{Binding Detalhe}"
+                                       Style="{DynamicResource text.secondary}"
+                                       VerticalAlignment="Center" />
+                        </Grid>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding Conflito}" Value="True">
+                                <Setter TargetName="Detalhe" Property="Foreground" Value="{DynamicResource danger}" />
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
 
         <TextBlock x:Name="Rodape"
-                   Grid.Row="5"
+                   Grid.Row="6"
                    Style="{DynamicResource text.caption}"
                    Margin="0,12,0,0" />
     </Grid>

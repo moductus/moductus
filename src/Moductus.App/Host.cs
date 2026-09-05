@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
 using Moductus.Core.Config;
@@ -20,6 +21,9 @@ namespace Moductus.App;
 /// </remarks>
 internal sealed class Host : IDisposable
 {
+    private const string LeaderOwner = "leader";
+    private const string LeaderKey = "leader";
+    private const string LeaderHotkeyKey = "hotkey";
     private const uint VkSpace = 0x20;
 
     private static readonly HotkeyBinding LeaderDefault =
@@ -35,6 +39,7 @@ internal sealed class Host : IDisposable
     private readonly Autostart _autostart;
     private readonly Theme _theme;
 
+    private HotkeyRegistration _leader;
     private SettingsWindow? _settings;
 
     public Host(Application app)
@@ -53,7 +58,7 @@ internal sealed class Host : IDisposable
 
         // 3. Hotkeys. Só a líder por padrão; conflito fica visível na configuração.
         _hotkeys = new HotkeyRegistry(new Win32HotkeySink(_messages.Handle));
-        _hotkeys.Register("leader", LeaderDefault, OnLeader);
+        _leader = _hotkeys.Register(LeaderOwner, LeaderBindingFromConfig(), OnLeader);
 
         // 4. Bandeja. O ícone é o genérico do sistema até o mark existir
         //    (ponto em aberto no apêndice 13 do PRODUCT.md).
@@ -91,6 +96,47 @@ internal sealed class Host : IDisposable
         }
     }
 
+    private HotkeyBinding LeaderBindingFromConfig()
+    {
+        var texto = _config.Root[LeaderKey]?[LeaderHotkeyKey]?.GetValue<string>();
+        return HotkeyBinding.TryParse(texto, out var binding) ? binding : LeaderDefault;
+    }
+
+    /// <summary>
+    /// Troca a tecla líder. Nunca deixa o usuário sem líder: se a nova
+    /// combinação conflita, a anterior é mantida e o pedido falho é devolvido
+    /// para a tela mostrar o motivo.
+    /// </summary>
+    private HotkeyRegistration RebindLeader(HotkeyBinding binding)
+    {
+        if (binding == _leader.Binding)
+        {
+            return _leader;
+        }
+
+        var tentativa = _hotkeys.Register(LeaderOwner, binding, OnLeader);
+
+        if (!tentativa.Active)
+        {
+            _hotkeys.Unregister(tentativa.Id);
+            return tentativa;
+        }
+
+        _hotkeys.Unregister(_leader.Id);
+        _leader = tentativa;
+
+        if (_config.Root[LeaderKey] is not JsonObject leader)
+        {
+            leader = [];
+            _config.Root[LeaderKey] = leader;
+        }
+
+        leader[LeaderHotkeyKey] = binding.ToString();
+        _config.Save();
+
+        return _leader;
+    }
+
     private bool OnMessage(uint message, nint wParam, nint lParam)
     {
         if (message == HotkeyRegistry.WindowsMessage)
@@ -125,7 +171,10 @@ internal sealed class Host : IDisposable
     {
         if (_settings is null || !_settings.IsLoaded)
         {
-            _settings = new SettingsWindow(_autostart, _hotkeys, _location, _configWarning);
+            _settings = new SettingsWindow(
+                _autostart, _hotkeys, _location, _theme, _configWarning,
+                leader: () => _leader,
+                rebindLeader: RebindLeader);
             _settings.Closed += (_, _) => _settings = null;
         }
 

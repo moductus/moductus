@@ -180,4 +180,46 @@ public class HotkeyBindingTests
         => Assert.Equal(
             new HotkeyBinding(HotkeyModifiers.Control, 0x41),
             new HotkeyBinding(HotkeyModifiers.Control, 0x41));
+
+    // O formato gravado no config.json precisa voltar idêntico.
+    [Theory]
+    [InlineData(HotkeyModifiers.Control | HotkeyModifiers.Alt, 0x20)]
+    [InlineData(HotkeyModifiers.Control, 0x50)]
+    [InlineData(HotkeyModifiers.Windows | HotkeyModifiers.Shift, 0x53)]
+    [InlineData(HotkeyModifiers.Alt, 0x70)]
+    public void Texto_e_parse_sao_inversos(HotkeyModifiers mods, uint vk)
+    {
+        var original = new HotkeyBinding(mods, vk);
+
+        Assert.True(HotkeyBinding.TryParse(original.ToString(), out var relido));
+        Assert.Equal(original, relido);
+    }
+
+    [Theory]
+    [InlineData("ctrl + alt + space", HotkeyModifiers.Control | HotkeyModifiers.Alt, 0x20)]
+    [InlineData("CONTROL+P", HotkeyModifiers.Control, 0x50)]
+    [InlineData("Windows+Shift+S", HotkeyModifiers.Windows | HotkeyModifiers.Shift, 0x53)]
+    [InlineData("F1", HotkeyModifiers.None, 0x70)]
+    public void Parse_tolera_caixa_espacos_e_sinonimos(string texto, HotkeyModifiers mods, uint vk)
+    {
+        Assert.True(HotkeyBinding.TryParse(texto, out var b));
+        Assert.Equal(new HotkeyBinding(mods, vk), b);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Ctrl+Alt")]
+    [InlineData("Ctrl+Foo")]
+    [InlineData("Ctrl+A+B")]
+    public void Parse_recusa_o_que_nao_e_combinacao(string? texto)
+        => Assert.False(HotkeyBinding.TryParse(texto, out _));
+
+    [Fact]
+    public void Tecla_solta_nao_tem_modificador()
+    {
+        Assert.False(new HotkeyBinding(HotkeyModifiers.None, 0x70).HasModifier);
+        Assert.False(new HotkeyBinding(HotkeyModifiers.NoRepeat, 0x70).HasModifier);
+        Assert.True(new HotkeyBinding(HotkeyModifiers.Alt, 0x70).HasModifier);
+    }
 }

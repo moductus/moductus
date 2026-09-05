@@ -22,6 +22,62 @@ public enum HotkeyModifiers : uint
 /// <summary>Uma combinação de teclas.</summary>
 public readonly record struct HotkeyBinding(HotkeyModifiers Modifiers, uint VirtualKey)
 {
+    /// <summary>Pelo menos um modificador: tecla solta como hotkey global é armadilha.</summary>
+    public bool HasModifier =>
+        (Modifiers & (HotkeyModifiers.Control | HotkeyModifiers.Alt | HotkeyModifiers.Shift | HotkeyModifiers.Windows)) != 0;
+
+    /// <summary>
+    /// O inverso de <see cref="ToString"/>: "Ctrl+Alt+Space" vira a combinação.
+    /// É o formato gravado no config.json.
+    /// </summary>
+    public static bool TryParse(string? text, out HotkeyBinding binding)
+    {
+        binding = default;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var modifiers = HotkeyModifiers.None;
+        uint vk = 0;
+
+        foreach (var parte in text.Split('+', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+        {
+            switch (parte.ToLowerInvariant())
+            {
+                case "ctrl" or "control":
+                    modifiers |= HotkeyModifiers.Control;
+                    break;
+                case "alt":
+                    modifiers |= HotkeyModifiers.Alt;
+                    break;
+                case "shift":
+                    modifiers |= HotkeyModifiers.Shift;
+                    break;
+                case "win" or "windows":
+                    modifiers |= HotkeyModifiers.Windows;
+                    break;
+                default:
+                    if (vk != 0 || !Enum.TryParse<Key>(parte, ignoreCase: true, out var key) || key == Key.None)
+                    {
+                        return false;
+                    }
+
+                    vk = (uint)KeyInterop.VirtualKeyFromKey(key);
+                    break;
+            }
+        }
+
+        if (vk == 0)
+        {
+            return false;
+        }
+
+        binding = new HotkeyBinding(modifiers, vk);
+        return true;
+    }
+
     /// <summary>Texto legível, do jeito que aparece na tela de configuração.</summary>
     public override string ToString()
     {

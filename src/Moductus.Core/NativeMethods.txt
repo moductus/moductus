@@ -17,3 +17,5 @@ DestroyIcon
 SetForegroundWindow
 FindWindowEx
 PostMessage
+DwmSetWindowAttribute
+DWMWINDOWATTRIBUTE

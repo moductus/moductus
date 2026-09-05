@@ -288,6 +288,10 @@ Superfície aparece no monitor da janela em foreground, não no primário. O Win
 
 Isso não é preciosismo de estilo: é o que permite que doze módulos escritos em momentos diferentes pareçam o mesmo produto, e o que impede que geração assistida invente uma cor a cada arquivo.
 
+**Armadilha do WPF que a primeira janela expôs:** estilo implícito só casa com o tipo exato, nunca com subclasse. `Style TargetType="Window"` não se aplica a `SettingsWindow : Window` — a janela nasce branca com texto claro. Toda janela nossa é subclasse, então cada uma declara `Style="{DynamicResource {x:Type Window}}"`; os arquétipos fazem isso no construtor base para que módulo nenhum precise lembrar.
+
+A barra de título nativa também segue os tokens, por `DwmSetWindowAttribute` (`TitleBar.Sync`). Sem isso ela nasce na cor de destaque que o usuário escolheu para o Windows, que raramente combina com `bg.base`.
+
 ---
 
 ## 7. Módulos

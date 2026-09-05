@@ -243,8 +243,9 @@ Isso entrega três coisas de graça:
 | `Win+Space` | Troca de layout de teclado |
 | `Ctrl+Space` | IME e autocomplete de IDE |
 | `Win+V` | Histórico de clipboard nativo |
+| `Ctrl+Alt+Space` | **Claude Code** (app desktop) — descoberto na máquina de desenvolvimento pelo registro de conflito |
 
-Padrão sugerido: `Ctrl+Alt+Space`, configurável.
+Padrão atual: `Ctrl+Alt+Space`, configurável pela tela de configurações desde a Fase 1. A colisão com o Claude Code é grave porque é o público-alvo exato; o padrão precisa ser revisto antes do `v0.1`, e a troca nunca deixa o usuário sem líder — se a combinação nova conflita, a anterior é mantida e o motivo aparece na hora.
 
 ---
 
