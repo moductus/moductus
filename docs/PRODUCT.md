@@ -2,7 +2,7 @@
 
 > Suíte de utilitários para Windows, open source, em processo único, acionada por teclado.
 
-**Status:** `v0.1` — Awake, Peek, Ports e Scratch sobre o esqueleto completo. Primeiro release público. Fase 3 (Palette) é a próxima. Este documento é a fonte de verdade até o primeiro release.
+**Status:** fase 3 implementada — a Palette como hub, com PasteFlow e RunNotify como comandos dela. `v0.1` publicado com as fases 1 e 2; a Palette entra no `v0.2`. Este documento é a fonte de verdade até o primeiro release.
 **Última revisão:** setembro de 2026
 
 ---
@@ -317,7 +317,7 @@ Atribuição inicial sugerida:
 | **OCR de tela** | O Windows tem OCR nativo e gratuito via `Windows.Media.Ocr`. Sem dependência externa, sem modelo pra baixar. Provavelmente a funcionalidade de maior valor percebido da lista inteira. | Dentro do Freeze |
 | **PasteFlow** | Transformações de clipboard: colar sem formatação, slug, camelCase, JSON formatado, decodificar base64 e JWT. | Comandos da Palette |
 | **RunNotify** | Envolve um comando longo e notifica quando termina, com tempo gasto e exit code. Trivial de fazer, resolve dor real. | Comando da Palette |
-| **QR do clipboard** | Gera QR do que estiver copiado, pra mandar link ao celular. Vinte linhas de código. | Comando da Palette |
+| **QR do clipboard** | Gera QR do que estiver copiado, pra mandar link ao celular. "Vinte linhas de código" assumia uma biblioteca: o Windows não tem codificador de QR nativo, e escrever um (Reed-Solomon, máscaras) são centenas. **Pendente de aprovar a dependência** — QRCoder, MIT — conforme a regra do CONTRIBUTING. | Comando da Palette |
 
 ### Armadilhas técnicas por módulo
 

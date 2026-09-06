@@ -90,6 +90,24 @@ panel.TakeFocus(_filtro);                  // só se o módulo tem digitação
 
 **Trabalho lento não entra no `Invoke`.** O Ports mostra o Panel com "lendo…" e lê a tabela TCP em `Task.Run`. A superfície aparece antes do dado, sempre.
 
+### Oferecendo comandos à Palette
+
+Utilitário pequeno **não vira módulo**: vira comando da Palette. O `CommandRegistry` do contexto é onde qualquer módulo registra o que oferece, e a Palette lista sem conhecer ninguém:
+
+```csharp
+context.Commands.Register("meu-modulo", new PaletteCommand(
+    id: "json",
+    text: "Clipboard: formatar JSON",
+    detail: "Indenta o JSON copiado",
+    hint: null,
+    execute: () => { /* ... */ }));
+
+// No Disable:
+context.Commands.Unregister("meu-modulo");
+```
+
+O host registra "Abrir X" para cada módulo ativo, com a letra como dica. O ranking da busca é prefixo, depois início de palavra, depois trecho — previsível de propósito, sem fuzzy. `PasteFlow` e `RunNotify` em `src/Moductus.Modules/Palette/` são os exemplos.
+
 ## Nomeação
 
 Substantivo curto, um só, em inglês. Lê bem como `Moductus · Ports` e é digitável na paleta.

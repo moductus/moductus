@@ -26,8 +26,14 @@ public class PaletteWindow : ArchetypeWindow
     private readonly TextBlock _empty = new();
     private readonly ObservableCollection<PaletteItem> _visible = [];
 
-    private IReadOnlyList<PaletteItem> _all = [];
+    private Func<string, IEnumerable<PaletteItem>>? _provider;
     private nint _previousForeground;
+
+    /// <summary>
+    /// Enter com a lista vazia entrega o texto digitado. É assim que
+    /// "Executar comando…" recebe o comando. Limpo ao fechar.
+    /// </summary>
+    public Func<string, bool>? QuerySubmit { get; set; }
 
     public PaletteWindow() : base(stealsFocus: true)
     {
@@ -52,9 +58,21 @@ public class PaletteWindow : ArchetypeWindow
 
     public string Query => _input.Text;
 
+    /// <summary>Lista fixa, filtrada por trecho no texto ou no detalhe.</summary>
     public void SetItems(IEnumerable<PaletteItem> items)
     {
-        _all = [.. items];
+        var todos = items.ToList();
+        SetProvider(q => q.Length == 0
+            ? todos
+            : todos.Where(i =>
+                i.Text.Contains(q, StringComparison.OrdinalIgnoreCase)
+                || (i.Detail?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false)));
+    }
+
+    /// <summary>Quem decide o que aparece para cada texto digitado — com ranking próprio.</summary>
+    public void SetProvider(Func<string, IEnumerable<PaletteItem>> provider)
+    {
+        _provider = provider ?? throw new ArgumentNullException(nameof(provider));
         Refilter();
     }
 
@@ -163,7 +181,8 @@ public class PaletteWindow : ArchetypeWindow
         _previousForeground = 0;
 
         _input.Clear();
-        _all = [];
+        _provider = null;
+        QuerySubmit = null;
         _visible.Clear();
         base.OnDismissed();
 
@@ -176,14 +195,9 @@ public class PaletteWindow : ArchetypeWindow
         _placeholder.Visibility = q.Length == 0 && _input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         _visible.Clear();
-        foreach (var item in _all)
+        foreach (var item in _provider?.Invoke(q) ?? [])
         {
-            if (q.Length == 0
-                || item.Text.Contains(q, StringComparison.OrdinalIgnoreCase)
-                || (item.Detail?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false))
-            {
-                _visible.Add(item);
-            }
+            _visible.Add(item);
         }
 
         _list.SelectedIndex = _visible.Count > 0 ? 0 : -1;
@@ -224,13 +238,21 @@ public class PaletteWindow : ArchetypeWindow
 
     private void ExecuteSelected()
     {
-        if (_list.SelectedItem is not PaletteItem item)
+        if (_list.SelectedItem is PaletteItem item)
         {
+            // Foco volta primeiro; a ação roda partindo de um estado limpo.
+            Dismiss();
+            item.Execute();
             return;
         }
 
-        // Foco volta primeiro; a ação roda partindo de um estado limpo.
-        Dismiss();
-        item.Execute();
+        var submit = QuerySubmit;
+        var texto = _input.Text.Trim();
+
+        if (submit is not null && texto.Length > 0)
+        {
+            Dismiss();
+            submit(texto);
+        }
     }
 }

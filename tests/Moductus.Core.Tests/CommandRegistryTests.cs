@@ -1,0 +1,81 @@
+using Moductus.Core.Commands;
+
+namespace Moductus.Core.Tests;
+
+public class CommandRegistryTests
+{
+    private static PaletteCommand Cmd(string id, string text, string? detail = null) =>
+        new(id, text, detail, null, () => { });
+
+    private static CommandRegistry Registro()
+    {
+        var r = new CommandRegistry();
+        r.Register("host", Cmd("settings", "Configurações", "Abrir a janela de configurações"));
+        r.Register("host", Cmd("quit", "Sair do Moductus"));
+        r.Register("module:ports", Cmd("open:ports", "Abrir Ports", "Portas locais ocupadas"));
+        r.Register("pasteflow", Cmd("json", "Clipboard: formatar JSON", "Indenta o JSON copiado"));
+        r.Register("pasteflow", Cmd("slug", "Clipboard: slug", "ola-mundo"));
+        return r;
+    }
+
+    [Fact]
+    public void Busca_vazia_lista_tudo_em_ordem_alfabetica()
+    {
+        var todos = Registro().Search("");
+
+        Assert.Equal(5, todos.Count);
+        Assert.Equal("Abrir Ports", todos[0].Text);
+    }
+
+    [Fact]
+    public void Prefixo_do_texto_vem_antes_de_inicio_de_palavra_que_vem_antes_de_trecho()
+    {
+        var r = new CommandRegistry();
+        r.Register("t", Cmd("a", "Portas abertas"));
+        r.Register("t", Cmd("b", "Abrir Ports"));
+        r.Register("t", Cmd("c", "Exportar"));
+
+        var ordem = r.Search("por").Select(c => c.Text).ToList();
+
+        Assert.Equal(["Portas abertas", "Abrir Ports", "Exportar"], ordem);
+    }
+
+    [Fact]
+    public void Trecho_do_detalhe_conta_por_ultimo()
+    {
+        var resultado = Registro().Search("indenta");
+
+        Assert.Single(resultado);
+        Assert.Equal("json", resultado[0].Id);
+    }
+
+    [Fact]
+    public void O_que_nao_casa_some()
+        => Assert.Empty(Registro().Search("zzz"));
+
+    [Fact]
+    public void Busca_ignora_caixa()
+        => Assert.Equal("quit", Registro().Search("SAIR")[0].Id);
+
+    [Fact]
+    public void Unregister_remove_so_o_dono()
+    {
+        var r = Registro();
+
+        r.Unregister("pasteflow");
+
+        Assert.Equal(3, r.All.Count);
+        Assert.DoesNotContain(r.All, c => c.Id == "json");
+    }
+
+    [Fact]
+    public void Registrar_o_mesmo_id_substitui()
+    {
+        var r = Registro();
+
+        r.Register("host", Cmd("quit", "Encerrar"));
+
+        Assert.Single(r.All, c => c.Id == "quit");
+        Assert.Equal("Encerrar", r.All.First(c => c.Id == "quit").Text);
+    }
+}

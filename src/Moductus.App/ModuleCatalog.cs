@@ -1,5 +1,6 @@
 using Moductus.Core.Modules;
 using Moductus.Modules.Awake;
+using Moductus.Modules.Palette;
 using Moductus.Modules.Peek;
 using Moductus.Modules.Ports;
 using Moductus.Modules.Scratch;
@@ -20,5 +21,6 @@ internal static class ModuleCatalog
         new PeekModule(context),
         new PortsModule(context),
         new ScratchModule(context),
+        new PaletteModule(context),
     ];
 }

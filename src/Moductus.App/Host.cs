@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
+using Moductus.Core.Commands;
 using Moductus.Core.Config;
 using Moductus.Core.Hotkeys;
 using Moductus.Core.Interop;
@@ -44,6 +45,7 @@ internal sealed class Host : IDisposable
     private readonly MessageWindow _messages;
     private readonly HotkeyRegistry _hotkeys;
     private readonly LeaderRegistry _letters = new();
+    private readonly CommandRegistry _commands = new();
     private readonly TrayIcon _tray;
     private readonly Autostart _autostart;
     private readonly Theme _theme;
@@ -92,12 +94,17 @@ internal sealed class Host : IDisposable
         _archetypes = new ArchetypeHost();
 
         // 8. Módulos: Enable() de cada um ativo, e a letra no registro central.
+        //    O host oferece à Palette o que é dele: configurações e sair.
+        _commands.Register("host", new PaletteCommand("settings", "Configurações", "Abrir a janela de configurações", null, OpenSettings));
+        _commands.Register("host", new PaletteCommand("quit", "Sair do Moductus", null, null, () => _app.Shutdown()));
+
         _modules = ModuleCatalog.Create(new ModuleContext(
             _archetypes,
             _config.ModuleScope,
             _config.Save,
             Path.GetDirectoryName(_location.Path)!,
-            _theme));
+            _theme,
+            _commands));
 
         foreach (var module in _modules.Where(IsEnabledInConfig))
         {
@@ -141,12 +148,24 @@ internal sealed class Host : IDisposable
     private void EnableModule(IModule module)
     {
         module.Enable();
-        _letters.Register(LetterFor(module), module.Id, module.Name, module.Description, module.Invoke);
+        var letra = _letters.Register(LetterFor(module), module.Id, module.Name, module.Description, module.Invoke);
         _enabled.Add(module.Id);
+
+        // Todo módulo ativo vira "Abrir X" na Palette — menos a própria Palette.
+        if (module.Archetype != ModuleArchetype.Palette)
+        {
+            _commands.Register($"module:{module.Id}", new PaletteCommand(
+                $"open:{module.Id}",
+                $"Abrir {module.Name}",
+                module.Description,
+                letra.Active ? letra.Key.ToString().ToUpperInvariant() : null,
+                module.Invoke));
+        }
     }
 
     private void DisableModule(IModule module)
     {
+        _commands.Unregister($"module:{module.Id}");
         _letters.Unregister(module.Id);
         module.Disable();
         _enabled.Remove(module.Id);

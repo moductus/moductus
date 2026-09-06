@@ -9,7 +9,7 @@ Suíte de utilitários para Windows, open source, em processo único, acionada p
 
 ---
 
-> **Status: v0.1.** Primeiro release público: o esqueleto inteiro e quatro módulos — Awake, Peek, Ports e Scratch. O ícone de bandeja ainda é o genérico do Windows; o mark próprio vem no v0.2. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
+> **Status: v0.1 publicado, v0.2 em andamento.** O v0.1 traz o esqueleto inteiro e quatro módulos — Awake, Peek, Ports e Scratch. Em `main` já existe a Palette, o hub de comandos, que entra no v0.2. O ícone de bandeja ainda é o genérico do Windows. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
 
 ## O que é
 
@@ -46,7 +46,7 @@ Atalho direto continua existindo, mas como opção para dois ou três favoritos 
 | **Peek** | Miniatura flutuante ao vivo de qualquer janela | 2 |
 | **Ports** | Lista portas locais ocupadas e mata o processo | 2 |
 | **Scratch** | Bloco de notas que desliza do topo e salva sozinho | 2 |
-| **Palette** | Busca de comandos, scripts e ações | 3 |
+| **Palette** | Busca de comandos: abre módulos, transforma o clipboard (slug, camelCase, JSON, Base64, JWT), executa um comando e avisa quando termina | 3 |
 | **Clips** | Histórico de clipboard navegável por teclado | 4 |
 | **Freeze** | Tela congelada com régua, conta-gotas, lupa e OCR | 4 |
 | **Shelf** | Bandeja temporária na borda para segurar arquivos | 4 |
