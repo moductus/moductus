@@ -2,7 +2,7 @@
 
 > Documento de arquitetura. O que o produto é e por que existe está em [PRODUCT.md](PRODUCT.md); aqui está **como ele funciona por dentro**.
 >
-> **Status:** fases 1 a 3 implementadas. Tudo das seções 4 a 7 existe, mais cinco módulos e o registro de comandos que faz a Palette ser extensível sem conhecer ninguém, com três lacunas deliberadas listadas na seção 12: o mecanismo de reivindicação da bandeja (5.8), o "clique fora fecha" do Panel (6.2) e o Acrylic dos overlays (6.4, hoje `bg.base` sólido — o fallback documentado).
+> **Status:** fases 1 a 3 e a maior parte da 4 implementadas. Tudo das seções 4 a 7 existe, mais nove módulos e o registro de comandos que faz a Palette ser extensível sem conhecer ninguém, com três lacunas deliberadas listadas na seção 12: o mecanismo de reivindicação da bandeja (5.8), o "clique fora fecha" do Panel (6.2) e o Acrylic dos overlays (6.4, hoje `bg.base` sólido — o fallback documentado).
 
 ## Sumário
 
