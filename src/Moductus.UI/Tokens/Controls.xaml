@@ -31,19 +31,19 @@
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
-    <Style x:Key="text.caption" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+    <Style x:Key="style.caption" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="FontSize" Value="{DynamicResource type.caption}" />
         <Setter Property="LineHeight" Value="{DynamicResource type.caption.line}" />
         <Setter Property="Foreground" Value="{DynamicResource text.secondary}" />
     </Style>
 
-    <Style x:Key="text.title" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+    <Style x:Key="style.title" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="FontSize" Value="{DynamicResource type.title}" />
         <Setter Property="LineHeight" Value="{DynamicResource type.title.line}" />
         <Setter Property="FontWeight" Value="{DynamicResource weight.semibold}" />
     </Style>
 
-    <Style x:Key="text.secondary" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+    <Style x:Key="style.secondary" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
         <Setter Property="Foreground" Value="{DynamicResource text.secondary}" />
     </Style>
 

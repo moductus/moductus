@@ -36,7 +36,7 @@ public sealed class PeekModule(ModuleContext context) : IModule
     public void Enable()
     {
         _area.SizeChanged += (_, _) => Reposicionar();
-        _legenda.SetResourceReference(FrameworkElement.StyleProperty, "text.caption");
+        _legenda.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
         _legenda.HorizontalAlignment = HorizontalAlignment.Center;
         _legenda.Margin = new Thickness(0, 0, 0, 8);
 

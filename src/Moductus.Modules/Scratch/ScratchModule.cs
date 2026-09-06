@@ -70,7 +70,7 @@ public sealed class ScratchModule(ModuleContext context) : IModule
             Gravar();
         };
 
-        _estado.SetResourceReference(FrameworkElement.StyleProperty, "text.caption");
+        _estado.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
         _estado.HorizontalAlignment = HorizontalAlignment.Right;
         _estado.Margin = new Thickness(0, 0, 12, 6);
 

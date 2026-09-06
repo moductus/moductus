@@ -71,7 +71,7 @@ public sealed class LeaderOverlay : ArchetypeWindow
     protected override FrameworkElement BuildChrome(ContentPresenter slot)
     {
         var titulo = new TextBlock { Text = "Tecla líder" };
-        titulo.SetResourceReference(StyleProperty, "text.caption");
+        titulo.SetResourceReference(StyleProperty, "style.caption");
         titulo.Margin = new Thickness(4, 0, 0, 8);
 
         _grade.ItemWidth = 200;
@@ -81,7 +81,7 @@ public sealed class LeaderOverlay : ArchetypeWindow
         _empty.Visibility = Visibility.Collapsed;
 
         var rodape = new TextBlock { Text = "Esc fecha" };
-        rodape.SetResourceReference(StyleProperty, "text.caption");
+        rodape.SetResourceReference(StyleProperty, "style.caption");
         rodape.SetResourceReference(TextBlock.ForegroundProperty, "text.muted");
         rodape.Margin = new Thickness(4, 8, 0, 0);
 
@@ -112,7 +112,7 @@ public sealed class LeaderOverlay : ArchetypeWindow
 
         var nome = new TextBlock { Text = e.Name };
         var descricao = new TextBlock { Text = e.Description, TextTrimming = TextTrimming.CharacterEllipsis, TextWrapping = TextWrapping.NoWrap };
-        descricao.SetResourceReference(StyleProperty, "text.caption");
+        descricao.SetResourceReference(StyleProperty, "style.caption");
 
         var textos = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         textos.Children.Add(nome);

@@ -2,6 +2,8 @@ using Moductus.Core.Modules;
 using Moductus.Modules.Awake;
 using Moductus.Modules.Clips;
 using Moductus.Modules.Freeze;
+using Moductus.Modules.Kill;
+using Moductus.Modules.Links;
 using Moductus.Modules.Palette;
 using Moductus.Modules.Peek;
 using Moductus.Modules.Ports;
@@ -26,5 +28,7 @@ internal static class ModuleCatalog
         new PaletteModule(context),
         new ClipsModule(context),
         new FreezeModule(context),
+        new LinksModule(context),
+        new KillModule(context),   // desligado por padrão: EnabledByDefault = false
     ];
 }

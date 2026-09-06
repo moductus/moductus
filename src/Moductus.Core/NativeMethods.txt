@@ -67,3 +67,14 @@ IsWindowVisible
 AddClipboardFormatListener
 RemoveClipboardFormatListener
 WM_CLIPBOARDUPDATE
+GetDC
+ReleaseDC
+CreateCompatibleDC
+CreateCompatibleBitmap
+SelectObject
+BitBlt
+DeleteObject
+DeleteDC
+ROP_CODE
+WindowFromPoint
+GetWindowRect

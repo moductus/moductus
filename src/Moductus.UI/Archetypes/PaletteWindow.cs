@@ -130,7 +130,7 @@ public class PaletteWindow : ArchetypeWindow
 
         var detalhe = new FrameworkElementFactory(typeof(TextBlock));
         detalhe.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(nameof(PaletteItem.Detail)));
-        detalhe.SetResourceReference(TextBlock.StyleProperty, "text.caption");
+        detalhe.SetResourceReference(TextBlock.StyleProperty, "style.caption");
         detalhe.SetValue(TextBlock.MarginProperty, new Thickness(12, 0, 0, 0));
         detalhe.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
         detalhe.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
@@ -143,7 +143,7 @@ public class PaletteWindow : ArchetypeWindow
 
         var dica = new FrameworkElementFactory(typeof(TextBlock));
         dica.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(nameof(PaletteItem.Hint)));
-        dica.SetResourceReference(TextBlock.StyleProperty, "text.caption");
+        dica.SetResourceReference(TextBlock.StyleProperty, "style.caption");
         dica.SetResourceReference(TextBlock.FontFamilyProperty, "font.mono");
         dica.SetValue(Grid.ColumnProperty, 1);
         dica.SetValue(TextBlock.MarginProperty, new Thickness(16, 0, 0, 0));

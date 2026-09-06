@@ -9,7 +9,7 @@ Suíte de utilitários para Windows, open source, em processo único, acionada p
 
 ---
 
-> **Status: v0.1 publicado, v0.2 em andamento.** O v0.1 traz o esqueleto inteiro e quatro módulos — Awake, Peek, Ports e Scratch. Em `main` já existem a Palette — o hub de comandos, com transformações de clipboard, QR e executar-e-avisar — o Clips e o Freeze — tela congelada com lupa, conta-gotas, régua e OCR nativo — que entram no v0.2. O ícone de bandeja ainda é o genérico do Windows. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
+> **Status: v0.1 publicado, v0.2 em andamento.** O v0.1 traz o esqueleto inteiro e quatro módulos — Awake, Peek, Ports e Scratch. Em `main` já existem a Palette — o hub de comandos, com transformações de clipboard, QR e executar-e-avisar — o Clips, o Freeze — tela congelada com lupa, conta-gotas, régua e OCR nativo —, o Links e o Kill, que entram no v0.2. O ícone de bandeja ainda é o genérico do Windows. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
 
 ## O que é
 

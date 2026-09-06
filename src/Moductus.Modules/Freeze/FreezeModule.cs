@@ -75,7 +75,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         _cor.VerticalAlignment = VerticalAlignment.Center;
 
         _dica.Text = "clique: copiar cor   ·   arraste: medir   ·   Shift + arraste: OCR   ·   Esc: fechar";
-        _dica.SetResourceReference(FrameworkElement.StyleProperty, "text.caption");
+        _dica.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
 
         _camada.Children.Add(_selecao);
         _camada.Children.Add(_dimensoes);

@@ -294,6 +294,8 @@ Isso não é preciosismo de estilo: é o que permite que doze módulos escritos 
 
 **Armadilha do WPF que a primeira janela expôs:** estilo implícito só casa com o tipo exato, nunca com subclasse. `Style TargetType="Window"` não se aplica a `SettingsWindow : Window` — a janela nasce branca com texto claro. Toda janela nossa é subclasse, então cada uma declara `Style="{DynamicResource {x:Type Window}}"`; os arquétipos fazem isso no construtor base para que módulo nenhum precise lembrar.
 
+**Chave de estilo nunca repete chave de cor.** `text.secondary` era ao mesmo tempo um `Style` no `Controls.xaml` e um `Brush` na paleta; a paleta, mesclada por último, ganhava, e o primeiro módulo que pediu o estilo derrubou o app com `InvalidCastException`. Estilos de texto chamam-se `style.caption`, `style.title`, `style.secondary`; nomes sem prefixo são cor.
+
 A barra de título nativa também segue os tokens, por `DwmSetWindowAttribute` (`TitleBar.Sync`). Sem isso ela nasce na cor de destaque que o usuário escolheu para o Windows, que raramente combina com `bg.base`.
 
 ---

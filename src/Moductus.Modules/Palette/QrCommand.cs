@@ -26,7 +26,7 @@ internal sealed class QrCommand(ModuleContext context)
 
     public void Register()
     {
-        _legenda.SetResourceReference(FrameworkElement.StyleProperty, "text.caption");
+        _legenda.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
         _legenda.HorizontalAlignment = HorizontalAlignment.Center;
         _legenda.Margin = new Thickness(16, 0, 16, 12);
         _legenda.TextTrimming = TextTrimming.CharacterEllipsis;

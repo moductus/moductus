@@ -27,7 +27,7 @@
                 <TextBlock x:Name="Detalhe"
                            Grid.Column="1"
                            Text="{Binding Detalhe}"
-                           Style="{DynamicResource text.secondary}"
+                           Style="{DynamicResource style.secondary}"
                            VerticalAlignment="Center" />
             </Grid>
             <DataTemplate.Triggers>
@@ -58,7 +58,7 @@
                 <TextBlock x:Name="Detalhe"
                            Grid.Column="2"
                            Text="{Binding Detalhe}"
-                           Style="{DynamicResource text.secondary}"
+                           Style="{DynamicResource style.secondary}"
                            VerticalAlignment="Center" />
             </Grid>
             <DataTemplate.Triggers>
@@ -80,7 +80,7 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Margin="{DynamicResource inset.24}">
 
-            <TextBlock Text="Moductus" Style="{DynamicResource text.title}" Margin="0,0,0,16" />
+            <TextBlock Text="Moductus" Style="{DynamicResource style.title}" Margin="0,0,0,16" />
 
             <Border x:Name="AvisoBorda"
                     Style="{StaticResource Cartao}"
@@ -99,7 +99,7 @@
                      Cursor="Hand"
                      PreviewKeyDown="OnLiderKeyDown" />
             <TextBlock x:Name="LiderDetalhe"
-                       Style="{DynamicResource text.caption}"
+                       Style="{DynamicResource style.caption}"
                        Margin="0,4,0,24" />
 
             <TextBlock Text="Módulos" FontWeight="{DynamicResource weight.semibold}" Margin="0,0,0,8" />
@@ -111,7 +111,7 @@
                       Content="Iniciar com o Windows"
                       Click="OnAutostartClick" />
             <TextBlock x:Name="AutostartDetalhe"
-                       Style="{DynamicResource text.caption}"
+                       Style="{DynamicResource style.caption}"
                        Margin="24,0,0,24" />
 
             <TextBlock Text="Atalhos globais" FontWeight="{DynamicResource weight.semibold}" Margin="0,0,0,8" />
@@ -119,7 +119,7 @@
                 <ItemsControl x:Name="Atalhos" ItemTemplate="{StaticResource LinhaAtalho}" />
             </Border>
 
-            <TextBlock x:Name="Rodape" Style="{DynamicResource text.caption}" />
+            <TextBlock x:Name="Rodape" Style="{DynamicResource style.caption}" />
         </StackPanel>
     </ScrollViewer>
 </Window>

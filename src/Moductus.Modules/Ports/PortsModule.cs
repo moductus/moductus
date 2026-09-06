@@ -54,7 +54,7 @@ public sealed class PortsModule(ModuleContext context) : IModule
             }
         };
 
-        _estado.SetResourceReference(FrameworkElement.StyleProperty, "text.caption");
+        _estado.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
         _estado.HorizontalAlignment = HorizontalAlignment.Center;
         _estado.Margin = new Thickness(0, 16, 0, 16);
 
@@ -176,7 +176,7 @@ public sealed class PortsModule(ModuleContext context) : IModule
         }
 
         var endereco = new TextBlock { Text = l.Porta.Address, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) };
-        endereco.SetResourceReference(FrameworkElement.StyleProperty, "text.caption");
+        endereco.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
 
         var encerrar = new Button { Content = "Encerrar", Height = 26, Padding = new Thickness(10, 0, 10, 0), IsEnabled = !l.Desconhecido };
         var confirmando = false;
