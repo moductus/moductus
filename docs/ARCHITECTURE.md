@@ -2,7 +2,7 @@
 
 > Documento de arquitetura. O que o produto é e por que existe está em [PRODUCT.md](PRODUCT.md); aqui está **como ele funciona por dentro**.
 >
-> **Status:** fases 1 a 3 e a maior parte da 4 implementadas. Tudo das seções 4 a 7 existe, mais nove módulos e o registro de comandos que faz a Palette ser extensível sem conhecer ninguém, com três lacunas deliberadas listadas na seção 12: o mecanismo de reivindicação da bandeja (5.8), o "clique fora fecha" do Panel (6.2) e o Acrylic dos overlays (6.4, hoje `bg.base` sólido — o fallback documentado).
+> **Status:** roadmap implementado. Tudo das seções 4 a 7 existe, mais os doze módulos e o registro de comandos que faz a Palette ser extensível sem conhecer ninguém. O que resta está na seção 12, e o item que mais pesa é o mark: o ícone de bandeja é um placeholder traçado em código.
 
 ## Sumário
 
@@ -234,12 +234,14 @@ Módulos guardam seu estado sob `modules.<id>`, e não enxergam a raiz.
 
 O documento de produto pede que **dois** módulos desenhem no ícone: o Timer pinta o progresso do pomodoro, e o Mic troca o ícone inteiro quando o microfone está mudo. Isso torna a bandeja um recurso disputado, e disputa sem regra vira bug.
 
-O `TrayHost` é dono do ícone e aceita *sobreposições* de módulos por prioridade:
+O `TrayHost` é dono do ícone e aceita *reivindicações* de módulos por prioridade:
 
-- A **base** é o mark do Moductus, com variante clara e escura conforme `SystemUsesLightTheme`.
-- Um módulo pode reivindicar a bandeja enquanto tem estado ativo a comunicar.
-- Se dois reivindicam ao mesmo tempo, vence a prioridade mais alta; o outro fica registrado e assume quando o primeiro liberar.
+- A **base** é o mark do Moductus, com variante clara e escura conforme `SystemUsesLightTheme` — a barra de tarefas tem tema próprio, independente do dos aplicativos.
+- Um módulo reivindica a bandeja enquanto tem estado a comunicar, e libera descartando o `IDisposable` que recebeu.
+- Se dois reivindicam ao mesmo tempo, vence a prioridade mais alta; o outro fica registrado e assume quando o primeiro liberar. **Mic mudo é 100, progresso do Timer é 50**: esquecer o microfone aberto custa mais caro que perder a contagem de vista.
 - O ícone volta à base quando ninguém reivindica.
+
+O ícone é recriado a cada mudança, e handle de GDI vazado aqui apareceria como um app que degrada ao longo do dia. `IconFactory` cria o `HICON` a partir de um `RenderTargetBitmap`, entrega o handle ao Windows, e só então destrói o anterior — destruir antes faz o ícone piscar. Medido: catorze segundos de tique do Timer, zero handles a mais.
 
 E a armadilha de DPI: **a bandeja pede o ícone em 16, 20, 24 ou 32px conforme o scaling do monitor.** Gerar o bitmap no tamanho solicitado, nunca fixo em 16 e escalado — o resultado escalado fica borrado exatamente no ativo visual mais visível do produto.
 
@@ -464,14 +466,13 @@ Pontos que este documento **não** resolve, e que precisam de decisão antes ou 
 
 | # | Questão | Por que ainda está aberta |
 |---|---|---|
-| 1 | **O mark** | O keycap foi escolhido quando o produto se chamava Tecla, e não deriva mais do nome. Bloqueia o desenho dos 16px, que a seção 7 do PRODUCT.md chama de ativo mais importante da identidade. |
-| 2 | **Prioridade na bandeja** | Timer e Mic podem reivindicar o ícone ao mesmo tempo. A regra de prioridade está desenhada mas os valores não foram atribuídos. |
-| 3 | **Timeout do líder** | Três segundos é chute fundamentado, não medição. Precisa de uso real para calibrar. |
-| 4 | **Persistência de posição do Panel** | Panel é redimensionável e fixável. Se a posição persiste, o que acontece quando o monitor onde ele estava deixa de existir? Hoje persiste só enquanto o processo vive. |
-| 5 | **"Clique fora" no Panel** | Panel nunca tem foco (`WS_EX_NOACTIVATE`), então não recebe `Deactivated` como a Palette. Detectar clique fora sem hook global de mouse exige `SetWinEventHook` em `EVENT_SYSTEM_FOREGROUND`, que não pega clique no app que já é foreground. Por ora fecha por Esc, pelo botão e pela hotkey. |
-| 6 | **Acrylic nos overlays** | `DWMWA_SYSTEMBACKDROP_TYPE` exige fundo transparente na janela, e no WPF isso passa por `WindowChrome` com moldura de vidro negativa — fiddly e com custo de GPU. Os arquétipos usam `bg.base` sólido, que é o fallback documentado, e cantos arredondados pelo DWM. O toggle de efeitos reduzidos só faz sentido quando houver efeito. |
+| 1 | **O mark** | O keycap de `Mark.cs` é um placeholder traçado em código: contorno arredondado com legenda sólida, alinhado ao pixel, correto em 16/20/24/32px e nos dois temas de barra. Funciona, mas não é um mark desenhado. A seção 7 do PRODUCT.md chama o ícone de 16px de ativo mais importante da identidade, e isso continua verdade. |
+| 2 | **Timeout do líder** | Três segundos é chute fundamentado, não medição. Precisa de uso real para calibrar. |
+| 3 | **Persistência de posição do Panel** | Panel é redimensionável e fixável. Se a posição persiste, o que acontece quando o monitor onde ele estava deixa de existir? Hoje persiste só enquanto o processo vive. |
+| 4 | **"Clique fora" e Esc no Panel sem foco** | Panel não é ativado por clique nem por exibição (`WS_EX_NOACTIVATE`), então nem recebe `Deactivated` como a Palette, nem recebe tecla. Módulo com teclado próprio chama `TakeFocus` e aí Esc funciona — Ports, Scratch, Shelf e Links fazem isso. **Peek e o QR fecham só pela hotkey ou pelo ✕**, de propósito: existem para você continuar trabalhando enquanto olha. Detectar clique fora sem hook global de mouse exigiria `SetWinEventHook` em `EVENT_SYSTEM_FOREGROUND`, que nem pega clique no app que já é foreground. |
+| 5 | **Acrylic nos overlays** | `DWMWA_SYSTEMBACKDROP_TYPE` exige fundo transparente na janela, e no WPF isso passa por `WindowChrome` com moldura de vidro negativa — fiddly e com custo de GPU. Os arquétipos usam `bg.base` sólido, que é o fallback documentado, e cantos arredondados pelo DWM. O toggle de efeitos reduzidos só faz sentido quando houver efeito. |
 
-O autostart, que constava aqui, foi decidido: chave `Run` — decisão 21 do PRODUCT.md, com a razão de ler `StartupApproved` documentada em `Autostart.cs`.
+Dois itens saíram desta lista. O **autostart** foi decidido: chave `Run`, decisão 21 do PRODUCT.md, com a razão de ler `StartupApproved` documentada em `Autostart.cs`. A **prioridade na bandeja** foi implementada: `TrayHost` resolve por prioridade, e os valores estão nos módulos — Mic mudo em 100, progresso do Timer em 50, porque esquecer o microfone aberto custa mais caro que perder a contagem de vista.
 
 ---
 

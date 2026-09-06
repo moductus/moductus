@@ -9,7 +9,7 @@ Suíte de utilitários para Windows, open source, em processo único, acionada p
 
 ---
 
-> **Status: v0.2.0, o primeiro release.** Esqueleto inteiro e nove módulos: Awake, Peek, Ports, Scratch, Palette — o hub de comandos, com transformações de clipboard, QR e executar-e-avisar —, Clips, Freeze — tela congelada com lupa, conta-gotas, régua e OCR nativo —, Links e Kill. O ícone de bandeja ainda é o genérico do Windows. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
+> **Status: v0.2.0 publicável, roadmap concluído.** O `v0.2.0` traz nove módulos. Em `main` estão os doze — Shelf, Mic e Timer entram no próximo release. O ícone de bandeja é um mark provisório desenhado em código; o mark de verdade ainda não existe. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
 
 ## O que é
 
@@ -54,6 +54,8 @@ Atalho direto continua existindo, mas como opção para dois ou três favoritos 
 | **Links** | Cria junction e symlink arrastando pasta | 4 |
 | **Kill** | Mira que encerra janela travada com um clique | 4 |
 | **Timer** | Pomodoro desenhado dentro do ícone da bandeja | 4 |
+
+Os doze existem. Cada um tem uma letra na tela de configurações, e o **Kill nasce desligado** — anti-cheat de jogo marca quem encerra processo alheio, então ligar é decisão sua.
 
 O que ficou de fora, e por quê, está em [docs/PRODUCT.md](docs/PRODUCT.md#5-módulos) — a lista de módulos cortados é tão importante quanto a de aprovados.
 

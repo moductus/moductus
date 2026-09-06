@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Moductus.Core.Commands;
 using Moductus.Core.Interop;
+using Moductus.Core.Tray;
 using Moductus.UI.Archetypes;
 
 namespace Moductus.UI.Modules;
@@ -25,6 +26,9 @@ namespace Moductus.UI.Modules;
 /// A janela oculta, para módulos que precisam assinar mensagens do Windows
 /// — o Clips assina o aviso de mudança do clipboard.
 /// </param>
+/// <param name="Tray">
+/// Onde Mic e Timer reivindicam o ícone de bandeja, por prioridade.
+/// </param>
 public sealed record ModuleContext(
     ArchetypeHost Archetypes,
     Func<string, JsonObject> ConfigScope,
@@ -32,4 +36,5 @@ public sealed record ModuleContext(
     string DataDirectory,
     Theme Theme,
     CommandRegistry Commands,
-    MessageWindow Messages);
+    MessageWindow Messages,
+    TrayHost Tray);

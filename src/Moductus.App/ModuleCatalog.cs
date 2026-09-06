@@ -4,10 +4,13 @@ using Moductus.Modules.Clips;
 using Moductus.Modules.Freeze;
 using Moductus.Modules.Kill;
 using Moductus.Modules.Links;
+using Moductus.Modules.Mic;
 using Moductus.Modules.Palette;
 using Moductus.Modules.Peek;
 using Moductus.Modules.Ports;
 using Moductus.Modules.Scratch;
+using Moductus.Modules.Shelf;
+using Moductus.Modules.Timer;
 using Moductus.UI.Modules;
 
 namespace Moductus.App;
@@ -30,5 +33,8 @@ internal static class ModuleCatalog
         new FreezeModule(context),
         new LinksModule(context),
         new KillModule(context),   // desligado por padrão: EnabledByDefault = false
+        new ShelfModule(context),
+        new MicModule(context),
+        new TimerModule(context),
     ];
 }

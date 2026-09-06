@@ -161,3 +161,27 @@ Anotações que economizam dias de depuração, por módulo:
 - **Freeze** — capture o desktop como bitmap, jogue numa janela fullscreen borderless topmost, e opere régua, lupa e conta-gotas sobre esse bitmap em memória. Fica preciso e independe do que estava se movendo na tela.
 - **Kill** — pode ser marcado por anti-cheat de jogo. Fica desligado por padrão e documentado no README.
 - **Todo módulo com Panel** — um elemento do WPF só pode ter um pai lógico. Construir um `DockPanel` novo a cada `Invoke` e adicionar nele o mesmo `TextBox` de sempre derruba o app com "já é o filho lógico de outro elemento" — e só na **segunda** abertura, que é quando ninguém está testando. Construa o conteúdo uma vez, no `Enable`, e reutilize.
+
+### Desenhando estado no ícone de bandeja
+
+O ícone é disputado: Timer pinta o progresso, Mic troca quando está mudo. `context.Tray` resolve por prioridade.
+
+```csharp
+// Reivindica enquanto há estado a comunicar.
+_claim = context.Tray.Claim(Id, prioridade,
+    (tamanho, barraClara) => Mark.Render(tamanho, barraClara, progress: 0.42),
+    "Moductus — faltam 14:30");
+
+// Redesenha (o tique do Timer). Só age se este dono estiver no ar.
+context.Tray.Refresh(Id);
+
+// Libera: o ícone volta para quem estiver abaixo, ou para o mark base.
+_claim?.Dispose();
+```
+
+**O tamanho vem por parâmetro e não se discute.** A bandeja pede 16, 20, 24 ou 32 conforme o scaling do monitor; renderizar fixo em 16 e deixar o Windows escalar borra o ativo visual mais visível do produto. `Mark.Render` já faz tudo proporcional.
+
+**`barraClara` não é o tema dos aplicativos.** A barra de tarefas tem tema próprio (`SystemUsesLightTheme`), e ícone branco em barra clara desaparece.
+
+Prioridades em uso: **Mic mudo 100**, **progresso do Timer 50**. A regra é qual erro custa mais caro — microfone aberto sem querer bate perder a contagem de vista.
+

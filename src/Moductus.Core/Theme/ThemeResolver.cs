@@ -29,6 +29,13 @@ public interface ISystemThemeSource
     /// animações na acessibilidade. Aí toda transição vai a zero.
     /// </summary>
     bool ClientAreaAnimation { get; }
+
+    /// <summary>
+    /// <c>SystemUsesLightTheme</c> — a barra de tarefas, que é independente
+    /// do tema dos aplicativos. Barra clara pede mark escuro, e ícone branco
+    /// em barra clara simplesmente desaparece.
+    /// </summary>
+    bool TaskbarIsLight { get; }
 }
 
 /// <summary>Decide o modo a partir do que o sistema diz. Puro, testável.</summary>
@@ -58,14 +65,16 @@ public sealed class Win32SystemThemeSource : ISystemThemeSource
 {
     private const string PersonalizeKey = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
     private const string LightValue = "AppsUseLightTheme";
+    private const string SystemValue = "SystemUsesLightTheme";
 
-    public bool AppsUseLightTheme
+    public bool AppsUseLightTheme => Ler(LightValue);
+
+    public bool TaskbarIsLight => Ler(SystemValue);
+
+    private static bool Ler(string nome)
     {
-        get
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(PersonalizeKey);
-            return key?.GetValue(LightValue) is int valor && valor != 0;
-        }
+        using var key = Registry.CurrentUser.OpenSubKey(PersonalizeKey);
+        return key?.GetValue(nome) is int valor && valor != 0;
     }
 
     public bool HighContrast => SystemParameters.HighContrast;

@@ -14,6 +14,9 @@ public enum PanelPlacement
 
     /// <summary>Encostado no topo, como o Scratch que desliza de cima.</summary>
     Top,
+
+    /// <summary>Alto e estreito na borda direita, como a bandeja do Shelf.</summary>
+    Edge,
 }
 
 /// <summary>
@@ -151,12 +154,24 @@ public class PanelWindow : ArchetypeWindow
             return;
         }
 
-        var w = a.Px(560);
-        var h = a.Px(360);
-        var x = a.WorkLeft + (a.WorkWidth - w) / 2;
-        var y = _placement == PanelPlacement.Top
-            ? a.WorkTop + a.Px(Token("space.16"))
-            : a.WorkTop + (a.WorkHeight - h) / 2;
+        int w, h, x, y;
+
+        if (_placement == PanelPlacement.Edge)
+        {
+            w = a.Px(320);
+            h = (int)(a.WorkHeight * 0.6);
+            x = a.WorkLeft + a.WorkWidth - w - a.Px(Token("space.16"));
+            y = a.WorkTop + (a.WorkHeight - h) / 2;
+        }
+        else
+        {
+            w = a.Px(560);
+            h = a.Px(360);
+            x = a.WorkLeft + (a.WorkWidth - w) / 2;
+            y = _placement == PanelPlacement.Top
+                ? a.WorkTop + a.Px(Token("space.16"))
+                : a.WorkTop + (a.WorkHeight - h) / 2;
+        }
 
         PlacePhysical(a, x, y, w, h);
         _placed = true;

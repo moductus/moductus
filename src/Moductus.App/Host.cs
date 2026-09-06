@@ -46,7 +46,7 @@ internal sealed class Host : IDisposable
     private readonly HotkeyRegistry _hotkeys;
     private readonly LeaderRegistry _letters = new();
     private readonly CommandRegistry _commands = new();
-    private readonly TrayIcon _tray;
+    private readonly TrayHost _tray;
     private readonly Autostart _autostart;
     private readonly Theme _theme;
     private readonly ArchetypeHost _archetypes;
@@ -75,9 +75,10 @@ internal sealed class Host : IDisposable
         _hotkeys = new HotkeyRegistry(new Win32HotkeySink(_messages.Handle));
         _leader = _hotkeys.Register(LeaderOwner, LeaderBindingFromConfig(), OnLeader);
 
-        // 4. Bandeja. O ícone é o genérico do sistema até o mark existir
-        //    (ponto em aberto no apêndice 13 do PRODUCT.md).
-        _tray = new TrayIcon(_messages, StockIcons.Application, "Moductus");
+        // 4. Bandeja. O mark é desenhado em código, no tamanho que a bandeja
+        //    pedir — placeholder até o mark de verdade existir (apêndice 13).
+        var sistema = new Win32SystemThemeSource();
+        _tray = new TrayHost(_messages, sistema, "Moductus");
         _tray.LeftClick += OpenSettings;
         _tray.RightClick += ShowMenu;
 
@@ -88,7 +89,10 @@ internal sealed class Host : IDisposable
 
         // 6. Tokens e tema. Depois do ícone de propósito: carregar XAML não
         //    pertence ao caminho crítico, e nenhuma janela existe ainda.
-        _theme = new Theme(new Win32SystemThemeSource(), _messages, _app.Resources);
+        _theme = new Theme(sistema, _messages, _app.Resources);
+
+        // Barra de tarefas clara pede mark escuro: o ícone acompanha o tema.
+        _theme.Changed += _tray.Invalidate;
 
         // 7. Os quatro arquétipos, pré-aquecidos quando o app estiver ocioso.
         _archetypes = new ArchetypeHost();
@@ -105,7 +109,8 @@ internal sealed class Host : IDisposable
             Path.GetDirectoryName(_location.Path)!,
             _theme,
             _commands,
-            _messages));
+            _messages,
+            _tray));
 
         foreach (var module in _modules.Where(IsEnabledInConfig))
         {
