@@ -64,3 +64,6 @@ MIB_TCP6TABLE_OWNER_PID
 MIB_TCP6ROW_OWNER_PID
 ADDRESS_FAMILY
 IsWindowVisible
+AddClipboardFormatListener
+RemoveClipboardFormatListener
+WM_CLIPBOARDUPDATE

@@ -14,6 +14,7 @@ public sealed class PaletteModule(ModuleContext context) : IModule
 {
     private readonly PasteFlow _pasteFlow = new(context);
     private readonly RunNotify _runNotify = new(context);
+    private readonly QrCommand _qr = new(context);
 
     public string Id => "palette";
 
@@ -31,12 +32,14 @@ public sealed class PaletteModule(ModuleContext context) : IModule
     {
         _pasteFlow.Register();
         _runNotify.Register();
+        _qr.Register();
     }
 
     public void Disable()
     {
         context.Commands.Unregister(PasteFlow.Owner);
         context.Commands.Unregister(RunNotify.Owner);
+        context.Commands.Unregister(QrCommand.Owner);
     }
 
     public void Invoke()

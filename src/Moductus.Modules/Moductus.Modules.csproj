@@ -14,5 +14,8 @@
     <ProjectReference Include="..\Moductus.Core\Moductus.Core.csproj" />
     <ProjectReference Include="..\Moductus.UI\Moductus.UI.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="QRCoder" Version="1.8.0" />
+  </ItemGroup>
 
 </Project>

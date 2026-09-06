@@ -104,7 +104,8 @@ internal sealed class Host : IDisposable
             _config.Save,
             Path.GetDirectoryName(_location.Path)!,
             _theme,
-            _commands));
+            _commands,
+            _messages));
 
         foreach (var module in _modules.Where(IsEnabledInConfig))
         {
@@ -137,7 +138,7 @@ internal sealed class Host : IDisposable
     // ---- Módulos -----------------------------------------------------------
 
     private bool IsEnabledInConfig(IModule module) =>
-        _config.ModuleScope(module.Id)[EnabledKey]?.GetValue<bool>() ?? true;
+        _config.ModuleScope(module.Id)[EnabledKey]?.GetValue<bool>() ?? module.EnabledByDefault;
 
     private char LetterFor(IModule module)
     {

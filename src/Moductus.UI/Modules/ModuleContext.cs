@@ -1,13 +1,12 @@
 using System.Text.Json.Nodes;
 using Moductus.Core.Commands;
+using Moductus.Core.Interop;
 using Moductus.UI.Archetypes;
 
 namespace Moductus.UI.Modules;
 
 /// <summary>
-/// O que um módulo recebe do host. Tudo que ele precisa e nada mais: as
-/// superfícies, seu escopo de configuração, onde guardar arquivos, o tema
-/// e o registro de comandos da Palette.
+/// O que um módulo recebe do host. Tudo que ele precisa e nada mais.
 /// </summary>
 /// <param name="ConfigScope">
 /// O escopo <c>modules.&lt;id&gt;</c> do módulo. Ele não enxerga a raiz.
@@ -22,10 +21,15 @@ namespace Moductus.UI.Modules;
 /// Onde qualquer módulo registra ações para a Palette listar. O host
 /// registra "Abrir X" para cada módulo ativo.
 /// </param>
+/// <param name="Messages">
+/// A janela oculta, para módulos que precisam assinar mensagens do Windows
+/// — o Clips assina o aviso de mudança do clipboard.
+/// </param>
 public sealed record ModuleContext(
     ArchetypeHost Archetypes,
     Func<string, JsonObject> ConfigScope,
     Action SaveConfig,
     string DataDirectory,
     Theme Theme,
-    CommandRegistry Commands);
+    CommandRegistry Commands,
+    MessageWindow Messages);

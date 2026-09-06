@@ -43,6 +43,12 @@ public interface IModule
     /// <summary>Falso em módulo puro de estado, como o Awake.</summary>
     bool HasSurface { get; }
 
+    /// <summary>
+    /// Falso para o que precisa de consentimento explícito — o Kill, que
+    /// anti-cheat marca. O usuário liga na configuração.
+    /// </summary>
+    bool EnabledByDefault => true;
+
     /// <summary>Barato. Roda no startup.</summary>
     void Enable();
 
