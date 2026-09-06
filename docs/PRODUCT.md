@@ -2,7 +2,7 @@
 
 > Suíte de utilitários para Windows, open source, em processo único, acionada por teclado.
 
-**Status:** fase 4 em andamento — Clips pronto, QR do clipboard na Palette. Em seguida Freeze, Links e Kill. `v0.1` publicado com as fases 1 e 2. Este documento é a fonte de verdade até o primeiro release.
+**Status:** fase 4 em andamento — Clips, QR e Freeze com OCR prontos. Em seguida Links e Kill. `v0.1` publicado com as fases 1 e 2. Este documento é a fonte de verdade até o primeiro release.
 **Última revisão:** setembro de 2026
 
 ---

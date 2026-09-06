@@ -61,12 +61,18 @@ public abstract class ArchetypeWindow : Window
     protected nint Handle => new WindowInteropHelper(this).Handle;
 
     /// <summary>Mostra, ou traz para o monitor certo se já estiver visível.</summary>
-    public void Present()
+    public void Present() => Present(null);
+
+    /// <summary>
+    /// Mostra num monitor escolhido por quem chama — o Freeze precisa exibir
+    /// no mesmo monitor que acabou de congelar.
+    /// </summary>
+    public void Present(MonitorArea? area)
     {
         var foreground = ForegroundWindow.Capture();
         OnPresenting(foreground);
 
-        Place(Monitors.Around(foreground));
+        Place(area ?? Monitors.Around(foreground));
 
         if (!IsVisible)
         {

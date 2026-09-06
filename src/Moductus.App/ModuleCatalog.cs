@@ -1,6 +1,7 @@
 using Moductus.Core.Modules;
 using Moductus.Modules.Awake;
 using Moductus.Modules.Clips;
+using Moductus.Modules.Freeze;
 using Moductus.Modules.Palette;
 using Moductus.Modules.Peek;
 using Moductus.Modules.Ports;
@@ -24,5 +25,6 @@ internal static class ModuleCatalog
         new ScratchModule(context),
         new PaletteModule(context),
         new ClipsModule(context),
+        new FreezeModule(context),
     ];
 }
