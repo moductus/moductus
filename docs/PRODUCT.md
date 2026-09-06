@@ -88,10 +88,10 @@ O framework-dependent resolve isso: fica na casa de 10 a 15 MB, porque o .NET De
 
 | Canal | Formato | Tamanho | Por quê |
 |---|---|---|---|
-| Download do README | Zip portable, self-contained | **56,6 MB** medidos | "Extrai e roda" sem exigir nada instalado |
-| winget e scoop | Framework-dependent | **0,3 MB** medidos | O gerenciador resolve o runtime; é o canal do público-alvo |
+| Download do README | Zip portable, self-contained | **62,7 MB** medidos no v0.2.0 | "Extrai e roda" sem exigir nada instalado |
+| winget e scoop | Framework-dependent | **6,6 MB** medidos no v0.2.0 | O gerenciador resolve o runtime; é o canal do público-alvo |
 
-A estimativa original de 10–15 MB para o framework-dependent estava errada para mais: sem o runtime, sobra só o app.
+A estimativa original de 10–15 MB para o framework-dependent estava errada para mais: sem o runtime, o app tinha 0,3 MB. Os 6,6 MB atuais são a projeção WinRT (`Microsoft.Windows.SDK.NET`) que o OCR nativo exige — o preço de não baixar modelo nenhum.
 
 Custa dois jobs no `release.yml` em vez de um. Em troca, o argumento de peso continua verdadeiro no canal onde ele é medido, e a promessa de portable continua verdadeira no canal onde ela importa.
 

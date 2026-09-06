@@ -71,10 +71,10 @@ Baixe na [página de releases](https://github.com/moductus/moductus/releases). D
 
 | Canal | Formato | Tamanho |
 |---|---|---|
-| Download direto | Zip portable, self-contained | ~57 MB |
-| `winget` e `scoop` | Framework-dependent (requer .NET Desktop Runtime) | ~0,3 MB |
+| Download direto | Zip portable, self-contained | ~63 MB |
+| `winget` e `scoop` | Framework-dependent (requer .NET Desktop Runtime) | ~7 MB |
 
-Números medidos no build, não estimados. O zip é maior porque carrega o runtime inteiro dentro dele — o WPF não pode ser *trimmed*, então não há como encolher isso. Em troca, ele extrai e roda em qualquer máquina, sem instalar nada. Pelo `winget` o runtime vira dependência declarada e o pacote é só o app.
+Números medidos no build do v0.2.0, não estimados. Os ~6 MB do pacote pequeno são a projeção WinRT que o OCR do Freeze exige; sem ela o app tinha 0,3 MB. O zip é maior porque carrega o runtime inteiro dentro dele — o WPF não pode ser *trimmed*, então não há como encolher isso. Em troca, ele extrai e roda em qualquer máquina, sem instalar nada. Pelo `winget` o runtime vira dependência declarada e o pacote é só o app.
 
 ### Sobre o aviso do SmartScreen
 
