@@ -5,11 +5,11 @@
 Suíte de utilitários para Windows, open source, em processo único, acionada por teclado.
 
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-FFB224)](LICENSE)
-[![Status: fase 2](https://img.shields.io/badge/status-fase%202%20%C2%B7%20rumo%20ao%20v0.1-6B717A)](docs/PRODUCT.md#9-roadmap)
+[![Release](https://img.shields.io/github/v/release/moductus/moductus?include_prereleases&color=FFB224)](https://github.com/moductus/moductus/releases)
 
 ---
 
-> **Status: fase 2 implementada, v0.1 a caminho.** Ainda não há release. Funcionam o esqueleto inteiro e quatro módulos: Awake, Peek, Ports e Scratch. O que falta para o primeiro release público é empacotar, não construir. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
+> **Status: v0.1.** Primeiro release público: o esqueleto inteiro e quatro módulos — Awake, Peek, Ports e Scratch. O ícone de bandeja ainda é o genérico do Windows; o mark próprio vem no v0.2. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
 
 ## O que é
 
@@ -26,10 +26,13 @@ Três regras carregam o produto inteiro, e um módulo que não cabe nas três n�
 Registrar dezoito hotkeys globais garante conflito com outros aplicativos, e o Windows não avisa quando o registro falha — o atalho simplesmente não funciona, sem explicação. Então existe **uma** hotkey, e uma letra escolhe o módulo:
 
 ```
-Ctrl+Alt+Space  →  o  →  Ports
-Ctrl+Alt+Space  →  s  →  Scratch
-Ctrl+Alt+Space  →  k  →  Peek
+Ctrl+Alt+M  →  o  →  Ports
+Ctrl+Alt+M  →  s  →  Scratch
+Ctrl+Alt+M  →  k  →  Peek
+Ctrl+Alt+M  →  a  →  Awake
 ```
+
+A combinação é configurável na tela de configurações — clique no campo e pressione a nova. Se ela colidir com outro aplicativo, a anterior é mantida e o motivo aparece na hora.
 
 Isso entrega três coisas de uma vez: um único ponto de conflito para resolver, descoberta dos módulos sem abrir configuração, e a sensação de leader key que torna um conjunto de ferramentas pequenas agradável de operar.
 
@@ -64,7 +67,7 @@ Se algum dia houver checagem de atualização, ela será opt-in explícito e doc
 
 ## Instalação
 
-Ainda não há release. Quando houver, serão dois canais:
+Baixe na [página de releases](https://github.com/moductus/moductus/releases). Dois canais:
 
 | Canal | Formato | Tamanho |
 |---|---|---|

@@ -155,7 +155,7 @@ Ela não é visível, não aparece no Alt+Tab e não tem superfície. É infraes
 
 O `HotkeyRegistry` centraliza todo registro e guarda o resultado de cada tentativa. Registro que falha **não é silencioso**: fica marcado como em conflito, o ícone de bandeja mostra o estado, e a janela de configurações lista a combinação com o motivo. Um atalho que "não funciona" sem explicação é o modo de falha mais caro deste tipo de app, e é exatamente o que a tecla líder existe para minimizar.
 
-Por padrão há **uma** hotkey registrada: `Ctrl+Alt+Space`. Atalhos diretos por módulo existem, mas são opt-in.
+Por padrão há **uma** hotkey registrada: `Ctrl+Alt+M`. Atalhos diretos por módulo existem, mas são opt-in.
 
 ```csharp
 public interface IHotkeyRegistry

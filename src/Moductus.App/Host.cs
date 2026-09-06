@@ -30,10 +30,12 @@ internal sealed class Host : IDisposable
     private const string LeaderHotkeyKey = "hotkey";
     private const string EnabledKey = "enabled";
     private const string LeaderLetterKey = "leaderKey";
-    private const uint VkSpace = 0x20;
+    // M de Moductus. Ctrl+Alt+Space era o padrão e colide com o Claude Code —
+    // o público-alvo exato. Ver a tabela de combinações a evitar no PRODUCT.md.
+    private const uint VkM = 0x4D;
 
     private static readonly HotkeyBinding LeaderDefault =
-        new(HotkeyModifiers.Control | HotkeyModifiers.Alt, VkSpace);
+        new(HotkeyModifiers.Control | HotkeyModifiers.Alt, VkM);
 
     private readonly Application _app;
     private readonly ConfigLocation _location;

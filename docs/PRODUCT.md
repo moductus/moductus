@@ -2,7 +2,7 @@
 
 > Suíte de utilitários para Windows, open source, em processo único, acionada por teclado.
 
-**Status:** fase 2 implementada — Awake, Peek, Ports e Scratch funcionando sobre o esqueleto. Falta o primeiro release público, `v0.1`. Este documento é a fonte de verdade até o primeiro release.
+**Status:** `v0.1` — Awake, Peek, Ports e Scratch sobre o esqueleto completo. Primeiro release público. Fase 3 (Palette) é a próxima. Este documento é a fonte de verdade até o primeiro release.
 **Última revisão:** setembro de 2026
 
 ---
@@ -225,8 +225,8 @@ Registrar 18 hotkeys globais garante conflito com outros apps, e `RegisterHotKey
 Se os dois nascerem com o mesmo nome, a Fase 3 vira refactor do núcleo em vez de mais um módulo. O Palette, quando chegar, se registra como só mais um destino alcançável pelo líder.
 
 ```
-Ctrl+Alt+Space  →  p  →  abre Ports
-Ctrl+Alt+Space  →  s  →  abre Scratch
+Ctrl+Alt+M  →  o  →  abre Ports
+Ctrl+Alt+M  →  s  →  abre Scratch
 ```
 
 Atalho direto continua existindo, mas como opção para dois ou três favoritos, nunca como padrão de fábrica.
@@ -247,7 +247,7 @@ Isso entrega três coisas de graça:
 | `Win+V` | Histórico de clipboard nativo |
 | `Ctrl+Alt+Space` | **Claude Code** (app desktop) — descoberto na máquina de desenvolvimento pelo registro de conflito |
 
-Padrão atual: `Ctrl+Alt+Space`, configurável pela tela de configurações desde a Fase 1. A colisão com o Claude Code é grave porque é o público-alvo exato; o padrão precisa ser revisto antes do `v0.1`, e a troca nunca deixa o usuário sem líder — se a combinação nova conflita, a anterior é mantida e o motivo aparece na hora.
+Padrão: **`Ctrl+Alt+M`** — M de Moductus — configurável pela tela de configurações desde a Fase 1. Era `Ctrl+Alt+Space` até o `v0.1`; a colisão com o Claude Code, descoberta pelo registro de conflito na máquina de desenvolvimento, era grave demais porque é o público-alvo exato. A troca nunca deixa o usuário sem líder: se a combinação nova conflita, a anterior é mantida e o motivo aparece na hora.
 
 ---
 
