@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Moductus.Core.Interop;
 using Moductus.Core.Modules;
 using Moductus.UI.Archetypes;
@@ -20,6 +21,11 @@ namespace Moductus.Modules.Kill;
 /// </remarks>
 public sealed class KillModule(ModuleContext context) : IModule
 {
+    private const string ChaveGentil = "graceful";
+
+    /// <summary>Quanto a janela tem para sair sozinha antes de a mira insistir.</summary>
+    private static readonly TimeSpan Prazo = TimeSpan.FromSeconds(3);
+
     private readonly Canvas _camada = new() { Cursor = Cursors.Cross, Background = Brushes.Transparent };
     private readonly Border _cartao = new() { Visibility = Visibility.Collapsed };
     private readonly TextBlock _titulo = new();
@@ -46,6 +52,8 @@ public sealed class KillModule(ModuleContext context) : IModule
     public bool HasSurface => true;
 
     public bool EnabledByDefault => false;
+
+    private bool Gentil => context.ConfigScope(Id)[ChaveGentil]?.GetValue<bool>() ?? true;
 
     public void Enable()
     {
@@ -199,9 +207,90 @@ public sealed class KillModule(ModuleContext context) : IModule
         _alvo = null;
         context.Archetypes.Canvas.Dismiss();
 
+        Encerrar(alvo);
+    }
+
+    private void Encerrar(TopLevelWindow alvo)
+    {
+        Process processo;
+
         try
         {
-            Process.GetProcessById((int)alvo.ProcessId).Kill();
+            processo = Process.GetProcessById((int)alvo.ProcessId);
+        }
+        catch (Exception ex)
+        {
+            context.Archetypes.Hud.Flash("Não deu para encerrar", Resumo(ex.Message, 80), HudTone.Alerta);
+            return;
+        }
+
+        if (Gentil && PedirParaFechar(processo))
+        {
+            context.Archetypes.Hud.Flash(
+                "Pedi para a janela fechar",
+                $"{alvo.Title} — se ela travar de vez, o processo morre em {Prazo.TotalSeconds:F0} s.",
+                HudTone.Neutro);
+
+            var prazo = new DispatcherTimer { Interval = Prazo };
+            prazo.Tick += (_, _) => { prazo.Stop(); Insistir(processo, alvo); };
+            prazo.Start();
+            return;
+        }
+
+        Matar(processo, alvo);
+    }
+
+    private static bool PedirParaFechar(Process processo)
+    {
+        try
+        {
+            // WM_CLOSE pela API gerenciada: a janela decide, e é a diferença
+            // entre salvar o trabalho e perdê-lo.
+            return processo.CloseMainWindow();
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void Insistir(Process processo, TopLevelWindow alvo)
+    {
+        try
+        {
+            if (processo.HasExited)
+            {
+                processo.Dispose();
+                return;
+            }
+
+            // Vivo e respondendo é o aplicativo perguntando "salvar antes de
+            // sair?". Matar em cima desse diálogo joga fora exatamente o que a
+            // opção existe para proteger.
+            if (processo.Responding)
+            {
+                context.Archetypes.Hud.Flash(
+                    "A janela ainda está aberta",
+                    $"{alvo.Title} continua respondendo — deve estar pedindo confirmação.",
+                    HudTone.Alerta);
+                processo.Dispose();
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            context.Archetypes.Hud.Flash("Não deu para encerrar", Resumo(ex.Message, 80), HudTone.Alerta);
+            return;
+        }
+
+        Matar(processo, alvo);
+    }
+
+    private void Matar(Process processo, TopLevelWindow alvo)
+    {
+        try
+        {
+            processo.Kill();
             context.Archetypes.Hud.Flash(
                 "Janela encerrada",
                 $"{alvo.Title} — processo morto, o que não estava salvo se perdeu.",
@@ -210,6 +299,10 @@ public sealed class KillModule(ModuleContext context) : IModule
         catch (Exception ex)
         {
             context.Archetypes.Hud.Flash("Não deu para encerrar", Resumo(ex.Message, 80), HudTone.Alerta);
+        }
+        finally
+        {
+            processo.Dispose();
         }
     }
 
@@ -243,5 +336,39 @@ public sealed class KillModule(ModuleContext context) : IModule
         return b;
     }
 
-    public UserControl? BuildSettings() => null;
+    // ---- Configuração ---------------------------------------------------------
+
+    public UserControl? BuildSettings()
+    {
+        var corpo = new StackPanel();
+
+        var gentil = new CheckBox
+        {
+            Content = "Tentar fechar pela janela antes de matar o processo",
+            IsChecked = Gentil,
+        };
+        gentil.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        gentil.Checked += (_, _) => Gravar(ChaveGentil, true);
+        gentil.Unchecked += (_, _) => Gravar(ChaveGentil, false);
+        corpo.Children.Add(gentil);
+
+        corpo.Children.Add(Nota("A janela recebe o pedido de fechar e pode salvar o que estava aberto. Só se ela parar de responder o processo é morto."));
+        corpo.Children.Add(Nota("Desmarcado, o Enter mata na hora e o que não estava salvo se perde."));
+
+        return new UserControl { Content = corpo };
+    }
+
+    private static TextBlock Nota(string texto)
+    {
+        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
+        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        return t;
+    }
+
+    private void Gravar(string chave, bool valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
 }

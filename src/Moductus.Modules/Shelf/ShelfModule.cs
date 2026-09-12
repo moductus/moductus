@@ -30,6 +30,7 @@ namespace Moductus.Modules.Shelf;
 public sealed class ShelfModule(ModuleContext context) : IModule
 {
     private const string ItemsKey = "items";
+    private const string ChaveEsvaziar = "clearOnExit";
 
     private readonly ListBox _lista = new();
     private readonly TextBlock _vazio = new();
@@ -53,6 +54,8 @@ public sealed class ShelfModule(ModuleContext context) : IModule
     public char SuggestedLeaderKey => 'h';
 
     public bool HasSurface => true;
+
+    private bool EsvaziarAoSair => context.ConfigScope(Id)[ChaveEsvaziar]?.GetValue<bool>() ?? false;
 
     public void Enable()
     {
@@ -135,6 +138,12 @@ public sealed class ShelfModule(ModuleContext context) : IModule
 
         context.Commands.Unregister(Id);
         context.Archetypes.Badge.Soltar(Id);
+
+        if (EsvaziarAoSair)
+        {
+            _caminhos.Clear();
+        }
+
         Salvar();
     }
 
@@ -365,5 +374,35 @@ public sealed class ShelfModule(ModuleContext context) : IModule
             : "não está mais lá";
     }
 
-    public UserControl? BuildSettings() => null;
+    // ---- Configuração ---------------------------------------------------------
+
+    public UserControl? BuildSettings()
+    {
+        var corpo = new StackPanel();
+
+        var esvaziar = new CheckBox { Content = "Esvaziar a bandeja ao sair", IsChecked = EsvaziarAoSair };
+        esvaziar.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        esvaziar.Checked += (_, _) => Gravar(ChaveEsvaziar, true);
+        esvaziar.Unchecked += (_, _) => Gravar(ChaveEsvaziar, false);
+        corpo.Children.Add(esvaziar);
+
+        corpo.Children.Add(Nota("A bandeja guarda caminhos, não cópias: esvaziar solta os arquivos e não apaga nenhum."));
+        corpo.Children.Add(Nota("Desligar o módulo aqui nas configurações também esvazia, pelo mesmo caminho de saída."));
+
+        return new UserControl { Content = corpo };
+    }
+
+    private static TextBlock Nota(string texto)
+    {
+        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
+        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        return t;
+    }
+
+    private void Gravar(string chave, bool valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
 }

@@ -15,6 +15,11 @@ namespace Moductus.Modules.Peek;
 /// </summary>
 public sealed class PeekModule(ModuleContext context) : IModule
 {
+    private const string ChaveOpacidade = "opacity";
+    private const string ChaveFixado = "startPinned";
+
+    private const int OpacidadePadrao = 100;
+
     private readonly Border _area = new() { Background = Brushes.Transparent, Margin = new Thickness(8) };
     private readonly TextBlock _legenda = new();
     private readonly DockPanel _corpo = new();
@@ -35,6 +40,10 @@ public sealed class PeekModule(ModuleContext context) : IModule
     public char SuggestedLeaderKey => 'k';
 
     public bool HasSurface => true;
+
+    private int Opacidade => Faixa(context.ConfigScope(Id)[ChaveOpacidade]?.GetValue<int>() ?? OpacidadePadrao);
+
+    private bool AbrirFixado => context.ConfigScope(Id)[ChaveFixado]?.GetValue<bool>() ?? false;
 
     public void Enable()
     {
@@ -192,5 +201,80 @@ public sealed class PeekModule(ModuleContext context) : IModule
         }
     }
 
-    public UserControl? BuildSettings() => null;
+    // ---- Configuração ---------------------------------------------------------
+
+    private static int Faixa(int valor) => Math.Clamp(valor, 20, 100);
+
+    public UserControl? BuildSettings()
+    {
+        var corpo = new StackPanel();
+
+        corpo.Children.Add(Campo("Opacidade", "de 20 a 100; abaixo de 100 a miniatura deixa ver o que está atrás", ChaveOpacidade));
+
+        var fixado = new CheckBox { Content = "Abrir já fixado", IsChecked = AbrirFixado };
+        fixado.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        fixado.Checked += (_, _) => Gravar(ChaveFixado, true);
+        fixado.Unchecked += (_, _) => Gravar(ChaveFixado, false);
+        corpo.Children.Add(fixado);
+
+        corpo.Children.Add(Nota("Fixado, a miniatura não fecha quando o atalho é repetido — é o que serve para acompanhar um build."));
+        corpo.Children.Add(Nota("As duas opções ficam gravadas, mas ainda não valem: a opacidade da miniatura e o estado do alfinete do Panel são decididos fora do módulo."));
+
+        return new UserControl { Content = corpo };
+    }
+
+    private FrameworkElement Campo(string rotulo, string dica, string chave)
+    {
+        var caixa = new TextBox
+        {
+            Text = Opacidade.ToString(),
+            Width = 80,
+            HorizontalContentAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        // Grava no que sair do campo, não a cada tecla: "2" a caminho de "20"
+        // não pode virar opacidade gravada.
+        caixa.LostFocus += (_, _) =>
+        {
+            var valor = int.TryParse(caixa.Text, out var n) ? Faixa(n) : OpacidadePadrao;
+            caixa.Text = valor.ToString();
+            Gravar(chave, valor);
+        };
+
+        var nome = new TextBlock { Text = rotulo, VerticalAlignment = VerticalAlignment.Center, MinWidth = 96 };
+        var detalhe = new TextBlock { Text = dica, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+        detalhe.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        detalhe.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
+
+        var linha = new DockPanel { LastChildFill = true };
+        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        DockPanel.SetDock(nome, Dock.Left);
+        DockPanel.SetDock(caixa, Dock.Left);
+        linha.Children.Add(nome);
+        linha.Children.Add(caixa);
+        linha.Children.Add(detalhe);
+
+        return linha;
+    }
+
+    private static TextBlock Nota(string texto)
+    {
+        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
+        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        return t;
+    }
+
+    private void Gravar(string chave, int valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
+
+    private void Gravar(string chave, bool valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
 }

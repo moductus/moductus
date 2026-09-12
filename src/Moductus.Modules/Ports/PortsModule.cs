@@ -21,10 +21,20 @@ namespace Moductus.Modules.Ports;
 /// </remarks>
 public sealed class PortsModule(ModuleContext context) : IModule
 {
+    private const string ChaveEsconderSistema = "hideSystemPorts";
+    private const string ChaveRecarregar = "autoRefreshSeconds";
+
+    /// <summary>Abaixo disto é porta reservada a serviço do sistema.</summary>
+    private const int PrimeiraPortaDeUsuario = 1024;
+
+    private const int SegundosPadrao = 0;
+    private const int SegundosMaximo = 3600;
+
     private readonly TextBox _filtro = new();
     private readonly StackPanel _linhas = new();
     private readonly TextBlock _estado = new();
     private readonly DockPanel _corpo = new();
+    private readonly DispatcherTimer _auto = new();
     private IReadOnlyList<Linha> _todas = [];
 
     /// <summary>A árvore visual só é construída uma vez, por mais que Enable repita.</summary>
@@ -41,6 +51,10 @@ public sealed class PortsModule(ModuleContext context) : IModule
     public char SuggestedLeaderKey => 'o';
 
     public bool HasSurface => true;
+
+    private bool EsconderSistema => context.ConfigScope(Id)[ChaveEsconderSistema]?.GetValue<bool>() ?? false;
+
+    private int SegundosAteRecarregar => Segundos(context.ConfigScope(Id)[ChaveRecarregar]?.GetValue<int>() ?? SegundosPadrao);
 
     /// <summary>
     /// Endereço cru não responde a pergunta que a pessoa tem. "0.0.0.0" e "::"
@@ -84,6 +98,8 @@ public sealed class PortsModule(ModuleContext context) : IModule
         _estado.HorizontalAlignment = HorizontalAlignment.Center;
         _estado.Margin = new Thickness(0, 16, 0, 16);
 
+        _auto.Tick += (_, _) => Carregar();
+
         // Construído uma vez: um elemento só pode ter um pai lógico.
         var atualizar = new Button { Content = "Atualizar (F5)" };
         atualizar.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
@@ -105,6 +121,8 @@ public sealed class PortsModule(ModuleContext context) : IModule
 
     public void Disable()
     {
+        _auto.Stop();
+
         // O Panel continuaria na tela operando um módulo desligado — e o botão
         // "Encerrar" continuaria matando processo.
         var panel = context.Archetypes.Panel;
@@ -128,10 +146,37 @@ public sealed class PortsModule(ModuleContext context) : IModule
         panel.Heading = "Ports";
         panel.Placement = PanelPlacement.Center;
         panel.SlotContent = _corpo;
+        panel.Dismissed -= PararAoFechar;
+        panel.Dismissed += PararAoFechar;
         panel.Present();
         panel.TakeFocus(_filtro);
 
         Carregar();
+        ReiniciarAuto();
+    }
+
+    /// <summary>
+    /// Recarregar com o Panel fechado gastaria a tabela TCP inteira para
+    /// ninguém ver.
+    /// </summary>
+    private void PararAoFechar()
+    {
+        context.Archetypes.Panel.Dismissed -= PararAoFechar;
+        _auto.Stop();
+    }
+
+    private void ReiniciarAuto()
+    {
+        _auto.Stop();
+
+        var segundos = SegundosAteRecarregar;
+        if (segundos <= 0)
+        {
+            return;
+        }
+
+        _auto.Interval = TimeSpan.FromSeconds(segundos);
+        _auto.Start();
     }
 
     private async void Carregar()
@@ -174,15 +219,17 @@ public sealed class PortsModule(ModuleContext context) : IModule
         _linhas.Children.Clear();
 
         var q = _filtro.Text.Trim();
+        var escondendo = EsconderSistema;
         var visiveis = _todas.Where(l =>
-            q.Length == 0
-            || l.Porta.Port.ToString().Contains(q, StringComparison.Ordinal)
-            || l.Processo.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+            (!escondendo || l.Porta.Port >= PrimeiraPortaDeUsuario)
+            && (q.Length == 0
+                || l.Porta.Port.ToString().Contains(q, StringComparison.Ordinal)
+                || l.Processo.Contains(q, StringComparison.OrdinalIgnoreCase))).ToList();
 
         if (visiveis.Count == 0)
         {
-            _estado.Text = _todas.Count == 0
-                ? "Nenhuma porta TCP em escuta."
+            _estado.Text = _todas.Count == 0 ? "Nenhuma porta TCP em escuta."
+                : q.Length == 0 ? "Só portas de sistema em escuta. Desmarque a opção em Ajustar para vê-las."
                 : $"Nada com \"{q}\". Filtra por número da porta ou nome do processo.";
             _estado.Visibility = Visibility.Visible;
             return;
@@ -299,5 +346,86 @@ public sealed class PortsModule(ModuleContext context) : IModule
         }
     }
 
-    public UserControl? BuildSettings() => null;
+    // ---- Configuração ---------------------------------------------------------
+
+    private static int Segundos(int valor) => Math.Clamp(valor, 0, SegundosMaximo);
+
+    public UserControl? BuildSettings()
+    {
+        var corpo = new StackPanel();
+
+        var esconder = new CheckBox
+        {
+            Content = "Esconder portas de sistema, abaixo de 1024",
+            IsChecked = EsconderSistema,
+        };
+        esconder.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        esconder.Checked += (_, _) => { Gravar(ChaveEsconderSistema, true); Render(); };
+        esconder.Unchecked += (_, _) => { Gravar(ChaveEsconderSistema, false); Render(); };
+        corpo.Children.Add(esconder);
+
+        corpo.Children.Add(Nota("São as que aparecem como \"requer elevação\" e sobre as quais não dá para agir daqui."));
+
+        corpo.Children.Add(Campo("Recarregar a cada", "segundos; 0 recarrega só no F5", ChaveRecarregar));
+
+        corpo.Children.Add(Nota("A releitura só acontece com a lista aberta."));
+
+        return new UserControl { Content = corpo };
+    }
+
+    private FrameworkElement Campo(string rotulo, string dica, string chave)
+    {
+        var caixa = new TextBox
+        {
+            Text = SegundosAteRecarregar.ToString(),
+            Width = 80,
+            HorizontalContentAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        // Grava no que sair do campo, não a cada tecla: "1" a caminho de "10"
+        // não pode virar uma releitura por segundo.
+        caixa.LostFocus += (_, _) =>
+        {
+            var valor = int.TryParse(caixa.Text, out var n) ? Segundos(n) : SegundosPadrao;
+            caixa.Text = valor.ToString();
+            Gravar(chave, valor);
+            ReiniciarAuto();
+        };
+
+        var nome = new TextBlock { Text = rotulo, VerticalAlignment = VerticalAlignment.Center, MinWidth = 128 };
+        var detalhe = new TextBlock { Text = dica, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+        detalhe.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        detalhe.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
+
+        var linha = new DockPanel { LastChildFill = true };
+        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        DockPanel.SetDock(nome, Dock.Left);
+        DockPanel.SetDock(caixa, Dock.Left);
+        linha.Children.Add(nome);
+        linha.Children.Add(caixa);
+        linha.Children.Add(detalhe);
+
+        return linha;
+    }
+
+    private static TextBlock Nota(string texto)
+    {
+        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
+        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        return t;
+    }
+
+    private void Gravar(string chave, int valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
+
+    private void Gravar(string chave, bool valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
 }

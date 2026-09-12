@@ -20,6 +20,11 @@ namespace Moductus.Modules.Links;
 /// </remarks>
 public sealed class LinksModule(ModuleContext context) : IModule
 {
+    private const string ChaveSymlink = "symlinkByDefault";
+    private const string ChaveSufixo = "suffix";
+
+    private const string SufixoPadrao = "-link";
+
     private readonly TextBox _origem = new();
     private readonly TextBox _destino = new();
     private readonly ToggleButton _symlink = new();
@@ -41,6 +46,17 @@ public sealed class LinksModule(ModuleContext context) : IModule
     public char SuggestedLeaderKey => 'l';
 
     public bool HasSurface => true;
+
+    private bool SymlinkPorPadrao => context.ConfigScope(Id)[ChaveSymlink]?.GetValue<bool>() ?? false;
+
+    private string Sufixo
+    {
+        get
+        {
+            var escolhido = context.ConfigScope(Id)[ChaveSufixo]?.GetValue<string>();
+            return string.IsNullOrWhiteSpace(escolhido) ? SufixoPadrao : escolhido.Trim();
+        }
+    }
 
     public void Enable()
     {
@@ -83,7 +99,7 @@ public sealed class LinksModule(ModuleContext context) : IModule
                 _origem.Text = pasta;
                 if (string.IsNullOrWhiteSpace(_destino.Text))
                 {
-                    _destino.Text = Path.Combine(Path.GetDirectoryName(pasta) ?? pasta, Path.GetFileName(pasta) + "-link");
+                    _destino.Text = Path.Combine(Path.GetDirectoryName(pasta) ?? pasta, Path.GetFileName(pasta) + Sufixo);
                 }
 
                 _estado.Text = string.Empty;
@@ -148,6 +164,8 @@ public sealed class LinksModule(ModuleContext context) : IModule
             panel.Dismiss();
             return;
         }
+
+        _symlink.IsChecked = SymlinkPorPadrao;
 
         panel.Owner = Id;
         panel.Heading = "Links";
@@ -265,5 +283,82 @@ public sealed class LinksModule(ModuleContext context) : IModule
         return t;
     }
 
-    public UserControl? BuildSettings() => null;
+    // ---- Configuração ---------------------------------------------------------
+
+    public UserControl? BuildSettings()
+    {
+        var corpo = new StackPanel();
+
+        var symlink = new CheckBox
+        {
+            Content = "Usar symlink por padrão, em vez de junction",
+            IsChecked = SymlinkPorPadrao,
+        };
+        symlink.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        symlink.Checked += (_, _) => Gravar(ChaveSymlink, true);
+        symlink.Unchecked += (_, _) => Gravar(ChaveSymlink, false);
+        corpo.Children.Add(symlink);
+
+        corpo.Children.Add(Nota("Symlink exige Modo Desenvolvedor ou admin. Junction não exige nada e dá conta de mover pasta pesada de disco."));
+
+        corpo.Children.Add(CampoSufixo());
+        corpo.Children.Add(Nota("O que é acrescentado ao nome da pasta quando você arrasta ela e o destino ainda está vazio."));
+
+        return new UserControl { Content = corpo };
+    }
+
+    private FrameworkElement CampoSufixo()
+    {
+        var caixa = new TextBox
+        {
+            Text = Sufixo,
+            Width = 160,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        // Grava no que sair do campo, não a cada tecla: "-l" a caminho de
+        // "-link" não pode virar o sufixo gravado.
+        caixa.LostFocus += (_, _) =>
+        {
+            var sufixo = caixa.Text.Trim();
+            if (sufixo.Length == 0 || sufixo.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            {
+                sufixo = SufixoPadrao;
+            }
+
+            caixa.Text = sufixo;
+            Gravar(ChaveSufixo, sufixo);
+        };
+
+        var nome = new TextBlock { Text = "Sufixo", VerticalAlignment = VerticalAlignment.Center, MinWidth = 72 };
+
+        var linha = new DockPanel { LastChildFill = false };
+        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        DockPanel.SetDock(nome, Dock.Left);
+        DockPanel.SetDock(caixa, Dock.Left);
+        linha.Children.Add(nome);
+        linha.Children.Add(caixa);
+
+        return linha;
+    }
+
+    private static TextBlock Nota(string texto)
+    {
+        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
+        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        return t;
+    }
+
+    private void Gravar(string chave, string valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
+
+    private void Gravar(string chave, bool valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
 }

@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -30,6 +31,13 @@ public sealed class ClipsModule(ModuleContext context) : IModule
     private const int Preview = 70;
     private const int MaxRetries = 4;
 
+    private const string ChaveMaxItens = "maxItems";
+    private const string ChaveMaxKb = "maxItemKb";
+    private const string ChaveSoMemoria = "memoryOnly";
+
+    private const int MaxItensPadrao = 200;
+    private const int MaxKbPadrao = 64;
+
     private ClipboardWatcher? _watcher;
     private ClipStore? _store;
     private DispatcherTimer? _retry;
@@ -49,9 +57,16 @@ public sealed class ClipsModule(ModuleContext context) : IModule
 
     private string Arquivo => Path.Combine(context.DataDirectory, "clips.json");
 
+    private int MaxItens => Math.Clamp(context.ConfigScope(Id)[ChaveMaxItens]?.GetValue<int>() ?? MaxItensPadrao, 10, 1000);
+
+    private int MaxBytesPorItem => Math.Clamp(context.ConfigScope(Id)[ChaveMaxKb]?.GetValue<int>() ?? MaxKbPadrao, 1, 1024) * 1024;
+
+    private bool SoMemoria => context.ConfigScope(Id)[ChaveSoMemoria]?.GetValue<bool>() ?? false;
+
     public void Enable()
     {
-        _store = ClipStore.Load(new PhysicalConfigFile(Arquivo));
+        _store = ClipStore.Load(SoMemoria ? new SemDisco(Arquivo) : new PhysicalConfigFile(Arquivo));
+        Aparar();
         _watcher = new ClipboardWatcher(context.Messages);
         _watcher.Changed += AgendarLeitura;
 
@@ -155,8 +170,16 @@ public sealed class ClipsModule(ModuleContext context) : IModule
 
             var texto = dados.GetData(DataFormats.UnicodeText) as string;
 
+            // Colar um log inteiro engordava o histórico em megabytes e o
+            // startup pagava a leitura do arquivo.
+            if (texto is not null && Encoding.UTF8.GetByteCount(texto) > MaxBytesPorItem)
+            {
+                return true;
+            }
+
             if (_store.Add(texto, DateTimeOffset.Now))
             {
+                Aparar();
                 _store.Save();
             }
 
@@ -203,6 +226,21 @@ public sealed class ClipsModule(ModuleContext context) : IModule
         }
     }
 
+    /// <summary>Corta a cauda até o teto configurado. Mais recente primeiro.</summary>
+    private void Aparar()
+    {
+        if (_store is null)
+        {
+            return;
+        }
+
+        var teto = MaxItens;
+        while (_store.Count > teto)
+        {
+            _store.Remove(_store.All[^1].Text);
+        }
+    }
+
     private void Limpar()
     {
         _store?.Clear();
@@ -236,5 +274,106 @@ public sealed class ClipsModule(ModuleContext context) : IModule
         return linhas > 1 ? $"{quando} · {linhas} linhas" : $"{quando} · {c.Text.Length} caracteres";
     }
 
-    public UserControl? BuildSettings() => null;
+    // ---- Configuração ---------------------------------------------------------
+
+    public UserControl? BuildSettings()
+    {
+        var corpo = new StackPanel();
+
+        corpo.Children.Add(Campo("Máximo de itens", "de 10 a 1000", MaxItens, 10, 1000, MaxItensPadrao, valor =>
+        {
+            Gravar(ChaveMaxItens, valor);
+            Aparar();
+            _store?.Save();
+        }));
+
+        corpo.Children.Add(Nota("O histórico guarda no máximo 200 itens; número maior que isso fica gravado e vale quando o teto do armazenamento subir."));
+
+        corpo.Children.Add(Campo("Teto por item", "em KB, de 1 a 1024", MaxBytesPorItem / 1024, 1, 1024, MaxKbPadrao, valor => Gravar(ChaveMaxKb, valor)));
+
+        corpo.Children.Add(Nota("Texto maior que isso não entra no histórico. Continua no clipboard normalmente."));
+
+        var memoria = new CheckBox { Content = "Guardar só em memória", IsChecked = SoMemoria };
+        memoria.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        memoria.Checked += (_, _) => Gravar(ChaveSoMemoria, true);
+        memoria.Unchecked += (_, _) => Gravar(ChaveSoMemoria, false);
+        corpo.Children.Add(memoria);
+
+        corpo.Children.Add(Nota("Nada do clipboard vai para disco, e o histórico some ao fechar o Moductus. Vale a partir da próxima vez que o módulo ligar."));
+
+        return new UserControl { Content = corpo };
+    }
+
+    private static FrameworkElement Campo(string rotulo, string dica, int atual, int minimo, int maximo, int padrao, Action<int> gravar)
+    {
+        var caixa = new TextBox
+        {
+            Text = atual.ToString(),
+            Width = 80,
+            HorizontalContentAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        // Grava no que sair do campo, não a cada tecla: "1" a caminho de "100"
+        // não pode virar um histórico de um item.
+        caixa.LostFocus += (_, _) =>
+        {
+            var valor = int.TryParse(caixa.Text, out var n) ? Math.Clamp(n, minimo, maximo) : padrao;
+            caixa.Text = valor.ToString();
+            gravar(valor);
+        };
+
+        var nome = new TextBlock { Text = rotulo, VerticalAlignment = VerticalAlignment.Center, MinWidth = 128 };
+        var detalhe = new TextBlock { Text = dica, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
+        detalhe.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        detalhe.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
+
+        var linha = new DockPanel { LastChildFill = true };
+        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        DockPanel.SetDock(nome, Dock.Left);
+        DockPanel.SetDock(caixa, Dock.Left);
+        linha.Children.Add(nome);
+        linha.Children.Add(caixa);
+        linha.Children.Add(detalhe);
+
+        return linha;
+    }
+
+    private static TextBlock Nota(string texto)
+    {
+        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
+        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        return t;
+    }
+
+    private void Gravar(string chave, int valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
+
+    private void Gravar(string chave, bool valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
+
+    /// <summary>
+    /// O histórico em "só em memória": cumpre o contrato do ClipStore sem
+    /// nunca ler nem escrever o arquivo.
+    /// </summary>
+    private sealed class SemDisco(string caminho) : IConfigFile
+    {
+        public string Path => caminho;
+
+        public bool Exists() => false;
+
+        public string Read() => "[]";
+
+        public void WriteAtomic(string content)
+        {
+            // De propósito: é o ponto inteiro da opção.
+        }
+    }
 }

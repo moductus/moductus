@@ -1,4 +1,6 @@
+using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using Moductus.Core.Interop;
 using Moductus.Core.Modules;
 using Moductus.UI.Archetypes;
@@ -13,7 +15,16 @@ namespace Moductus.Modules.Awake;
 /// </summary>
 public sealed class AwakeModule(ModuleContext context) : IModule
 {
+    private const string ChaveTela = "keepDisplayOn";
+    private const string ChaveHoras = "autoOffHours";
+
+    private const int HorasPadrao = 0;
+    private const int HorasMaximo = 24;
+
     private bool _on;
+
+    /// <summary>Só existe enquanto há prazo para cumprir.</summary>
+    private DispatcherTimer? _prazo;
 
     public string Id => "awake";
 
@@ -29,6 +40,10 @@ public sealed class AwakeModule(ModuleContext context) : IModule
 
     public bool IsOn => _on;
 
+    private bool MantemTela => context.ConfigScope(Id)[ChaveTela]?.GetValue<bool>() ?? true;
+
+    private int HorasAteDesligar => Horas(context.ConfigScope(Id)[ChaveHoras]?.GetValue<int>() ?? HorasPadrao);
+
     public void Enable()
     {
         // Nada. Awake nunca começa ligado: ninguém quer descobrir que o
@@ -37,6 +52,8 @@ public sealed class AwakeModule(ModuleContext context) : IModule
 
     public void Disable()
     {
+        Cancelar();
+
         if (_on)
         {
             Power.AllowSleep();
@@ -51,20 +68,20 @@ public sealed class AwakeModule(ModuleContext context) : IModule
 
         if (_on)
         {
-            Power.KeepAwake(keepDisplayOn: true);
+            var tela = MantemTela;
+            Power.KeepAwake(keepDisplayOn: tela);
+            Agendar();
 
             // Estado que dura e some da vista: sem a pastilha, a máquina fica
             // acordada a noite inteira porque ninguém lembrou de desligar.
             context.Archetypes.Badge.Fixar(Id, "Awake ligado",
                 "Clique para soltar a máquina", HudTone.Neutro, Invoke);
 
-            context.Archetypes.Hud.Flash(
-                "Awake ligado",
-                "A máquina não hiberna e a tela não apaga até você repetir o atalho.",
-                HudTone.Neutro);
+            context.Archetypes.Hud.Flash("Awake ligado", Explicacao(tela), HudTone.Neutro);
         }
         else
         {
+            Cancelar();
             Power.AllowSleep();
             context.Archetypes.Badge.Soltar(Id);
             context.Archetypes.Hud.Flash(
@@ -74,5 +91,124 @@ public sealed class AwakeModule(ModuleContext context) : IModule
         }
     }
 
-    public UserControl? BuildSettings() => null;
+    private string Explicacao(bool tela)
+    {
+        var inicio = tela
+            ? "A máquina não hiberna e a tela não apaga"
+            : "A máquina não hiberna, mas a tela apaga no tempo de sempre";
+
+        var horas = HorasAteDesligar;
+        return horas > 0
+            ? $"{inicio}. Desliga sozinho em {horas} h."
+            : $"{inicio} até você repetir o atalho.";
+    }
+
+    /// <summary>
+    /// Esquecer ligado é o modo de falha do módulo: com prazo configurado, o
+    /// próprio módulo repete o atalho no fim dele.
+    /// </summary>
+    private void Agendar()
+    {
+        Cancelar();
+
+        var horas = HorasAteDesligar;
+        if (horas <= 0)
+        {
+            return;
+        }
+
+        _prazo = new DispatcherTimer { Interval = TimeSpan.FromHours(horas) };
+        _prazo.Tick += (_, _) =>
+        {
+            if (_on)
+            {
+                Invoke();
+            }
+        };
+        _prazo.Start();
+    }
+
+    private void Cancelar()
+    {
+        _prazo?.Stop();
+        _prazo = null;
+    }
+
+    // ---- Configuração ---------------------------------------------------------
+
+    private static int Horas(int valor) => Math.Clamp(valor, 0, HorasMaximo);
+
+    public UserControl? BuildSettings()
+    {
+        var corpo = new StackPanel();
+
+        var tela = new CheckBox { Content = "Manter a tela ligada", IsChecked = MantemTela };
+        tela.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        tela.Checked += (_, _) => Gravar(ChaveTela, true);
+        tela.Unchecked += (_, _) => Gravar(ChaveTela, false);
+        corpo.Children.Add(tela);
+
+        corpo.Children.Add(Nota("Desmarcado, só a hibernação é impedida — o monitor apaga como sempre num download longo."));
+
+        corpo.Children.Add(Campo("Desligar em", "horas até soltar a máquina sozinho; 0 nunca desliga", ChaveHoras, HorasPadrao));
+
+        corpo.Children.Add(Nota("Mudança vale na próxima vez que o Awake for ligado."));
+
+        return new UserControl { Content = corpo };
+    }
+
+    private FrameworkElement Campo(string rotulo, string dica, string chave, int padrao)
+    {
+        var caixa = new TextBox
+        {
+            Text = HorasAteDesligar.ToString(),
+            Width = 80,
+            HorizontalContentAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        // Grava no que sair do campo, não a cada tecla: "1" a caminho de "12"
+        // não pode virar uma hora gravada.
+        caixa.LostFocus += (_, _) =>
+        {
+            var horas = int.TryParse(caixa.Text, out var n) ? Horas(n) : padrao;
+            caixa.Text = horas.ToString();
+            Gravar(chave, horas);
+        };
+
+        var nome = new TextBlock { Text = rotulo, VerticalAlignment = VerticalAlignment.Center, MinWidth = 96 };
+        var detalhe = new TextBlock { Text = dica, VerticalAlignment = VerticalAlignment.Center };
+        detalhe.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        detalhe.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
+
+        var linha = new DockPanel { LastChildFill = true };
+        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        DockPanel.SetDock(nome, Dock.Left);
+        DockPanel.SetDock(caixa, Dock.Left);
+        linha.Children.Add(nome);
+        linha.Children.Add(caixa);
+        linha.Children.Add(detalhe);
+
+        return linha;
+    }
+
+    private static TextBlock Nota(string texto)
+    {
+        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
+        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        return t;
+    }
+
+    private void Gravar(string chave, int valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
+
+    private void Gravar(string chave, bool valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
 }

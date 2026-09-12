@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Controls;
 using Moductus.Core.Audio;
 using Moductus.Core.Commands;
@@ -23,6 +24,8 @@ public sealed class MicModule(ModuleContext context) : IModule
     /// <summary>Acima do Timer (50): esquecer o microfone aberto custa mais caro.</summary>
     public const int TrayPriority = 100;
 
+    private const string ChaveComunicacao = "alsoCommunications";
+
     private readonly MicrophoneMute _mute = new();
     private IDisposable? _claim;
 
@@ -37,6 +40,8 @@ public sealed class MicModule(ModuleContext context) : IModule
     public char SuggestedLeaderKey => 'm';
 
     public bool HasSurface => false;
+
+    private bool TambemComunicacao => context.ConfigScope(Id)[ChaveComunicacao]?.GetValue<bool>() ?? true;
 
     public void Enable()
     {
@@ -127,5 +132,39 @@ public sealed class MicModule(ModuleContext context) : IModule
         }
     }
 
-    public UserControl? BuildSettings() => null;
+    // ---- Configuração ---------------------------------------------------------
+
+    public UserControl? BuildSettings()
+    {
+        var corpo = new StackPanel();
+
+        var ambos = new CheckBox
+        {
+            Content = "Mutar também o dispositivo de comunicação",
+            IsChecked = TambemComunicacao,
+        };
+        ambos.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        ambos.Checked += (_, _) => Gravar(ChaveComunicacao, true);
+        ambos.Unchecked += (_, _) => Gravar(ChaveComunicacao, false);
+        corpo.Children.Add(ambos);
+
+        corpo.Children.Add(Nota("Quem tem headset e webcam costuma ter dois microfones padrão: um para chamada, outro para gravação."));
+        corpo.Children.Add(Nota("A opção fica gravada, mas ainda não muda o que é mutado: o endpoint escolhido é fixo em Moductus.Core."));
+
+        return new UserControl { Content = corpo };
+    }
+
+    private static TextBlock Nota(string texto)
+    {
+        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
+        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        return t;
+    }
+
+    private void Gravar(string chave, bool valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
 }

@@ -15,7 +15,14 @@ namespace Moductus.Modules.Scratch;
 /// </summary>
 public sealed class ScratchModule(ModuleContext context) : IModule
 {
-    private static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(600);
+    private const string ChaveCaminho = "path";
+    private const string ChaveAtraso = "saveDelayMs";
+
+    private const int AtrasoPadrao = 600;
+    private const int AtrasoMinimo = 200;
+    private const int AtrasoMaximo = 5000;
+
+    private static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(AtrasoPadrao);
     private static readonly UTF8Encoding Utf8 = new(false);
 
     private readonly TextBox _texto = new();
@@ -47,7 +54,19 @@ public sealed class ScratchModule(ModuleContext context) : IModule
 
     public bool HasSurface => true;
 
-    private string Arquivo => Path.Combine(context.DataDirectory, "scratch.txt");
+    /// <summary>Vazio na configuração significa o arquivo padrão, na pasta de dados.</summary>
+    private string Arquivo
+    {
+        get
+        {
+            var escolhido = context.ConfigScope(Id)[ChaveCaminho]?.GetValue<string>();
+            return string.IsNullOrWhiteSpace(escolhido)
+                ? Path.Combine(context.DataDirectory, "scratch.txt")
+                : escolhido.Trim();
+        }
+    }
+
+    private int Atraso => Milissegundos(context.ConfigScope(Id)[ChaveAtraso]?.GetValue<int>() ?? AtrasoPadrao);
 
     public void Enable()
     {
@@ -138,6 +157,8 @@ public sealed class ScratchModule(ModuleContext context) : IModule
             Carregar();
         }
 
+        _salvar.Interval = TimeSpan.FromMilliseconds(Atraso);
+
         panel.Owner = Id;
         panel.Heading = "Scratch";
         panel.Placement = PanelPlacement.Top;
@@ -150,14 +171,16 @@ public sealed class ScratchModule(ModuleContext context) : IModule
 
     private void Carregar()
     {
+        var arquivo = Arquivo;
+
         try
         {
-            _texto.Text = File.Exists(Arquivo) ? File.ReadAllText(Arquivo, Encoding.UTF8) : string.Empty;
+            _texto.Text = File.Exists(arquivo) ? File.ReadAllText(arquivo, Encoding.UTF8) : string.Empty;
             _estado.Text = string.IsNullOrEmpty(_texto.Text) ? "Escreva. Salva sozinho." : "Salvo";
         }
         catch (Exception e)
         {
-            _estado.Text = $"Não deu para ler {Arquivo}: {e.Message}";
+            _estado.Text = $"Não deu para ler {arquivo}: {e.Message}";
         }
 
         _carregado = true;
@@ -173,16 +196,22 @@ public sealed class ScratchModule(ModuleContext context) : IModule
 
         try
         {
-            Directory.CreateDirectory(context.DataDirectory);
-            var temp = Arquivo + ".tmp";
-            File.WriteAllText(temp, _texto.Text, Utf8);
-            if (File.Exists(Arquivo))
+            var arquivo = Arquivo;
+            var pasta = Path.GetDirectoryName(arquivo);
+            if (!string.IsNullOrEmpty(pasta))
             {
-                File.Replace(temp, Arquivo, null);
+                Directory.CreateDirectory(pasta);
+            }
+
+            var temp = arquivo + ".tmp";
+            File.WriteAllText(temp, _texto.Text, Utf8);
+            if (File.Exists(arquivo))
+            {
+                File.Replace(temp, arquivo, null);
             }
             else
             {
-                File.Move(temp, Arquivo);
+                File.Move(temp, arquivo);
             }
 
             _sujo = false;
@@ -201,5 +230,107 @@ public sealed class ScratchModule(ModuleContext context) : IModule
         Gravar();
     }
 
-    public UserControl? BuildSettings() => null;
+    // ---- Configuração ---------------------------------------------------------
+
+    private static int Milissegundos(int valor) => Math.Clamp(valor, AtrasoMinimo, AtrasoMaximo);
+
+    public UserControl? BuildSettings()
+    {
+        var corpo = new StackPanel();
+
+        corpo.Children.Add(CampoCaminho());
+        corpo.Children.Add(Nota("Vazio usa o arquivo padrão, na pasta de dados. Aponte para uma pasta sincronizada se quiser o bloco em mais de uma máquina."));
+
+        corpo.Children.Add(CampoAtraso());
+        corpo.Children.Add(Nota("Quanto tempo sem digitar antes de gravar, de 200 a 5000 milissegundos."));
+
+        return new UserControl { Content = corpo };
+    }
+
+    private FrameworkElement CampoCaminho()
+    {
+        var caixa = new TextBox
+        {
+            Text = context.ConfigScope(Id)[ChaveCaminho]?.GetValue<string>() ?? string.Empty,
+            Tag = "Vazio usa o arquivo padrão",
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        caixa.LostFocus += (_, _) =>
+        {
+            var caminho = caixa.Text.Trim().Trim('"');
+            caixa.Text = caminho;
+            Gravar(ChaveCaminho, caminho);
+
+            // O conteúdo em tela é do arquivo antigo: grava nele antes de
+            // trocar, senão o que foi digitado morre na troca.
+            _salvar.Stop();
+            Gravar();
+            _carregado = false;
+            Carregar();
+        };
+
+        return Linha("Arquivo", caixa, esticar: true);
+    }
+
+    private FrameworkElement CampoAtraso()
+    {
+        var caixa = new TextBox
+        {
+            Text = Atraso.ToString(),
+            Width = 80,
+            HorizontalContentAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        // Grava no que sair do campo, não a cada tecla: "2" a caminho de "200"
+        // não pode virar dois milissegundos gravados.
+        caixa.LostFocus += (_, _) =>
+        {
+            var valor = int.TryParse(caixa.Text, out var n) ? Milissegundos(n) : AtrasoPadrao;
+            caixa.Text = valor.ToString();
+            Gravar(ChaveAtraso, valor);
+            _salvar.Interval = TimeSpan.FromMilliseconds(valor);
+        };
+
+        return Linha("Atraso", caixa, esticar: false);
+    }
+
+    private static FrameworkElement Linha(string rotulo, FrameworkElement campo, bool esticar)
+    {
+        var nome = new TextBlock { Text = rotulo, VerticalAlignment = VerticalAlignment.Center, MinWidth = 72 };
+
+        var linha = new DockPanel { LastChildFill = esticar };
+        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        DockPanel.SetDock(nome, Dock.Left);
+        linha.Children.Add(nome);
+
+        if (!esticar)
+        {
+            DockPanel.SetDock(campo, Dock.Left);
+        }
+
+        linha.Children.Add(campo);
+        return linha;
+    }
+
+    private static TextBlock Nota(string texto)
+    {
+        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
+        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        return t;
+    }
+
+    private void Gravar(string chave, string valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
+
+    private void Gravar(string chave, int valor)
+    {
+        context.ConfigScope(Id)[chave] = valor;
+        context.SaveConfig();
+    }
 }
