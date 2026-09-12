@@ -239,12 +239,14 @@ public sealed class TimerModule(ModuleContext context) : IModule
 
     private void Retomar()
     {
-        if (!Rodando || !Pausado)
+        // O padrão captura o valor: Pausado sozinho não convence o compilador
+        // de que _congelado tem conteúdo.
+        if (!Rodando || _congelado is not { } parado)
         {
             return;
         }
 
-        _fim = DateTimeOffset.Now + _congelado.Value;
+        _fim = DateTimeOffset.Now + parado;
         _congelado = null;
         _tique.Start();
 
@@ -418,7 +420,8 @@ public sealed class TimerModule(ModuleContext context) : IModule
         var caixa = new TextBox
         {
             Text = Minutos(chave, padrao).ToString(),
-            Width = 64,
+            // 64 cortava "25" em "2!" depois que inset.input voltou para 12.
+            Width = 80,
             HorizontalContentAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
         };

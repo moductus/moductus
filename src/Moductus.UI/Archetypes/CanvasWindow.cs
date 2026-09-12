@@ -27,7 +27,7 @@ public class CanvasWindow : ArchetypeWindow
     }
 
     /// <summary>Quem está usando a Canvas agora. Módulos checam antes de alternar.</summary>
-    public string? Owner { get; set; }
+    public new string? Owner { get; set; }
 
     public void SetBackdrop(ImageSource? frozen) => _backdrop.Source = frozen;
 

@@ -7,7 +7,7 @@ using Moductus.UI;
 
 namespace Moductus.App;
 
-/// <summary>Tudo que a janela de configurações precisa, e nada que ela não precise.</summary>
+/// <summary>Tudo que as janelas do host precisam, e nada que elas não precisem.</summary>
 internal sealed record SettingsModel(
     Autostart Autostart,
     HotkeyRegistry Hotkeys,

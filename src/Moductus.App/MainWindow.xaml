@@ -1,0 +1,157 @@
+<Window x:Class="Moductus.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Moductus"
+        Style="{DynamicResource {x:Type Window}}"
+        Width="760" Height="640"
+        MinWidth="420" MinHeight="420"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="True"
+        KeyDown="OnKeyDown">
+
+    <!-- Nenhuma cor, tamanho ou raio aqui: tudo vem dos tokens. -->
+
+    <Window.Resources>
+        <Style x:Key="Cartao" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource bg.raised}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource border.subtle}" />
+            <Setter Property="BorderThickness" Value="{DynamicResource border.width}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource radius.card}" />
+            <Setter Property="Padding" Value="{DynamicResource inset.16}" />
+        </Style>
+
+        <!-- Cartão de módulo: keycap com a letra líder, nome, descrição e as
+             duas ações. O visual da keycap é o mesmo da ajuda, de propósito:
+             é o mesmo objeto — a tecla que chama o módulo. -->
+        <DataTemplate x:Key="CartaoModulo">
+            <Border Style="{StaticResource Cartao}"
+                    Width="{DynamicResource size.panel.minwidth}"
+                    Margin="{DynamicResource inset.8}">
+                <!-- DockPanel e não StackPanel: o WrapPanel iguala a altura dos
+                     cartões da linha, e só com as ações ancoradas embaixo elas
+                     ficam alinhadas entre cartões de descrição desigual. -->
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Bottom"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                Margin="{DynamicResource inset.8}">
+                        <Button Content="Abrir"
+                                Style="{DynamicResource style.button.compact}"
+                                Tag="{Binding Id}"
+                                Click="OnAbrirClick" />
+                        <Button x:Name="Configurar"
+                                Content="Configurar"
+                                Style="{DynamicResource style.button.compact}"
+                                Tag="{Binding Id}"
+                                Click="OnConfigurarClick"
+                                Margin="{DynamicResource inset.4}"
+                                Visibility="Collapsed" />
+                    </StackPanel>
+
+                    <Grid VerticalAlignment="Top">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0"
+                                Background="{DynamicResource bg.base}"
+                                BorderBrush="{DynamicResource border.strong}"
+                                BorderThickness="{DynamicResource border.width}"
+                                CornerRadius="{DynamicResource radius.control}"
+                                Padding="{DynamicResource inset.8}"
+                                VerticalAlignment="Top"
+                                Margin="{DynamicResource inset.8}">
+                            <TextBlock Text="{Binding Letra}"
+                                       FontFamily="{DynamicResource font.mono}"
+                                       FontSize="{DynamicResource type.body-lg}"
+                                       Foreground="{DynamicResource accent}" />
+                        </Border>
+                        <StackPanel Grid.Column="1" Margin="{DynamicResource inset.8}">
+                            <TextBlock Text="{Binding Nome}"
+                                       FontSize="{DynamicResource type.body-lg}"
+                                       LineHeight="{DynamicResource type.body-lg.line}"
+                                       FontWeight="{DynamicResource weight.semibold}" />
+                            <TextBlock Text="{Binding Descricao}"
+                                       Style="{DynamicResource style.secondary}" />
+                        </StackPanel>
+                    </Grid>
+                </DockPanel>
+            </Border>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding TemPainel}" Value="True">
+                    <Setter TargetName="Configurar" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </Window.Resources>
+
+    <DockPanel>
+        <Border DockPanel.Dock="Bottom"
+                Background="{DynamicResource bg.raised}"
+                BorderBrush="{DynamicResource border.subtle}"
+                BorderThickness="0,1,0,0"
+                Padding="{DynamicResource inset.16}">
+            <StackPanel Orientation="Horizontal">
+                <Button Content="Como usar"
+                        Style="{DynamicResource style.button.compact}"
+                        Click="OnComoUsarClick" />
+                <Button Content="Configurações"
+                        Style="{DynamicResource style.button.compact}"
+                        Click="OnConfiguracoesClick"
+                        Margin="{DynamicResource inset.8}" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="{DynamicResource inset.24}">
+
+                <TextBlock Text="Moductus" Style="{DynamicResource style.title}" />
+                <TextBlock x:Name="Subtitulo"
+                           Style="{DynamicResource style.secondary}"
+                           Margin="{DynamicResource inset.4}" />
+
+                <TextBox x:Name="Busca"
+                         Tag="Buscar módulo"
+                         TextChanged="OnBuscaChanged"
+                         Margin="{DynamicResource inset.16}" />
+
+                <ItemsControl x:Name="Modulos" ItemTemplate="{StaticResource CartaoModulo}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+
+                <TextBlock x:Name="Vazio"
+                           Style="{DynamicResource style.secondary}"
+                           Text="Nenhum módulo com esse nome."
+                           Margin="{DynamicResource inset.8}"
+                           Visibility="Collapsed" />
+
+                <!-- Ponto de montagem único do painel do módulo. Fica fora da
+                     grade de propósito: montar o mesmo UserControl dentro de um
+                     item recriado a cada filtro esbarra no "um pai lógico só"
+                     do WPF. -->
+                <Border x:Name="PainelCartao"
+                        Style="{StaticResource Cartao}"
+                        Margin="{DynamicResource inset.8}"
+                        Visibility="Collapsed">
+                    <StackPanel>
+                        <DockPanel Margin="{DynamicResource inset.4}">
+                            <Button DockPanel.Dock="Right"
+                                    Content="Fechar"
+                                    Style="{DynamicResource style.button.compact}"
+                                    Click="OnFecharPainelClick" />
+                            <TextBlock x:Name="PainelTitulo"
+                                       FontWeight="{DynamicResource weight.semibold}"
+                                       VerticalAlignment="Center" />
+                        </DockPanel>
+                        <ContentControl x:Name="PainelCorpo" Margin="{DynamicResource inset.4}" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

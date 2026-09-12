@@ -58,6 +58,7 @@ internal sealed class Host : IDisposable
     private LeaderOverlay? _overlay;
     private SettingsWindow? _settings;
     private HelpWindow? _help;
+    private MainWindow? _main;
 
     public Host(Application app)
     {
@@ -81,7 +82,7 @@ internal sealed class Host : IDisposable
         //    pedir — placeholder até o mark de verdade existir (apêndice 13).
         var sistema = new Win32SystemThemeSource();
         _tray = new TrayHost(_messages, sistema, "Moductus");
-        _tray.LeftClick += OpenSettings;
+        _tray.LeftClick += OpenMain;
         _tray.RightClick += ShowMenu;
 
         // 5. Autostart. Estado vem do registro; não é duplicado na config.
@@ -267,34 +268,54 @@ internal sealed class Host : IDisposable
 
         if (message == SingleInstance.ActivateMessage)
         {
-            OpenSettings();
+            // Segunda instância pedindo para aparecer: mostra a principal, que
+            // é a porta de entrada, não a tela de opções.
+            OpenMain();
             return true;
         }
 
         return false;
     }
 
+    private SettingsModel Model() => new(
+        _autostart,
+        _hotkeys,
+        _letters,
+        _location,
+        _theme,
+        _configWarning,
+        Leader: () => _leader,
+        RebindLeader: RebindLeader,
+        Modules: _modules,
+        IsModuleEnabled: id => _enabled.Contains(id),
+        SetModuleEnabled: SetModuleEnabled);
+
     private void OpenSettings()
     {
         if (_settings is null || !_settings.IsLoaded)
         {
-            _settings = new SettingsWindow(new SettingsModel(
-                _autostart,
-                _hotkeys,
-                _letters,
-                _location,
-                _theme,
-                _configWarning,
-                Leader: () => _leader,
-                RebindLeader: RebindLeader,
-                Modules: _modules,
-                IsModuleEnabled: id => _enabled.Contains(id),
-                SetModuleEnabled: SetModuleEnabled));
+            _settings = new SettingsWindow(Model());
             _settings.Closed += (_, _) => _settings = null;
         }
 
         _settings.Show();
         _settings.Activate();
+    }
+
+    /// <summary>
+    /// A janela principal, no clique esquerdo da bandeja. É a resposta a "o que
+    /// o Moductus faz" — a de configurações responde só "o que está ligado".
+    /// </summary>
+    private void OpenMain()
+    {
+        if (_main is null || !_main.IsLoaded)
+        {
+            _main = new MainWindow(Model(), OpenHelp, OpenSettings);
+            _main.Closed += (_, _) => _main = null;
+        }
+
+        _main.Show();
+        _main.Activate();
     }
 
     /// <summary>
@@ -355,12 +376,19 @@ internal sealed class Host : IDisposable
     {
         var menu = new ContextMenu();
 
-        foreach (var module in _modules.Where(m => _enabled.Contains(m.Id)))
+        var principal = new MenuItem { Header = "Moductus" };
+        principal.Click += (_, _) => OpenMain();
+        menu.Items.Add(principal);
+        menu.Items.Add(new Separator { Style = (Style)_app.Resources["style.menu.separator"] });
+
+        var ativos = _modules.Where(m => _enabled.Contains(m.Id)).ToList();
+
+        foreach (var module in ativos)
         {
             menu.Items.Add(MenuDoModulo(module));
         }
 
-        if (menu.Items.Count > 0)
+        if (ativos.Count > 0)
         {
             menu.Items.Add(new Separator { Style = (Style)_app.Resources["style.menu.separator"] });
         }
@@ -418,6 +446,7 @@ internal sealed class Host : IDisposable
             module.Disable();
         }
 
+        _main?.Close();
         _settings?.Close();
         _overlay?.Close();
         _archetypes.Dispose();

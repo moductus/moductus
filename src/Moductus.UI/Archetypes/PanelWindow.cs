@@ -69,7 +69,7 @@ public class PanelWindow : ArchetypeWindow
     public bool IsPinned => _pin.IsChecked == true;
 
     /// <summary>Quem está usando o Panel agora. Módulos checam antes de alternar.</summary>
-    public string? Owner { get; set; }
+    public new string? Owner { get; set; }
 
     public PanelPlacement Placement
     {
