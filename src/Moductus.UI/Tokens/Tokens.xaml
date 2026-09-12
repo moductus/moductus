@@ -11,8 +11,17 @@
                     xmlns:sys="clr-namespace:System;assembly=System.Runtime">
 
     <!-- ═══ Tipografia ═══════════════════════════════════════════════════ -->
-    <!-- Segoe UI Variable no Win11, Segoe UI no Win10. Zero download. -->
-    <FontFamily x:Key="font.ui">Segoe UI Variable, Segoe UI</FontFamily>
+    <!--
+      Segoe UI Variable no Win11, Segoe UI no Win10. Zero download.
+
+      O nome PRECISA trazer o sufixo óptico. "Segoe UI Variable" sozinho não é
+      uma família instalada — as que existem são Text, Small e Display — e o
+      WPF cai calado no Segoe UI do Windows 10. O app inteiro renderizava na
+      fonte antiga por causa disso.
+    -->
+    <FontFamily x:Key="font.ui">Segoe UI Variable Text, Segoe UI</FontFamily>
+    <!-- Display tem sizing óptico próprio: só para título e número grande. -->
+    <FontFamily x:Key="font.display">Segoe UI Variable Display, Segoe UI</FontFamily>
     <FontFamily x:Key="font.mono">Consolas</FontFamily>
 
     <FontWeight x:Key="weight.regular">Normal</FontWeight>
@@ -45,6 +54,9 @@
     <Thickness x:Key="inset.24">24</Thickness>
     <Thickness x:Key="inset.input">12,0</Thickness>
     <Thickness x:Key="inset.button">16,0</Thickness>
+    <!-- Linha de lista: o vão vertical é o que separa item de duas linhas do
+         item seguinte. Zero aqui faz os dois colarem. -->
+    <Thickness x:Key="inset.row">12,8</Thickness>
 
     <!-- ═══ Raio ═════════════════════════════════════════════════════════ -->
     <!-- O Win11 usa 8 em menu e 12 em janela; isto encaixa sem parecer estrangeiro. -->
@@ -55,7 +67,7 @@
 
     <!-- ═══ Tamanho ══════════════════════════════════════════════════════ -->
     <sys:Double x:Key="size.row">32</sys:Double>
-    <sys:Double x:Key="size.input">36</sys:Double>
+    <sys:Double x:Key="size.input">32</sys:Double>
     <sys:Double x:Key="size.button">32</sys:Double>
     <sys:Double x:Key="size.icon">16</sys:Double>
     <sys:Double x:Key="size.palette.width">640</sys:Double>

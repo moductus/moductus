@@ -38,6 +38,7 @@
     </Style>
 
     <Style x:Key="style.title" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+        <Setter Property="FontFamily" Value="{DynamicResource font.display}" />
         <Setter Property="FontSize" Value="{DynamicResource type.title}" />
         <Setter Property="LineHeight" Value="{DynamicResource type.title.line}" />
         <Setter Property="FontWeight" Value="{DynamicResource weight.semibold}" />
@@ -73,7 +74,7 @@
                             <Setter TargetName="Fundo" Property="Background" Value="{DynamicResource bg.hover}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="Fundo" Property="BorderBrush" Value="{DynamicResource accent}" />
+                            <Setter TargetName="Fundo" Property="BorderBrush" Value="{DynamicResource accent.border}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground" Value="{DynamicResource text.muted}" />
@@ -117,7 +118,7 @@
                             <Setter Property="Foreground" Value="{DynamicResource accent.fg}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="Fundo" Property="BorderBrush" Value="{DynamicResource accent}" />
+                            <Setter TargetName="Fundo" Property="BorderBrush" Value="{DynamicResource accent.border}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -146,11 +147,28 @@
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="{DynamicResource radius.control}"
                             Padding="{TemplateBinding Padding}">
-                        <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" />
+                        <Grid>
+                            <!-- Dica: campo vazio sem rótulo parece campo quebrado,
+                                 porque o cursor fica sozinho no meio do nada. Vem
+                                 do Tag para não exigir controle nem anexada. -->
+                            <TextBlock x:Name="Dica"
+                                       Text="{TemplateBinding Tag}"
+                                       Foreground="{DynamicResource text.muted}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       IsHitTestVisible="False"
+                                       Visibility="Collapsed" />
+                            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" />
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="Dica" Property="Visibility" Value="Visible" />
+                        </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="Fundo" Property="BorderBrush" Value="{DynamicResource accent}" />
+                            <Setter TargetName="Fundo" Property="BorderBrush" Value="{DynamicResource accent.border}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -179,10 +197,14 @@
                                 BorderBrush="{DynamicResource border.strong}"
                                 BorderThickness="{DynamicResource border.width}"
                                 CornerRadius="4">
+                            <!-- A borda de 1px inseta o filho, então a origem do
+                                 Path é (1,1), não (0,0). Desenhado para (0,0) o
+                                 visto fica 1px baixo, 1px à direita, e a ponta
+                                 encosta na borda da caixa. -->
                             <Path x:Name="Marca"
-                                  Data="M 3,8 L 7,12 L 13,4"
+                                  Data="M 2.75,7 L 5.75,10 L 11.25,4"
                                   Stroke="{DynamicResource accent.fg}"
-                                  StrokeThickness="2"
+                                  StrokeThickness="1.75"
                                   StrokeStartLineCap="Round"
                                   StrokeEndLineCap="Round"
                                   StrokeLineJoin="Round"
@@ -200,7 +222,7 @@
                             <Setter TargetName="Caixa" Property="BorderBrush" Value="{DynamicResource accent}" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
-                            <Setter TargetName="Caixa" Property="BorderBrush" Value="{DynamicResource accent}" />
+                            <Setter TargetName="Caixa" Property="BorderBrush" Value="{DynamicResource accent.border}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -238,7 +260,7 @@
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="MinHeight" Value="{DynamicResource size.row}" />
-        <Setter Property="Padding" Value="{DynamicResource inset.input}" />
+        <Setter Property="Padding" Value="{DynamicResource inset.row}" />
         <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
         <Setter Property="Template">
             <Setter.Value>
@@ -267,6 +289,130 @@
         <Setter Property="Background" Value="{DynamicResource border.subtle}" />
         <Setter Property="Height" Value="1" />
         <Setter Property="Margin" Value="0,4" />
+    </Style>
+
+    <!-- ═══ Barra de rolagem ═════════════════════════════════════════════ -->
+    <!--
+      Sem isto o WPF entrega a barra do tema clássico do Windows: cinza,
+      larga, com setas nas pontas. É a peça que mais denuncia janela feita às
+      pressas, e aparece em toda lista do app.
+
+      A barra daqui é um trilho invisível com um polegar que engorda no hover,
+      como no Edge e no VS Code. Sem setas: ninguém clica em seta de rolagem
+      desde que a roda do mouse existe, e elas custam 34px de altura útil.
+    -->
+    <Style x:Key="style.scroll.thumb" TargetType="Thumb">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <!-- O Border externo é a área de clique; o interno é o que se vê. -->
+                    <Border Background="Transparent" Padding="3">
+                        <Border x:Name="Barra"
+                                Background="{DynamicResource border.strong}"
+                                CornerRadius="{DynamicResource radius.pill}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Barra" Property="Background" Value="{DynamicResource text.muted}" />
+                        </Trigger>
+                        <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="Barra" Property="Background" Value="{DynamicResource text.secondary}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- O trilho precisa existir para o clique em página funcionar, e precisa
+         ser invisível para não desenhar um bloco atrás do polegar. -->
+    <Style x:Key="style.scroll.track" TargetType="RepeatButton">
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <Rectangle Fill="{TemplateBinding Background}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ScrollBar">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Width" Value="10" />
+        <Setter Property="MinWidth" Value="10" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollBar">
+                    <Grid Background="{TemplateBinding Background}">
+                        <Track x:Name="PART_Track" IsDirectionReversed="True">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="ScrollBar.PageUpCommand" Style="{StaticResource style.scroll.track}" />
+                            </Track.DecreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb Style="{StaticResource style.scroll.thumb}" />
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="ScrollBar.PageDownCommand" Style="{StaticResource style.scroll.track}" />
+                            </Track.IncreaseRepeatButton>
+                        </Track>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Orientation" Value="Horizontal">
+                            <Setter Property="Width" Value="Auto" />
+                            <Setter Property="MinWidth" Value="0" />
+                            <Setter Property="Height" Value="10" />
+                            <Setter Property="MinHeight" Value="10" />
+                            <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- O quadradinho do canto entre as duas barras some junto. -->
+    <Style TargetType="ScrollViewer">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollViewer">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <ScrollContentPresenter Grid.Row="0" Grid.Column="0"
+                                                CanContentScroll="{TemplateBinding CanContentScroll}"
+                                                Margin="{TemplateBinding Padding}" />
+
+                        <ScrollBar x:Name="PART_VerticalScrollBar"
+                                   Grid.Row="0" Grid.Column="1"
+                                   Orientation="Vertical"
+                                   Value="{TemplateBinding VerticalOffset}"
+                                   Maximum="{TemplateBinding ScrollableHeight}"
+                                   ViewportSize="{TemplateBinding ViewportHeight}"
+                                   Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}" />
+
+                        <ScrollBar x:Name="PART_HorizontalScrollBar"
+                                   Grid.Row="1" Grid.Column="0"
+                                   Orientation="Horizontal"
+                                   Value="{TemplateBinding HorizontalOffset}"
+                                   Maximum="{TemplateBinding ScrollableWidth}"
+                                   ViewportSize="{TemplateBinding ViewportWidth}"
+                                   Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
 </ResourceDictionary>

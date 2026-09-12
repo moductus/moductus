@@ -9,8 +9,10 @@
     <Color x:Key="border.strong.color">#3C4048</Color>
     <Color x:Key="text.primary.color">#E8EAED</Color>
     <Color x:Key="text.secondary.color">#9AA0A9</Color>
-    <Color x:Key="text.muted.color">#6B717A</Color>
+    <Color x:Key="text.muted.color">#868D96</Color>
     <Color x:Key="accent.color">#FFB224</Color>
+    <!-- No escuro o âmbar já passa: mesma cor, chave separada para o claro. -->
+    <Color x:Key="accent.border.color">#FFB224</Color>
     <Color x:Key="accent.fg.color">#1A1204</Color>
     <Color x:Key="success.color">#3DD68C</Color>
     <Color x:Key="danger.color">#F0554F</Color>
@@ -25,6 +27,7 @@
     <SolidColorBrush x:Key="text.secondary" Color="{StaticResource text.secondary.color}" />
     <SolidColorBrush x:Key="text.muted" Color="{StaticResource text.muted.color}" />
     <SolidColorBrush x:Key="accent" Color="{StaticResource accent.color}" />
+    <SolidColorBrush x:Key="accent.border" Color="{StaticResource accent.border.color}" />
     <SolidColorBrush x:Key="accent.fg" Color="{StaticResource accent.fg.color}" />
     <SolidColorBrush x:Key="success" Color="{StaticResource success.color}" />
     <SolidColorBrush x:Key="danger" Color="{StaticResource danger.color}" />
