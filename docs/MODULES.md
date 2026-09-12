@@ -108,6 +108,32 @@ context.Commands.Unregister("meu-modulo");
 
 O host registra "Abrir X" para cada módulo ativo, com a letra como dica. O ranking da busca é prefixo, depois início de palavra, depois trecho — previsível de propósito, sem fuzzy. `PasteFlow` e `RunNotify` em `src/Moductus.Modules/Palette/` são os exemplos.
 
+### Ícone
+
+Não embuta arquivo de ícone nem adicione biblioteca. O Windows já traz a fonte:
+
+```csharp
+var glifo = new TextBlock { Text = "" };   // ChromeClose
+glifo.SetResourceReference(FrameworkElement.StyleProperty, "style.icon");
+```
+
+`font.icon` é `Segoe Fluent Icons` no Windows 11 com `Segoe MDL2 Assets` atrás,
+e os glifos que sobrevivem entre as duas têm o mesmo ponto de código. A lista
+de códigos está na [documentação da Microsoft](https://learn.microsoft.com/windows/apps/design/style/segoe-fluent-icons-font).
+
+**Não use caractere tipográfico no lugar do glifo.** "✕", "▸" e "★" mudam de
+desenho e de peso conforme a fonte da interface, e nunca batem com o que o
+Windows desenha nas próprias janelas.
+
+### Configuração do módulo
+
+`BuildSettings()` devolve um `UserControl` e é chamado quando o usuário clica em
+**Ajustar** na janela principal. Devolver `null` esconde o botão.
+
+Ele nasce só no clique, então pode construir UI à vontade — ao contrário do
+`Enable()`. Grave em `LostFocus` para campo de texto, não a cada tecla: "5" a
+caminho de "50" não pode virar cinco gravado. `TimerModule` é o modelo.
+
 ## Nomeação
 
 Substantivo curto, um só, em inglês. Lê bem como `Moductus · Ports` e é digitável na paleta.
