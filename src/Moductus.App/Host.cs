@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json.Nodes;
 using System.Windows;
+using System.Windows.Threading;
 using System.Windows.Controls;
 using Moductus.Core.Commands;
 using Moductus.Core.Config;
@@ -56,6 +57,7 @@ internal sealed class Host : IDisposable
     private HotkeyRegistration _leader;
     private LeaderOverlay? _overlay;
     private SettingsWindow? _settings;
+    private HelpWindow? _help;
 
     public Host(Application app)
     {
@@ -118,6 +120,7 @@ internal sealed class Host : IDisposable
         }
 
         _archetypes.Prewarm(_app.Dispatcher);
+        OpenHelpOnFirstRun();
     }
 
     private static (ConfigStore, string?) LoadConfig(ConfigLocation location)
@@ -302,6 +305,52 @@ internal sealed class Host : IDisposable
     /// descoberta para quem ainda não decorou as letras, e a saída para quando
     /// a tecla líder colide com outro app.
     /// </summary>
+    private const string AjudaVistaKey = "helpSeen";
+
+    /// <summary>
+    /// Abre a ajuda uma vez, na primeira execução. Um app sem janela
+    /// principal, acionado por uma combinação que ninguém adivinha, é
+    /// indistinguível de um app quebrado se ninguém explicar.
+    /// </summary>
+    private void OpenHelpOnFirstRun()
+    {
+        if (_config.Root[AjudaVistaKey]?.GetValue<bool>() == true)
+        {
+            return;
+        }
+
+        // Fora do caminho crítico: o ícone da bandeja aparece primeiro.
+        _app.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, OpenHelp);
+    }
+
+    private void OpenHelp()
+    {
+        if (_help is null || !_help.IsLoaded)
+        {
+            _help = new HelpWindow(
+                _theme,
+                _hotkeys.All.FirstOrDefault(h => h.Owner == LeaderOwner)?.Binding.ToString() ?? "Ctrl+Alt+M",
+                [.. _modules.Where(m => _enabled.Contains(m.Id))],
+                _letters.All,
+                _config.Root[AjudaVistaKey]?.GetValue<bool>() != true,
+                abrirNoInicio =>
+                {
+                    _config.Root[AjudaVistaKey] = !abrirNoInicio;
+                    _config.Save();
+                });
+
+            _help.Closed += (_, _) => _help = null;
+
+            // Ter aberto já conta como visto: quem fechou sem marcar a caixa
+            // não quer isso na cara toda vez que a máquina liga.
+            _config.Root[AjudaVistaKey] = true;
+            _config.Save();
+        }
+
+        _help.Show();
+        _help.Activate();
+    }
+
     private void ShowMenu()
     {
         var menu = new ContextMenu();
@@ -316,12 +365,16 @@ internal sealed class Host : IDisposable
             menu.Items.Add(new Separator());
         }
 
+        var ajuda = new MenuItem { Header = "Como usar" };
+        ajuda.Click += (_, _) => OpenHelp();
+
         var configuracoes = new MenuItem { Header = "Configurações" };
         configuracoes.Click += (_, _) => OpenSettings();
 
         var sair = new MenuItem { Header = "Sair" };
         sair.Click += (_, _) => _app.Shutdown();
 
+        menu.Items.Add(ajuda);
         menu.Items.Add(configuracoes);
         menu.Items.Add(new Separator());
         menu.Items.Add(sair);
