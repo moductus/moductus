@@ -185,6 +185,47 @@
         </Setter>
     </Style>
 
+    <!-- Igual ao TextBox no que se vê, sem o que não cabe: altura fixa não
+         serve a um campo que cresce, e a dica fica por conta de quem usa,
+         porque RichTextBox não tem Text para o gatilho de vazio. -->
+    <Style TargetType="RichTextBox">
+        <Setter Property="Padding" Value="{DynamicResource inset.input}" />
+        <Setter Property="Background" Value="{DynamicResource bg.raised}" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource accent}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource accent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.subtle}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource border.width}" />
+        <Setter Property="FontFamily" Value="{DynamicResource font.ui}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.body}" />
+        <Setter Property="VerticalContentAlignment" Value="Top" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RichTextBox">
+                    <Border x:Name="Fundo"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{DynamicResource radius.control}"
+                            Padding="{TemplateBinding Padding}">
+                        <!-- Style nulo pelo mesmo motivo do TextBox: o estilo
+                             implícito de ScrollViewer troca o template e desloca
+                             o texto. As barras seguem com o nosso visual. -->
+                        <ScrollViewer x:Name="PART_ContentHost"
+                                      Style="{x:Null}"
+                                      Padding="0"
+                                      Margin="0" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Fundo" Property="BorderBrush" Value="{DynamicResource accent.border}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style TargetType="CheckBox">
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="HorizontalAlignment" Value="Left" />
