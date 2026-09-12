@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using Moductus.Core.Interop;
 using Moductus.Core.Modules;
+using Moductus.UI.Archetypes;
 using Moductus.UI.Modules;
 
 namespace Moductus.Modules.Kill;
@@ -149,7 +150,10 @@ public sealed class KillModule(ModuleContext context) : IModule
         var janela = WindowList.TopLevelAt(x, y);
         if (janela is null)
         {
-            context.Archetypes.Hud.Flash("Nenhuma janela aí.");
+            context.Archetypes.Hud.Flash(
+                "Nenhuma janela aí",
+                "Clique em cima da janela que você quer encerrar, ou Esc para sair.",
+                HudTone.Alerta);
             return;
         }
 
@@ -186,11 +190,14 @@ public sealed class KillModule(ModuleContext context) : IModule
         try
         {
             Process.GetProcessById((int)alvo.ProcessId).Kill();
-            context.Archetypes.Hud.Flash($"Encerrado: {alvo.Title}");
+            context.Archetypes.Hud.Flash(
+                "Janela encerrada",
+                $"{alvo.Title} — processo morto, o que não estava salvo se perdeu.",
+                HudTone.Sucesso);
         }
         catch (Exception ex)
         {
-            context.Archetypes.Hud.Flash($"Não deu para encerrar: {ex.Message}");
+            context.Archetypes.Hud.Flash("Não deu para encerrar", Resumo(ex.Message, 80), HudTone.Alerta);
         }
     }
 
@@ -199,6 +206,12 @@ public sealed class KillModule(ModuleContext context) : IModule
         _cartao.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         Canvas.SetLeft(_cartao, (_camada.ActualWidth - _cartao.DesiredSize.Width) / 2);
         Canvas.SetTop(_cartao, (_camada.ActualHeight - _cartao.DesiredSize.Height) / 2);
+    }
+
+    private static string Resumo(string t, int max)
+    {
+        var linha = t.ReplaceLineEndings(" ").Trim();
+        return linha.Length > max ? linha[..max] + "…" : linha;
     }
 
     private static TextBlock Rotulo(string texto)

@@ -184,12 +184,12 @@ public sealed class LinksModule(ModuleContext context) : IModule
             if (_symlink.IsChecked == true)
             {
                 Directory.CreateSymbolicLink(destino, origem);
-                Sucesso($"Symlink criado: {destino} → {origem}");
+                Sucesso("Symlink criado", $"{destino} → {origem}");
             }
             else
             {
                 Junction(destino, origem);
-                Sucesso($"Junction criada: {destino} → {origem}");
+                Sucesso("Junction criada", $"{destino} → {origem}");
             }
         }
         catch (UnauthorizedAccessException)
@@ -225,11 +225,11 @@ public sealed class LinksModule(ModuleContext context) : IModule
         }
     }
 
-    private void Sucesso(string mensagem)
+    private void Sucesso(string titulo, string detalhe)
     {
-        _estado.Text = mensagem;
+        _estado.Text = $"{titulo}: {detalhe}";
         _estado.SetResourceReference(TextBlock.ForegroundProperty, "success");
-        context.Archetypes.Hud.Flash(mensagem);
+        context.Archetypes.Hud.Flash(titulo, detalhe, HudTone.Sucesso);
     }
 
     private void Falha(string mensagem)

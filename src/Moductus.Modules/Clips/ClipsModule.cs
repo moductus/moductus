@@ -195,11 +195,11 @@ public sealed class ClipsModule(ModuleContext context) : IModule
         try
         {
             System.Windows.Clipboard.SetText(texto);
-            context.Archetypes.Hud.Flash($"Copiado: {Resumo(texto, 40)}");
+            context.Archetypes.Hud.Flash("Copiado do histórico", Resumo(texto, 60), HudTone.Sucesso);
         }
         catch (Exception e)
         {
-            context.Archetypes.Hud.Flash($"Não consegui copiar: {e.Message}");
+            context.Archetypes.Hud.Flash("Não consegui copiar", Resumo(e.Message, 80), HudTone.Alerta);
         }
     }
 
@@ -207,7 +207,10 @@ public sealed class ClipsModule(ModuleContext context) : IModule
     {
         _store?.Clear();
         _store?.Save();
-        context.Archetypes.Hud.Flash("Histórico do clipboard apagado.");
+        context.Archetypes.Hud.Flash(
+            "Histórico apagado",
+            "O que está no clipboard agora continua lá.",
+            HudTone.Sucesso);
     }
 
     private static string Resumo(string texto, int max = Preview)

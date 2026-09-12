@@ -7,6 +7,7 @@ using System.Windows.Shapes;
 using Moductus.Core.Interop;
 using Moductus.Core.Modules;
 using Moductus.Core.Ocr;
+using Moductus.UI.Archetypes;
 using Moductus.UI.Modules;
 
 namespace Moductus.Modules.Freeze;
@@ -123,7 +124,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         }
         catch (Exception e)
         {
-            context.Archetypes.Hud.Flash($"Não deu para capturar a tela: {e.Message}");
+            context.Archetypes.Hud.Flash("Não deu para capturar a tela", Resumo(e.Message, 80), HudTone.Alerta);
             return;
         }
 
@@ -193,7 +194,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
             var (px, py) = Pixel(fim);
             var hex = Hex(px, py);
             Fechar();
-            Copiar(hex, $"Cor copiada: {hex}");
+            Copiar(hex, "Cor copiada", hex);
             return;
         }
 
@@ -207,7 +208,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         if (!_ocr)
         {
             Fechar();
-            Copiar($"{recorte.Width}×{recorte.Height}", $"{recorte.Width} × {recorte.Height} px — copiado");
+            Copiar($"{recorte.Width}×{recorte.Height}", "Medida copiada", $"{recorte.Width} × {recorte.Height} px, pronto para colar.");
             return;
         }
 
@@ -218,27 +219,36 @@ public sealed class FreezeModule(ModuleContext context) : IModule
 
         if (!TextRecognizer.Available)
         {
-            hud.Flash("OCR indisponível: nenhum idioma com reconhecimento instalado no Windows.");
+            hud.Flash(
+                "OCR indisponível",
+                "Nenhum idioma de reconhecimento instalado. Adicione um em Idioma e região.",
+                HudTone.Alerta);
             return;
         }
 
-        hud.Flash("Reconhecendo…");
+        hud.Flash(
+            "Reconhecendo…",
+            "Leva um instante. O texto vai direto para o clipboard.",
+            HudTone.Neutro);
 
         try
         {
             var texto = await TextRecognizer.RecognizeAsync(trecho);
             if (string.IsNullOrWhiteSpace(texto))
             {
-                hud.Flash("Nenhum texto reconhecido nessa região.");
+                hud.Flash(
+                    "Nenhum texto nessa região",
+                    "Tente um recorte maior ou com mais contraste.",
+                    HudTone.Alerta);
                 return;
             }
 
             var linhas = texto.Count(c => c == '\n') + 1;
-            Copiar(texto, linhas > 1 ? $"OCR: {linhas} linhas copiadas" : $"OCR copiado: {Resumo(texto)}");
+            Copiar(texto, "OCR copiado", $"{linhas} linhas no clipboard.");
         }
         catch (Exception ex)
         {
-            hud.Flash($"OCR falhou: {ex.Message}");
+            hud.Flash("OCR falhou", Resumo(ex.Message, 80), HudTone.Alerta);
         }
     }
 
@@ -299,16 +309,16 @@ public sealed class FreezeModule(ModuleContext context) : IModule
 
     private void Fechar() => context.Archetypes.Canvas.Dismiss();
 
-    private void Copiar(string texto, string aviso)
+    private void Copiar(string texto, string titulo, string detalhe)
     {
         try
         {
             System.Windows.Clipboard.SetText(texto);
-            context.Archetypes.Hud.Flash(aviso);
+            context.Archetypes.Hud.Flash(titulo, detalhe, HudTone.Sucesso);
         }
         catch (Exception e)
         {
-            context.Archetypes.Hud.Flash($"Não consegui copiar: {e.Message}");
+            context.Archetypes.Hud.Flash("Não consegui copiar", Resumo(e.Message, 80), HudTone.Alerta);
         }
     }
 
@@ -327,10 +337,10 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         _dimensoes.Visibility = Visibility.Collapsed;
     }
 
-    private static string Resumo(string t)
+    private static string Resumo(string t, int max = 40)
     {
         var linha = t.ReplaceLineEndings(" ").Trim();
-        return linha.Length > 40 ? linha[..40] + "…" : linha;
+        return linha.Length > max ? linha[..max] + "…" : linha;
     }
 
     private static FrameworkElement Rotulo(UIElement amostra, UIElement texto)

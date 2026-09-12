@@ -254,7 +254,10 @@ public sealed class PortsModule(ModuleContext context) : IModule
         try
         {
             Process.GetProcessById((int)l.Porta.ProcessId).Kill();
-            context.Archetypes.Hud.Flash($"{l.Processo} encerrado — porta {l.Porta.Port} livre");
+            context.Archetypes.Hud.Flash(
+                $"{l.Processo} encerrado",
+                $"A porta {l.Porta.Port} está livre.",
+                HudTone.Sucesso);
         }
         catch (Exception e)
         {

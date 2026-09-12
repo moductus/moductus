@@ -68,19 +68,25 @@ internal sealed class QrCommand(ModuleContext context)
         }
         catch (Exception e)
         {
-            hud.Flash($"Clipboard indisponível: {e.Message}");
+            hud.Flash("Clipboard indisponível", Resumo(e.Message, 80), HudTone.Alerta);
             return;
         }
 
         if (string.IsNullOrWhiteSpace(texto))
         {
-            hud.Flash("Nada de texto no clipboard.");
+            hud.Flash(
+                "Nada de texto no clipboard",
+                "Copie um link ou texto e repita o comando.",
+                HudTone.Alerta);
             return;
         }
 
         if (texto.Length > MaxChars)
         {
-            hud.Flash($"Texto longo demais para um QR ({texto.Length} caracteres).");
+            hud.Flash(
+                "Texto longo demais para um QR",
+                $"{texto.Length} caracteres; o limite é {MaxChars}.",
+                HudTone.Alerta);
             return;
         }
 
@@ -93,7 +99,7 @@ internal sealed class QrCommand(ModuleContext context)
         }
         catch (Exception e)
         {
-            hud.Flash($"Não deu para gerar o QR: {e.Message}");
+            hud.Flash("Não deu para gerar o QR", Resumo(e.Message, 80), HudTone.Alerta);
             return;
         }
 
@@ -113,5 +119,11 @@ internal sealed class QrCommand(ModuleContext context)
         panel.Placement = PanelPlacement.Center;
         panel.SlotContent = _corpo;
         panel.Present();
+    }
+
+    private static string Resumo(string t, int max)
+    {
+        var linha = t.ReplaceLineEndings(" ").Trim();
+        return linha.Length > max ? linha[..max] + "…" : linha;
     }
 }

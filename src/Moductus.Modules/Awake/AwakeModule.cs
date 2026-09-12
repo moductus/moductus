@@ -1,6 +1,7 @@
 using System.Windows.Controls;
 using Moductus.Core.Interop;
 using Moductus.Core.Modules;
+using Moductus.UI.Archetypes;
 using Moductus.UI.Modules;
 
 namespace Moductus.Modules.Awake;
@@ -50,12 +51,18 @@ public sealed class AwakeModule(ModuleContext context) : IModule
         if (_on)
         {
             Power.KeepAwake(keepDisplayOn: true);
-            context.Archetypes.Hud.Flash("Awake ligado — não vai hibernar");
+            context.Archetypes.Hud.Flash(
+                "Awake ligado",
+                "A máquina não hiberna e a tela não apaga até você repetir o atalho.",
+                HudTone.Neutro);
         }
         else
         {
             Power.AllowSleep();
-            context.Archetypes.Hud.Flash("Awake desligado");
+            context.Archetypes.Hud.Flash(
+                "Awake desligado",
+                "O plano de energia do Windows volta a valer.",
+                HudTone.Neutro);
         }
     }
 

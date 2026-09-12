@@ -3,6 +3,7 @@ using Moductus.Core.Audio;
 using Moductus.Core.Commands;
 using Moductus.Core.Modules;
 using Moductus.Core.Tray;
+using Moductus.UI.Archetypes;
 using Moductus.UI.Modules;
 
 namespace Moductus.Modules.Mic;
@@ -59,7 +60,10 @@ public sealed class MicModule(ModuleContext context) : IModule
     {
         if (!_mute.Available)
         {
-            context.Archetypes.Hud.Flash("Nenhum microfone padrão no Windows.");
+            context.Archetypes.Hud.Flash(
+                "Nenhum microfone padrão",
+                "O Windows não tem entrada de áudio ativa. Escolha uma em Configurações de som.",
+                HudTone.Alerta);
             return;
         }
 
@@ -67,12 +71,29 @@ public sealed class MicModule(ModuleContext context) : IModule
 
         if (estado is not { } mudo)
         {
-            context.Archetypes.Hud.Flash("O Windows recusou a troca do mudo.");
+            context.Archetypes.Hud.Flash(
+                "O Windows recusou o mudo",
+                "Algum app está segurando o endpoint. Tente de novo em alguns segundos.",
+                HudTone.Alerta);
             return;
         }
 
         Aplicar(mudo);
-        context.Archetypes.Hud.Flash(mudo ? "Microfone mudo" : "Microfone aberto");
+
+        if (mudo)
+        {
+            context.Archetypes.Hud.Flash(
+                "Microfone mudo",
+                "Mudo no endpoint, ninguém te ouve. O ícone da bandeja fica marcado.",
+                HudTone.Neutro);
+        }
+        else
+        {
+            context.Archetypes.Hud.Flash(
+                "Microfone aberto",
+                "Voltou a captar. Repita o atalho para mutar.",
+                HudTone.Neutro);
+        }
     }
 
     private void Sincronizar()
