@@ -649,6 +649,43 @@ Clips, Freeze (com OCR), Shelf, Mic, Links, Kill, Timer. Ordem por interesse.
 
 ---
 
+### Awake: fica, mas a implementação atual tem defeito conhecido
+
+Levantamento de 11/09/2026 confirmou que é dor real: 487 issues rotuladas
+`Product-Awake` no PowerToys, Don't Sleep na v10.22 de março de 2026, Caffeine
+mantido há mais de dez anos. A causa é estrutural e não foi resolvida pelo
+Windows 11 — os contadores de sono e de bloqueio contam **input do usuário**,
+não atividade de processo, então download, build e render não seguram a
+máquina sozinhos, e a única saída nativa é trocar o plano de energia para
+"Nunca" e lembrar de desfazer.
+
+**O defeito:** `Power.cs` usa `SetThreadExecutionState`, que só reseta
+contadores de ociosidade. Em máquina com Modern Standby (S0), que é o padrão
+em notebook novo, ela entra em connected standby minutos depois de a tela
+apagar mesmo com o estado ativo. O caso de uso mais pedido — "deixe a tela
+dormir mas segure meu download" — é justamente o que falha. O Awake do
+PowerToys tem o mesmo defeito, aberto na issue 48965.
+
+**A correção:** `PowerCreateRequest` + `PowerSetRequest` com
+`PowerRequestSystemRequired` e `PowerRequestDisplayRequired` separados. Isso
+cria requisição de energia de verdade, respeitada em S0, e que aparece
+nominalmente em `powercfg /requests` — auditável, o que a API antiga não
+oferece.
+
+**O que trava hoje:** o CsWin32 não resolve `REASON_CONTEXT` neste metadata, e
+`PowerCreateRequest` exige esse struct. Escrever a struct à mão está proibido
+pelo próprio MODULES.md, e com razão: assinatura errada compila, roda e
+corrompe memória em silêncio numa versão específica do Windows. Resolver exige
+atualizar o pacote de metadata ou achar o nome que o gerador usa.
+
+**E o que não dá:** tela de bloqueio e `Interactive logon: Machine inactivity
+limit` por política de grupo não são contornáveis por app de usuário.
+Prometer isso gera issue e decepção. O módulo também **não simula teclado**,
+nem como opção — é o que separa um utilitário de energia do mercado de mouse
+jigglers, e há demissões documentadas por causa disso.
+
+---
+
 ## 11. Riscos conhecidos
 
 | Risco | Impacto | Mitigação |
