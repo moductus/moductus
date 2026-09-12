@@ -24,7 +24,10 @@ public sealed class PaletteModule(ModuleContext context) : IModule
     private readonly AppLauncher _apps = new(context);
     private readonly FileFinder _arquivos = new(context);
 
-    public string Id => "palette";
+    /// <summary>Constante porque o AppLauncher grava na mesma gaveta de configuração.</summary>
+    public const string Id = "palette";
+
+    string IModule.Id => Id;
 
     public string Name => "Palette";
 

@@ -77,8 +77,12 @@ public sealed class CommandRegistry
     /// O resultado marcado como <see cref="PaletteCommand.Primary"/> vem
     /// antes de tudo. O resto dos resultados de provedor entra no mesmo
     /// ranking dos estáticos e ganha o empate, porque nasceu da consulta.
-    /// Busca vazia lista só os estáticos: provedor sem texto não tem o que
-    /// oferecer.
+    /// Busca vazia abre com o que os provedores oferecem sem texto nenhum —
+    /// para o lançador de aplicativos, o que se abriu por último — e só então
+    /// os estáticos. Nessa ordem porque o valor de não abrir vazio é ver o que
+    /// se usa no primeiro quadro; embaixo de uma dúzia de comandos não serviria
+    /// de nada. Provedor que só sabe responder a uma consulta devolve nada
+    /// aqui, que é o que calculadora e busca de arquivo já faziam.
     /// </remarks>
     public IReadOnlyList<PaletteCommand> Search(string? query)
     {
@@ -86,7 +90,7 @@ public sealed class CommandRegistry
 
         if (q.Length == 0)
         {
-            return All;
+            return [.. Dinamicos(string.Empty), .. All];
         }
 
         var dinamicos = Dinamicos(q);

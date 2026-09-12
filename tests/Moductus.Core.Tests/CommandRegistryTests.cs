@@ -104,12 +104,32 @@ public class CommandRegistryTests
     }
 
     [Fact]
-    public void Provedor_nao_aparece_em_busca_vazia_nem_em_All()
+    public void Provedor_nao_entra_em_All()
     {
         var r = Registro();
         r.RegisterProvider("apps", _ => [new PaletteCommand("app", "Notepad", null, null, () => { })]);
 
         Assert.Equal(5, r.All.Count);
+    }
+
+    [Fact]
+    public void Busca_vazia_abre_com_o_provedor_antes_dos_estaticos()
+    {
+        var r = Registro();
+        r.RegisterProvider("apps", _ => [new PaletteCommand("app", "Notepad", null, null, () => { })]);
+
+        var vazia = r.Search("");
+
+        Assert.Equal(6, vazia.Count);
+        Assert.Equal("app", vazia[0].Id);
+    }
+
+    [Fact]
+    public void Busca_vazia_nao_inventa_nada_quando_o_provedor_cala()
+    {
+        var r = Registro();
+        r.RegisterProvider("calc", q => q.Length == 0 ? [] : [new PaletteCommand("calc", "4", null, null, () => { })]);
+
         Assert.Equal(5, r.Search("").Count);
     }
 
