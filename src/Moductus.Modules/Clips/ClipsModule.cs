@@ -7,6 +7,7 @@ using Moductus.Core.Clipboard;
 using Moductus.Core.Commands;
 using Moductus.Core.Config;
 using Moductus.Core.Modules;
+using Moductus.Core.Text;
 using Moductus.UI.Archetypes;
 using Moductus.UI.Modules;
 
@@ -42,6 +43,9 @@ public sealed class ClipsModule(ModuleContext context) : IModule
     private ClipStore? _store;
     private DispatcherTimer? _retry;
     private int _retries;
+
+    /// <summary>Sobe a cada Invoke; preenchimento que volta com número velho é descartado.</summary>
+    private int _geracao;
 
     public string Id => "clips";
 
@@ -100,18 +104,47 @@ public sealed class ClipsModule(ModuleContext context) : IModule
             return;
         }
 
-        var agora = DateTimeOffset.Now;
-
         palette.Placeholder = "Buscar no histórico…";
         palette.EmptyText = _store is { Count: 0 }
             ? "Nada ainda. Copie algo e ele aparece aqui."
             : "Nada com esse texto.";
-        palette.SetItems((_store?.All ?? []).Select(c => new PaletteItem(
-            Resumo(c.Text),
-            Detalhe(c, agora),
-            null,
-            () => Copiar(c.Text))));
+        palette.SetItems([]);
         palette.Present();
+
+        Preencher();
+    }
+
+    /// <summary>
+    /// O histórico já está na memória, mas montar a linha de cada item é o WPF
+    /// criando centenas de elementos, e fazer isso antes do Present aparecia
+    /// como a tecla líder demorando a responder. A janela vem primeiro; as
+    /// linhas entram no quadro seguinte.
+    /// </summary>
+    private void Preencher()
+    {
+        var palette = context.Archetypes.Palette;
+        var desta = ++_geracao;
+
+        palette.Dispatcher.BeginInvoke(
+            DispatcherPriority.Background,
+            () =>
+            {
+                // A Palette é uma só para todos os módulos e não tem dono: se
+                // ela fechou ou outro módulo a tomou nesse meio-tempo, estes
+                // itens não são mais os dela.
+                if (desta != _geracao || !palette.IsVisible)
+                {
+                    return;
+                }
+
+                var agora = DateTimeOffset.Now;
+
+                palette.SetItems((_store?.All ?? []).Select(c => new PaletteItem(
+                    Summary.OneLine(c.Text, Preview),
+                    Detalhe(c, agora),
+                    null,
+                    () => Copiar(c.Text))));
+            });
     }
 
     // O clipboard pode estar trancado por quem acabou de escrever nele.
@@ -215,15 +248,13 @@ public sealed class ClipsModule(ModuleContext context) : IModule
 
     private void Copiar(string texto)
     {
-        try
+        if (!ClipboardText.TryWrite(texto, out var erro))
         {
-            System.Windows.Clipboard.SetText(texto);
-            context.Archetypes.Hud.Flash("Copiado do histórico", Resumo(texto, 60), HudTone.Sucesso);
+            context.Archetypes.Hud.Flash("Não consegui copiar", Summary.OneLine(erro, 80), HudTone.Alerta);
+            return;
         }
-        catch (Exception e)
-        {
-            context.Archetypes.Hud.Flash("Não consegui copiar", Resumo(e.Message, 80), HudTone.Alerta);
-        }
+
+        context.Archetypes.Hud.Flash("Copiado do histórico", Summary.OneLine(texto, 60), HudTone.Sucesso);
     }
 
     /// <summary>Corta a cauda até o teto configurado. Mais recente primeiro.</summary>
@@ -251,17 +282,6 @@ public sealed class ClipsModule(ModuleContext context) : IModule
             HudTone.Sucesso);
     }
 
-    private static string Resumo(string texto, int max = Preview)
-    {
-        var linha = texto.ReplaceLineEndings(" ").Trim();
-        while (linha.Contains("  "))
-        {
-            linha = linha.Replace("  ", " ");
-        }
-
-        return linha.Length > max ? linha[..max] + "…" : linha;
-    }
-
     private static string Detalhe(Clip c, DateTimeOffset agora)
     {
         var d = agora - c.When;
@@ -287,11 +307,11 @@ public sealed class ClipsModule(ModuleContext context) : IModule
             _store?.Save();
         }));
 
-        corpo.Children.Add(Nota("O histórico guarda no máximo 200 itens; número maior que isso fica gravado e vale quando o teto do armazenamento subir."));
+        corpo.Children.Add(SettingsUI.Note("O histórico guarda no máximo 200 itens; número maior que isso fica gravado e vale quando o teto do armazenamento subir."));
 
         corpo.Children.Add(Campo("Teto por item", "em KB, de 1 a 1024", MaxBytesPorItem / 1024, 1, 1024, MaxKbPadrao, valor => Gravar(ChaveMaxKb, valor)));
 
-        corpo.Children.Add(Nota("Texto maior que isso não entra no histórico. Continua no clipboard normalmente."));
+        corpo.Children.Add(SettingsUI.Note("Texto maior que isso não entra no histórico. Continua no clipboard normalmente."));
 
         var memoria = new CheckBox { Content = "Guardar só em memória", IsChecked = SoMemoria };
         memoria.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
@@ -299,20 +319,14 @@ public sealed class ClipsModule(ModuleContext context) : IModule
         memoria.Unchecked += (_, _) => Gravar(ChaveSoMemoria, false);
         corpo.Children.Add(memoria);
 
-        corpo.Children.Add(Nota("Nada do clipboard vai para disco, e o histórico some ao fechar o Moductus. Vale a partir da próxima vez que o módulo ligar."));
+        corpo.Children.Add(SettingsUI.Note("Nada do clipboard vai para disco, e o histórico some ao fechar o Moductus. Vale a partir da próxima vez que o módulo ligar."));
 
         return new UserControl { Content = corpo };
     }
 
     private static FrameworkElement Campo(string rotulo, string dica, int atual, int minimo, int maximo, int padrao, Action<int> gravar)
     {
-        var caixa = new TextBox
-        {
-            Text = atual.ToString(),
-            Width = 80,
-            HorizontalContentAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        var caixa = SettingsUI.NumberBox(atual.ToString());
 
         // Grava no que sair do campo, não a cada tecla: "1" a caminho de "100"
         // não pode virar um histórico de um item.
@@ -323,28 +337,7 @@ public sealed class ClipsModule(ModuleContext context) : IModule
             gravar(valor);
         };
 
-        var nome = new TextBlock { Text = rotulo, VerticalAlignment = VerticalAlignment.Center, MinWidth = 128 };
-        var detalhe = new TextBlock { Text = dica, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
-        detalhe.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        detalhe.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
-
-        var linha = new DockPanel { LastChildFill = true };
-        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
-        DockPanel.SetDock(nome, Dock.Left);
-        DockPanel.SetDock(caixa, Dock.Left);
-        linha.Children.Add(nome);
-        linha.Children.Add(caixa);
-        linha.Children.Add(detalhe);
-
-        return linha;
-    }
-
-    private static TextBlock Nota(string texto)
-    {
-        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
-        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
-        return t;
+        return SettingsUI.Row(rotulo, dica, caixa);
     }
 
     private void Gravar(string chave, int valor)

@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -20,7 +19,7 @@ public sealed class PeekModule(ModuleContext context) : IModule
 
     private const int OpacidadePadrao = 100;
 
-    private readonly Border _area = new() { Background = Brushes.Transparent, Margin = new Thickness(8) };
+    private readonly Border _area = new() { Background = Brushes.Transparent };
     private readonly TextBlock _legenda = new();
     private readonly DockPanel _corpo = new();
     private DwmThumbnail? _thumbnail;
@@ -28,6 +27,12 @@ public sealed class PeekModule(ModuleContext context) : IModule
 
     /// <summary>A árvore visual só é construída uma vez, por mais que Enable repita.</summary>
     private bool _montado;
+
+    /// <summary>
+    /// Sobe a cada Invoke. A leitura que voltar com número velho é de uma
+    /// abertura que já passou, e não deve escrever na Palette de agora.
+    /// </summary>
+    private int _geracao;
 
     public string Id => "peek";
 
@@ -57,10 +62,12 @@ public sealed class PeekModule(ModuleContext context) : IModule
 
         _montado = true;
 
+        _area.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
+
         _area.SizeChanged += (_, _) => Reposicionar();
         _legenda.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
         _legenda.HorizontalAlignment = HorizontalAlignment.Center;
-        _legenda.Margin = new Thickness(0, 0, 0, 8);
+        _legenda.SetResourceReference(FrameworkElement.MarginProperty, "inset.bottom.8");
 
         // Construído uma vez: um elemento só pode ter um pai lógico.
         DockPanel.SetDock(_legenda, Dock.Bottom);
@@ -74,22 +81,47 @@ public sealed class PeekModule(ModuleContext context) : IModule
     {
         var panel = context.Archetypes.Panel;
 
-        // Toggle: se o Panel é nosso e está aberto, fecha.
-        if (panel.IsVisible && panel.Owner == Id && !panel.IsPinned)
+        if (panel.DismissIfShowing(Id))
         {
-            panel.Dismiss();
             return;
         }
 
         var palette = context.Archetypes.Palette;
         palette.Placeholder = "Qual janela?";
-        palette.EmptyText = "Nenhuma janela aberta além desta.";
-        palette.SetItems(WindowList.AltTab().Select(w => new PaletteItem(
-            w.Title,
-            NomeDoProcesso(w.ProcessId),
-            null,
-            () => Mostrar(w))));
+        palette.EmptyText = "Procurando janelas…";
+        palette.SetItems([]);
         palette.Present();
+
+        Listar();
+    }
+
+    /// <summary>
+    /// Enumerar as janelas e descobrir o processo de cada uma é ida ao kernel
+    /// por janela, e antes do Present isso aparecia como a tecla líder demorando
+    /// a responder. A lista chega depois, com a Palette já na tela.
+    /// </summary>
+    private async void Listar()
+    {
+        var palette = context.Archetypes.Palette;
+        var desta = ++_geracao;
+
+        var janelas = await Task.Run(() =>
+            WindowList.AltTab().Select(w => (Janela: w, Processo: Processes.NameOf(w.ProcessId) ?? "processo desconhecido")).ToList());
+
+        // A Palette é uma só para todos os módulos e não tem dono. Se ela fechou
+        // ou outro módulo a tomou enquanto líamos, estes itens não são mais os
+        // dela — escrevê-los apagaria o que está em tela.
+        if (desta != _geracao || !palette.IsVisible)
+        {
+            return;
+        }
+
+        palette.EmptyText = "Nenhuma janela aberta além desta.";
+        palette.SetItems(janelas.Select(x => new PaletteItem(
+            x.Janela.Title,
+            x.Processo,
+            null,
+            () => Mostrar(x.Janela))));
     }
 
     private void Mostrar(TopLevelWindow janela)
@@ -101,12 +133,8 @@ public sealed class PeekModule(ModuleContext context) : IModule
 
         _legenda.Text = "Ao vivo. A hotkey fecha; Fixar mantém aberto.";
 
-        panel.Owner = Id;
-        panel.Heading = $"Peek · {janela.Title}";
-        panel.Placement = PanelPlacement.Center;
-        panel.SlotContent = _corpo;
         panel.Dismissed += SoltarAoFechar;
-        panel.Present();
+        panel.Occupy(Id, $"Peek · {janela.Title}", PanelPlacement.Center, _corpo);
 
         _thumbnail = DwmThumbnail.Register(new System.Windows.Interop.WindowInteropHelper(panel).Handle, _alvo);
 
@@ -172,7 +200,7 @@ public sealed class PeekModule(ModuleContext context) : IModule
     {
         var panel = context.Archetypes.Panel;
 
-        if (panel.Owner == Id && panel.IsVisible)
+        if (panel.IsShowingFor(Id))
         {
             panel.Dismiss();
             return;
@@ -187,18 +215,6 @@ public sealed class PeekModule(ModuleContext context) : IModule
         _thumbnail = null;
         _alvo = 0;
         context.Archetypes.Badge.Soltar(Id);
-    }
-
-    private static string NomeDoProcesso(uint pid)
-    {
-        try
-        {
-            return Process.GetProcessById((int)pid).ProcessName;
-        }
-        catch
-        {
-            return "processo desconhecido";
-        }
     }
 
     // ---- Configuração ---------------------------------------------------------
@@ -217,21 +233,15 @@ public sealed class PeekModule(ModuleContext context) : IModule
         fixado.Unchecked += (_, _) => Gravar(ChaveFixado, false);
         corpo.Children.Add(fixado);
 
-        corpo.Children.Add(Nota("Fixado, a miniatura não fecha quando o atalho é repetido — é o que serve para acompanhar um build."));
-        corpo.Children.Add(Nota("As duas opções ficam gravadas, mas ainda não valem: a opacidade da miniatura e o estado do alfinete do Panel são decididos fora do módulo."));
+        corpo.Children.Add(SettingsUI.Note("Fixado, a miniatura não fecha quando o atalho é repetido — é o que serve para acompanhar um build."));
+        corpo.Children.Add(SettingsUI.Note("As duas opções ficam gravadas, mas ainda não valem: a opacidade da miniatura e o estado do alfinete do Panel são decididos fora do módulo."));
 
         return new UserControl { Content = corpo };
     }
 
     private FrameworkElement Campo(string rotulo, string dica, string chave)
     {
-        var caixa = new TextBox
-        {
-            Text = Opacidade.ToString(),
-            Width = 80,
-            HorizontalContentAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        var caixa = SettingsUI.NumberBox(Opacidade.ToString());
 
         // Grava no que sair do campo, não a cada tecla: "2" a caminho de "20"
         // não pode virar opacidade gravada.
@@ -242,28 +252,7 @@ public sealed class PeekModule(ModuleContext context) : IModule
             Gravar(chave, valor);
         };
 
-        var nome = new TextBlock { Text = rotulo, VerticalAlignment = VerticalAlignment.Center, MinWidth = 96 };
-        var detalhe = new TextBlock { Text = dica, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
-        detalhe.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        detalhe.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
-
-        var linha = new DockPanel { LastChildFill = true };
-        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
-        DockPanel.SetDock(nome, Dock.Left);
-        DockPanel.SetDock(caixa, Dock.Left);
-        linha.Children.Add(nome);
-        linha.Children.Add(caixa);
-        linha.Children.Add(detalhe);
-
-        return linha;
-    }
-
-    private static TextBlock Nota(string texto)
-    {
-        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
-        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
-        return t;
+        return SettingsUI.Row(rotulo, dica, caixa);
     }
 
     private void Gravar(string chave, int valor)

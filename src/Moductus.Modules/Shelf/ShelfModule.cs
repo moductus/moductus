@@ -43,6 +43,12 @@ public sealed class ShelfModule(ModuleContext context) : IModule
     /// <summary>A árvore visual só é construída uma vez, por mais que Enable repita.</summary>
     private bool _montado;
 
+    /// <summary>O que já se conferiu no disco. Sem entrada é "ainda não sei".</summary>
+    private readonly Dictionary<string, bool> _existe = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Sobe a cada Invoke; conferência que volta com número velho é descartada.</summary>
+    private int _geracao;
+
     public string Id => "shelf";
 
     public string Name => "Shelf";
@@ -131,7 +137,7 @@ public sealed class ShelfModule(ModuleContext context) : IModule
         // O Panel continuaria na tela operando um módulo desligado — aceitando
         // drop e gravando a config.
         var panel = context.Archetypes.Panel;
-        if (panel.Owner == Id && panel.IsVisible)
+        if (panel.IsShowingFor(Id))
         {
             panel.Dismiss();
         }
@@ -151,23 +157,48 @@ public sealed class ShelfModule(ModuleContext context) : IModule
     {
         var panel = context.Archetypes.Panel;
 
-        if (panel.IsVisible && panel.Owner == Id && !panel.IsPinned)
+        if (panel.DismissIfShowing(Id))
         {
-            panel.Dismiss();
             return;
         }
 
         Render();
 
-        panel.Owner = Id;
-        panel.Heading = $"Shelf · {_caminhos.Count} item(ns)";
-        panel.Placement = PanelPlacement.Edge;
-        panel.SlotContent = _corpo;
-        panel.Present();
+        panel.Occupy(Id, $"Shelf · {_caminhos.Count} item(ns)", PanelPlacement.Edge, _corpo);
 
         // Toma o foco porque a lista tem teclado próprio — Delete tira da
         // bandeja, Esc fecha. Panel sem foco não recebe tecla nenhuma.
         panel.TakeFocus(_lista);
+
+        Conferir();
+    }
+
+    /// <summary>
+    /// Pergunta ao disco quais itens ainda estão lá. Fora da thread de UI porque
+    /// um caminho de rede fora do ar faz File.Exists esperar o timeout inteiro do
+    /// SMB, e antes do Present isso era o painel simplesmente não abrir.
+    /// </summary>
+    private async void Conferir()
+    {
+        var alvos = _caminhos.ToArray();
+        var desta = ++_geracao;
+
+        var achados = await Task.Run(() => alvos
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(c => c, c => File.Exists(c) || Directory.Exists(c), StringComparer.OrdinalIgnoreCase));
+
+        // Abriu de novo enquanto a rede pensava: quem manda é a abertura nova.
+        if (desta != _geracao)
+        {
+            return;
+        }
+
+        foreach (var (caminho, existe) in achados)
+        {
+            _existe[caminho] = existe;
+        }
+
+        Render();
     }
 
     // ---- Entrada e saída de arquivos ----------------------------------------
@@ -219,7 +250,9 @@ public sealed class ShelfModule(ModuleContext context) : IModule
         }
 
         var selecionados = _lista.SelectedItems.Cast<Item>()
-            .Where(i => i.Existe)
+            // Nulo é "ainda não conferido": deixa tentar, e quem reclama é o
+            // shell. Só o que se sabe que sumiu fica de fora.
+            .Where(i => i.Existe != false)
             .Select(i => i.Caminho)
             .ToArray();
 
@@ -266,7 +299,27 @@ public sealed class ShelfModule(ModuleContext context) : IModule
 
     private void Render()
     {
-        _lista.ItemsSource = _caminhos.Select(c => new Item(c)).ToList();
+        // Render roda de novo quando a conferência de existência volta, que num
+        // caminho de rede fora do ar são segundos — tempo de sobra para a pessoa
+        // já ter escolhido o que quer abrir. Trocar o ItemsSource descarta a
+        // seleção, então ela é remontada por caminho logo abaixo.
+        var escolhidos = _lista.SelectedItems
+            .Cast<Item>()
+            .Select(i => i.Caminho)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // TryGetValue e não GetValueOrDefault: o dicionário é de bool, e o
+        // default dele é false, não nulo. Com GetValueOrDefault todo item nascia
+        // "sumiu" antes de a conferência voltar — riscado na lista, e descartado
+        // pelo Enter, que só abre o que não é falso.
+        _lista.ItemsSource = _caminhos
+            .Select(c => new Item(c, _existe.TryGetValue(c, out var existe) ? existe : null))
+            .ToList();
+
+        foreach (var item in _lista.Items.Cast<Item>().Where(i => escolhidos.Contains(i.Caminho)))
+        {
+            _lista.SelectedItems.Add(item);
+        }
         _vazio.Visibility = _caminhos.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         _lista.Visibility = _caminhos.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         Repintar();
@@ -288,7 +341,7 @@ public sealed class ShelfModule(ModuleContext context) : IModule
         context.Archetypes.Badge.Fixar(
             Id,
             $"Bandeja — {_caminhos.Count} item(ns)",
-            new Item(_caminhos[0]).Nome,
+            new Item(_caminhos[0], null).Nome,
             HudTone.Neutro,
             aoClicar: null,
             [
@@ -344,7 +397,7 @@ public sealed class ShelfModule(ModuleContext context) : IModule
         pasta.SetValue(TextBlock.TextWrappingProperty, TextWrapping.NoWrap);
 
         var pilha = new FrameworkElementFactory(typeof(StackPanel));
-        pilha.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 4, 0, 4));
+        pilha.SetResourceReference(FrameworkElement.MarginProperty, "inset.y.4");
         pilha.AppendChild(nome);
         pilha.AppendChild(pasta);
 
@@ -361,17 +414,19 @@ public sealed class ShelfModule(ModuleContext context) : IModule
         return modelo;
     }
 
-    private sealed record Item(string Caminho)
+    /// <summary>
+    /// Nome e pasta saem do próprio texto do caminho, sem tocar em disco, para a
+    /// lista poder aparecer antes de qualquer I/O. <paramref name="Existe"/> é
+    /// nulo até a conferência voltar; o item riscado é o que já se sabe que
+    /// sumiu, não o que ainda não se perguntou.
+    /// </summary>
+    private sealed record Item(string Caminho, bool? Existe)
     {
-        public bool Existe { get; } = File.Exists(Caminho) || Directory.Exists(Caminho);
-
         public string Nome { get; } = Path.GetFileName(Caminho.TrimEnd(Path.DirectorySeparatorChar)) is { Length: > 0 } n
             ? n
             : Caminho;
 
-        public string Detalhe { get; } = File.Exists(Caminho) || Directory.Exists(Caminho)
-            ? Path.GetDirectoryName(Caminho) ?? Caminho
-            : "não está mais lá";
+        public string Detalhe { get; } = Path.GetDirectoryName(Caminho) ?? Caminho;
     }
 
     // ---- Configuração ---------------------------------------------------------
@@ -386,18 +441,10 @@ public sealed class ShelfModule(ModuleContext context) : IModule
         esvaziar.Unchecked += (_, _) => Gravar(ChaveEsvaziar, false);
         corpo.Children.Add(esvaziar);
 
-        corpo.Children.Add(Nota("A bandeja guarda caminhos, não cópias: esvaziar solta os arquivos e não apaga nenhum."));
-        corpo.Children.Add(Nota("Desligar o módulo aqui nas configurações também esvazia, pelo mesmo caminho de saída."));
+        corpo.Children.Add(SettingsUI.Note("A bandeja guarda caminhos, não cópias: esvaziar solta os arquivos e não apaga nenhum."));
+        corpo.Children.Add(SettingsUI.Note("Desligar o módulo aqui nas configurações também esvazia, pelo mesmo caminho de saída."));
 
         return new UserControl { Content = corpo };
-    }
-
-    private static TextBlock Nota(string texto)
-    {
-        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
-        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
-        return t;
     }
 
     private void Gravar(string chave, bool valor)
