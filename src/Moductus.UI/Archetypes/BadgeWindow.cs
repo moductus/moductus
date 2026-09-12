@@ -85,6 +85,14 @@ public class BadgeWindow : ArchetypeWindow
         if (entrada is null)
         {
             entrada = new Entrada(owner, Construir());
+
+            // Vão só ENTRE pastilhas. Margem na primeira deixava uma faixa do
+            // fundo da janela aparecendo acima dela, como se fosse borda.
+            if (_entradas.Count > 0)
+            {
+                entrada.Raiz.Margin = new Thickness(0, 8, 0, 0);
+            }
+
             _entradas.Add(entrada);
             _pilha.Children.Add(entrada.Raiz);
         }
@@ -205,7 +213,6 @@ public class BadgeWindow : ArchetypeWindow
             {
                 Child = linha,
                 Padding = new Thickness(12, 8, 16, 8),
-                Margin = new Thickness(0, 4, 0, 0),
                 MaxWidth = 320,
             };
 

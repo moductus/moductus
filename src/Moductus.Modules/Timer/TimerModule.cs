@@ -285,7 +285,11 @@ public sealed class TimerModule(ModuleContext context) : IModule
     {
         if (Restante() > TimeSpan.Zero)
         {
+            // O ícone é redesenhado só quando o arco mudaria de verdade, mas a
+            // pastilha mostra segundos: presa na mesma guarda, ela ficava
+            // quinze segundos parada no mesmo número e parecia travada.
             Redesenhar();
+            Repintar();
             return;
         }
 
@@ -340,7 +344,6 @@ public sealed class TimerModule(ModuleContext context) : IModule
 
         _ultimoPercentual = percentual;
         context.Tray.Refresh(Id);
-        Repintar();
     }
 
     /// <summary>

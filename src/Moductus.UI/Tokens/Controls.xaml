@@ -160,7 +160,16 @@
                                        TextTrimming="CharacterEllipsis"
                                        IsHitTestVisible="False"
                                        Visibility="Collapsed" />
-                            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center" />
+                            <!-- Style nulo de propósito: o estilo implícito de
+                                 ScrollViewer troca o template, e o presenter
+                                 dele desloca o texto em relação à dica. As
+                                 barras continuam com o nosso visual porque o
+                                 estilo de ScrollBar é implícito e independente. -->
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Style="{x:Null}"
+                                          Padding="0"
+                                          Margin="0"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                         </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
