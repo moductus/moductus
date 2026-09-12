@@ -56,6 +56,13 @@ public sealed class TimerModule(ModuleContext context) : IModule
     private TimeSpan _total;
     private string _rotulo = string.Empty;
     private bool _emPausa;
+
+    /// <summary>
+    /// Quanto faltava quando pausou. Enquanto isso não for nulo, `_fim` está
+    /// congelado e não significa mais nada — retomar recalcula a partir daqui.
+    /// </summary>
+    private TimeSpan? _congelado;
+
     private int _ultimoPercentual = -1;
 
     public string Id => "timer";
@@ -71,6 +78,11 @@ public sealed class TimerModule(ModuleContext context) : IModule
     public bool HasSurface => false;
 
     private bool Rodando => _claim is not null;
+
+    private bool Pausado => _congelado is not null;
+
+    /// <summary>Quanto o botão "+" acrescenta. Cinco minutos é o passo do método.</summary>
+    private static readonly TimeSpan Esticada = TimeSpan.FromMinutes(5);
 
     private TimeSpan Foco => TimeSpan.FromMinutes(Minutos(ChaveFoco, FocoPadrao));
 
@@ -94,6 +106,13 @@ public sealed class TimerModule(ModuleContext context) : IModule
 
         context.Commands.Register(Id, new PaletteCommand(
             "timer:status", "Pomodoro: quanto falta", "Mostra a contagem em andamento", null, Consultar));
+
+        context.Commands.Register(Id, new PaletteCommand(
+            "timer:pause", "Pomodoro: pausar ou retomar", "Congela a contagem sem descartar", null,
+            () => { if (Pausado) { Retomar(); } else { Pausar(); } }));
+
+        context.Commands.Register(Id, new PaletteCommand(
+            "timer:extend", "Pomodoro: +5 minutos", "Estica o bloco em andamento", null, Esticar));
 
         context.Commands.Register(Id, new PaletteCommand(
             "timer:stop", "Pomodoro: parar", "Cancela a contagem em andamento", null, Parar));
@@ -143,6 +162,7 @@ public sealed class TimerModule(ModuleContext context) : IModule
         _fim = DateTimeOffset.Now + duracao;
         _rotulo = rotulo;
         _emPausa = pausa;
+        _congelado = null;
         _ultimoPercentual = -1;
         _ultimaConsulta = DateTimeOffset.MinValue;
 
@@ -152,6 +172,7 @@ public sealed class TimerModule(ModuleContext context) : IModule
         _tique.Start();
 
         Redesenhar();
+        Repintar();
 
         if (avisar)
         {
@@ -188,10 +209,74 @@ public sealed class TimerModule(ModuleContext context) : IModule
         _tique.Stop();
         _claim?.Dispose();
         _claim = null;
+        _congelado = null;
         _ultimaConsulta = DateTimeOffset.MinValue;
         context.Archetypes.Badge.Soltar(Id);
 
         context.Archetypes.Hud.Flash("Contagem cancelada.", $"{_rotulo} parado com {Relogio(Restante())} restando.", HudTone.Alerta);
+    }
+
+    /// <summary>
+    /// Congela a contagem. Pomodoro sem pausa é cronômetro: a interrupção
+    /// acontece, e obrigar a cancelar e recomeçar é o que faz a pessoa
+    /// abandonar o método no terceiro dia.
+    /// </summary>
+    private void Pausar()
+    {
+        if (!Rodando || Pausado)
+        {
+            return;
+        }
+
+        _congelado = Restante();
+        _tique.Stop();
+
+        // O ícone continua com o arco parado onde estava: some seria pior,
+        // porque some é o que "acabou" faz.
+        context.Tray.Refresh(Id);
+        Repintar();
+    }
+
+    private void Retomar()
+    {
+        if (!Rodando || !Pausado)
+        {
+            return;
+        }
+
+        _fim = DateTimeOffset.Now + _congelado.Value;
+        _congelado = null;
+        _tique.Start();
+
+        Redesenhar();
+        Repintar();
+    }
+
+    /// <summary>
+    /// Acrescenta tempo ao bloco em andamento. Some no total também, senão o
+    /// arco voltaria para trás e o ícone passaria a mentir.
+    /// </summary>
+    private void Esticar()
+    {
+        if (!Rodando)
+        {
+            return;
+        }
+
+        _total += Esticada;
+
+        if (_congelado is { } parado)
+        {
+            _congelado = parado + Esticada;
+        }
+        else
+        {
+            _fim += Esticada;
+        }
+
+        _ultimoPercentual = -1;
+        Redesenhar();
+        Repintar();
     }
 
     private void Tique()
@@ -228,6 +313,11 @@ public sealed class TimerModule(ModuleContext context) : IModule
 
     private TimeSpan Restante()
     {
+        if (_congelado is { } parado)
+        {
+            return parado;
+        }
+
         var falta = _fim - DateTimeOffset.Now;
         return falta > TimeSpan.Zero ? falta : TimeSpan.Zero;
     }
@@ -248,17 +338,48 @@ public sealed class TimerModule(ModuleContext context) : IModule
 
         _ultimoPercentual = percentual;
         context.Tray.Refresh(Id);
+        Repintar();
+    }
 
-        // A pastilha mostra o relógio porque o arco no ícone diz "mais ou
-        // menos quanto falta" e mora atrás da setinha de estouro.
-        context.Archetypes.Badge.Fixar(Id, $"{_rotulo} — {Relogio(Restante())}",
-            "Clique para cancelar", _emPausa ? HudTone.Sucesso : HudTone.Neutro, Parar);
+    /// <summary>
+    /// Redesenha a pastilha. O corpo não é clicável de propósito: com botões
+    /// ali, clique no corpo vira cancelamento sem querer.
+    /// </summary>
+    private void Repintar()
+    {
+        if (!Rodando)
+        {
+            return;
+        }
+
+        var titulo = Pausado
+            ? $"{_rotulo} pausado — {Relogio(Restante())}"
+            : $"{_rotulo} — {Relogio(Restante())}";
+
+        List<BadgeAction> acoes =
+        [
+            Pausado
+                ? new BadgeAction("Retomar", "Continua de onde parou", Retomar)
+                : new BadgeAction("Pausar", "Congela a contagem", Pausar),
+            new BadgeAction($"+{Esticada.TotalMinutes:F0}", "Acrescenta cinco minutos a este bloco", Esticar),
+            new BadgeAction("Parar", "Cancela e descarta a contagem", Parar),
+        ];
+
+        context.Archetypes.Badge.Fixar(
+            Id,
+            titulo,
+            $"Termina às {_fim.LocalDateTime:HH:mm}",
+            Pausado ? HudTone.Alerta : _emPausa ? HudTone.Sucesso : HudTone.Neutro,
+            aoClicar: null,
+            acoes);
     }
 
     private System.Windows.Media.Imaging.BitmapSource Desenhar(int tamanho, bool claro) =>
         Mark.Render(tamanho, claro, progress: Math.Max(Fracao(), 0.001));
 
-    private string Tooltip() => $"Moductus — {_rotulo}, faltam {Relogio(Restante())}";
+    private string Tooltip() => Pausado
+        ? $"Moductus — {_rotulo} pausado, faltam {Relogio(Restante())}"
+        : $"Moductus — {_rotulo}, faltam {Relogio(Restante())}";
 
     // ---- Configuração ---------------------------------------------------------
 

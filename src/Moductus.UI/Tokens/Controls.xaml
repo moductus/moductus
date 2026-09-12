@@ -571,4 +571,31 @@
         </Setter>
     </Style>
 
+    <!-- ═══ Botões compactos ═════════════════════════════════════════════ -->
+    <!--
+      Existe porque seis lugares do app escreviam Height=26 e um padding
+      próprio à mão, cada um com um número diferente. O resultado eram botões
+      de alturas distintas na mesma tela, e no cabeçalho do Panel um botão da
+      mesma altura da barra, encostado nas duas bordas.
+    -->
+    <Style x:Key="style.button.compact" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Height" Value="{DynamicResource size.button.compact}" />
+        <Setter Property="Padding" Value="{DynamicResource inset.button.compact}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.caption}" />
+    </Style>
+
+    <!-- Só o glifo: quadrado, senão o "✕" vira um retângulo deitado. -->
+    <Style x:Key="style.button.icon" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Height" Value="{DynamicResource size.button.icon}" />
+        <Setter Property="Width" Value="{DynamicResource size.button.icon}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="{DynamicResource type.caption}" />
+    </Style>
+
+    <Style x:Key="style.toggle.compact" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+        <Setter Property="Height" Value="{DynamicResource size.button.compact}" />
+        <Setter Property="Padding" Value="{DynamicResource inset.button.compact}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.caption}" />
+    </Style>
+
 </ResourceDictionary>

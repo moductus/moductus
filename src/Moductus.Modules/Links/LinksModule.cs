@@ -97,11 +97,11 @@ public sealed class LinksModule(ModuleContext context) : IModule
         _destino.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
 
         _symlink.Content = "Symlink (avançado)";
-        _symlink.Height = 26;
-        _symlink.Padding = new Thickness(10, 0, 10, 0);
+        _symlink.SetResourceReference(FrameworkElement.StyleProperty, "style.toggle.compact");
         _symlink.ToolTip = "Symlink exige Modo Desenvolvedor ou admin. Junction, o padrão, não exige nada.";
 
-        var criar = new Button { Content = "Criar", Height = 26, Padding = new Thickness(14, 0, 14, 0), Margin = new Thickness(8, 0, 0, 0) };
+        var criar = new Button { Content = "Criar", Margin = new Thickness(8, 0, 0, 0) };
+        criar.SetResourceReference(FrameworkElement.StyleProperty, "style.button.compact");
         criar.IsDefault = true; // Enter nos TextBox cria o link.
         criar.Click += (_, _) => Criar();
 

@@ -7,6 +7,12 @@ using Moductus.Core.Interop;
 
 namespace Moductus.UI.Archetypes;
 
+/// <summary>Um botão da pastilha. O rótulo é curto: cabe ao lado de outros dois.</summary>
+/// <param name="Rotulo">Uma ou duas palavras. "Pausar", "+5 min", "Parar".</param>
+/// <param name="Dica">O que acontece. Vai no tooltip.</param>
+/// <param name="Executar">A ação.</param>
+public sealed record BadgeAction(string Rotulo, string? Dica, Action Executar);
+
 /// <summary>
 /// Badge: pastilha pequena e permanente no canto da tela, uma por módulo,
 /// que fica enquanto o estado durar e desfaz o estado quando clicada.
@@ -50,9 +56,20 @@ public class BadgeWindow : ArchetypeWindow
     /// <param name="dica">O que o clique faz. Aparece menor, embaixo.</param>
     /// <param name="tom">Cor do ponto.</param>
     /// <param name="aoClicar">
-    /// O que desfaz o estado. Nulo deixa a pastilha só informativa.
+    /// O que o clique no corpo da pastilha faz. Nulo deixa o corpo inerte —
+    /// use quando houver botões, senão clicar sem querer dispara a ação.
     /// </param>
-    public void Fixar(string owner, string texto, string? dica, HudTone tom, Action? aoClicar)
+    /// <param name="acoes">
+    /// Botões. Estado que só dá para desfazer é estado que a pessoa desfaz
+    /// cedo demais: um pomodoro precisa de pausar e esticar, não só de parar.
+    /// </param>
+    public void Fixar(
+        string owner,
+        string texto,
+        string? dica,
+        HudTone tom,
+        Action? aoClicar,
+        IReadOnlyList<BadgeAction>? acoes = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(owner);
 
@@ -65,7 +82,7 @@ public class BadgeWindow : ArchetypeWindow
             _pilha.Children.Add(entrada.Raiz);
         }
 
-        entrada.Atualizar(texto, dica, tom, aoClicar);
+        entrada.Atualizar(texto, dica, tom, aoClicar, acoes);
         Mostrar();
     }
 
@@ -136,8 +153,8 @@ public class BadgeWindow : ArchetypeWindow
 
         public FrameworkElement Raiz => pastilha.Raiz;
 
-        public void Atualizar(string texto, string? dica, HudTone tom, Action? aoClicar) =>
-            pastilha.Atualizar(texto, dica, tom, aoClicar);
+        public void Atualizar(string texto, string? dica, HudTone tom, Action? aoClicar, IReadOnlyList<BadgeAction>? acoes) =>
+            pastilha.Atualizar(texto, dica, tom, aoClicar, acoes);
     }
 
     /// <summary>Uma pastilha: ponto colorido, texto, dica, e o clique que desfaz.</summary>
@@ -146,6 +163,7 @@ public class BadgeWindow : ArchetypeWindow
         private readonly Ellipse _ponto = new() { Width = 8, Height = 8, VerticalAlignment = VerticalAlignment.Center };
         private readonly TextBlock _texto = new() { TextWrapping = TextWrapping.NoWrap };
         private readonly TextBlock _dica = new() { TextWrapping = TextWrapping.NoWrap };
+        private readonly StackPanel _botoes = new();
         private readonly Border _moldura;
 
         private Action? _aoClicar;
@@ -163,9 +181,14 @@ public class BadgeWindow : ArchetypeWindow
             _dica.TextTrimming = TextTrimming.CharacterEllipsis;
             _dica.Visibility = Visibility.Collapsed;
 
+            _botoes.Orientation = Orientation.Horizontal;
+            _botoes.Margin = new Thickness(0, 8, 0, 0);
+            _botoes.Visibility = Visibility.Collapsed;
+
             var coluna = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             coluna.Children.Add(_texto);
             coluna.Children.Add(_dica);
+            coluna.Children.Add(_botoes);
 
             var linha = new StackPanel { Orientation = Orientation.Horizontal };
             linha.Children.Add(_ponto);
@@ -175,7 +198,6 @@ public class BadgeWindow : ArchetypeWindow
             {
                 Child = linha,
                 Padding = new Thickness(12, 8, 16, 8),
-                Cursor = Cursors.Hand,
                 Margin = new Thickness(0, 4, 0, 0),
                 MaxWidth = 320,
             };
@@ -183,7 +205,9 @@ public class BadgeWindow : ArchetypeWindow
             _moldura.SetResourceReference(Border.BackgroundProperty, "bg.raised");
             _moldura.SetResourceReference(Border.BorderBrushProperty, "border.strong");
             _moldura.SetResourceReference(Border.BorderThicknessProperty, "border.width");
-            _moldura.SetResourceReference(Border.CornerRadiusProperty, "radius.pill");
+            // Cartão, não pílula: o raio de pílula é para uma linha só. Num
+            // bloco de duas linhas com botões ele vira um comprimido torto.
+            _moldura.SetResourceReference(Border.CornerRadiusProperty, "radius.card");
 
             _moldura.MouseLeftButtonUp += (_, e) =>
             {
@@ -197,7 +221,7 @@ public class BadgeWindow : ArchetypeWindow
 
         public FrameworkElement Raiz => _moldura;
 
-        public void Atualizar(string texto, string? dica, HudTone tom, Action? aoClicar)
+        public void Atualizar(string texto, string? dica, HudTone tom, Action? aoClicar, IReadOnlyList<BadgeAction>? acoes)
         {
             _texto.Text = texto;
             _dica.Text = dica ?? string.Empty;
@@ -206,12 +230,62 @@ public class BadgeWindow : ArchetypeWindow
             _aoClicar = aoClicar;
             _moldura.Cursor = aoClicar is null ? Cursors.Arrow : Cursors.Hand;
 
+            MontarBotoes(acoes);
+
             _ponto.SetResourceReference(Shape.FillProperty, tom switch
             {
                 HudTone.Sucesso => "success",
                 HudTone.Alerta => "danger",
                 _ => "accent",
             });
+        }
+
+        /// <summary>
+        /// Reaproveita os botões que já estão lá. Recriar a cada tique faria a
+        /// pastilha piscar uma vez por segundo e perder o clique no meio.
+        /// </summary>
+        private void MontarBotoes(IReadOnlyList<BadgeAction>? acoes)
+        {
+            var quantos = acoes?.Count ?? 0;
+            _botoes.Visibility = quantos == 0 ? Visibility.Collapsed : Visibility.Visible;
+
+            while (_botoes.Children.Count > quantos)
+            {
+                _botoes.Children.RemoveAt(_botoes.Children.Count - 1);
+            }
+
+            while (_botoes.Children.Count < quantos)
+            {
+                var novo = new Button
+                {
+                    Height = 24,
+                    Padding = new Thickness(10, 0, 10, 0),
+                    Margin = new Thickness(0, 0, 8, 0),
+                    FontSize = 12,
+                };
+
+                // Handler fixo, lendo a ação da Tag: reassinar a cada tique
+                // acumularia handlers no mesmo botão.
+                novo.Click += (remetente, e) =>
+                {
+                    e.Handled = true;
+                    if (remetente is Button { Tag: BadgeAction acao })
+                    {
+                        acao.Executar();
+                    }
+                };
+
+                _botoes.Children.Add(novo);
+            }
+
+            for (var i = 0; i < quantos; i++)
+            {
+                var acao = acoes![i];
+                var botao = (Button)_botoes.Children[i];
+                botao.Content = acao.Rotulo;
+                botao.ToolTip = acao.Dica;
+                botao.Tag = acao;
+            }
         }
     }
 }

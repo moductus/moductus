@@ -100,7 +100,8 @@ public sealed class ShelfModule(ModuleContext context) : IModule
         _vazio.SetResourceReference(FrameworkElement.MarginProperty, "inset.24");
         _vazio.VerticalAlignment = VerticalAlignment.Center;
 
-        var limpar = new Button { Content = "Esvaziar", Height = 26, Padding = new Thickness(10, 0, 10, 0) };
+        var limpar = new Button { Content = "Esvaziar" };
+        limpar.SetResourceReference(FrameworkElement.StyleProperty, "style.button.compact");
         limpar.Click += (_, _) => { _caminhos.Clear(); Render(); Salvar(); };
 
         var rodape = new DockPanel();

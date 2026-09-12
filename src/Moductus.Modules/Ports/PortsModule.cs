@@ -218,7 +218,8 @@ public sealed class PortsModule(ModuleContext context) : IModule
         var endereco = new TextBlock { Text = l.Enderecos, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) };
         endereco.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
 
-        var encerrar = new Button { Content = "Encerrar", Height = 26, Padding = new Thickness(10, 0, 10, 0), IsEnabled = !l.Desconhecido };
+        var encerrar = new Button { Content = "Encerrar", IsEnabled = !l.Desconhecido };
+        encerrar.SetResourceReference(FrameworkElement.StyleProperty, "style.button.compact");
         var confirmando = false;
         var volta = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         volta.Tick += (_, _) =>

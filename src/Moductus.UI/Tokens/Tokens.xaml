@@ -54,6 +54,7 @@
     <Thickness x:Key="inset.24">24</Thickness>
     <Thickness x:Key="inset.input">12,0</Thickness>
     <Thickness x:Key="inset.button">16,0</Thickness>
+    <Thickness x:Key="inset.button.compact">12,0</Thickness>
     <!-- Linha de lista: o vão vertical é o que separa item de duas linhas do
          item seguinte. Zero aqui faz os dois colarem. -->
     <Thickness x:Key="inset.row">12,8</Thickness>
@@ -69,6 +70,14 @@
     <sys:Double x:Key="size.row">32</sys:Double>
     <sys:Double x:Key="size.input">32</sys:Double>
     <sys:Double x:Key="size.button">32</sys:Double>
+    <!-- Botão dentro de barra ou linha de lista. Precisa ser MENOR que a faixa
+         que o contém, senão encosta nas duas bordas e fica achatado. -->
+    <sys:Double x:Key="size.button.compact">28</sys:Double>
+    <!-- Botão só de ícone: quadrado, para o glifo não virar um retângulo. -->
+    <sys:Double x:Key="size.button.icon">28</sys:Double>
+    <!-- A barra de título do Panel. 44 dá 8px de folga em cima e embaixo do
+         botão compacto; com 32 o botão preenchia a barra inteira. -->
+    <sys:Double x:Key="size.titlebar">44</sys:Double>
     <sys:Double x:Key="size.icon">16</sys:Double>
     <sys:Double x:Key="size.palette.width">640</sys:Double>
     <sys:Double x:Key="size.palette.maxheight">480</sys:Double>

@@ -113,10 +113,11 @@ public class PanelWindow : ArchetypeWindow
         _heading.TextWrapping = TextWrapping.NoWrap;
 
         _pin.Content = "Fixar";
-        _pin.Padding = new Thickness(8, 0, 8, 0);
-        _pin.Height = 32;
+        _pin.SetResourceReference(FrameworkElement.StyleProperty, "style.toggle.compact");
+        _pin.ToolTip = "Mantém o painel aberto quando você chama outro módulo";
 
-        var fechar = new Button { Content = "✕", Padding = new Thickness(8, 0, 8, 0), Height = 32, Margin = new Thickness(8, 0, 0, 0) };
+        var fechar = new Button { Content = "✕", Margin = new Thickness(8, 0, 0, 0), ToolTip = "Fechar (Esc)" };
+        fechar.SetResourceReference(FrameworkElement.StyleProperty, "style.button.icon");
         fechar.Click += (_, _) => Dismiss();
 
         var acoes = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
@@ -124,7 +125,9 @@ public class PanelWindow : ArchetypeWindow
         acoes.Children.Add(fechar);
 
         var cabecalho = new DockPanel { LastChildFill = true };
-        cabecalho.SetResourceReference(FrameworkElement.HeightProperty, "size.input");
+        // A barra é mais alta que os botões de propósito: com a mesma altura
+        // eles encostam nas duas bordas e a barra parece achatada.
+        cabecalho.SetResourceReference(FrameworkElement.HeightProperty, "size.titlebar");
         cabecalho.SetResourceReference(Panel.BackgroundProperty, "bg.raised");
         DockPanel.SetDock(acoes, Dock.Right);
         cabecalho.Children.Add(acoes);
