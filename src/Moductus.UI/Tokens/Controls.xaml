@@ -607,4 +607,27 @@
         <Setter Property="FontSize" Value="{DynamicResource type.caption}" />
     </Style>
 
+    <!-- ═══ Ícone ════════════════════════════════════════════════════════ -->
+    <!--
+      Um TextBlock com a fonte de ícone do sistema. Não é gambiarra: é como o
+      próprio Windows desenha os ícones do Explorer e das Configurações, e
+      custa zero byte de pacote. O glifo vem como Text="&#xE8BB;".
+
+      TextWrapping precisa ser NoWrap: o estilo implícito de TextBlock liga
+      Wrap, e glifo quebrado em duas linhas vira um retângulo vazio.
+    -->
+    <Style x:Key="style.icon" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource font.icon}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.caption}" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="TextAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <!-- LineHeight igual ao tamanho: o padrão de 18 empurra o glifo para
+             baixo dentro de um botão de 28. -->
+        <Setter Property="LineHeight" Value="{DynamicResource type.caption}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+    </Style>
+
 </ResourceDictionary>

@@ -35,6 +35,14 @@
     -->
     <FontFamily x:Key="font.mono">JetBrainsMono Nerd Font, JetBrainsMono NF, CaskaydiaCove Nerd Font, CaskaydiaCove NF, FiraCode Nerd Font, Cascadia Code, Cascadia Mono, Consolas</FontFamily>
 
+    <!--
+      Ícones. Segoe Fluent Icons vem no Windows 11 e Segoe MDL2 Assets no
+      Windows 10, então o app tem ícone vetorial nos dois sem embutir arquivo
+      nem adicionar dependência. Os glifos MDL2 que sobrevivem no Fluent têm o
+      mesmo ponto de código, então a pilha funciona de verdade.
+    -->
+    <FontFamily x:Key="font.icon">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+
     <FontWeight x:Key="weight.regular">Normal</FontWeight>
     <FontWeight x:Key="weight.semibold">SemiBold</FontWeight>
 
