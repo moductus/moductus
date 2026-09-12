@@ -108,7 +108,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
     {
         var canvas = context.Archetypes.Canvas;
 
-        if (canvas.IsVisible)
+        if (canvas.IsVisible && canvas.Owner == Id)
         {
             canvas.Dismiss();
             return;
@@ -131,6 +131,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         _escala = _area.Scale;
         _lupaImagem.Fill = new ImageBrush(_bitmap) { ViewboxUnits = BrushMappingMode.Absolute, Stretch = Stretch.Fill };
 
+        canvas.Owner = Id;
         canvas.SetBackdrop(_bitmap);
         canvas.SlotContent = _camada;
         canvas.Dismissed += SoltarAoFechar;

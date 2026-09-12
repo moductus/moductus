@@ -92,19 +92,18 @@ public sealed class KillModule(ModuleContext context) : IModule
             Canvas.SetTop(dica, _camada.ActualHeight - 64);
             Centralizar();
         };
-
-        if (!_assinado)
-        {
-            context.Archetypes.Canvas.PreviewKeyDown += OnKey;
-            _assinado = true;
-        }
     }
 
     public void Disable()
     {
+        _alvo = null;
+
+        // Só toca a Canvas se já assinou: a propriedade constrói a janela.
         if (_assinado)
         {
-            context.Archetypes.Canvas.PreviewKeyDown -= OnKey;
+            var canvas = context.Archetypes.Canvas;
+            canvas.PreviewKeyDown -= OnKey;
+            canvas.Dismissed -= LimparAlvo;
             _assinado = false;
         }
     }
@@ -113,7 +112,16 @@ public sealed class KillModule(ModuleContext context) : IModule
     {
         var canvas = context.Archetypes.Canvas;
 
-        if (canvas.IsVisible)
+        // Assinado aqui, e não no Enable: ler a propriedade Canvas constrói a
+        // janela, e o Enable roda no caminho crítico do startup.
+        if (!_assinado)
+        {
+            canvas.PreviewKeyDown += OnKey;
+            canvas.Dismissed += LimparAlvo;
+            _assinado = true;
+        }
+
+        if (canvas.IsVisible && canvas.Owner == Id)
         {
             canvas.Dismiss();
             return;
@@ -132,9 +140,13 @@ public sealed class KillModule(ModuleContext context) : IModule
             canvas.SetBackdrop(null);
         }
 
+        canvas.Owner = Id;
         canvas.SlotContent = _camada;
         canvas.Present(_area);
     }
+
+    /// <summary>Canvas fechada por qualquer motivo — Esc, outro módulo — desarma a mira.</summary>
+    private void LimparAlvo() => _alvo = null;
 
     private void OnClick(object sender, MouseButtonEventArgs e)
     {

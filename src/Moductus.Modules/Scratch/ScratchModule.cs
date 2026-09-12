@@ -22,6 +22,13 @@ public sealed class ScratchModule(ModuleContext context) : IModule
     private readonly TextBlock _estado = new();
     private readonly DockPanel _corpo = new();
     private readonly DispatcherTimer _salvar = new() { Interval = Debounce };
+
+    /// <summary>
+    /// Guardado em campo porque Disable desassina e religar o módulo precisa
+    /// reassinar. Lambda anônima não dá para remover, e o texto continuaria
+    /// indo para o disco com o módulo desligado.
+    /// </summary>
+    private TextChangedEventHandler? _aoMudarTexto;
     private bool _carregado;
     private bool _sujo;
 
@@ -44,6 +51,22 @@ public sealed class ScratchModule(ModuleContext context) : IModule
 
     public void Enable()
     {
+        // Fora da guarda de _montado: Disable desassina, e religar tem de reassinar.
+        _aoMudarTexto ??= (_, _) =>
+        {
+            if (!_carregado)
+            {
+                return;
+            }
+
+            _sujo = true;
+            _estado.Text = "…";
+            _salvar.Stop();
+            _salvar.Start();
+        };
+        _texto.TextChanged -= _aoMudarTexto;
+        _texto.TextChanged += _aoMudarTexto;
+
         // Enable roda de novo toda vez que o módulo é religado nas configurações.
         // A árvore visual já está montada, e readicionar um filho que já tem pai
         // derruba o processo inteiro — ver docs/MODULES.md, "Armadilhas conhecidas".
@@ -65,19 +88,6 @@ public sealed class ScratchModule(ModuleContext context) : IModule
         _texto.Background = null;
         _texto.SetResourceReference(Control.FontSizeProperty, "type.body");
         _texto.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
-        _texto.TextChanged += (_, _) =>
-        {
-            if (!_carregado)
-            {
-                return;
-            }
-
-            _sujo = true;
-            _estado.Text = "…";
-            _salvar.Stop();
-            _salvar.Start();
-        };
-
         _salvar.Tick += (_, _) =>
         {
             _salvar.Stop();
@@ -97,8 +107,20 @@ public sealed class ScratchModule(ModuleContext context) : IModule
 
     public void Disable()
     {
+        // Grava antes de fechar: o Panel some, mas o que foi digitado fica.
         _salvar.Stop();
         Gravar();
+
+        var panel = context.Archetypes.Panel;
+        if (panel.Owner == Id && panel.IsVisible)
+        {
+            panel.Dismiss();
+        }
+
+        if (_aoMudarTexto is not null)
+        {
+            _texto.TextChanged -= _aoMudarTexto;
+        }
     }
 
     public void Invoke()

@@ -102,6 +102,7 @@ public sealed class LinksModule(ModuleContext context) : IModule
         _symlink.ToolTip = "Symlink exige Modo Desenvolvedor ou admin. Junction, o padrão, não exige nada.";
 
         var criar = new Button { Content = "Criar", Height = 26, Padding = new Thickness(14, 0, 14, 0), Margin = new Thickness(8, 0, 0, 0) };
+        criar.IsDefault = true; // Enter nos TextBox cria o link.
         criar.Click += (_, _) => Criar();
 
         var acoes = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
@@ -129,6 +130,13 @@ public sealed class LinksModule(ModuleContext context) : IModule
 
     public void Disable()
     {
+        // O Panel continuaria na tela operando um módulo desligado — e o botão
+        // "Criar" continuaria criando junction.
+        var panel = context.Archetypes.Panel;
+        if (panel.Owner == Id && panel.IsVisible)
+        {
+            panel.Dismiss();
+        }
     }
 
     public void Invoke()

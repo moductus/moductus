@@ -105,6 +105,13 @@ public sealed class PortsModule(ModuleContext context) : IModule
 
     public void Disable()
     {
+        // O Panel continuaria na tela operando um módulo desligado — e o botão
+        // "Encerrar" continuaria matando processo.
+        var panel = context.Archetypes.Panel;
+        if (panel.Owner == Id && panel.IsVisible)
+        {
+            panel.Dismiss();
+        }
     }
 
     public void Invoke()

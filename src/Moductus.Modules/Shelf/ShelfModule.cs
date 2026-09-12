@@ -124,6 +124,14 @@ public sealed class ShelfModule(ModuleContext context) : IModule
 
     public void Disable()
     {
+        // O Panel continuaria na tela operando um módulo desligado — aceitando
+        // drop e gravando a config.
+        var panel = context.Archetypes.Panel;
+        if (panel.Owner == Id && panel.IsVisible)
+        {
+            panel.Dismiss();
+        }
+
         context.Commands.Unregister(Id);
         Salvar();
     }
