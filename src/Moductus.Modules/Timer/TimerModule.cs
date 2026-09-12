@@ -103,6 +103,7 @@ public sealed class TimerModule(ModuleContext context) : IModule
     {
         context.Commands.Unregister(Id);
         _tique.Stop();
+        context.Archetypes.Badge.Soltar(Id);
 
         if (_aoTique is not null)
         {
@@ -188,6 +189,7 @@ public sealed class TimerModule(ModuleContext context) : IModule
         _claim?.Dispose();
         _claim = null;
         _ultimaConsulta = DateTimeOffset.MinValue;
+        context.Archetypes.Badge.Soltar(Id);
 
         context.Archetypes.Hud.Flash("Contagem cancelada.", $"{_rotulo} parado com {Relogio(Restante())} restando.", HudTone.Alerta);
     }
@@ -207,6 +209,7 @@ public sealed class TimerModule(ModuleContext context) : IModule
         _claim?.Dispose();
         _claim = null;
         _ultimaConsulta = DateTimeOffset.MinValue;
+        context.Archetypes.Badge.Soltar(Id);
 
         if (eraFoco && PausaAutomatica)
         {
@@ -245,6 +248,11 @@ public sealed class TimerModule(ModuleContext context) : IModule
 
         _ultimoPercentual = percentual;
         context.Tray.Refresh(Id);
+
+        // A pastilha mostra o relógio porque o arco no ícone diz "mais ou
+        // menos quanto falta" e mora atrás da setinha de estouro.
+        context.Archetypes.Badge.Fixar(Id, $"{_rotulo} — {Relogio(Restante())}",
+            "Clique para cancelar", _emPausa ? HudTone.Sucesso : HudTone.Neutro, Parar);
     }
 
     private System.Windows.Media.Imaging.BitmapSource Desenhar(int tamanho, bool claro) =>

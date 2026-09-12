@@ -41,6 +41,7 @@ public sealed class AwakeModule(ModuleContext context) : IModule
         {
             Power.AllowSleep();
             _on = false;
+            context.Archetypes.Badge.Soltar(Id);
         }
     }
 
@@ -51,6 +52,12 @@ public sealed class AwakeModule(ModuleContext context) : IModule
         if (_on)
         {
             Power.KeepAwake(keepDisplayOn: true);
+
+            // Estado que dura e some da vista: sem a pastilha, a máquina fica
+            // acordada a noite inteira porque ninguém lembrou de desligar.
+            context.Archetypes.Badge.Fixar(Id, "Awake ligado",
+                "Clique para soltar a máquina", HudTone.Neutro, Invoke);
+
             context.Archetypes.Hud.Flash(
                 "Awake ligado",
                 "A máquina não hiberna e a tela não apaga até você repetir o atalho.",
@@ -59,6 +66,7 @@ public sealed class AwakeModule(ModuleContext context) : IModule
         else
         {
             Power.AllowSleep();
+            context.Archetypes.Badge.Soltar(Id);
             context.Archetypes.Hud.Flash(
                 "Awake desligado",
                 "O plano de energia do Windows volta a valer.",

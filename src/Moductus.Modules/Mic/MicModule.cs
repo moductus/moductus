@@ -110,12 +110,20 @@ public sealed class MicModule(ModuleContext context) : IModule
         {
             _claim = context.Tray.Claim(Id, TrayPriority,
                 (tamanho, claro) => Mark.Render(tamanho, claro, slashed: true),
-                "Moductus — microfone mudo");
+                () => "Moductus — microfone mudo");
+
+            // O risco no ícone não serve se o ícone está atrás da setinha de
+            // estouro do Windows 11, que é onde ele nasce. Microfone mudo sem
+            // querer custa uma reunião inteira: a pastilha fica na tela e o
+            // clique desmuta, sem repetir o atalho.
+            context.Archetypes.Badge.Fixar(Id, "Microfone mudo",
+                "Clique para voltar a captar", HudTone.Alerta, Invoke);
         }
         else
         {
             _claim?.Dispose();
             _claim = null;
+            context.Archetypes.Badge.Soltar(Id);
         }
     }
 
