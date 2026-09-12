@@ -48,7 +48,7 @@ Atalho direto continua existindo, mas como opção para dois ou três favoritos 
 | **Peek** | Miniatura flutuante ao vivo de qualquer janela | 2 |
 | **Ports** | Lista portas locais ocupadas e mata o processo | 2 |
 | **Scratch** | Bloco de notas que desliza do topo e salva sozinho | 2 |
-| **Palette** | Busca de comandos: abre módulos, transforma o clipboard (slug, camelCase, JSON, Base64, JWT), executa um comando e avisa quando termina | 3 |
+| **Palette** | Lançador: resolve contas, abre aplicativos instalados, acha arquivos, transforma o clipboard (slug, camelCase, JSON, Base64, JWT) e executa comando avisando quando termina | 3 |
 | **Clips** | Histórico de clipboard navegável por teclado | 4 |
 | **Freeze** | Tela congelada com régua, conta-gotas, lupa e OCR | 4 |
 | **Shelf** | Bandeja temporária na borda para segurar arquivos | 4 |
@@ -57,9 +57,17 @@ Atalho direto continua existindo, mas como opção para dois ou três favoritos 
 | **Kill** | Mira que encerra janela travada com um clique | 4 |
 | **Timer** | Pomodoro desenhado dentro do ícone da bandeja | 4 |
 
-Os doze existem. Cada um tem uma letra na tela de configurações, e o **Kill nasce desligado** — anti-cheat de jogo marca quem encerra processo alheio, então ligar é decisão sua.
+Os doze existem. Cada um tem uma letra, ajustável, e o **Kill nasce desligado** — anti-cheat de jogo marca quem encerra processo alheio, então ligar é decisão sua.
 
 O que ficou de fora, e por quê, está em [docs/PRODUCT.md](docs/PRODUCT.md#5-módulos) — a lista de módulos cortados é tão importante quanto a de aprovados.
+
+## As três superfícies
+
+Nenhuma janela é permanente, mas três coisas precisam existir fora do atalho:
+
+- **A janela principal** abre no clique do ícone de bandeja. Um cartão por módulo, com a letra, o que ele faz, e botões para abrir e para configurar.
+- **A pastilha**, no canto inferior direito, fica enquanto durar um estado que você vai querer desfazer — microfone mudo, Awake ligado, pomodoro contando. Clicar nela desfaz, sem repetir o atalho. Ela existe porque o Windows 11 esconde ícone de bandeja novo atrás da setinha de estouro, e estado que ninguém vê não comunica nada.
+- **O menu da bandeja**, no botão direito, lista todo módulo ativo com os comandos de cada um em submenu. É a saída para quando a tecla líder colidir com outro programa.
 
 ## Privacidade
 
