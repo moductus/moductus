@@ -107,6 +107,14 @@ public sealed class PeekModule(ModuleContext context) : IModule
             return;
         }
 
+        context.Archetypes.Badge.Fixar(
+            Id,
+            $"Peek — {janela.Title}",
+            "A miniatura fecha com o ✕ ou o atalho",
+            HudTone.Neutro,
+            aoClicar: null,
+            [new BadgeAction("Fechar", "Dispensa a miniatura", Fechar)]);
+
         panel.Dispatcher.BeginInvoke(Reposicionar, System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
@@ -147,11 +155,29 @@ public sealed class PeekModule(ModuleContext context) : IModule
         Soltar();
     }
 
+    /// <summary>
+    /// Fecha pela pastilha. Dismiss só dispara Dismissed com o Panel visível,
+    /// então o caso do Panel já fechado solta a miniatura na mão.
+    /// </summary>
+    private void Fechar()
+    {
+        var panel = context.Archetypes.Panel;
+
+        if (panel.Owner == Id && panel.IsVisible)
+        {
+            panel.Dismiss();
+            return;
+        }
+
+        Soltar();
+    }
+
     private void Soltar()
     {
         _thumbnail?.Dispose();
         _thumbnail = null;
         _alvo = 0;
+        context.Archetypes.Badge.Soltar(Id);
     }
 
     private static string NomeDoProcesso(uint pid)

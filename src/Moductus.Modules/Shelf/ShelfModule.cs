@@ -134,6 +134,7 @@ public sealed class ShelfModule(ModuleContext context) : IModule
         }
 
         context.Commands.Unregister(Id);
+        context.Archetypes.Badge.Soltar(Id);
         Salvar();
     }
 
@@ -259,6 +260,39 @@ public sealed class ShelfModule(ModuleContext context) : IModule
         _lista.ItemsSource = _caminhos.Select(c => new Item(c)).ToList();
         _vazio.Visibility = _caminhos.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         _lista.Visibility = _caminhos.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        Repintar();
+    }
+
+    /// <summary>
+    /// Redesenha a pastilha. Sai daqui, e não do Enable, porque Enable roda
+    /// antes de a UI existir — a lista gravada só vira pastilha no primeiro
+    /// Invoke e a cada mudança depois dele.
+    /// </summary>
+    private void Repintar()
+    {
+        if (_caminhos.Count == 0)
+        {
+            context.Archetypes.Badge.Soltar(Id);
+            return;
+        }
+
+        context.Archetypes.Badge.Fixar(
+            Id,
+            $"Bandeja — {_caminhos.Count} item(ns)",
+            new Item(_caminhos[0]).Nome,
+            HudTone.Neutro,
+            aoClicar: null,
+            [
+                new BadgeAction("Abrir", "Mostra a bandeja", Invoke),
+                new BadgeAction("Esvaziar", "Solta os arquivos guardados, sem apagar nada", Esvaziar),
+            ]);
+    }
+
+    private void Esvaziar()
+    {
+        _caminhos.Clear();
+        Render();
+        Salvar();
     }
 
     private void Carregar()
