@@ -22,7 +22,18 @@
     <FontFamily x:Key="font.ui">Segoe UI Variable Text, Segoe UI</FontFamily>
     <!-- Display tem sizing óptico próprio: só para título e número grande. -->
     <FontFamily x:Key="font.display">Segoe UI Variable Display, Segoe UI</FontFamily>
-    <FontFamily x:Key="font.mono">Consolas</FontFamily>
+    <!--
+      Pilha de fontes de dev, da preferida para o que sempre existe. Nerd Font
+      primeiro porque é o que quem vive em terminal já tem instalado, e o nome
+      com "NF" e o sem sufixo cobrem as duas convenções de nomeação que os
+      instaladores usam. Cascadia Code é o penúltimo degrau e vem no Windows 11
+      de fábrica; Consolas é o chão, presente desde o Vista.
+
+      Nenhuma delas é embutida no pacote: uma Nerd Font sozinha passa de 10 MB,
+      e o app não baixa nada. Quem tem, vê; quem não tem, cai no degrau
+      seguinte sem perceber.
+    -->
+    <FontFamily x:Key="font.mono">JetBrainsMono Nerd Font, JetBrainsMono NF, CaskaydiaCove Nerd Font, CaskaydiaCove NF, FiraCode Nerd Font, Cascadia Code, Cascadia Mono, Consolas</FontFamily>
 
     <FontWeight x:Key="weight.regular">Normal</FontWeight>
     <FontWeight x:Key="weight.semibold">SemiBold</FontWeight>
