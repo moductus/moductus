@@ -420,14 +420,7 @@ public sealed class TimerModule(ModuleContext context) : IModule
 
     private FrameworkElement Campo(string rotulo, string dica, string chave, int padrao)
     {
-        var caixa = new TextBox
-        {
-            Text = Minutos(chave, padrao).ToString(),
-            // 64 cortava "25" em "2!" depois que inset.input voltou para 12.
-            Width = 80,
-            HorizontalContentAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        var caixa = SettingsUI.NumberBox(Minutos(chave, padrao).ToString());
 
         // Grava no que sair do campo, não a cada tecla: "5" a caminho de "50"
         // não pode virar cinco minutos gravados.
@@ -438,20 +431,7 @@ public sealed class TimerModule(ModuleContext context) : IModule
             Gravar(chave, minutos);
         };
 
-        var nome = new TextBlock { Text = rotulo, VerticalAlignment = VerticalAlignment.Center, MinWidth = 64 };
-        var detalhe = new TextBlock { Text = dica, VerticalAlignment = VerticalAlignment.Center };
-        detalhe.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        detalhe.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
-
-        var linha = new DockPanel { LastChildFill = true };
-        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
-        DockPanel.SetDock(nome, Dock.Left);
-        DockPanel.SetDock(caixa, Dock.Left);
-        linha.Children.Add(nome);
-        linha.Children.Add(caixa);
-        linha.Children.Add(detalhe);
-
-        return linha;
+        return SettingsUI.Row(rotulo, dica, caixa);
     }
 
     private void Gravar(string chave, int valor)

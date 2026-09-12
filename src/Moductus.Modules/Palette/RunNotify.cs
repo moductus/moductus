@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Moductus.Core.Commands;
+using Moductus.Core.Text;
 using Moductus.UI.Archetypes;
 using Moductus.UI.Modules;
 
@@ -49,7 +50,7 @@ internal sealed class RunNotify(ModuleContext context)
         }
         catch (Exception e)
         {
-            hud.Flash("O comando não iniciou", Resumo(e.Message, 80), HudTone.Alerta);
+            hud.Flash("O comando não iniciou", Summary.OneLine(e.Message, 80), HudTone.Alerta);
             return false;
         }
 
@@ -79,11 +80,5 @@ internal sealed class RunNotify(ModuleContext context)
 
         hud.Flash("Rodando", $"{comando} — aviso aqui quando terminar.", HudTone.Neutro);
         return true;
-    }
-
-    private static string Resumo(string t, int max)
-    {
-        var linha = t.ReplaceLineEndings(" ").Trim();
-        return linha.Length > max ? linha[..max] + "…" : linha;
     }
 }

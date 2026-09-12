@@ -80,11 +80,11 @@ public sealed class LinksModule(ModuleContext context) : IModule
         zonaTexto.SetResourceReference(FrameworkElement.StyleProperty, "style.secondary");
 
         _zona.Child = zonaTexto;
-        _zona.Height = 72;
+        _zona.SetResourceReference(FrameworkElement.HeightProperty, "size.dropzone");
         _zona.AllowDrop = true;
         _zona.SetResourceReference(Border.BackgroundProperty, "bg.raised");
         _zona.SetResourceReference(Border.BorderBrushProperty, "border.strong");
-        _zona.BorderThickness = new Thickness(1);
+        _zona.SetResourceReference(Border.BorderThicknessProperty, "border.width");
         _zona.SetResourceReference(Border.CornerRadiusProperty, "radius.card");
         _zona.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
         _zona.DragOver += (_, e) =>
@@ -116,7 +116,8 @@ public sealed class LinksModule(ModuleContext context) : IModule
         _symlink.SetResourceReference(FrameworkElement.StyleProperty, "style.toggle.compact");
         _symlink.ToolTip = "Symlink exige Modo Desenvolvedor ou admin. Junction, o padrão, não exige nada.";
 
-        var criar = new Button { Content = "Criar", Margin = new Thickness(8, 0, 0, 0) };
+        var criar = new Button { Content = "Criar" };
+        criar.SetResourceReference(FrameworkElement.MarginProperty, "inset.start.8");
         criar.SetResourceReference(FrameworkElement.StyleProperty, "style.button.compact");
         criar.IsDefault = true; // Enter nos TextBox cria o link.
         criar.Click += (_, _) => Criar();
@@ -127,7 +128,7 @@ public sealed class LinksModule(ModuleContext context) : IModule
         acoes.Children.Add(criar);
 
         _estado.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        _estado.Margin = new Thickness(12, 0, 12, 8);
+        _estado.SetResourceReference(FrameworkElement.MarginProperty, "inset.field.status");
 
         var rotuloOrigem = Rotulo("Origem — a pasta que existe");
         var rotuloDestino = Rotulo("Link — o caminho novo que vai apontar para ela");
@@ -149,7 +150,7 @@ public sealed class LinksModule(ModuleContext context) : IModule
         // O Panel continuaria na tela operando um módulo desligado — e o botão
         // "Criar" continuaria criando junction.
         var panel = context.Archetypes.Panel;
-        if (panel.Owner == Id && panel.IsVisible)
+        if (panel.IsShowingFor(Id))
         {
             panel.Dismiss();
         }
@@ -159,19 +160,14 @@ public sealed class LinksModule(ModuleContext context) : IModule
     {
         var panel = context.Archetypes.Panel;
 
-        if (panel.IsVisible && panel.Owner == Id && !panel.IsPinned)
+        if (panel.DismissIfShowing(Id))
         {
-            panel.Dismiss();
             return;
         }
 
         _symlink.IsChecked = SymlinkPorPadrao;
 
-        panel.Owner = Id;
-        panel.Heading = "Links";
-        panel.Placement = PanelPlacement.Center;
-        panel.SlotContent = _corpo;
-        panel.Present();
+        panel.Occupy(Id, "Links", PanelPlacement.Center, _corpo);
         panel.TakeFocus(_origem);
     }
 
@@ -278,7 +274,8 @@ public sealed class LinksModule(ModuleContext context) : IModule
 
     private static TextBlock Rotulo(string texto)
     {
-        var t = new TextBlock { Text = texto, Margin = new Thickness(12, 8, 12, 0) };
+        var t = new TextBlock { Text = texto };
+        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.field.note");
         t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
         return t;
     }
@@ -299,22 +296,18 @@ public sealed class LinksModule(ModuleContext context) : IModule
         symlink.Unchecked += (_, _) => Gravar(ChaveSymlink, false);
         corpo.Children.Add(symlink);
 
-        corpo.Children.Add(Nota("Symlink exige Modo Desenvolvedor ou admin. Junction não exige nada e dá conta de mover pasta pesada de disco."));
+        corpo.Children.Add(SettingsUI.Note("Symlink exige Modo Desenvolvedor ou admin. Junction não exige nada e dá conta de mover pasta pesada de disco."));
 
         corpo.Children.Add(CampoSufixo());
-        corpo.Children.Add(Nota("O que é acrescentado ao nome da pasta quando você arrasta ela e o destino ainda está vazio."));
+        corpo.Children.Add(SettingsUI.Note("O que é acrescentado ao nome da pasta quando você arrasta ela e o destino ainda está vazio."));
 
         return new UserControl { Content = corpo };
     }
 
     private FrameworkElement CampoSufixo()
     {
-        var caixa = new TextBox
-        {
-            Text = Sufixo,
-            Width = 160,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        var caixa = new TextBox { Text = Sufixo, VerticalAlignment = VerticalAlignment.Center };
+        caixa.SetResourceReference(FrameworkElement.WidthProperty, "size.settings.text");
 
         // Grava no que sair do campo, não a cada tecla: "-l" a caminho de
         // "-link" não pode virar o sufixo gravado.
@@ -330,24 +323,7 @@ public sealed class LinksModule(ModuleContext context) : IModule
             Gravar(ChaveSufixo, sufixo);
         };
 
-        var nome = new TextBlock { Text = "Sufixo", VerticalAlignment = VerticalAlignment.Center, MinWidth = 72 };
-
-        var linha = new DockPanel { LastChildFill = false };
-        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
-        DockPanel.SetDock(nome, Dock.Left);
-        DockPanel.SetDock(caixa, Dock.Left);
-        linha.Children.Add(nome);
-        linha.Children.Add(caixa);
-
-        return linha;
-    }
-
-    private static TextBlock Nota(string texto)
-    {
-        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
-        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
-        return t;
+        return SettingsUI.Row("Sufixo", caixa);
     }
 
     private void Gravar(string chave, string valor)

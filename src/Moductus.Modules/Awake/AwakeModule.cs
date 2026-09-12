@@ -148,24 +148,18 @@ public sealed class AwakeModule(ModuleContext context) : IModule
         tela.Unchecked += (_, _) => Gravar(ChaveTela, false);
         corpo.Children.Add(tela);
 
-        corpo.Children.Add(Nota("Desmarcado, só a hibernação é impedida — o monitor apaga como sempre num download longo."));
+        corpo.Children.Add(SettingsUI.Note("Desmarcado, só a hibernação é impedida — o monitor apaga como sempre num download longo."));
 
         corpo.Children.Add(Campo("Desligar em", "horas até soltar a máquina sozinho; 0 nunca desliga", ChaveHoras, HorasPadrao));
 
-        corpo.Children.Add(Nota("Mudança vale na próxima vez que o Awake for ligado."));
+        corpo.Children.Add(SettingsUI.Note("Mudança vale na próxima vez que o Awake for ligado."));
 
         return new UserControl { Content = corpo };
     }
 
     private FrameworkElement Campo(string rotulo, string dica, string chave, int padrao)
     {
-        var caixa = new TextBox
-        {
-            Text = HorasAteDesligar.ToString(),
-            Width = 80,
-            HorizontalContentAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        var caixa = SettingsUI.NumberBox(HorasAteDesligar.ToString());
 
         // Grava no que sair do campo, não a cada tecla: "1" a caminho de "12"
         // não pode virar uma hora gravada.
@@ -176,28 +170,7 @@ public sealed class AwakeModule(ModuleContext context) : IModule
             Gravar(chave, horas);
         };
 
-        var nome = new TextBlock { Text = rotulo, VerticalAlignment = VerticalAlignment.Center, MinWidth = 96 };
-        var detalhe = new TextBlock { Text = dica, VerticalAlignment = VerticalAlignment.Center };
-        detalhe.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        detalhe.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
-
-        var linha = new DockPanel { LastChildFill = true };
-        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
-        DockPanel.SetDock(nome, Dock.Left);
-        DockPanel.SetDock(caixa, Dock.Left);
-        linha.Children.Add(nome);
-        linha.Children.Add(caixa);
-        linha.Children.Add(detalhe);
-
-        return linha;
-    }
-
-    private static TextBlock Nota(string texto)
-    {
-        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
-        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
-        return t;
+        return SettingsUI.Row(rotulo, dica, caixa);
     }
 
     private void Gravar(string chave, int valor)

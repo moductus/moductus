@@ -148,18 +148,10 @@ public sealed class MicModule(ModuleContext context) : IModule
         ambos.Unchecked += (_, _) => Gravar(ChaveComunicacao, false);
         corpo.Children.Add(ambos);
 
-        corpo.Children.Add(Nota("Quem tem headset e webcam costuma ter dois microfones padrão: um para chamada, outro para gravação."));
-        corpo.Children.Add(Nota("A opção fica gravada, mas ainda não muda o que é mutado: o endpoint escolhido é fixo em Moductus.Core."));
+        corpo.Children.Add(SettingsUI.Note("Quem tem headset e webcam costuma ter dois microfones padrão: um para chamada, outro para gravação."));
+        corpo.Children.Add(SettingsUI.Note("A opção fica gravada, mas ainda não muda o que é mutado: o endpoint escolhido é fixo em Moductus.Core."));
 
         return new UserControl { Content = corpo };
-    }
-
-    private static TextBlock Nota(string texto)
-    {
-        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
-        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
-        return t;
     }
 
     private void Gravar(string chave, bool valor)

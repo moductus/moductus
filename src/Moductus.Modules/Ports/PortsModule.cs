@@ -96,7 +96,7 @@ public sealed class PortsModule(ModuleContext context) : IModule
 
         _estado.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
         _estado.HorizontalAlignment = HorizontalAlignment.Center;
-        _estado.Margin = new Thickness(0, 16, 0, 16);
+        _estado.SetResourceReference(FrameworkElement.MarginProperty, "inset.y.16");
 
         _auto.Tick += (_, _) => Carregar();
 
@@ -126,7 +126,7 @@ public sealed class PortsModule(ModuleContext context) : IModule
         // O Panel continuaria na tela operando um módulo desligado — e o botão
         // "Encerrar" continuaria matando processo.
         var panel = context.Archetypes.Panel;
-        if (panel.Owner == Id && panel.IsVisible)
+        if (panel.IsShowingFor(Id))
         {
             panel.Dismiss();
         }
@@ -136,19 +136,14 @@ public sealed class PortsModule(ModuleContext context) : IModule
     {
         var panel = context.Archetypes.Panel;
 
-        if (panel.IsVisible && panel.Owner == Id && !panel.IsPinned)
+        if (panel.DismissIfShowing(Id))
         {
-            panel.Dismiss();
             return;
         }
 
-        panel.Owner = Id;
-        panel.Heading = "Ports";
-        panel.Placement = PanelPlacement.Center;
-        panel.SlotContent = _corpo;
         panel.Dismissed -= PararAoFechar;
         panel.Dismissed += PararAoFechar;
-        panel.Present();
+        panel.Occupy(Id, "Ports", PanelPlacement.Center, _corpo);
         panel.TakeFocus(_filtro);
 
         Carregar();
@@ -245,7 +240,8 @@ public sealed class PortsModule(ModuleContext context) : IModule
 
     private FrameworkElement BuildLinha(Linha l)
     {
-        var porta = new TextBlock { Text = l.Porta.Port.ToString(), Width = 64, VerticalAlignment = VerticalAlignment.Center };
+        var porta = new TextBlock { Text = l.Porta.Port.ToString(), VerticalAlignment = VerticalAlignment.Center };
+        porta.SetResourceReference(FrameworkElement.WidthProperty, "size.port");
         porta.SetResourceReference(TextBlock.FontFamilyProperty, "font.mono");
         porta.SetResourceReference(TextBlock.FontWeightProperty, "weight.semibold");
 
@@ -262,7 +258,8 @@ public sealed class PortsModule(ModuleContext context) : IModule
             processo.SetResourceReference(TextBlock.ForegroundProperty, "text.muted");
         }
 
-        var endereco = new TextBlock { Text = l.Enderecos, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) };
+        var endereco = new TextBlock { Text = l.Enderecos, VerticalAlignment = VerticalAlignment.Center };
+        endereco.SetResourceReference(FrameworkElement.MarginProperty, "inset.8.h");
         endereco.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
 
         var encerrar = new Button { Content = "Encerrar", IsEnabled = !l.Desconhecido };
@@ -293,7 +290,9 @@ public sealed class PortsModule(ModuleContext context) : IModule
             Encerrar(l);
         };
 
-        var linha = new DockPanel { MinHeight = 32, Margin = new Thickness(8, 0, 8, 0) };
+        var linha = new DockPanel();
+        linha.SetResourceReference(FrameworkElement.MinHeightProperty, "size.row");
+        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.8.h");
         DockPanel.SetDock(porta, Dock.Left);
         DockPanel.SetDock(encerrar, Dock.Right);
         DockPanel.SetDock(endereco, Dock.Right);
@@ -334,16 +333,10 @@ public sealed class PortsModule(ModuleContext context) : IModule
             return ("sistema", true);
         }
 
-        try
-        {
-            return (Process.GetProcessById((int)pid).ProcessName, false);
-        }
-        catch
-        {
-            // Serviço do sistema: sem elevação não dá para ler. Dito na
-            // interface, não escondido.
-            return ("requer elevação", true);
-        }
+        // Sem nome quer dizer serviço do sistema, que sem elevação não dá para
+        // ler. Dito na interface, não escondido.
+        var nome = Processes.NameOf(pid);
+        return nome is null ? ("requer elevação", true) : (nome, false);
     }
 
     // ---- Configuração ---------------------------------------------------------
@@ -364,24 +357,18 @@ public sealed class PortsModule(ModuleContext context) : IModule
         esconder.Unchecked += (_, _) => { Gravar(ChaveEsconderSistema, false); Render(); };
         corpo.Children.Add(esconder);
 
-        corpo.Children.Add(Nota("São as que aparecem como \"requer elevação\" e sobre as quais não dá para agir daqui."));
+        corpo.Children.Add(SettingsUI.Note("São as que aparecem como \"requer elevação\" e sobre as quais não dá para agir daqui."));
 
         corpo.Children.Add(Campo("Recarregar a cada", "segundos; 0 recarrega só no F5", ChaveRecarregar));
 
-        corpo.Children.Add(Nota("A releitura só acontece com a lista aberta."));
+        corpo.Children.Add(SettingsUI.Note("A releitura só acontece com a lista aberta."));
 
         return new UserControl { Content = corpo };
     }
 
     private FrameworkElement Campo(string rotulo, string dica, string chave)
     {
-        var caixa = new TextBox
-        {
-            Text = SegundosAteRecarregar.ToString(),
-            Width = 80,
-            HorizontalContentAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
+        var caixa = SettingsUI.NumberBox(SegundosAteRecarregar.ToString());
 
         // Grava no que sair do campo, não a cada tecla: "1" a caminho de "10"
         // não pode virar uma releitura por segundo.
@@ -393,28 +380,7 @@ public sealed class PortsModule(ModuleContext context) : IModule
             ReiniciarAuto();
         };
 
-        var nome = new TextBlock { Text = rotulo, VerticalAlignment = VerticalAlignment.Center, MinWidth = 128 };
-        var detalhe = new TextBlock { Text = dica, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
-        detalhe.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        detalhe.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
-
-        var linha = new DockPanel { LastChildFill = true };
-        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
-        DockPanel.SetDock(nome, Dock.Left);
-        DockPanel.SetDock(caixa, Dock.Left);
-        linha.Children.Add(nome);
-        linha.Children.Add(caixa);
-        linha.Children.Add(detalhe);
-
-        return linha;
-    }
-
-    private static TextBlock Nota(string texto)
-    {
-        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
-        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
-        return t;
+        return SettingsUI.Row(rotulo, dica, caixa);
     }
 
     private void Gravar(string chave, int valor)

@@ -7,8 +7,10 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using Moductus.Core.Clipboard;
 using Moductus.Core.Interop;
 using Moductus.Core.Modules;
+using Moductus.Core.Text;
 using Moductus.Core.Ocr;
 using Moductus.UI.Archetypes;
 using Moductus.UI.Modules;
@@ -46,7 +48,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
     private readonly Border _lupa = new() { Width = LupaTamanho, Height = LupaTamanho };
     private readonly Rectangle _lupaImagem = new();
     private readonly TextBlock _cor = new();
-    private readonly Rectangle _amostra = new() { Width = 14, Height = 14, Margin = new Thickness(0, 0, 8, 0) };
+    private readonly Rectangle _amostra = new();
     private readonly TextBlock _dica = new();
     private readonly StackPanel _ferramentas = new() { Orientation = Orientation.Horizontal };
     private readonly TextBlock _traco = new();
@@ -104,7 +106,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         _montado = true;
 
         _selecao.SetResourceReference(Shape.StrokeProperty, "accent");
-        _selecao.Fill = new SolidColorBrush(Color.FromArgb(0x28, 0xFF, 0xB2, 0x24));
+        _selecao.SetResourceReference(Shape.FillProperty, "accent.veil");
 
         _tinta.Pintor = Pintar;
         _tinta.SetResourceReference(Tinta.CorProperty, "accent");
@@ -113,17 +115,23 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         _dimensoes.SetResourceReference(TextBlock.FontFamilyProperty, "font.mono");
         _dimensoes.SetResourceReference(TextBlock.ForegroundProperty, "accent.fg");
         _dimensoes.SetResourceReference(TextBlock.BackgroundProperty, "accent");
-        _dimensoes.Padding = new Thickness(6, 2, 6, 2);
+        _dimensoes.SetResourceReference(Control.PaddingProperty, "inset.chip");
 
         RenderOptions.SetBitmapScalingMode(_lupaImagem, BitmapScalingMode.NearestNeighbor);
         var mira = new Grid();
         mira.Children.Add(_lupaImagem);
-        mira.Children.Add(new Rectangle { Width = LupaZoom, Height = LupaZoom, Stroke = Brushes.White, StrokeThickness = 1, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+        var alvo = new Rectangle { Width = LupaZoom, Height = LupaZoom, StrokeThickness = 1, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        alvo.SetResourceReference(Shape.StrokeProperty, "accent");
+        mira.Children.Add(alvo);
         _lupa.Child = mira;
         _lupa.SetResourceReference(Border.BorderBrushProperty, "border.strong");
-        _lupa.BorderThickness = new Thickness(2);
+        _lupa.SetResourceReference(Border.BorderThicknessProperty, "border.width.strong");
         _lupa.SetResourceReference(Border.CornerRadiusProperty, "radius.control");
         _lupa.ClipToBounds = true;
+
+        _amostra.SetResourceReference(FrameworkElement.WidthProperty, "size.swatch");
+        _amostra.SetResourceReference(FrameworkElement.HeightProperty, "size.swatch");
+        _amostra.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.8");
 
         _cor.SetResourceReference(TextBlock.FontFamilyProperty, "font.mono");
         _cor.VerticalAlignment = VerticalAlignment.Center;
@@ -137,7 +145,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         _traco.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
         _traco.VerticalAlignment = VerticalAlignment.Center;
         _ferramentas.Children.Add(_traco);
-        Vestir(_barra, _ferramentas);
+        CanvasWindow.Dress(_barra, _ferramentas);
 
         _dica.Text = "clique: cor   ·   arraste: recorte   ·   Shift + arraste: OCR   ·   R A L T: anotar   ·   [ ]: traço   ·   Ctrl+Z: desfazer   ·   Enter: copiar   ·   Ctrl+S: salvar   ·   Esc: fechar";
         _dica.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
@@ -148,7 +156,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         _camada.Children.Add(_lupa);
         _camada.Children.Add(Rotulo(_amostra, _cor));
         _camada.Children.Add(_barra);
-        _camada.Children.Add(Cartao(_dica));
+        _camada.Children.Add(CanvasWindow.Card(_dica));
 
         // A tinta desenha em coordenadas do Canvas; sem tamanho ela nasce com
         // zero e o layout não reserva nada para ela.
@@ -169,9 +177,8 @@ public sealed class FreezeModule(ModuleContext context) : IModule
     {
         var canvas = context.Archetypes.Canvas;
 
-        if (canvas.IsVisible && canvas.Owner == Id)
+        if (canvas.DismissIfShowing(Id))
         {
-            canvas.Dismiss();
             return;
         }
 
@@ -185,7 +192,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         }
         catch (Exception e)
         {
-            context.Archetypes.Hud.Flash("Não deu para capturar a tela", Resumo(e.Message, 80), HudTone.Alerta);
+            context.Archetypes.Hud.Flash("Não deu para capturar a tela", Summary.OneLine(e.Message, 80), HudTone.Alerta);
             return;
         }
 
@@ -358,7 +365,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         }
         catch (Exception ex)
         {
-            hud.Flash("OCR falhou", Resumo(ex.Message, 80), HudTone.Alerta);
+            hud.Flash("OCR falhou", Summary.OneLine(ex.Message, 80), HudTone.Alerta);
         }
     }
 
@@ -700,7 +707,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         catch (Exception e)
         {
             Fechar();
-            context.Archetypes.Hud.Flash("Não consegui copiar o recorte", Resumo(e.Message, 80), HudTone.Alerta);
+            context.Archetypes.Hud.Flash("Não consegui copiar o recorte", Summary.OneLine(e.Message, 80), HudTone.Alerta);
         }
     }
 
@@ -732,7 +739,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         catch (Exception e)
         {
             Fechar();
-            context.Archetypes.Hud.Flash("Não consegui salvar o recorte", Resumo(e.Message, 80), HudTone.Alerta);
+            context.Archetypes.Hud.Flash("Não consegui salvar o recorte", Summary.OneLine(e.Message, 80), HudTone.Alerta);
         }
     }
 
@@ -877,31 +884,25 @@ public sealed class FreezeModule(ModuleContext context) : IModule
 
     private void Copiar(string texto, string titulo, string detalhe)
     {
-        try
+        if (CopiarQuieto(texto))
         {
-            System.Windows.Clipboard.SetText(texto);
             context.Archetypes.Hud.Flash(titulo, detalhe, HudTone.Sucesso);
-        }
-        catch (Exception e)
-        {
-            context.Archetypes.Hud.Flash("Não consegui copiar", Resumo(e.Message, 80), HudTone.Alerta);
         }
     }
 
     /// <summary>
-    /// Copia sem HUD: a Canvas continua aberta por cima dele, e a medida já
-    /// está na tela ao lado da seleção. Só a falha precisa aparecer.
+    /// Copia sem HUD de sucesso: a Canvas continua aberta por cima dele, e a
+    /// medida já está na tela ao lado da seleção. Só a falha precisa aparecer.
     /// </summary>
-    private void CopiarQuieto(string texto)
+    private bool CopiarQuieto(string texto)
     {
-        try
+        if (ClipboardText.TryWrite(texto, out var erro))
         {
-            System.Windows.Clipboard.SetText(texto);
+            return true;
         }
-        catch (Exception e)
-        {
-            context.Archetypes.Hud.Flash("Não consegui copiar", Resumo(e.Message, 80), HudTone.Alerta);
-        }
+
+        context.Archetypes.Hud.Flash("Não consegui copiar", Summary.OneLine(erro, 80), HudTone.Alerta);
+        return false;
     }
 
     private void SoltarAoFechar()
@@ -931,31 +932,12 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         }
     }
 
-    private static string Resumo(string t, int max = 40)
-    {
-        var linha = t.ReplaceLineEndings(" ").Trim();
-        return linha.Length > max ? linha[..max] + "…" : linha;
-    }
-
     private static FrameworkElement Rotulo(UIElement amostra, UIElement texto)
     {
         var painel = new StackPanel { Orientation = Orientation.Horizontal };
         painel.Children.Add(amostra);
         painel.Children.Add(texto);
-        return Cartao(painel);
-    }
-
-    private static Border Cartao(UIElement filho) => Vestir(new Border(), filho);
-
-    private static Border Vestir(Border b, UIElement filho)
-    {
-        b.Child = filho;
-        b.Padding = new Thickness(10, 5, 10, 5);
-        b.SetResourceReference(Border.BackgroundProperty, "bg.raised");
-        b.SetResourceReference(Border.BorderBrushProperty, "border.strong");
-        b.SetResourceReference(Border.BorderThicknessProperty, "border.width");
-        b.SetResourceReference(Border.CornerRadiusProperty, "radius.control");
-        return b;
+        return CanvasWindow.Card(painel);
     }
 
     public UserControl? BuildSettings() => null;

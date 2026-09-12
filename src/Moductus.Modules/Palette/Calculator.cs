@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Windows;
+using Moductus.Core.Clipboard;
 using Moductus.Core.Commands;
 using Moductus.Core.Text;
 using Moductus.UI.Archetypes;
@@ -39,12 +40,6 @@ internal sealed class Calculator(ModuleContext context)
         return n.ToString(Formato, CultureInfo.CurrentCulture);
     }
 
-    private static string Resumo(string t, int max)
-    {
-        var linha = t.ReplaceLineEndings(" ").Trim();
-        return linha.Length > max ? linha[..max] + "…" : linha;
-    }
-
     private IEnumerable<PaletteCommand> Procurar(string consulta)
     {
         var q = consulta.Trim();
@@ -66,13 +61,9 @@ internal sealed class Calculator(ModuleContext context)
     {
         var hud = context.Archetypes.Hud;
 
-        try
+        if (!ClipboardText.TryWrite(valor, out var erro))
         {
-            Clipboard.SetText(valor);
-        }
-        catch (Exception e)
-        {
-            hud.Flash("Não consegui escrever no clipboard", Resumo(e.Message, 80), HudTone.Alerta);
+            hud.Flash("Não consegui escrever no clipboard", Summary.OneLine(erro, 80), HudTone.Alerta);
             return;
         }
 

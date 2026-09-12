@@ -3,7 +3,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Moductus.Core.Clipboard;
 using Moductus.Core.Commands;
+using Moductus.Core.Text;
 using Moductus.UI.Archetypes;
 using Moductus.UI.Modules;
 using QRCoder;
@@ -20,7 +22,7 @@ internal sealed class QrCommand(ModuleContext context)
 
     private const int MaxChars = 2000;
 
-    private readonly Image _imagem = new() { Stretch = Stretch.Uniform, Margin = new Thickness(16) };
+    private readonly Image _imagem = new() { Stretch = Stretch.Uniform };
     private readonly TextBlock _legenda = new();
     private readonly DockPanel _corpo = new();
 
@@ -46,10 +48,11 @@ internal sealed class QrCommand(ModuleContext context)
 
         _legenda.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
         _legenda.HorizontalAlignment = HorizontalAlignment.Center;
-        _legenda.Margin = new Thickness(16, 0, 16, 12);
+        _legenda.SetResourceReference(FrameworkElement.MarginProperty, "inset.legend");
         _legenda.TextTrimming = TextTrimming.CharacterEllipsis;
         _legenda.TextWrapping = TextWrapping.NoWrap;
 
+        _imagem.SetResourceReference(FrameworkElement.MarginProperty, "inset.16");
         RenderOptions.SetBitmapScalingMode(_imagem, BitmapScalingMode.NearestNeighbor);
 
         DockPanel.SetDock(_legenda, Dock.Bottom);
@@ -61,14 +64,9 @@ internal sealed class QrCommand(ModuleContext context)
     {
         var hud = context.Archetypes.Hud;
 
-        string texto;
-        try
+        if (!ClipboardText.TryRead(out var texto, out var falha))
         {
-            texto = System.Windows.Clipboard.ContainsText() ? System.Windows.Clipboard.GetText() : string.Empty;
-        }
-        catch (Exception e)
-        {
-            hud.Flash("Clipboard indisponível", Resumo(e.Message, 80), HudTone.Alerta);
+            hud.Flash("Clipboard indisponível", Summary.OneLine(falha, 80), HudTone.Alerta);
             return;
         }
 
@@ -99,7 +97,7 @@ internal sealed class QrCommand(ModuleContext context)
         }
         catch (Exception e)
         {
-            hud.Flash("Não deu para gerar o QR", Resumo(e.Message, 80), HudTone.Alerta);
+            hud.Flash("Não deu para gerar o QR", Summary.OneLine(e.Message, 80), HudTone.Alerta);
             return;
         }
 
@@ -114,16 +112,6 @@ internal sealed class QrCommand(ModuleContext context)
         _legenda.Text = texto.ReplaceLineEndings(" ");
 
         var panel = context.Archetypes.Panel;
-        panel.Owner = Owner;
-        panel.Heading = "QR do clipboard";
-        panel.Placement = PanelPlacement.Center;
-        panel.SlotContent = _corpo;
-        panel.Present();
-    }
-
-    private static string Resumo(string t, int max)
-    {
-        var linha = t.ReplaceLineEndings(" ").Trim();
-        return linha.Length > max ? linha[..max] + "…" : linha;
+        panel.Occupy(Owner, "QR do clipboard", PanelPlacement.Center, _corpo);
     }
 }

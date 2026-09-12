@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using Moductus.Core.Commands;
+using Moductus.Core.Text;
 using Moductus.UI.Archetypes;
 using Moductus.UI.Modules;
 
@@ -100,12 +101,6 @@ internal sealed class FileFinder(ModuleContext context)
         return achado.EhPasta ? $"Pasta · {pasta}" : pasta;
     }
 
-    private static string Resumo(string t, int max)
-    {
-        var linha = t.ReplaceLineEndings(" ").Trim();
-        return linha.Length > max ? linha[..max] + "…" : linha;
-    }
-
     private IEnumerable<PaletteCommand> Procurar(string consulta)
     {
         var q = consulta.Trim();
@@ -186,7 +181,7 @@ internal sealed class FileFinder(ModuleContext context)
         }
         catch (Exception e)
         {
-            context.Archetypes.Hud.Flash($"Não deu para abrir {achado.Nome}", Resumo(e.Message, 80), HudTone.Alerta);
+            context.Archetypes.Hud.Flash($"Não deu para abrir {achado.Nome}", Summary.OneLine(e.Message, 80), HudTone.Alerta);
         }
     }
 

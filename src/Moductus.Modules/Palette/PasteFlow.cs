@@ -1,4 +1,5 @@
 using System.Windows;
+using Moductus.Core.Clipboard;
 using Moductus.Core.Commands;
 using Moductus.Core.Text;
 using Moductus.UI.Archetypes;
@@ -35,14 +36,9 @@ internal sealed class PasteFlow(ModuleContext context)
     {
         var hud = context.Archetypes.Hud;
 
-        string entrada;
-        try
+        if (!ClipboardText.TryRead(out var entrada, out var falha))
         {
-            entrada = Clipboard.ContainsText() ? Clipboard.GetText() : string.Empty;
-        }
-        catch (Exception e)
-        {
-            hud.Flash("Clipboard indisponível", Resumo(e.Message, 80), HudTone.Alerta);
+            hud.Flash("Clipboard indisponível", Summary.OneLine(falha, 80), HudTone.Alerta);
             return;
         }
 
@@ -62,26 +58,16 @@ internal sealed class PasteFlow(ModuleContext context)
         }
         catch (Exception e)
         {
-            hud.Flash("Não deu para converter", Resumo(e.Message, 80), HudTone.Alerta);
+            hud.Flash("Não deu para converter", Summary.OneLine(e.Message, 80), HudTone.Alerta);
             return;
         }
 
-        try
+        if (!ClipboardText.TryWrite(saida, out var erro))
         {
-            Clipboard.SetText(saida);
-        }
-        catch (Exception e)
-        {
-            hud.Flash("Não consegui escrever no clipboard", Resumo(e.Message, 80), HudTone.Alerta);
+            hud.Flash("Não consegui escrever no clipboard", Summary.OneLine(erro, 80), HudTone.Alerta);
             return;
         }
 
-        hud.Flash("Clipboard convertido", Resumo(saida, Preview), HudTone.Sucesso);
-    }
-
-    private static string Resumo(string t, int max)
-    {
-        var linha = t.ReplaceLineEndings(" ").Trim();
-        return linha.Length > max ? linha[..max] + "…" : linha;
+        hud.Flash("Clipboard convertido", Summary.OneLine(saida, Preview), HudTone.Sucesso);
     }
 }

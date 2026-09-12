@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using Moductus.Core.Interop;
 using Moductus.Core.Modules;
+using Moductus.Core.Text;
 using Moductus.UI.Archetypes;
 using Moductus.UI.Modules;
 
@@ -70,10 +71,10 @@ public sealed class KillModule(ModuleContext context) : IModule
         _titulo.SetResourceReference(FrameworkElement.StyleProperty, "style.title");
         _titulo.TextTrimming = TextTrimming.CharacterEllipsis;
         _titulo.TextWrapping = TextWrapping.NoWrap;
-        _titulo.MaxWidth = 520;
+        _titulo.SetResourceReference(FrameworkElement.MaxWidthProperty, "size.card.maxwidth");
 
         _detalhe.SetResourceReference(FrameworkElement.StyleProperty, "style.secondary");
-        _detalhe.Margin = new Thickness(0, 4, 0, 12);
+        _detalhe.SetResourceReference(FrameworkElement.MarginProperty, "inset.detail");
 
         var pilha = new StackPanel();
         pilha.Children.Add(_titulo);
@@ -83,13 +84,13 @@ public sealed class KillModule(ModuleContext context) : IModule
         _cartao.Child = pilha;
         _cartao.SetResourceReference(Border.BackgroundProperty, "bg.raised");
         _cartao.SetResourceReference(Border.BorderBrushProperty, "danger");
-        _cartao.BorderThickness = new Thickness(2);
+        _cartao.SetResourceReference(Border.BorderThicknessProperty, "border.width.strong");
         _cartao.SetResourceReference(Border.CornerRadiusProperty, "radius.window");
         _cartao.SetResourceReference(Border.PaddingProperty, "inset.24");
 
         _dica.Text = "clique na janela travada   ·   Esc: cancelar";
         _dica.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        var dica = Cartao(_dica);
+        var dica = CanvasWindow.Card(_dica);
 
         _camada.Children.Add(dica);
         _camada.Children.Add(_cartao);
@@ -129,9 +130,8 @@ public sealed class KillModule(ModuleContext context) : IModule
             _assinado = true;
         }
 
-        if (canvas.IsVisible && canvas.Owner == Id)
+        if (canvas.DismissIfShowing(Id))
         {
-            canvas.Dismiss();
             return;
         }
 
@@ -179,15 +179,7 @@ public sealed class KillModule(ModuleContext context) : IModule
 
         _alvo = janela;
 
-        string processo;
-        try
-        {
-            processo = Process.GetProcessById((int)janela.ProcessId).ProcessName;
-        }
-        catch
-        {
-            processo = "processo desconhecido";
-        }
+        var processo = Processes.NameOf(janela.ProcessId) ?? "processo desconhecido";
 
         _titulo.Text = string.IsNullOrWhiteSpace(janela.Title) ? "(sem título)" : janela.Title;
         _detalhe.Text = $"{processo} · pid {janela.ProcessId}";
@@ -220,7 +212,7 @@ public sealed class KillModule(ModuleContext context) : IModule
         }
         catch (Exception ex)
         {
-            context.Archetypes.Hud.Flash("Não deu para encerrar", Resumo(ex.Message, 80), HudTone.Alerta);
+            context.Archetypes.Hud.Flash("Não deu para encerrar", Summary.OneLine(ex.Message, 80), HudTone.Alerta);
             return;
         }
 
@@ -279,7 +271,7 @@ public sealed class KillModule(ModuleContext context) : IModule
         }
         catch (Exception ex)
         {
-            context.Archetypes.Hud.Flash("Não deu para encerrar", Resumo(ex.Message, 80), HudTone.Alerta);
+            context.Archetypes.Hud.Flash("Não deu para encerrar", Summary.OneLine(ex.Message, 80), HudTone.Alerta);
             return;
         }
 
@@ -298,7 +290,7 @@ public sealed class KillModule(ModuleContext context) : IModule
         }
         catch (Exception ex)
         {
-            context.Archetypes.Hud.Flash("Não deu para encerrar", Resumo(ex.Message, 80), HudTone.Alerta);
+            context.Archetypes.Hud.Flash("Não deu para encerrar", Summary.OneLine(ex.Message, 80), HudTone.Alerta);
         }
         finally
         {
@@ -313,27 +305,11 @@ public sealed class KillModule(ModuleContext context) : IModule
         Canvas.SetTop(_cartao, (_camada.ActualHeight - _cartao.DesiredSize.Height) / 2);
     }
 
-    private static string Resumo(string t, int max)
-    {
-        var linha = t.ReplaceLineEndings(" ").Trim();
-        return linha.Length > max ? linha[..max] + "…" : linha;
-    }
-
     private static TextBlock Rotulo(string texto)
     {
         var t = new TextBlock { Text = texto };
         t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
         return t;
-    }
-
-    private static Border Cartao(UIElement filho)
-    {
-        var b = new Border { Child = filho, Padding = new Thickness(10, 5, 10, 5) };
-        b.SetResourceReference(Border.BackgroundProperty, "bg.raised");
-        b.SetResourceReference(Border.BorderBrushProperty, "border.strong");
-        b.SetResourceReference(Border.BorderThicknessProperty, "border.width");
-        b.SetResourceReference(Border.CornerRadiusProperty, "radius.control");
-        return b;
     }
 
     // ---- Configuração ---------------------------------------------------------
@@ -352,18 +328,10 @@ public sealed class KillModule(ModuleContext context) : IModule
         gentil.Unchecked += (_, _) => Gravar(ChaveGentil, false);
         corpo.Children.Add(gentil);
 
-        corpo.Children.Add(Nota("A janela recebe o pedido de fechar e pode salvar o que estava aberto. Só se ela parar de responder o processo é morto."));
-        corpo.Children.Add(Nota("Desmarcado, o Enter mata na hora e o que não estava salvo se perde."));
+        corpo.Children.Add(SettingsUI.Note("A janela recebe o pedido de fechar e pode salvar o que estava aberto. Só se ela parar de responder o processo é morto."));
+        corpo.Children.Add(SettingsUI.Note("Desmarcado, o Enter mata na hora e o que não estava salvo se perde."));
 
         return new UserControl { Content = corpo };
-    }
-
-    private static TextBlock Nota(string texto)
-    {
-        var t = new TextBlock { Text = texto, TextWrapping = TextWrapping.Wrap };
-        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        t.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
-        return t;
     }
 
     private void Gravar(string chave, bool valor)
