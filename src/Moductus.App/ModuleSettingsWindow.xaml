@@ -1,0 +1,37 @@
+<Window x:Class="Moductus.App.ModuleSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Style="{DynamicResource {x:Type Window}}"
+        Width="460"
+        SizeToContent="Height"
+        MinHeight="200"
+        MaxHeight="720"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        KeyDown="OnKeyDown">
+
+    <!-- Nenhuma cor, tamanho ou raio aqui: tudo vem dos tokens. -->
+
+    <DockPanel>
+        <Border DockPanel.Dock="Bottom"
+                Background="{DynamicResource bg.raised}"
+                BorderBrush="{DynamicResource border.subtle}"
+                BorderThickness="0,1,0,0"
+                Padding="{DynamicResource inset.16}">
+            <Button Content="Fechar"
+                    HorizontalAlignment="Right"
+                    Click="OnFecharClick" />
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="{DynamicResource inset.24}">
+                <TextBlock x:Name="Titulo" Style="{DynamicResource style.title}" />
+                <TextBlock x:Name="Descricao"
+                           Style="{DynamicResource style.secondary}"
+                           Margin="0,4,0,16" />
+                <ContentControl x:Name="Corpo" />
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

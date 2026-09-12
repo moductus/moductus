@@ -7,7 +7,8 @@
         MinWidth="420" MinHeight="420"
         WindowStartupLocation="CenterScreen"
         ShowInTaskbar="True"
-        KeyDown="OnKeyDown">
+        KeyDown="OnKeyDown"
+        SizeChanged="OnSizeChanged">
 
     <!-- Nenhuma cor, tamanho ou raio aqui: tudo vem dos tokens. -->
 
@@ -25,7 +26,7 @@
              é o mesmo objeto — a tecla que chama o módulo. -->
         <DataTemplate x:Key="CartaoModulo">
             <Border Style="{StaticResource Cartao}"
-                    Width="{DynamicResource size.panel.minwidth}"
+                    MinWidth="{DynamicResource size.panel.minwidth}"
                     Margin="{DynamicResource inset.8}">
                 <!-- DockPanel e não StackPanel: o WrapPanel iguala a altura dos
                      cartões da linha, e só com as ações ancoradas embaixo elas
@@ -118,7 +119,11 @@
                 <ItemsControl x:Name="Modulos" ItemTemplate="{StaticResource CartaoModulo}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <WrapPanel />
+                            <!-- UniformGrid e não WrapPanel: com WrapPanel os
+                                 cartões têm largura fixa e sobra uma faixa
+                                 vazia à direita quando não cabe mais um. As
+                                 colunas são recalculadas no SizeChanged. -->
+                            <UniformGrid x:Name="Grade" Columns="2" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                 </ItemsControl>
@@ -129,27 +134,7 @@
                            Margin="{DynamicResource inset.8}"
                            Visibility="Collapsed" />
 
-                <!-- Ponto de montagem único do painel do módulo. Fica fora da
-                     grade de propósito: montar o mesmo UserControl dentro de um
-                     item recriado a cada filtro esbarra no "um pai lógico só"
-                     do WPF. -->
-                <Border x:Name="PainelCartao"
-                        Style="{StaticResource Cartao}"
-                        Margin="{DynamicResource inset.8}"
-                        Visibility="Collapsed">
-                    <StackPanel>
-                        <DockPanel Margin="{DynamicResource inset.4}">
-                            <Button DockPanel.Dock="Right"
-                                    Content="Fechar"
-                                    Style="{DynamicResource style.button.compact}"
-                                    Click="OnFecharPainelClick" />
-                            <TextBlock x:Name="PainelTitulo"
-                                       FontWeight="{DynamicResource weight.semibold}"
-                                       VerticalAlignment="Center" />
-                        </DockPanel>
-                        <ContentControl x:Name="PainelCorpo" Margin="{DynamicResource inset.4}" />
-                    </StackPanel>
-                </Border>
+                
 
             </StackPanel>
         </ScrollViewer>

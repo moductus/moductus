@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using Moductus.UI;
 
@@ -20,7 +22,12 @@ public partial class MainWindow : Window
     private readonly Action _abrirAjuda;
     private readonly Action _abrirConfiguracoes;
     private readonly Dictionary<string, UserControl?> _paineis = [];
-    private string? _painelAberto;
+    /// <summary>
+    /// Uma janela por módulo, para o segundo clique trazer para frente em vez
+    /// de abrir outra com o mesmo painel dentro — o que estouraria no "um pai
+    /// lógico só" do WPF.
+    /// </summary>
+    private readonly Dictionary<string, ModuleSettingsWindow> _janelas = [];
 
     internal MainWindow(SettingsModel model, Action abrirAjuda, Action abrirConfiguracoes)
     {
@@ -65,13 +72,6 @@ public partial class MainWindow : Window
 
         Modulos.ItemsSource = cartoes;
         Vazio.Visibility = cartoes.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-
-        // O painel aberto some junto com o cartão que o abriu: painel sem
-        // cartão à vista vira um bloco órfão no fim da tela.
-        if (_painelAberto is not null && !cartoes.Any(c => c.Id == _painelAberto))
-        {
-            FecharPainel();
-        }
     }
 
     /// <summary>
@@ -101,6 +101,11 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Abre a configuração do módulo em janela própria. Inline, abaixo da
+    /// grade, ela empurrava os cartões para baixo e obrigava a rolar para ver
+    /// o que estava sendo ajustado.
+    /// </summary>
     private void OnConfigurarClick(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string id })
@@ -108,9 +113,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_painelAberto == id)
+        // Já aberta para este módulo: traz para frente em vez de abrir outra.
+        if (_janelas.TryGetValue(id, out var existente) && existente.IsLoaded)
         {
-            FecharPainel();
+            existente.Activate();
             return;
         }
 
@@ -120,23 +126,57 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Solta o anterior antes de montar o novo: um elemento do WPF só pode
-        // ter um pai lógico, e trocar sem limpar derruba a janela.
-        PainelCorpo.Content = null;
-        PainelCorpo.Content = painel;
+        var modulo = _model.Modules.First(m => m.Id == id);
 
-        PainelTitulo.Text = _model.Modules.First(m => m.Id == id).Name;
-        PainelCartao.Visibility = Visibility.Visible;
-        _painelAberto = id;
+        var janela = new ModuleSettingsWindow(_model.Theme, modulo.Name, modulo.Description, painel)
+        {
+            Owner = this,
+        };
+
+        janela.Closed += (_, _) => _janelas.Remove(id);
+        _janelas[id] = janela;
+        janela.Show();
     }
 
-    private void OnFecharPainelClick(object sender, RoutedEventArgs e) => FecharPainel();
-
-    private void FecharPainel()
+    /// <summary>
+    /// Recalcula quantas colunas cabem. O UniformGrid divide a largura em
+    /// partes iguais, então quem decide o número somos nós: largura útil
+    /// dividida pela largura mínima de um cartão, no mínimo uma coluna.
+    /// </summary>
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        PainelCorpo.Content = null;
-        PainelCartao.Visibility = Visibility.Collapsed;
-        _painelAberto = null;
+        if (!e.WidthChanged || Grade() is not { } grade)
+        {
+            return;
+        }
+
+        var minima = (double)FindResource("size.panel.minwidth");
+        var util = grade.ActualWidth > 0 ? grade.ActualWidth : ActualWidth;
+
+        grade.Columns = Math.Max(1, (int)(util / minima));
+    }
+
+    /// <summary>
+    /// O painel de itens vive dentro de um ItemsPanelTemplate, então x:Name
+    /// não chega ao code-behind: é preciso achá-lo na árvore visual.
+    /// </summary>
+    private UniformGrid? Grade()
+    {
+        if (VisualTreeHelper.GetChildrenCount(Modulos) == 0)
+        {
+            return null;
+        }
+
+        var atual = VisualTreeHelper.GetChild(Modulos, 0);
+
+        while (atual is not null and not UniformGrid)
+        {
+            atual = VisualTreeHelper.GetChildrenCount(atual) > 0
+                ? VisualTreeHelper.GetChild(atual, 0)
+                : null;
+        }
+
+        return atual as UniformGrid;
     }
 
     private void OnComoUsarClick(object sender, RoutedEventArgs e) => _abrirAjuda();
