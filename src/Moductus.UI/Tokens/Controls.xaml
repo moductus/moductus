@@ -415,4 +415,129 @@
         </Setter>
     </Style>
 
+    <!-- ═══ Menu de contexto ═════════════════════════════════════════════ -->
+    <!--
+      Sem isto o menu da bandeja sai no tema do sistema: fundo branco no meio
+      de um app escuro. É a superfície permanente do produto, e era a única
+      que não passava pelos tokens.
+    -->
+    <Style x:Key="style.menu.separator" TargetType="Separator">
+        <Setter Property="Background" Value="{DynamicResource border.subtle}" />
+        <Setter Property="Margin" Value="8,4" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Rectangle Height="1" Fill="{TemplateBinding Background}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="ContextMenu">
+        <Setter Property="Background" Value="{DynamicResource bg.raised}" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
+        <Setter Property="FontFamily" Value="{DynamicResource font.ui}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.body}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.strong}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource border.width}" />
+        <Setter Property="Padding" Value="{DynamicResource inset.4}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{DynamicResource radius.card}"
+                            Padding="{TemplateBinding Padding}">
+                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="MenuItem">
+        <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
+        <Setter Property="FontFamily" Value="{DynamicResource font.ui}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.body}" />
+        <Setter Property="MinHeight" Value="{DynamicResource size.row}" />
+        <Setter Property="Padding" Value="{DynamicResource inset.row}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Border x:Name="Linha"
+                            Background="Transparent"
+                            CornerRadius="{DynamicResource radius.control}"
+                            Padding="{TemplateBinding Padding}"
+                            MinHeight="{TemplateBinding MinHeight}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <ContentPresenter Grid.Column="0"
+                                              ContentSource="Header"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" />
+
+                            <!-- A letra do lider vem aqui: usar o menu duas
+                                 vezes ensina a tecla e dispensa o menu. -->
+                            <TextBlock x:Name="Gesto"
+                                       Grid.Column="1"
+                                       Text="{TemplateBinding InputGestureText}"
+                                       FontFamily="{DynamicResource font.mono}"
+                                       Foreground="{DynamicResource text.muted}"
+                                       VerticalAlignment="Center"
+                                       Margin="16,0,0,0" />
+
+                            <Path x:Name="Seta"
+                                  Grid.Column="2"
+                                  Data="M 0,0 L 4,4 L 0,8"
+                                  Stroke="{DynamicResource text.secondary}"
+                                  StrokeThickness="1.5"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round"
+                                  StrokeLineJoin="Round"
+                                  VerticalAlignment="Center"
+                                  Margin="12,0,0,0"
+                                  Visibility="Collapsed" />
+
+                            <Popup x:Name="PART_Popup"
+                                   Placement="Right"
+                                   HorizontalOffset="4"
+                                   IsOpen="{TemplateBinding IsSubmenuOpen}"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Fade">
+                                <Border Background="{DynamicResource bg.raised}"
+                                        BorderBrush="{DynamicResource border.strong}"
+                                        BorderThickness="{DynamicResource border.width}"
+                                        CornerRadius="{DynamicResource radius.card}"
+                                        Padding="{DynamicResource inset.4}">
+                                    <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Role" Value="SubmenuHeader">
+                            <Setter TargetName="Seta" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Linha" Property="Background" Value="{DynamicResource bg.hover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource text.muted}" />
+                        </Trigger>
+                        <Trigger Property="InputGestureText" Value="">
+                            <Setter TargetName="Gesto" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>

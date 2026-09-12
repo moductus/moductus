@@ -362,7 +362,7 @@ internal sealed class Host : IDisposable
 
         if (menu.Items.Count > 0)
         {
-            menu.Items.Add(new Separator());
+            menu.Items.Add(new Separator { Style = (Style)_app.Resources["style.menu.separator"] });
         }
 
         var ajuda = new MenuItem { Header = "Como usar" };
@@ -376,7 +376,7 @@ internal sealed class Host : IDisposable
 
         menu.Items.Add(ajuda);
         menu.Items.Add(configuracoes);
-        menu.Items.Add(new Separator());
+        menu.Items.Add(new Separator { Style = (Style)_app.Resources["style.menu.separator"] });
         menu.Items.Add(sair);
 
         // A dança do foreground. Sem isto o menu não fecha ao clicar fora.
