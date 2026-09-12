@@ -220,7 +220,7 @@ Registrar 18 hotkeys globais garante conflito com outros apps, e `RegisterHotKey
 | | O que é | Onde mora | Quando |
 |---|---|---|---|
 | **LeaderOverlay** | Mostra as letras e dispara módulos | `Moductus.UI`, infraestrutura do host | Fase 1 |
-| **Palette** | Busca de comandos, scripts e ações | `Moductus.Modules`, um módulo | Fase 3 |
+| **Palette** | Lançador: conta, aplicativo, arquivo, comandos e scripts | `Moductus.Modules`, um módulo | Fase 3 |
 
 Se os dois nascerem com o mesmo nome, a Fase 3 vira refactor do núcleo em vez de mais um módulo. O Palette, quando chegar, se registra como só mais um destino alcançável pelo líder.
 
@@ -269,7 +269,7 @@ Substantivo curto, um só, em inglês. Lê bem como `Moductus · Ports` e é dig
 | **Scratch** | Bloco de notas que desliza do topo, salva sozinho | Panel | — | 2 |
 | **Palette** | Busca de comandos, scripts e ações | Palette | `RegisterHotKey` | 3 |
 | **Clips** | Histórico de clipboard navegável por teclado | Palette | `AddClipboardFormatListener` | 4 |
-| **Freeze** | Tela congelada com régua, conta-gotas, lupa e OCR | Canvas | `BitBlt` + `Windows.Media.Ocr` | 4 |
+| **Freeze** | Congela a tela: recorte, anotação, régua, conta-gotas, lupa e OCR | Canvas | `BitBlt` + `Windows.Media.Ocr` | 4 |
 | **Shelf** | Bandeja temporária na borda pra segurar arquivos | Panel | `IDropTarget` + `DoDragDrop` | 4 |
 | **Mic** | Mudo de microfone por hardware, com indicador | HUD | Core Audio (`IAudioEndpointVolume`) | 4 |
 | **Links** | Cria junction e symlink arrastando pasta | Panel | `CreateSymbolicLink` / junction | 4 |
