@@ -39,6 +39,9 @@ public sealed class ShelfModule(ModuleContext context) : IModule
     private Point _arrasteInicio;
     private bool _arrastando;
 
+    /// <summary>A árvore visual só é construída uma vez, por mais que Enable repita.</summary>
+    private bool _montado;
+
     public string Id => "shelf";
 
     public string Name => "Shelf";
@@ -53,6 +56,29 @@ public sealed class ShelfModule(ModuleContext context) : IModule
 
     public void Enable()
     {
+        Montar();
+
+        context.Commands.Register(Id, new PaletteCommand(
+            "shelf:clear", "Esvaziar a bandeja", "Solta os arquivos guardados, sem apagar nada", null,
+            () => { _caminhos.Clear(); Render(); Salvar(); context.Archetypes.Hud.Flash("Bandeja esvaziada.", "Os arquivos continuam onde estavam.", HudTone.Sucesso); }));
+    }
+
+    /// <summary>
+    /// A árvore visual, montada uma vez só. O registro do comando fica fora
+    /// porque Disable o remove, e religar o módulo precisa recolocá-lo.
+    /// </summary>
+    private void Montar()
+    {
+        // Enable roda de novo toda vez que o módulo é religado nas configurações.
+        // A árvore visual já está montada, e readicionar um filho que já tem pai
+        // derruba o processo inteiro — ver docs/MODULES.md, "Armadilhas conhecidas".
+        if (_montado)
+        {
+            return;
+        }
+
+        _montado = true;
+
         Carregar();
 
         _lista.SelectionMode = SelectionMode.Extended;
@@ -94,9 +120,6 @@ public sealed class ShelfModule(ModuleContext context) : IModule
         _corpo.Children.Add(rodape);
         _corpo.Children.Add(area);
 
-        context.Commands.Register(Id, new PaletteCommand(
-            "shelf:clear", "Esvaziar a bandeja", "Solta os arquivos guardados, sem apagar nada", null,
-            () => { _caminhos.Clear(); Render(); Salvar(); context.Archetypes.Hud.Flash("Bandeja esvaziada."); }));
     }
 
     public void Disable()

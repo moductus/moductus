@@ -29,6 +29,9 @@ public sealed class KillModule(ModuleContext context) : IModule
     private TopLevelWindow? _alvo;
     private bool _assinado;
 
+    /// <summary>A árvore visual só é construída uma vez, por mais que Enable repita.</summary>
+    private bool _montado;
+
     public string Id => "kill";
 
     public string Name => "Kill";
@@ -45,6 +48,16 @@ public sealed class KillModule(ModuleContext context) : IModule
 
     public void Enable()
     {
+        // Enable roda de novo toda vez que o módulo é religado nas configurações.
+        // A árvore visual já está montada, e readicionar um filho que já tem pai
+        // derruba o processo inteiro — ver docs/MODULES.md, "Armadilhas conhecidas".
+        if (_montado)
+        {
+            return;
+        }
+
+        _montado = true;
+
         _titulo.SetResourceReference(FrameworkElement.StyleProperty, "style.title");
         _titulo.TextTrimming = TextTrimming.CharacterEllipsis;
         _titulo.TextWrapping = TextWrapping.NoWrap;

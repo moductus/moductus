@@ -39,6 +39,9 @@ public sealed class FreezeModule(ModuleContext context) : IModule
     private Point? _inicio;
     private bool _ocr;
 
+    /// <summary>A árvore visual só é construída uma vez, por mais que Enable repita.</summary>
+    private bool _montado;
+
     public string Id => "freeze";
 
     public string Name => "Freeze";
@@ -53,6 +56,16 @@ public sealed class FreezeModule(ModuleContext context) : IModule
 
     public void Enable()
     {
+        // Enable roda de novo toda vez que o módulo é religado nas configurações.
+        // A árvore visual já está montada, e readicionar um filho que já tem pai
+        // derruba o processo inteiro — ver docs/MODULES.md, "Armadilhas conhecidas".
+        if (_montado)
+        {
+            return;
+        }
+
+        _montado = true;
+
         _selecao.SetResourceReference(Shape.StrokeProperty, "accent");
         _selecao.Fill = new SolidColorBrush(Color.FromArgb(0x28, 0xFF, 0xB2, 0x24));
 

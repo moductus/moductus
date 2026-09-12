@@ -24,8 +24,26 @@ internal sealed class QrCommand(ModuleContext context)
     private readonly TextBlock _legenda = new();
     private readonly DockPanel _corpo = new();
 
+    private bool _montado;
+
     public void Register()
     {
+        Montar();
+
+        context.Commands.Register(Owner, new PaletteCommand(
+            "qr", "QR do clipboard", "Mostra o texto copiado como QR, para apontar o celular", null, Mostrar));
+    }
+
+    /// <summary>Construída uma vez: Register roda de novo quando a Palette é religada.</summary>
+    private void Montar()
+    {
+        if (_montado)
+        {
+            return;
+        }
+
+        _montado = true;
+
         _legenda.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
         _legenda.HorizontalAlignment = HorizontalAlignment.Center;
         _legenda.Margin = new Thickness(16, 0, 16, 12);
@@ -37,9 +55,6 @@ internal sealed class QrCommand(ModuleContext context)
         DockPanel.SetDock(_legenda, Dock.Bottom);
         _corpo.Children.Add(_legenda);
         _corpo.Children.Add(_imagem);
-
-        context.Commands.Register(Owner, new PaletteCommand(
-            "qr", "QR do clipboard", "Mostra o texto copiado como QR, para apontar o celular", null, Mostrar));
     }
 
     private void Mostrar()

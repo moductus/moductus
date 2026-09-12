@@ -25,6 +25,9 @@ public sealed class ScratchModule(ModuleContext context) : IModule
     private bool _carregado;
     private bool _sujo;
 
+    /// <summary>A árvore visual só é construída uma vez, por mais que Enable repita.</summary>
+    private bool _montado;
+
     public string Id => "scratch";
 
     public string Name => "Scratch";
@@ -41,6 +44,17 @@ public sealed class ScratchModule(ModuleContext context) : IModule
 
     public void Enable()
     {
+        // Enable roda de novo toda vez que o módulo é religado nas configurações.
+        // A árvore visual já está montada, e readicionar um filho que já tem pai
+        // derruba o processo inteiro — ver docs/MODULES.md, "Armadilhas conhecidas".
+        if (_montado)
+        {
+            return;
+        }
+
+        _montado = true;
+
+        _texto.Tag = "Escreva. Salva sozinho.";
         _texto.AcceptsReturn = true;
         _texto.AcceptsTab = true;
         _texto.TextWrapping = TextWrapping.Wrap;

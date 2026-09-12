@@ -27,6 +27,9 @@ public sealed class LinksModule(ModuleContext context) : IModule
     private readonly DockPanel _corpo = new();
     private readonly Border _zona = new();
 
+    /// <summary>A árvore visual só é construída uma vez, por mais que Enable repita.</summary>
+    private bool _montado;
+
     public string Id => "links";
 
     public string Name => "Links";
@@ -41,6 +44,16 @@ public sealed class LinksModule(ModuleContext context) : IModule
 
     public void Enable()
     {
+        // Enable roda de novo toda vez que o módulo é religado nas configurações.
+        // A árvore visual já está montada, e readicionar um filho que já tem pai
+        // derruba o processo inteiro — ver docs/MODULES.md, "Armadilhas conhecidas".
+        if (_montado)
+        {
+            return;
+        }
+
+        _montado = true;
+
         var zonaTexto = new TextBlock
         {
             Text = "Arraste a pasta de origem aqui, ou cole o caminho abaixo.",
@@ -78,7 +91,9 @@ public sealed class LinksModule(ModuleContext context) : IModule
             }
         };
 
+        _origem.Tag = "Pasta de origem — arraste ela para cá";
         _origem.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
+        _destino.Tag = "Onde o atalho vai aparecer";
         _destino.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
 
         _symlink.Content = "Symlink (avançado)";

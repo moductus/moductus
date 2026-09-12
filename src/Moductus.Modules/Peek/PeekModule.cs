@@ -21,6 +21,9 @@ public sealed class PeekModule(ModuleContext context) : IModule
     private DwmThumbnail? _thumbnail;
     private nint _alvo;
 
+    /// <summary>A árvore visual só é construída uma vez, por mais que Enable repita.</summary>
+    private bool _montado;
+
     public string Id => "peek";
 
     public string Name => "Peek";
@@ -35,6 +38,16 @@ public sealed class PeekModule(ModuleContext context) : IModule
 
     public void Enable()
     {
+        // Enable roda de novo toda vez que o módulo é religado nas configurações.
+        // A árvore visual já está montada, e readicionar um filho que já tem pai
+        // derruba o processo inteiro — ver docs/MODULES.md, "Armadilhas conhecidas".
+        if (_montado)
+        {
+            return;
+        }
+
+        _montado = true;
+
         _area.SizeChanged += (_, _) => Reposicionar();
         _legenda.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
         _legenda.HorizontalAlignment = HorizontalAlignment.Center;
