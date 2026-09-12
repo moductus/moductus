@@ -160,7 +160,31 @@ Anotações que economizam dias de depuração, por módulo:
 - **Timer** — a bandeja pede o ícone em 16, 20, 24 ou 32px conforme o scaling do monitor. Gere o bitmap no tamanho solicitado, nunca fixo em 16.
 - **Freeze** — capture o desktop como bitmap, jogue numa janela fullscreen borderless topmost, e opere régua, lupa e conta-gotas sobre esse bitmap em memória. Fica preciso e independe do que estava se movendo na tela.
 - **Kill** — pode ser marcado por anti-cheat de jogo. Fica desligado por padrão e documentado no README.
+- **Todo módulo, sem exceção** — `Enable()` **roda de novo** toda vez que o módulo é religado nas configurações. Se ele monta a árvore visual, monte uma vez só e guarde a flag; readicionar um filho que já tem pai lança `ArgumentException` e derruba o processo inteiro, sem janela de erro. Registro de comando fica **fora** da guarda, porque `Disable()` o remove e religar precisa recolocá-lo.
 - **Todo módulo com Panel** — um elemento do WPF só pode ter um pai lógico. Construir um `DockPanel` novo a cada `Invoke` e adicionar nele o mesmo `TextBox` de sempre derruba o app com "já é o filho lógico de outro elemento" — e só na **segunda** abertura, que é quando ninguém está testando. Construa o conteúdo uma vez, no `Enable`, e reutilize.
+
+### Estado que dura: a pastilha
+
+O ícone de bandeja comunica estado, mas o Windows 11 esconde ícone novo atrás
+da setinha de estouro — na prática o estado existe e ninguém vê. Para estado
+que dura e que o usuário vai querer desfazer, use o badge:
+
+```csharp
+// Fica no canto enquanto durar. O clique desfaz.
+context.Archetypes.Badge.Fixar(Id, "Microfone mudo",
+    "Clique para voltar a captar", HudTone.Alerta, () => Alternar());
+
+// Some.
+context.Archetypes.Badge.Soltar(Id);
+```
+
+**Pastilha empilha, ícone de bandeja não.** Mic mudo e pomodoro contando ao
+mesmo tempo são duas pastilhas; no ícone eles disputam por prioridade. Por
+isso os dois existem, e um módulo de estado costuma usar os dois.
+
+**Badge não é HUD.** HUD é transitório e some sozinho; badge fica até o estado
+acabar. Avisar "microfone mudo" por 1,6 segundo e sumir é o que fazia a pessoa
+esquecer que está mudo.
 
 ### Desenhando estado no ícone de bandeja
 
