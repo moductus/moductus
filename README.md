@@ -1,3 +1,5 @@
+<img src="assets/mark-192.png" alt="" width="96" align="right">
+
 # Moductus
 
 **Tudo a uma tecla de distância.**
@@ -9,7 +11,7 @@ Suíte de utilitários para Windows, open source, em processo único, acionada p
 
 ---
 
-> **Status: v0.2.0 publicável, roadmap concluído.** O `v0.2.0` traz nove módulos. Em `main` estão os doze — Shelf, Mic e Timer entram no próximo release. O ícone de bandeja é um mark provisório desenhado em código; o mark de verdade ainda não existe. Este README descreve o que está sendo construído, não o que já funciona — o [roadmap](docs/PRODUCT.md#9-roadmap) diz o que vem primeiro.
+> **Status: v0.3.0, o primeiro release público.** Os doze módulos do roadmap existem, e o mark saiu do provisório. Nenhum rascunho anterior chegou a ser publicado.
 
 ## O que é
 
@@ -38,7 +40,7 @@ Isso entrega três coisas de uma vez: um único ponto de conflito para resolver,
 
 Atalho direto continua existindo, mas como opção para dois ou três favoritos — nunca como padrão de fábrica.
 
-## Módulos planejados
+## Os módulos
 
 | Módulo | O que faz | Fase |
 |---|---|---|
@@ -76,7 +78,7 @@ Baixe na [página de releases](https://github.com/moductus/moductus/releases). D
 | Download direto | Zip portable, self-contained | ~63 MB |
 | `winget` e `scoop` | Framework-dependent (requer .NET Desktop Runtime) | ~7 MB |
 
-Números medidos no build do v0.2.0, não estimados. Os ~6 MB do pacote pequeno são a projeção WinRT que o OCR do Freeze exige; sem ela o app tinha 0,3 MB. O zip é maior porque carrega o runtime inteiro dentro dele — o WPF não pode ser *trimmed*, então não há como encolher isso. Em troca, ele extrai e roda em qualquer máquina, sem instalar nada. Pelo `winget` o runtime vira dependência declarada e o pacote é só o app.
+Números medidos no build do v0.3.0, não estimados. Os ~6 MB do pacote pequeno são a projeção WinRT que o OCR do Freeze exige; sem ela o app tinha 0,3 MB. O zip é maior porque carrega o runtime inteiro dentro dele — o WPF não pode ser *trimmed*, então não há como encolher isso. Em troca, ele extrai e roda em qualquer máquina, sem instalar nada. Pelo `winget` o runtime vira dependência declarada e o pacote é só o app.
 
 ### Sobre o aviso do SmartScreen
 
@@ -88,7 +90,7 @@ O que dá para fazer sem dinheiro, e está sendo feito: todo binário é constru
 
 | Documento | O que responde |
 |---|---|
-| [docs/PRODUCT.md](docs/PRODUCT.md) | O que o produto é, por que existe, e as 20 decisões registradas |
+| [docs/PRODUCT.md](docs/PRODUCT.md) | O que o produto é, por que existe, e as 21 decisões registradas |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Como funciona por dentro — ciclo de vida, tecla líder, foco, latência |
 | [docs/MODULES.md](docs/MODULES.md) | Como escrever um módulo |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Regras não negociáveis de PR |

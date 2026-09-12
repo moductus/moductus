@@ -503,15 +503,23 @@ Vale para todo módulo, sem exceção.
 
 O ativo mais importante **não é o logo grande**. É o ícone de 16px na bandeja, porque é ele que a pessoa vê 100% do tempo.
 
-**Desenhe o mark primeiro em 16px**, monocromático, com formas alinhadas ao pixel. Só depois escale para os 256px do instalador. O caminho contrário garante um borrão na bandeja.
+O mark são **quatro módulos arredondados num arranjo 2×2**, cada um com um glifo próprio, dentro de um contêiner escuro — pequenas medidas reunidas, que é o que o nome diz. Os arquivos estão em `assets/`:
 
-Mark sugerido, coerente com o nome: um **keycap** — quadrado de cantos arredondados com um chanfro ou ponto interno. Em 16px vira um contorno de 12×12 com traço de 1px, o que é legível. Versão preenchida vira o ícone do app; versão de contorno vira a bandeja.
+| Arquivo | Para quê |
+|---|---|
+| `assets/mark-512.png` | A fonte. Todo tamanho novo sai daqui. |
+| `assets/moductus.ico` | `<ApplicationIcon>` do executável — Alt+Tab, Explorer, taskbar fixado. Sete tamanhos, de 16 a 256. |
+| `assets/mark-192.png` | Avatar da organização e README. |
+| `assets/web/` | Conjunto de favicon, para quando houver site. |
 
-Exportar duas variantes, clara e escura, trocando conforme `SystemUsesLightTheme`. Muita gente usa barra de tarefas clara, e ícone branco desaparece.
+**A bandeja não usa nenhum desses arquivos.** Ela usa `Mark.cs`, que traça a redução monocromática do mesmo desenho no tamanho e no tema do momento. Não é duplicação por descuido — é o que separa ícone legível de borrão:
 
-**Estado dentro do ícone:** o Timer desenha o progresso no próprio ícone; o Mic mudo troca o ícone inteiro. Atenção ao DPI, conforme a armadilha anotada acima.
+- **Escalar raster não funciona em 16px.** O mark cheio tem contêiner, quatro módulos e um glifo dentro de cada um; em 16px sobra uma mancha âmbar. A bandeja recebe só os quatro blocos, que é o que ainda lê.
+- **Bandeja é tinta sobre transparência, não placa colorida.** A placa escura do mark cheio desaparece em barra de tarefas clara, e muita gente usa barra clara. `Mark.cs` inverte a tinta conforme `SystemUsesLightTheme`.
+- **O tamanho vem por parâmetro.** A bandeja pede 16, 20, 24 ou 32 conforme o scaling, e cada um é traçado na hora, com aritmética que fecha em inteiro nos quatro. `MarkTests` lê os pixels que saíram e falha se a borda escorregar da grade.
+- **O ícone carrega estado.** O Timer pinta um arco em volta, o Mic mudo risca na diagonal. Os blocos recuam quando o arco aparece, porque arco e blocos disputam a mesma moldura de 16px.
 
-Tagline: *"Tudo a uma tecla de distância."*
+Acento: `#FFB224`. Tagline: *"Tudo a uma tecla de distância."*
 
 ---
 
@@ -547,10 +555,13 @@ moductus/
 │  │                                 # PanelWindow, CanvasWindow
 │  └─ Moductus.Modules/              # UMA pasta por módulo, um projeto só
 ├─ tests/
-│  └─ Moductus.Core.Tests/           # hotkeys, letras, config — não testa UI
+│  └─ Moductus.Core.Tests/           # hotkeys, letras, config, e os pixels
+│                                    # que o mark da bandeja produz
 ├─ assets/
-│  ├─ icon-16.svg  icon-256.svg
-│  └─ tray-light.ico  tray-dark.ico
+│  ├─ mark-512.png                   # a fonte do mark; todo tamanho sai daqui
+│  ├─ mark-192.png                   # avatar da org e README
+│  ├─ moductus.ico                   # ícone do executável, 16 a 256
+│  └─ web/                           # conjunto de favicon, para um site futuro
 ├─ docs/
 │  ├─ PRODUCT.md                     # este documento
 │  └─ MODULES.md                     # como escrever um módulo

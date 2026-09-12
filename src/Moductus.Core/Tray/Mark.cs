@@ -10,15 +10,17 @@ namespace Moductus.Core.Tray;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Isto é um placeholder deliberado</b>, e o apêndice 13 do PRODUCT.md
-/// registra o mark como decisão em aberto. É um keycap geométrico traçado em
-/// código: contorno arredondado com uma legenda sólida dentro, alinhado ao
-/// pixel, legível em 16px. Existe para destravar Mic e Timer, que precisam
-/// desenhar estado no ícone, e para o produto não sair com o ícone genérico
-/// do Windows. O mark de verdade substitui esta classe inteira.
+/// É a redução monocromática do mark de <c>assets/mark-512.png</c>: quatro
+/// módulos num arranjo 2×2, o "pequenas medidas reunidas" que dá nome ao
+/// projeto. O mark cheio tem um contêiner arredondado e um glifo dentro de
+/// cada módulo — nada disso sobrevive a 16px, e por isso a bandeja recebe só
+/// os quatro blocos. O contêiner some porque ícone de bandeja é tinta sobre
+/// transparência, não placa colorida: placa escura desaparece em barra clara.
 /// </para>
 /// <para>
-/// Tudo é proporcional ao tamanho pedido, nunca escalado depois.
+/// Tudo é proporcional ao tamanho pedido, nunca escalado depois, e a
+/// aritmética fecha em inteiro nos quatro tamanhos que a bandeja usa — 16, 20,
+/// 24 e 32. Meio pixel aqui é a diferença entre bloco nítido e bloco cinza.
 /// </para>
 /// </remarks>
 public static class Mark
@@ -29,7 +31,7 @@ public static class Mark
     /// desaparece, e muita gente usa barra clara.
     /// </param>
     /// <param name="progress">
-    /// De 0 a 1: desenha um arco em volta do keycap. É o que o Timer usa.
+    /// De 0 a 1: desenha um arco em volta dos módulos. É o que o Timer usa.
     /// </param>
     /// <param name="slashed">Risco diagonal — o Mic mudo.</param>
     /// <param name="accent">Cor do arco e do risco. Padrão: o âmbar dos tokens.</param>
@@ -47,8 +49,16 @@ public static class Mark
         var destaque = accent ?? Color.FromRgb(0xFF, 0xB2, 0x24);
 
         var traco = Math.Max(1.0, Math.Round(size / 16.0));
-        var margem = progress > 0 ? traco * 2 : traco;
-        var lado = size - margem * 2;
+
+        // Com o arco no ar os módulos recuam, senão os cantos do arranjo
+        // encostam no anel. O encolhimento é visível, e é o preço de caber:
+        // arco e módulos disputam a mesma moldura de 16px.
+        var margem = progress > 0 ? traco * 3 : traco;
+
+        // Cada módulo é quadrado; o vão entre eles é o dobro do traço, que é o
+        // menor vão que ainda separa dois blocos a 16px.
+        var vao = traco * 2;
+        var modulo = size / 2.0 - margem - traco;
 
         var visual = new DrawingVisual();
         RenderOptions.SetEdgeMode(visual, EdgeMode.Unspecified);
@@ -58,21 +68,23 @@ public static class Mark
             var pincel = new SolidColorBrush(tinta);
             pincel.Freeze();
 
-            // Meio pixel de deslocamento alinha o traço à grade.
-            var caneta = new Pen(pincel, traco);
-            caneta.Freeze();
+            // O canto arredondado é o que liga o ícone de bandeja ao mark
+            // cheio. Acima de 1px ele come o bloco inteiro, então é modesto.
+            var raio = Math.Min(traco, modulo / 4.0);
 
-            var corpo = new Rect(margem + traco / 2, margem + traco / 2, lado - traco, lado - traco);
-            var raio = Math.Max(1.5, size / 8.0);
-            dc.DrawRoundedRectangle(null, caneta, corpo, raio, raio);
+            for (var linha = 0; linha < 2; linha++)
+            {
+                for (var coluna = 0; coluna < 2; coluna++)
+                {
+                    var quadro = new Rect(
+                        margem + coluna * (modulo + vao),
+                        margem + linha * (modulo + vao),
+                        modulo,
+                        modulo);
 
-            // Legenda: quadradinho sólido no centro, o que faz ler como tecla.
-            var legenda = size / 4.0;
-            dc.DrawRectangle(pincel, null, new Rect(
-                (size - legenda) / 2,
-                (size - legenda) / 2,
-                legenda,
-                legenda));
+                    dc.DrawRoundedRectangle(pincel, null, quadro, raio, raio);
+                }
+            }
 
             if (slashed)
             {

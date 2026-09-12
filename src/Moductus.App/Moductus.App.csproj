@@ -10,6 +10,9 @@
     <PlatformTarget>x64</PlatformTarget>
     <!-- Per-Monitor DPI V2 é declarado aqui, não em código. Ver ARCHITECTURE.md §6.3. -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Alt+Tab, Explorer e taskbar fixado. A bandeja não usa isto: ela pede
+         bitmap no tamanho e no tema do momento, e quem desenha é o Mark. -->
+    <ApplicationIcon>..\..\assets\moductus.ico</ApplicationIcon>
     <!-- O nome do processo no Gerenciador de Tarefas é Moductus.exe. -->
     <AssemblyName>Moductus</AssemblyName>
     <RootNamespace>Moductus.App</RootNamespace>

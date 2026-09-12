@@ -2,7 +2,7 @@
 
 > Documento de arquitetura. O que o produto é e por que existe está em [PRODUCT.md](PRODUCT.md); aqui está **como ele funciona por dentro**.
 >
-> **Status:** roadmap implementado. Tudo das seções 4 a 7 existe, mais os doze módulos e o registro de comandos que faz a Palette ser extensível sem conhecer ninguém. O que resta está na seção 12, e o item que mais pesa é o mark: o ícone de bandeja é um placeholder traçado em código.
+> **Status:** roadmap implementado. Tudo das seções 4 a 7 existe, mais os doze módulos, o registro de comandos que faz a Palette ser extensível sem conhecer ninguém, e o mark — desenho em `assets/`, redução monocromática da bandeja em `Mark.cs`. O que resta está na seção 12, e o item que mais pesa agora é o timeout da tecla líder, que só uso real calibra.
 
 ## Sumário
 
@@ -466,18 +466,19 @@ Pontos que este documento **não** resolve, e que precisam de decisão antes ou 
 
 | # | Questão | Por que ainda está aberta |
 |---|---|---|
-| 1 | **O mark** | O keycap de `Mark.cs` é um placeholder traçado em código: contorno arredondado com legenda sólida, alinhado ao pixel, correto em 16/20/24/32px e nos dois temas de barra. Funciona, mas não é um mark desenhado. A seção 7 do PRODUCT.md chama o ícone de 16px de ativo mais importante da identidade, e isso continua verdade. |
-| 2 | **Timeout do líder** | Três segundos é chute fundamentado, não medição. Precisa de uso real para calibrar. |
-| 3 | **Persistência de posição do Panel** | Panel é redimensionável e fixável. Se a posição persiste, o que acontece quando o monitor onde ele estava deixa de existir? Hoje persiste só enquanto o processo vive. |
-| 4 | **"Clique fora" e Esc no Panel sem foco** | Panel não é ativado por clique nem por exibição (`WS_EX_NOACTIVATE`), então nem recebe `Deactivated` como a Palette, nem recebe tecla. Módulo com teclado próprio chama `TakeFocus` e aí Esc funciona — Ports, Scratch, Shelf e Links fazem isso. **Peek e o QR fecham só pela hotkey ou pelo ✕**, de propósito: existem para você continuar trabalhando enquanto olha. Detectar clique fora sem hook global de mouse exigiria `SetWinEventHook` em `EVENT_SYSTEM_FOREGROUND`, que nem pega clique no app que já é foreground. |
-| 5 | **Acrylic nos overlays** | `DWMWA_SYSTEMBACKDROP_TYPE` exige fundo transparente na janela, e no WPF isso passa por `WindowChrome` com moldura de vidro negativa — fiddly e com custo de GPU. Os arquétipos usam `bg.base` sólido, que é o fallback documentado, e cantos arredondados pelo DWM. O toggle de efeitos reduzidos só faz sentido quando houver efeito. |
+| 1 | **Timeout do líder** | Três segundos é chute fundamentado, não medição. Precisa de uso real para calibrar. |
+| 2 | **Persistência de posição do Panel** | Panel é redimensionável e fixável. Se a posição persiste, o que acontece quando o monitor onde ele estava deixa de existir? Hoje persiste só enquanto o processo vive. |
+| 3 | **"Clique fora" e Esc no Panel sem foco** | Panel não é ativado por clique nem por exibição (`WS_EX_NOACTIVATE`), então nem recebe `Deactivated` como a Palette, nem recebe tecla. Módulo com teclado próprio chama `TakeFocus` e aí Esc funciona — Ports, Scratch, Shelf e Links fazem isso. **Peek e o QR fecham só pela hotkey ou pelo ✕**, de propósito: existem para você continuar trabalhando enquanto olha. Detectar clique fora sem hook global de mouse exigiria `SetWinEventHook` em `EVENT_SYSTEM_FOREGROUND`, que nem pega clique no app que já é foreground. |
+| 4 | **Acrylic nos overlays** | `DWMWA_SYSTEMBACKDROP_TYPE` exige fundo transparente na janela, e no WPF isso passa por `WindowChrome` com moldura de vidro negativa — fiddly e com custo de GPU. Os arquétipos usam `bg.base` sólido, que é o fallback documentado, e cantos arredondados pelo DWM. O toggle de efeitos reduzidos só faz sentido quando houver efeito. |
 
-Dois itens saíram desta lista. O **autostart** foi decidido: chave `Run`, decisão 21 do PRODUCT.md, com a razão de ler `StartupApproved` documentada em `Autostart.cs`. A **prioridade na bandeja** foi implementada: `TrayHost` resolve por prioridade, e os valores estão nos módulos — Mic mudo em 100, progresso do Timer em 50, porque esquecer o microfone aberto custa mais caro que perder a contagem de vista.
+Três itens saíram desta lista. O **autostart** foi decidido: chave `Run`, decisão 21 do PRODUCT.md, com a razão de ler `StartupApproved` documentada em `Autostart.cs`. A **prioridade na bandeja** foi implementada: `TrayHost` resolve por prioridade, e os valores estão nos módulos — Mic mudo em 100, progresso do Timer em 50, porque esquecer o microfone aberto custa mais caro que perder a contagem de vista.
+
+O **mark** deixou de ser placeholder. O desenho está em `assets/mark-512.png` e vira o ícone do executável por `assets/moductus.ico`; `Mark.cs` passou a traçar a redução monocromática dele — quatro blocos num arranjo 2×2, sem o contêiner, que é o que sobrevive a 16px. O contêiner cai porque ícone de bandeja é tinta sobre transparência: placa escura some em barra clara. A seção 7 do PRODUCT.md tem o raciocínio inteiro, e `MarkTests` lê os pixels de saída nos quatro tamanhos para que a grade não escorregue em silêncio.
 
 ---
 
 ## Referências internas
 
-- [PRODUCT.md](PRODUCT.md) — o que é e por que existe, com as 20 decisões registradas
+- [PRODUCT.md](PRODUCT.md) — o que é e por que existe, com as 21 decisões registradas
 - [MODULES.md](MODULES.md) — como escrever um módulo
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — regras não negociáveis de PR
