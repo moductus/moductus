@@ -96,3 +96,11 @@ MMDeviceEnumerator
 IAudioEndpointVolume
 EDataFlow
 ERole
+PowerCreateRequest
+PowerSetRequest
+PowerClearRequest
+REASON_CONTEXT
+POWER_REQUEST_TYPE
+POWER_REQUEST_CONTEXT_VERSION
+POWER_REQUEST_CONTEXT_FLAGS
+CloseHandle

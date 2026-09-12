@@ -263,7 +263,7 @@ Substantivo curto, um só, em inglês. Lê bem como `Moductus · Ports` e é dig
 
 | Módulo | Faz | Arquétipo | API principal | Fase |
 |---|---|---|---|---|
-| **Awake** | Impede hibernar e desligar tela | HUD | `SetThreadExecutionState` | 1 |
+| **Awake** | Impede hibernar e desligar tela | HUD | `PowerCreateRequest` | 1 |
 | **Peek** | Miniatura flutuante ao vivo de qualquer janela | Panel | `DwmRegisterThumbnail` | 2 |
 | **Ports** | Lista portas locais ocupadas, mata o processo | Panel | `GetExtendedTcpTable` | 2 |
 | **Scratch** | Bloco de notas que desliza do topo, salva sozinho | Panel | — | 2 |
@@ -649,7 +649,7 @@ Clips, Freeze (com OCR), Shelf, Mic, Links, Kill, Timer. Ordem por interesse.
 
 ---
 
-### Awake: fica, mas a implementação atual tem defeito conhecido
+### Awake segura a máquina por requisição de energia, não por reset de ociosidade
 
 Levantamento de 11/09/2026 confirmou que é dor real: 487 issues rotuladas
 `Product-Awake` no PowerToys, Don't Sleep na v10.22 de março de 2026, Caffeine
@@ -659,24 +659,33 @@ não atividade de processo, então download, build e render não seguram a
 máquina sozinhos, e a única saída nativa é trocar o plano de energia para
 "Nunca" e lembrar de desfazer.
 
-**O defeito:** `Power.cs` usa `SetThreadExecutionState`, que só reseta
-contadores de ociosidade. Em máquina com Modern Standby (S0), que é o padrão
-em notebook novo, ela entra em connected standby minutos depois de a tela
-apagar mesmo com o estado ativo. O caso de uso mais pedido — "deixe a tela
-dormir mas segure meu download" — é justamente o que falha. O Awake do
-PowerToys tem o mesmo defeito, aberto na issue 48965.
+**O que não servia:** `SetThreadExecutionState` só reseta contadores de
+ociosidade. Em máquina com Modern Standby (S0), que é o padrão em notebook
+novo, ela entra em connected standby minutos depois de a tela apagar mesmo com
+o estado ativo. O caso de uso mais pedido — "deixe a tela dormir mas segure meu
+download" — é justamente o que falhava. O Awake do PowerToys tem o mesmo
+defeito, aberto na issue 48965.
 
-**A correção:** `PowerCreateRequest` + `PowerSetRequest` com
-`PowerRequestSystemRequired` e `PowerRequestDisplayRequired` separados. Isso
-cria requisição de energia de verdade, respeitada em S0, e que aparece
-nominalmente em `powercfg /requests` — auditável, o que a API antiga não
-oferece.
+**O que `Power.cs` faz hoje:** abre um handle com `PowerCreateRequest` e liga
+duas requisições separadas nele, `PowerRequestSystemRequired` e
+`PowerRequestDisplayRequired`, por `PowerSetRequest`. Separadas porque segurar
+a máquina e segurar a tela são pedidos independentes: quem quer o download de
+madrugada desliga a segunda e mantém a primeira. `PowerClearRequest` desfaz
+cada uma, e o handle só morre quando o módulo é desligado. Isso é requisição de
+energia de verdade, respeitada em S0.
 
-**O que trava hoje:** o CsWin32 não resolve `REASON_CONTEXT` neste metadata, e
-`PowerCreateRequest` exige esse struct. Escrever a struct à mão está proibido
-pelo próprio MODULES.md, e com razão: assinatura errada compila, roda e
-corrompe memória em silêncio numa versão específica do Windows. Resolver exige
-atualizar o pacote de metadata ou achar o nome que o gerador usa.
+**O motivo aparece por escrito.** `PowerCreateRequest` recebe um
+`REASON_CONTEXT` com `POWER_REQUEST_CONTEXT_SIMPLE_STRING` e a frase
+"Moductus: Awake ligado". Com o módulo ligado, `powercfg /requests` num
+terminal elevado lista o executável com essa frase ao lado — o estado fica
+auditável de fora do app, por uma ferramenta que já vem no Windows, e é isso
+que a API antiga não oferecia.
+
+**O CsWin32 resolve o struct.** A primeira versão desta seção dizia que não, e
+isso travou o módulo por um tempo à toa: `REASON_CONTEXT` existe no metadata,
+em `Windows.Win32.System.Threading`, e não no `System.Power` onde o resto da
+área vive — é só pedir o nome no `NativeMethods.txt`. Nenhuma struct escrita à
+mão, que continua proibida pelo `MODULES.md` e pela decisão 3.
 
 **E o que não dá:** tela de bloqueio e `Interactive logon: Machine inactivity
 limit` por política de grupo não são contornáveis por app de usuário.
