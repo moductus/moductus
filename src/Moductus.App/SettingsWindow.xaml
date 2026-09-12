@@ -16,7 +16,11 @@
         <DataTemplate x:Key="LinhaAtalho">
             <Grid MinHeight="{DynamicResource size.row}" Margin="8,0">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
+                    <!-- SharedSizeGroup: o Grid está DENTRO do template, então
+                         cada linha mediria a própria coluna. "Alt+Q" e
+                         "Ctrl+Shift+Alt+P" jogavam a coluna do detalhe 78px de
+                         diferença entre linhas da mesma lista. -->
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="AtalhoCombo" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0"
@@ -40,9 +44,13 @@
         <DataTemplate x:Key="LinhaModulo">
             <Grid MinHeight="{DynamicResource size.row}" Margin="8,0">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
+                    <!-- SharedSizeGroup porque o Grid vive DENTRO do template:
+                         sem isso cada linha mede a própria coluna e a descrição
+                         fica serrilhada de linha para linha. -->
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="ModuloNome" />
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="ModuloLetra" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <CheckBox Grid.Column="0"
                           IsChecked="{Binding Ativo, Mode=OneWay}"
@@ -60,10 +68,20 @@
                            Text="{Binding Detalhe}"
                            Style="{DynamicResource style.secondary}"
                            VerticalAlignment="Center" />
+                <Button x:Name="Ajustar"
+                        Grid.Column="3"
+                        Content="Ajustar"
+                        Tag="{Binding Id}"
+                        Click="OnAjustarClick"
+                        Margin="8,0,0,0"
+                        Visibility="Collapsed" />
             </Grid>
             <DataTemplate.Triggers>
                 <DataTrigger Binding="{Binding Conflito}" Value="True">
                     <Setter TargetName="Detalhe" Property="Foreground" Value="{DynamicResource danger}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding TemAjuste}" Value="True">
+                    <Setter TargetName="Ajustar" Property="Visibility" Value="Visible" />
                 </DataTrigger>
             </DataTemplate.Triggers>
         </DataTemplate>
@@ -104,7 +122,24 @@
 
             <TextBlock Text="Módulos" FontWeight="{DynamicResource weight.semibold}" Margin="0,0,0,8" />
             <Border Style="{StaticResource Cartao}" Margin="0,0,0,24">
-                <ItemsControl x:Name="Modulos" ItemTemplate="{StaticResource LinhaModulo}" />
+                <ItemsControl x:Name="Modulos" ItemTemplate="{StaticResource LinhaModulo}" Grid.IsSharedSizeScope="True" />
+            </Border>
+
+            <!-- Painel do módulo escolhido. Fica fora da lista de propósito:
+                 montar o mesmo UserControl dentro de um item que é recriado a
+                 cada Refresh esbarra no "um pai lógico só" do WPF. -->
+            <Border x:Name="AjusteCartao" Style="{StaticResource Cartao}" Margin="0,0,0,24" Visibility="Collapsed">
+                <StackPanel>
+                    <DockPanel Margin="8,4,8,8">
+                        <Button DockPanel.Dock="Right"
+                                Content="Fechar"
+                                Click="OnFecharAjusteClick" />
+                        <TextBlock x:Name="AjusteTitulo"
+                                   FontWeight="{DynamicResource weight.semibold}"
+                                   VerticalAlignment="Center" />
+                    </DockPanel>
+                    <ContentControl x:Name="AjusteCorpo" Margin="8,0,8,8" />
+                </StackPanel>
             </Border>
 
             <CheckBox x:Name="IniciarComWindows"
@@ -116,7 +151,7 @@
 
             <TextBlock Text="Atalhos globais" FontWeight="{DynamicResource weight.semibold}" Margin="0,0,0,8" />
             <Border Style="{StaticResource Cartao}" Margin="0,0,0,16">
-                <ItemsControl x:Name="Atalhos" ItemTemplate="{StaticResource LinhaAtalho}" />
+                <ItemsControl x:Name="Atalhos" ItemTemplate="{StaticResource LinhaAtalho}" Grid.IsSharedSizeScope="True" />
             </Border>
 
             <TextBlock x:Name="Rodape" Style="{DynamicResource style.caption}" />

@@ -27,6 +27,9 @@ public sealed class PortsModule(ModuleContext context) : IModule
     private readonly DockPanel _corpo = new();
     private IReadOnlyList<Linha> _todas = [];
 
+    /// <summary>A árvore visual só é construída uma vez, por mais que Enable repita.</summary>
+    private bool _montado;
+
     public string Id => "ports";
 
     public string Name => "Ports";
@@ -39,11 +42,34 @@ public sealed class PortsModule(ModuleContext context) : IModule
 
     public bool HasSurface => true;
 
-    private sealed record Linha(TcpListener Porta, string Processo, bool Desconhecido);
+    /// <summary>
+    /// Endereço cru não responde a pergunta que a pessoa tem. "0.0.0.0" e "::"
+    /// são a mesma coisa dita em duas pilhas, e o que importa é se a porta está
+    /// exposta na rede ou presa na máquina.
+    /// </summary>
+    private static string Onde(string address) => address switch
+    {
+        "0.0.0.0" or "::" => "todas",
+        "127.0.0.1" or "::1" => "local",
+        _ => address,
+    };
+
+    private sealed record Linha(TcpListener Porta, string Processo, bool Desconhecido, string Enderecos);
 
     public void Enable()
     {
+        // Enable roda de novo toda vez que o módulo é religado nas configurações.
+        // A árvore visual já está montada, e readicionar um filho que já tem pai
+        // derruba o processo inteiro — ver docs/MODULES.md, "Armadilhas conhecidas".
+        if (_montado)
+        {
+            return;
+        }
+
+        _montado = true;
+
         _filtro.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
+        _filtro.Tag = "Filtrar por número da porta ou nome do processo";
         _filtro.TextChanged += (_, _) => Render();
         _filtro.PreviewKeyDown += (_, e) =>
         {
@@ -118,12 +144,19 @@ public sealed class PortsModule(ModuleContext context) : IModule
             return;
         }
 
+        // Uma porta em escuta nas duas pilhas aparece duas vezes na tabela do
+        // Windows — 0.0.0.0 e ::. São a mesma porta do mesmo processo, e listar
+        // as duas só faz a lista parecer o dobro do tamanho.
         _todas = portas
-            .Select(p =>
+            .GroupBy(p => (p.Port, p.ProcessId))
+            .Select(g =>
             {
+                var p = g.First();
                 var (nome, desconhecido) = NomeDoProcesso(p.ProcessId);
-                return new Linha(p, nome, desconhecido);
+                var enderecos = string.Join(", ", g.Select(x => Onde(x.Address)).Distinct(StringComparer.Ordinal));
+                return new Linha(p, nome, desconhecido, enderecos);
             })
+            .OrderBy(l => l.Porta.Port)
             .ToList();
 
         Render();
@@ -164,7 +197,7 @@ public sealed class PortsModule(ModuleContext context) : IModule
 
         var processo = new TextBlock
         {
-            Text = l.Desconhecido ? $"{l.Processo} · pid {l.Porta.ProcessId}" : $"{l.Processo} · pid {l.Porta.ProcessId}",
+            Text = $"{l.Processo} · pid {l.Porta.ProcessId}",
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
             TextWrapping = TextWrapping.NoWrap,
@@ -175,7 +208,7 @@ public sealed class PortsModule(ModuleContext context) : IModule
             processo.SetResourceReference(TextBlock.ForegroundProperty, "text.muted");
         }
 
-        var endereco = new TextBlock { Text = l.Porta.Address, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) };
+        var endereco = new TextBlock { Text = l.Enderecos, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) };
         endereco.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
 
         var encerrar = new Button { Content = "Encerrar", Height = 26, Padding = new Thickness(10, 0, 10, 0), IsEnabled = !l.Desconhecido };

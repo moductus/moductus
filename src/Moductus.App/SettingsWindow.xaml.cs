@@ -10,6 +10,8 @@ namespace Moductus.App;
 public partial class SettingsWindow : Window
 {
     private readonly SettingsModel _model;
+    private readonly Dictionary<string, UserControl?> _paineis = [];
+    private string? _ajusteAberto;
 
     internal SettingsWindow(SettingsModel model)
     {
@@ -33,7 +35,7 @@ public partial class SettingsWindow : Window
 
     private sealed record AtalhoItem(string Combinacao, string Detalhe, bool Conflito);
 
-    private sealed record ModuloItem(string Id, string Nome, bool Ativo, string Letra, string Detalhe, bool Conflito);
+    private sealed record ModuloItem(string Id, string Nome, bool Ativo, string Letra, string Detalhe, bool Conflito, bool TemAjuste);
 
     private void Refresh()
     {
@@ -72,7 +74,8 @@ public partial class SettingsWindow : Window
                     ativo,
                     ativo && letra is not null ? letra.Key.ToString().ToUpperInvariant() : "—",
                     letra is { Active: false } ? $"em conflito: {letra.ConflictDetail}" : m.Description,
-                    letra is { Active: false });
+                    letra is { Active: false },
+                    ativo && Painel(m.Id) is not null);
             })
             .ToList();
 
@@ -89,8 +92,70 @@ public partial class SettingsWindow : Window
         if (sender is CheckBox { Tag: string id } caixa)
         {
             _model.SetModuleEnabled(id, caixa.IsChecked == true);
+
+            // Módulo desligado não mostra painel: o que ele configura não roda.
+            if (caixa.IsChecked != true && _ajusteAberto == id)
+            {
+                FecharAjuste();
+            }
+
             Refresh();
         }
+    }
+
+    /// <summary>
+    /// O painel de cada módulo, construído uma vez e reaproveitado. Reconstruir
+    /// a cada abertura jogaria fora o que o usuário digitou e não gravou ainda.
+    /// </summary>
+    private UserControl? Painel(string id)
+    {
+        if (_paineis.TryGetValue(id, out var pronto))
+        {
+            return pronto;
+        }
+
+        var modulo = _model.Modules.FirstOrDefault(m => m.Id == id);
+        var painel = modulo?.BuildSettings();
+        _paineis[id] = painel;
+        return painel;
+    }
+
+    private void OnAjustarClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string id })
+        {
+            return;
+        }
+
+        if (_ajusteAberto == id)
+        {
+            FecharAjuste();
+            return;
+        }
+
+        var painel = Painel(id);
+        if (painel is null)
+        {
+            return;
+        }
+
+        // Solta o anterior antes de montar o novo: um elemento do WPF só pode
+        // ter um pai lógico, e trocar sem limpar derruba a janela.
+        AjusteCorpo.Content = null;
+        AjusteCorpo.Content = painel;
+
+        AjusteTitulo.Text = _model.Modules.First(m => m.Id == id).Name;
+        AjusteCartao.Visibility = Visibility.Visible;
+        _ajusteAberto = id;
+    }
+
+    private void OnFecharAjusteClick(object sender, RoutedEventArgs e) => FecharAjuste();
+
+    private void FecharAjuste()
+    {
+        AjusteCorpo.Content = null;
+        AjusteCartao.Visibility = Visibility.Collapsed;
+        _ajusteAberto = null;
     }
 
     private void OnLiderKeyDown(object sender, KeyEventArgs e)

@@ -114,12 +114,12 @@ public class PanelWindow : ArchetypeWindow
 
         _pin.Content = "Fixar";
         _pin.Padding = new Thickness(8, 0, 8, 0);
-        _pin.Height = 26;
+        _pin.Height = 32;
 
-        var fechar = new Button { Content = "✕", Padding = new Thickness(8, 0, 8, 0), Height = 26, Margin = new Thickness(6, 0, 0, 0) };
+        var fechar = new Button { Content = "✕", Padding = new Thickness(8, 0, 8, 0), Height = 32, Margin = new Thickness(8, 0, 0, 0) };
         fechar.Click += (_, _) => Dismiss();
 
-        var acoes = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) };
+        var acoes = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
         acoes.Children.Add(_pin);
         acoes.Children.Add(fechar);
 

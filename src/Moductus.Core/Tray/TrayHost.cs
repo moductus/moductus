@@ -58,8 +58,21 @@ public sealed class TrayHost : IDisposable
     /// </summary>
     public IDisposable Claim(string owner, int priority, TrayRender render, string tooltip)
     {
+        ArgumentNullException.ThrowIfNull(tooltip);
+        return Claim(owner, priority, render, () => tooltip);
+    }
+
+    /// <summary>
+    /// Igual, mas com a dica avaliada a cada redesenho. É o que o Timer
+    /// precisa: dica fixa congela em "faltam 25:00" pela contagem inteira, e
+    /// passar o mouse no ícone vira a forma mais rápida de desconfiar que o
+    /// módulo travou.
+    /// </summary>
+    public IDisposable Claim(string owner, int priority, TrayRender render, Func<string> tooltip)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(owner);
         ArgumentNullException.ThrowIfNull(render);
+        ArgumentNullException.ThrowIfNull(tooltip);
 
         _claims.RemoveAll(c => c.Owner == owner);
 
@@ -103,7 +116,7 @@ public sealed class TrayHost : IDisposable
         var novo = Render(vencedor?.Render);
 
         _icon.SetIcon(novo);
-        _icon.SetTooltip(vencedor?.Tooltip ?? BaseTooltip);
+        _icon.SetTooltip(vencedor is null ? BaseTooltip : vencedor.Tooltip());
 
         // Só depois de o Windows já ter o novo: destruir antes pisca.
         IconFactory.Destroy(_handle);
@@ -130,7 +143,7 @@ public sealed class TrayHost : IDisposable
         _handle = 0;
     }
 
-    private sealed record Reivindicacao(string Owner, int Priority, TrayRender Render, string Tooltip, int Ordem);
+    private sealed record Reivindicacao(string Owner, int Priority, TrayRender Render, Func<string> Tooltip, int Ordem);
 
     private sealed class Release(TrayHost host, string owner) : IDisposable
     {
