@@ -35,7 +35,7 @@ public enum PanelPlacement
 /// chama <see cref="TakeFocus"/>; os outros nunca interrompem o usuário.
 /// </para>
 /// </remarks>
-public class PanelWindow : ArchetypeWindow
+public class PanelWindow : OwnedWindow
 {
     private readonly TextBlock _heading = new();
     private readonly ToggleButton _pin = new();
@@ -52,7 +52,7 @@ public class PanelWindow : ArchetypeWindow
         WindowChrome.SetWindowChrome(this, new WindowChrome
         {
             CaptionHeight = 0,
-            ResizeBorderThickness = new Thickness(6),
+            ResizeBorderThickness = (Thickness)FindResource("border.resize"),
             GlassFrameThickness = new Thickness(0),
             CornerRadius = new CornerRadius(0),
             UseAeroCaptionButtons = false,
@@ -66,10 +66,7 @@ public class PanelWindow : ArchetypeWindow
     }
 
     /// <summary>Fixado não fecha quando a hotkey do módulo alterna.</summary>
-    public bool IsPinned => _pin.IsChecked == true;
-
-    /// <summary>Quem está usando o Panel agora. Módulos checam antes de alternar.</summary>
-    public new string? Owner { get; set; }
+    public override bool IsPinned => _pin.IsChecked == true;
 
     public PanelPlacement Placement
     {
@@ -82,6 +79,26 @@ public class PanelWindow : ArchetypeWindow
                 _placed = false;
             }
         }
+    }
+
+    /// <summary>
+    /// Toma posse, veste e mostra, que é o que todo módulo faz depois da
+    /// guarda de toggle. Os quatro passos andam juntos: esquecer o
+    /// <see cref="OwnedWindow.Owner"/> faz a hotkey do módulo vizinho fechar
+    /// esta superfície, e trocar o conteúdo sem trocar o cabeçalho deixa o
+    /// painel mentindo sobre o que mostra.
+    /// </summary>
+    /// <remarks>
+    /// Foco continua de fora, por <see cref="TakeFocus"/>: tomá-lo é opt-in
+    /// deliberado, e só vale para módulo com digitação própria.
+    /// </remarks>
+    public void Occupy(string owner, string heading, PanelPlacement placement, object content)
+    {
+        Owner = owner;
+        Heading = heading;
+        Placement = placement;
+        SlotContent = content;
+        Present();
     }
 
     /// <summary>
@@ -129,11 +146,13 @@ public class PanelWindow : ArchetypeWindow
         var glifoFechar = new TextBlock { Text = "\uE8BB" };
         glifoFechar.SetResourceReference(FrameworkElement.StyleProperty, "style.icon");
 
-        var fechar = new Button { Content = glifoFechar, Margin = new Thickness(8, 0, 0, 0), ToolTip = "Fechar (Esc)" };
+        var fechar = new Button { Content = glifoFechar, ToolTip = "Fechar (Esc)" };
+        fechar.SetResourceReference(FrameworkElement.MarginProperty, "inset.start.8");
         fechar.SetResourceReference(FrameworkElement.StyleProperty, "style.button.icon");
         fechar.Click += (_, _) => Dismiss();
 
-        var acoes = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
+        var acoes = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        acoes.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.12");
         acoes.Children.Add(_pin);
         acoes.Children.Add(fechar);
 
@@ -144,7 +163,7 @@ public class PanelWindow : ArchetypeWindow
         cabecalho.SetResourceReference(Panel.BackgroundProperty, "bg.raised");
         DockPanel.SetDock(acoes, Dock.Right);
         cabecalho.Children.Add(acoes);
-        _heading.Margin = new Thickness(12, 0, 0, 0);
+        _heading.SetResourceReference(FrameworkElement.MarginProperty, "inset.start.12");
         cabecalho.Children.Add(_heading);
         cabecalho.MouseLeftButtonDown += (_, e) =>
         {
@@ -174,15 +193,15 @@ public class PanelWindow : ArchetypeWindow
 
         if (_placement == PanelPlacement.Edge)
         {
-            w = a.Px(320);
-            h = (int)(a.WorkHeight * 0.6);
+            w = a.Px(Token("size.panel.minwidth"));
+            h = (int)(a.WorkHeight * Token("size.panel.edge.height"));
             x = a.WorkLeft + a.WorkWidth - w - a.Px(Token("space.16"));
             y = a.WorkTop + (a.WorkHeight - h) / 2;
         }
         else
         {
-            w = a.Px(560);
-            h = a.Px(360);
+            w = a.Px(Token("size.panel.width"));
+            h = a.Px(Token("size.panel.height"));
             x = a.WorkLeft + (a.WorkWidth - w) / 2;
             y = _placement == PanelPlacement.Top
                 ? a.WorkTop + a.Px(Token("space.16"))

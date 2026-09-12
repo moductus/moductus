@@ -150,19 +150,6 @@ public abstract class ArchetypeWindow : Window
         }
     }
 
-    /// <summary>A hotkey é toggle: apertar de novo fecha.</summary>
-    public void Toggle()
-    {
-        if (IsVisible)
-        {
-            Dismiss();
-        }
-        else
-        {
-            Present();
-        }
-    }
-
     /// <summary>
     /// Cria o HWND e força a primeira renderização fora da tela, em tempo
     /// ocioso. Depois disto, <see cref="Present"/> custa milissegundos.

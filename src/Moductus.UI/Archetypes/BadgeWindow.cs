@@ -90,7 +90,7 @@ public class BadgeWindow : ArchetypeWindow
             // fundo da janela aparecendo acima dela, como se fosse borda.
             if (_entradas.Count > 0)
             {
-                entrada.Raiz.Margin = new Thickness(0, 8, 0, 0);
+                entrada.Raiz.SetResourceReference(FrameworkElement.MarginProperty, "inset.top.8");
             }
 
             _entradas.Add(entrada);
@@ -175,7 +175,7 @@ public class BadgeWindow : ArchetypeWindow
     /// <summary>Uma pastilha: ponto colorido, texto, dica, e o clique que desfaz.</summary>
     private sealed class Pastilha
     {
-        private readonly Ellipse _ponto = new() { Width = 8, Height = 8, VerticalAlignment = VerticalAlignment.Center };
+        private readonly Ellipse _ponto = new() { VerticalAlignment = VerticalAlignment.Center };
         private readonly TextBlock _texto = new() { TextWrapping = TextWrapping.NoWrap };
         private readonly TextBlock _dica = new() { TextWrapping = TextWrapping.NoWrap };
         private readonly StackPanel _botoes = new();
@@ -185,7 +185,9 @@ public class BadgeWindow : ArchetypeWindow
 
         public Pastilha()
         {
-            _ponto.Margin = new Thickness(0, 0, 12, 0);
+            _ponto.SetResourceReference(FrameworkElement.WidthProperty, "size.dot");
+            _ponto.SetResourceReference(FrameworkElement.HeightProperty, "size.dot");
+            _ponto.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.12");
 
             _texto.SetResourceReference(TextBlock.FontSizeProperty, "type.body");
             _texto.SetResourceReference(TextBlock.LineHeightProperty, "type.body.line");
@@ -197,7 +199,7 @@ public class BadgeWindow : ArchetypeWindow
             _dica.Visibility = Visibility.Collapsed;
 
             _botoes.Orientation = Orientation.Horizontal;
-            _botoes.Margin = new Thickness(0, 8, 0, 0);
+            _botoes.SetResourceReference(FrameworkElement.MarginProperty, "inset.top.8");
             _botoes.Visibility = Visibility.Collapsed;
 
             var coluna = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
@@ -209,12 +211,9 @@ public class BadgeWindow : ArchetypeWindow
             linha.Children.Add(_ponto);
             linha.Children.Add(coluna);
 
-            _moldura = new Border
-            {
-                Child = linha,
-                Padding = new Thickness(12, 8, 16, 8),
-                MaxWidth = 320,
-            };
+            _moldura = new Border { Child = linha };
+            _moldura.SetResourceReference(Border.PaddingProperty, "inset.badge");
+            _moldura.SetResourceReference(FrameworkElement.MaxWidthProperty, "size.badge.maxwidth");
 
             _moldura.SetResourceReference(Border.BackgroundProperty, "bg.raised");
             _moldura.SetResourceReference(Border.BorderBrushProperty, "border.strong");
@@ -270,13 +269,11 @@ public class BadgeWindow : ArchetypeWindow
 
             while (_botoes.Children.Count < quantos)
             {
-                var novo = new Button
-                {
-                    Height = 24,
-                    Padding = new Thickness(10, 0, 10, 0),
-                    Margin = new Thickness(0, 0, 8, 0),
-                    FontSize = 12,
-                };
+                var novo = new Button();
+                novo.SetResourceReference(FrameworkElement.HeightProperty, "size.badge.action");
+                novo.SetResourceReference(Control.PaddingProperty, "inset.badge.action");
+                novo.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.8");
+                novo.SetResourceReference(Control.FontSizeProperty, "type.action");
 
                 // Handler fixo, lendo a ação da Tag: reassinar a cada tique
                 // acumularia handlers no mesmo botão.

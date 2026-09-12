@@ -45,7 +45,11 @@ public sealed class LeaderOverlay : ArchetypeWindow
         _timer = new DispatcherTimer { Interval = Timeout };
         _timer.Tick += (_, _) => Dismiss();
 
-        _blink = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(140) };
+        // Interval não é DependencyProperty, então a duração é lida do
+        // dicionário na mão. Chave própria e não motion.enter: com animações
+        // desligadas na acessibilidade motion.enter vale zero, e o pisca
+        // sumiria — mas ele é resposta a erro de digitação, não transição.
+        _blink = new DispatcherTimer { Interval = Duracao("motion.blink") };
         _blink.Tick += (_, _) =>
         {
             _blink.Stop();
@@ -72,9 +76,9 @@ public sealed class LeaderOverlay : ArchetypeWindow
     {
         var titulo = new TextBlock { Text = "Tecla líder" };
         titulo.SetResourceReference(StyleProperty, "style.caption");
-        titulo.Margin = new Thickness(4, 0, 0, 8);
+        titulo.SetResourceReference(FrameworkElement.MarginProperty, "inset.leader.title");
 
-        _grade.ItemWidth = 200;
+        _grade.SetResourceReference(WrapPanel.ItemWidthProperty, "size.leader.column");
 
         _empty.Text = "Nenhum módulo ativo. Ative um nas configurações.";
         _empty.SetResourceReference(TextBlock.ForegroundProperty, "text.muted");
@@ -83,7 +87,7 @@ public sealed class LeaderOverlay : ArchetypeWindow
         var rodape = new TextBlock { Text = "Esc fecha" };
         rodape.SetResourceReference(StyleProperty, "style.caption");
         rodape.SetResourceReference(TextBlock.ForegroundProperty, "text.muted");
-        rodape.Margin = new Thickness(4, 8, 0, 0);
+        rodape.SetResourceReference(FrameworkElement.MarginProperty, "inset.leader.footer");
 
         var corpo = new StackPanel();
         corpo.SetResourceReference(FrameworkElement.MarginProperty, "inset.16");
@@ -105,7 +109,10 @@ public sealed class LeaderOverlay : ArchetypeWindow
         tecla.HorizontalAlignment = HorizontalAlignment.Center;
         tecla.VerticalAlignment = VerticalAlignment.Center;
 
-        var keycap = new Border { Child = tecla, Width = 28, Height = 28, Margin = new Thickness(0, 0, 10, 0) };
+        var keycap = new Border { Child = tecla };
+        keycap.SetResourceReference(FrameworkElement.WidthProperty, "size.button.compact");
+        keycap.SetResourceReference(FrameworkElement.HeightProperty, "size.button.compact");
+        keycap.SetResourceReference(FrameworkElement.MarginProperty, "inset.keycap");
         keycap.SetResourceReference(Border.BackgroundProperty, "accent");
         keycap.SetResourceReference(Border.CornerRadiusProperty, "radius.control");
         tecla.SetResourceReference(TextBlock.ForegroundProperty, "accent.fg");
@@ -118,7 +125,8 @@ public sealed class LeaderOverlay : ArchetypeWindow
         textos.Children.Add(nome);
         textos.Children.Add(descricao);
 
-        var linha = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4, 6, 4, 6) };
+        var linha = new StackPanel { Orientation = Orientation.Horizontal };
+        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.leader.key");
         linha.Children.Add(keycap);
         linha.Children.Add(textos);
         return linha;
@@ -131,7 +139,7 @@ public sealed class LeaderOverlay : ArchetypeWindow
         var y = a.WorkTop + a.WorkHeight / 6;
 
         SizeToContent = SizeToContent.Height;
-        PlacePhysical(a, x, y, w, a.Px(200));
+        PlacePhysical(a, x, y, w, a.Px(Token("size.leader.height")));
     }
 
     protected override void OnPresenting(nint foreground) => _previousForeground = foreground;
@@ -193,4 +201,13 @@ public sealed class LeaderOverlay : ArchetypeWindow
 
         return c != '\0';
     }
+
+    /// <summary>
+    /// Duração vinda do dicionário. Existe porque DispatcherTimer.Interval não é
+    /// DependencyProperty e não aceita SetResourceReference.
+    /// </summary>
+    private static TimeSpan Duracao(string chave)
+        => Application.Current?.TryFindResource(chave) is Duration { HasTimeSpan: true } d
+            ? d.TimeSpan
+            : TimeSpan.Zero;
 }

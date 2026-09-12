@@ -92,7 +92,7 @@ public class PaletteWindow : ArchetypeWindow
 
         _list.BorderThickness = new Thickness(0);
         _list.Background = null;
-        _list.Margin = new Thickness(8, 0, 8, 8);
+        _list.SetResourceReference(FrameworkElement.MarginProperty, "inset.list");
         _list.SetResourceReference(ListBox.MaxHeightProperty, "size.palette.maxheight");
         _list.ItemTemplate = ItemTemplate();
         ScrollViewer.SetHorizontalScrollBarVisibility(_list, ScrollBarVisibility.Disabled);
@@ -130,7 +130,7 @@ public class PaletteWindow : ArchetypeWindow
         var detalhe = new FrameworkElementFactory(typeof(TextBlock));
         detalhe.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(nameof(PaletteItem.Detail)));
         detalhe.SetResourceReference(TextBlock.StyleProperty, "style.caption");
-        detalhe.SetValue(TextBlock.MarginProperty, new Thickness(12, 0, 0, 0));
+        detalhe.SetResourceReference(TextBlock.MarginProperty, "inset.start.12");
         detalhe.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
         detalhe.SetValue(TextBlock.TextTrimmingProperty, TextTrimming.CharacterEllipsis);
         detalhe.SetValue(TextBlock.TextWrappingProperty, TextWrapping.NoWrap);
@@ -145,7 +145,7 @@ public class PaletteWindow : ArchetypeWindow
         dica.SetResourceReference(TextBlock.StyleProperty, "style.caption");
         dica.SetResourceReference(TextBlock.FontFamilyProperty, "font.mono");
         dica.SetValue(Grid.ColumnProperty, 1);
-        dica.SetValue(TextBlock.MarginProperty, new Thickness(16, 0, 0, 0));
+        dica.SetResourceReference(TextBlock.MarginProperty, "inset.start.16");
         dica.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
 
         grade.AppendChild(esquerda);

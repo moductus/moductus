@@ -108,10 +108,10 @@ public class HudWindow : ArchetypeWindow
 
     protected override FrameworkElement BuildChrome(ContentPresenter slot)
     {
-        _ponto.Width = 8;
-        _ponto.Height = 8;
+        _ponto.SetResourceReference(FrameworkElement.WidthProperty, "size.dot");
+        _ponto.SetResourceReference(FrameworkElement.HeightProperty, "size.dot");
         _ponto.VerticalAlignment = VerticalAlignment.Center;
-        _ponto.Margin = new Thickness(0, 0, 12, 0);
+        _ponto.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.12");
 
         _titulo.SetResourceReference(TextBlock.FontSizeProperty, "type.body-lg");
         _titulo.SetResourceReference(TextBlock.LineHeightProperty, "type.body-lg.line");
@@ -133,7 +133,8 @@ public class HudWindow : ArchetypeWindow
         conteudo.Children.Add(texto);
         conteudo.Children.Add(slot);
 
-        _pilula = new Border { Child = conteudo, Padding = new Thickness(16, 8, 16, 8) };
+        _pilula = new Border { Child = conteudo };
+        _pilula.SetResourceReference(Border.PaddingProperty, "inset.pill");
         Superficie = _pilula;
 
         // Mensagem de erro carrega texto de exceção, que não tem tamanho. Sem
