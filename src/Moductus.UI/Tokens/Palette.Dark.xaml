@@ -34,6 +34,15 @@
     <SolidColorBrush x:Key="text.muted" Color="{StaticResource text.muted.color}" />
     <SolidColorBrush x:Key="accent" Color="{StaticResource accent.color}" />
     <SolidColorBrush x:Key="accent.border" Color="{StaticResource accent.border.color}" />
+    <!-- Accent translúcido: o miolo de uma seleção, que precisa deixar ver o
+         que está embaixo. Existe como token porque desenhá-lo à mão deixava o
+         Freeze com a borda seguindo o tema e o preenchimento preso ao âmbar. -->
+    <SolidColorBrush x:Key="accent.veil" Color="{StaticResource accent.color}" Opacity="0.16" />
+    <!-- O véu do Canvas: escurece o desktop congelado para a anotação do
+         Freeze e o alvo do Kill se destacarem. Preto nos três temas, porque
+         quem escurece não pode clarear no tema claro. A opacidade mora no
+         pincel para que o retângulo não carregue número nenhum. -->
+    <SolidColorBrush x:Key="veil.canvas" Color="Black" Opacity="0.40" />
     <SolidColorBrush x:Key="accent.fg" Color="{StaticResource accent.fg.color}" />
     <SolidColorBrush x:Key="success" Color="{StaticResource success.color}" />
     <SolidColorBrush x:Key="danger" Color="{StaticResource danger.color}" />

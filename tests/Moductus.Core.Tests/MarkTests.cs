@@ -72,26 +72,33 @@ public class MarkTests
     }
 
     [Fact]
-    public void O_progresso_do_timer_pinta_em_ambar()
+    public void O_progresso_do_timer_pinta_no_destaque()
     {
-        var semArco = Ler(Renderizar(() => Mark.Render(32, onLightTaskbar: false)), 32);
-        var comArco = Ler(Renderizar(() => Mark.Render(32, onLightTaskbar: false, progress: 0.7)), 32);
+        var semArco = Ler(Renderizar(() => Mark.Render(32, onLightTaskbar: false, accent: Ambar)), 32);
+        var comArco = Ler(Renderizar(() => Mark.Render(32, onLightTaskbar: false, progress: 0.7, accent: Ambar)), 32);
 
         Assert.DoesNotContain(semArco, EhAmbar);
         Assert.Contains(comArco, EhAmbar);
     }
 
     [Fact]
-    public void O_mudo_do_mic_risca_em_ambar()
+    public void O_mudo_do_mic_risca_no_destaque()
     {
-        var aberto = Ler(Renderizar(() => Mark.Render(32, onLightTaskbar: false)), 32);
-        var mudo = Ler(Renderizar(() => Mark.Render(32, onLightTaskbar: false, slashed: true)), 32);
+        var aberto = Ler(Renderizar(() => Mark.Render(32, onLightTaskbar: false, accent: Ambar)), 32);
+        var mudo = Ler(Renderizar(() => Mark.Render(32, onLightTaskbar: false, slashed: true, accent: Ambar)), 32);
 
         Assert.DoesNotContain(aberto, EhAmbar);
         Assert.Contains(mudo, EhAmbar);
     }
 
     // ---- Apoio ---------------------------------------------------------------
+
+    /// <summary>
+    /// O accent vem da paleta, e num teste não há paleta carregada. A cor é
+    /// dita aqui porque é o teste que decide o que quer ver sair — e o âmbar
+    /// dos tokens é o que o app usa em claro e em escuro.
+    /// </summary>
+    private static readonly Color Ambar = Color.FromRgb(0xFF, 0xB2, 0x24);
 
     private static bool EhAmbar(Cor c) => c.A > 128 && c.R > 180 && c.G is > 100 and < 220 && c.B < 120;
 

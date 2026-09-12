@@ -18,6 +18,18 @@
     <SolidColorBrush x:Key="text.secondary" Color="{x:Static SystemColors.GrayTextColor}" />
     <SolidColorBrush x:Key="text.muted" Color="{x:Static SystemColors.GrayTextColor}" />
     <SolidColorBrush x:Key="accent" Color="{x:Static SystemColors.HighlightColor}" />
+    <!-- A moldura de foco de campo sai daqui. Faltando a chave, o DynamicResource
+         não resolve e o foco fica invisível — sem erro nenhum. -->
+    <SolidColorBrush x:Key="accent.border" Color="{x:Static SystemColors.HighlightColor}" />
+    <!-- Accent translúcido: o miolo de uma seleção, que precisa deixar ver o
+         que está embaixo. Existe como token porque desenhá-lo à mão deixava o
+         Freeze com a borda seguindo o tema e o preenchimento preso ao âmbar. -->
+    <SolidColorBrush x:Key="accent.veil" Color="{x:Static SystemColors.HighlightColor}" Opacity="0.16" />
+    <!-- O véu do Canvas: escurece o desktop congelado para a anotação do
+         Freeze e o alvo do Kill se destacarem. Preto nos três temas, porque
+         quem escurece não pode clarear no tema claro. A opacidade mora no
+         pincel para que o retângulo não carregue número nenhum. -->
+    <SolidColorBrush x:Key="veil.canvas" Color="Black" Opacity="0.40" />
     <SolidColorBrush x:Key="accent.fg" Color="{x:Static SystemColors.HighlightTextColor}" />
     <SolidColorBrush x:Key="success" Color="{x:Static SystemColors.WindowTextColor}" />
     <SolidColorBrush x:Key="danger" Color="{x:Static SystemColors.WindowTextColor}" />

@@ -11,6 +11,10 @@
     <Duration x:Key="motion.exit">0:0:0</Duration>
     <Duration x:Key="motion.hover">0:0:0</Duration>
 
+    <!-- Este NÃO vai a zero: o pisca é feedback de erro, não animação, e a
+         letra desconhecida precisa responder alguma coisa. Ver Motion.xaml. -->
+    <Duration x:Key="motion.blink">0:0:0.140</Duration>
+
     <sys:Double x:Key="motion.offset">0</sys:Double>
     <sys:Double x:Key="motion.scale">1</sys:Double>
 

@@ -56,6 +56,10 @@
     <sys:Double x:Key="type.title">20</sys:Double>
     <sys:Double x:Key="type.title.line">24</sys:Double>
     <sys:Double x:Key="type.display">28</sys:Double>
+    <!-- Fora da escala de propósito, e só aqui: o botão dentro da pastilha
+         precisa ser menor que o corpo sem virar metadado. Com type.caption ele
+         some ao lado do texto que acompanha; com type.body compete com ele. -->
+    <sys:Double x:Key="type.action">12</sys:Double>
     <sys:Double x:Key="type.display.line">34</sys:Double>
 
     <!-- ═══ Espaço — grade de 4px ════════════════════════════════════════ -->
@@ -77,6 +81,59 @@
     <!-- Linha de lista: o vão vertical é o que separa item de duas linhas do
          item seguinte. Zero aqui faz os dois colarem. -->
     <Thickness x:Key="inset.row">12,8</Thickness>
+    <!-- Pastilha: o rótulo pequeno sobre fundo cheio, como as medidas do Freeze. -->
+    <Thickness x:Key="inset.chip">6,2</Thickness>
+    <!-- Cartão que flutua sobre conteúdo arbitrário — a lupa do Freeze, o alvo
+         do Kill. Mais aperto na vertical que na horizontal, senão a caixa cresce
+         mais que o texto que ela carrega. -->
+    <Thickness x:Key="inset.card">10,5</Thickness>
+    <!-- Só nas laterais: linha de lista que respira sem afastar da de cima. -->
+    <Thickness x:Key="inset.8.h">8,0</Thickness>
+    <!-- Rótulo de estado no rodapé — o "Salvo" do Scratch. Encostado no canto
+         de baixo à direita, com menos folga embaixo que dos lados: com a folga
+         da linha de lista ele descola do canto e parece um item solto. -->
+    <Thickness x:Key="inset.status">0,0,12,6</Thickness>
+    <!-- Recuos de um lado só. O nome diz a borda: start é a esquerda, end a
+         direita, y é em cima e embaixo. Servem para afastar vizinhos numa
+         linha sem empurrar a linha inteira. -->
+    <Thickness x:Key="inset.start.8">8,0,0,0</Thickness>
+    <Thickness x:Key="inset.start.12">12,0,0,0</Thickness>
+    <Thickness x:Key="inset.start.16">16,0,0,0</Thickness>
+    <Thickness x:Key="inset.end.8">0,0,8,0</Thickness>
+    <Thickness x:Key="inset.end.12">0,0,12,0</Thickness>
+    <Thickness x:Key="inset.top.8">0,8,0,0</Thickness>
+    <Thickness x:Key="inset.bottom.8">0,0,0,8</Thickness>
+    <Thickness x:Key="inset.y.4">0,4</Thickness>
+    <Thickness x:Key="inset.y.16">0,16</Thickness>
+
+    <!-- Pílula do HUD: mais folga nos lados que em cima, porque a pílula é larga
+         e baixa, e a mesma folga nos quatro lados a deixaria gorda. -->
+    <Thickness x:Key="inset.pill">16,8</Thickness>
+    <!-- Pastilha de estado. A folga da direita é maior: é o lado que encosta na
+         borda da tela, e o botão de desfazer fica ali. -->
+    <Thickness x:Key="inset.badge">12,8,16,8</Thickness>
+    <!-- O botão dentro da pastilha, que tem altura própria e não precisa de
+         folga vertical nenhuma. -->
+    <Thickness x:Key="inset.badge.action">10,0</Thickness>
+    <!-- A lista da Palette: encostada no campo de busca em cima, afastada das
+         outras três bordas. -->
+    <Thickness x:Key="inset.list">8,0,8,8</Thickness>
+    <!-- Detalhe embaixo de um título, no cartão: colado nele em cima, afastado
+         do que vem depois. -->
+    <Thickness x:Key="inset.detail">0,4,0,12</Thickness>
+    <!-- Rodapé e nota de um painel de formulário: alinhados ao recuo lateral do
+         conteúdo, com a folga só do lado que encosta no resto. -->
+    <Thickness x:Key="inset.field.status">12,0,12,8</Thickness>
+    <Thickness x:Key="inset.field.note">12,8,12,0</Thickness>
+    <!-- Legenda sob uma imagem — o texto do QR. -->
+    <Thickness x:Key="inset.legend">16,0,16,12</Thickness>
+
+    <!-- O overlay da tecla líder: a grade de letras, o título e o rodapé. -->
+    <Thickness x:Key="inset.leader.key">4,6</Thickness>
+    <Thickness x:Key="inset.leader.title">4,0,0,8</Thickness>
+    <Thickness x:Key="inset.leader.footer">4,8,0,0</Thickness>
+    <!-- Afastamento entre a tecla desenhada e o nome do módulo, no overlay. -->
+    <Thickness x:Key="inset.keycap">0,0,10,0</Thickness>
 
     <!-- ═══ Raio ═════════════════════════════════════════════════════════ -->
     <!-- O Win11 usa 8 em menu e 12 em janela; isto encaixa sem parecer estrangeiro. -->
@@ -98,14 +155,65 @@
          botão compacto; com 32 o botão preenchia a barra inteira. -->
     <sys:Double x:Key="size.titlebar">44</sys:Double>
     <sys:Double x:Key="size.icon">16</sys:Double>
+    <!-- Painel de configuração: a coluna do rótulo e a caixa de número. A
+         coluna cabe o rótulo mais longo dos doze módulos, e é a mesma em todos
+         para que dois painéis abertos um depois do outro não pareçam telas de
+         apps diferentes. A caixa é estreita de propósito: o que se digita ali
+         são minutos, segundos ou itens, nunca um texto. -->
+    <sys:Double x:Key="size.settings.label">128</sys:Double>
+    <sys:Double x:Key="size.settings.field">80</sys:Double>
+    <!-- Campo de texto curto no painel: sufixo, nome. Não é caminho de arquivo,
+         que estica. -->
+    <sys:Double x:Key="size.settings.text">160</sys:Double>
+
+    <!-- Ponto de estado antes do texto, no HUD e na pastilha. Menor que o
+         ícone inline: é sinal, não desenho. -->
+    <sys:Double x:Key="size.dot">8</sys:Double>
+    <!-- Amostra de cor do conta-gotas, ao lado do valor hexadecimal. -->
+    <sys:Double x:Key="size.swatch">14</sys:Double>
+    <!-- A coluna da porta na lista do Ports. Fixa para os números ficarem
+         alinhados entre linhas; cabe cinco dígitos. -->
+    <sys:Double x:Key="size.port">64</sys:Double>
+    <!-- Zona de soltar arquivo: alta o bastante para ser alvo de arrasto sem
+         tomar o painel. -->
+    <sys:Double x:Key="size.dropzone">72</sys:Double>
+    <!-- Teto do cartão sobre a Canvas. Sem ele, uma janela de título comprido
+         esticaria o cartão de ponta a ponta da tela. -->
+    <sys:Double x:Key="size.card.maxwidth">520</sys:Double>
+    <!-- Teto e altura de ação da pastilha. Ela mora no canto e precisa caber
+         lá sem virar painel. -->
+    <sys:Double x:Key="size.badge.maxwidth">320</sys:Double>
+    <sys:Double x:Key="size.badge.action">24</sys:Double>
+    <!-- Coluna da grade de letras do overlay: cabe a tecla e o nome do módulo
+         mais longo. -->
+    <sys:Double x:Key="size.leader.column">200</sys:Double>
     <sys:Double x:Key="size.palette.width">640</sys:Double>
     <sys:Double x:Key="size.palette.maxheight">480</sys:Double>
     <sys:Double x:Key="size.panel.minwidth">320</sys:Double>
     <sys:Double x:Key="size.panel.minheight">240</sys:Double>
+    <!-- Onde o Panel nasce quando é a primeira vez. Depois disso ele fica onde
+         o usuário deixou, então estes valores só valem para a primeira
+         impressão: largos o bastante para uma lista de portas caber sem
+         redimensionar, estreitos o bastante para não parecerem uma janela de
+         aplicativo. -->
+    <sys:Double x:Key="size.panel.width">560</sys:Double>
+    <sys:Double x:Key="size.panel.height">360</sys:Double>
+    <!-- Na borda, ele é alto e estreito como uma bandeja: a largura mínima, e
+         a fração da altura útil do monitor, que acompanha a tela em vez de
+         fixar um número que sobra em 4K e falta em notebook. -->
+    <sys:Double x:Key="size.panel.edge.height">0.6</sys:Double>
+    <!-- Altura do overlay da tecla líder: cabe a grade dos doze módulos. -->
+    <sys:Double x:Key="size.leader.height">200</sys:Double>
 
     <!-- Elevação é só isto: borda de 1px em border.strong mais uma sombra suave.
          Nunca empilhar sombras. -->
     <Thickness x:Key="border.width">1</Thickness>
+    <!-- Moldura que precisa se impor sobre conteúdo arbitrário: a lupa do Freeze
+         sobre a tela congelada, o cartão do Kill sobre a janela alvo. -->
+    <Thickness x:Key="border.width.strong">2</Thickness>
+    <!-- A faixa invisível onde o cursor vira seta de redimensionar, no Panel.
+         Não é borda desenhada: é alvo de mouse, e 1px é impossível de acertar. -->
+    <Thickness x:Key="border.resize">6</Thickness>
     <sys:Double x:Key="shadow.depth">0</sys:Double>
     <sys:Double x:Key="shadow.blur">24</sys:Double>
     <sys:Double x:Key="shadow.opacity">0.35</sys:Double>

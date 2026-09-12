@@ -11,6 +11,12 @@
     <Duration x:Key="motion.exit">0:0:0.090</Duration>
     <Duration x:Key="motion.hover">0:0:0.080</Duration>
 
+    <!-- O pisca da letra desconhecida no overlay da tecla líder. Não é
+         transição: é a resposta a um erro de digitação, e sem ela a tecla
+         errada não devolve sinal nenhum. Por isso tem chave própria e vale
+         o mesmo com animações desligadas. -->
+    <Duration x:Key="motion.blink">0:0:0.140</Duration>
+
     <sys:Double x:Key="motion.offset">8</sys:Double>
     <sys:Double x:Key="motion.scale">0.98</sys:Double>
 

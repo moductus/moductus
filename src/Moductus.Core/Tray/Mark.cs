@@ -34,7 +34,9 @@ public static class Mark
     /// De 0 a 1: desenha um arco em volta dos módulos. É o que o Timer usa.
     /// </param>
     /// <param name="slashed">Risco diagonal — o Mic mudo.</param>
-    /// <param name="accent">Cor do arco e do risco. Padrão: o âmbar dos tokens.</param>
+    /// <param name="accent">
+    /// Cor do arco e do risco. Omitida, sai o <c>accent</c> da paleta em uso.
+    /// </param>
     public static BitmapSource Render(
         int size,
         bool onLightTaskbar,
@@ -42,11 +44,16 @@ public static class Mark
         bool slashed = false,
         Color? accent = null)
     {
+        // Os dois únicos valores de cor escritos no código do produto, e é
+        // deliberado: eles seguem o tema da BARRA DE TAREFAS, que o Windows
+        // mantém separado do tema dos aplicativos. Trocá-los por text.primary
+        // faria o ícone acompanhar o app e sumir em quem usa barra clara com
+        // apps escuros — a combinação padrão de muita gente.
         var tinta = onLightTaskbar
             ? Color.FromRgb(0x17, 0x18, 0x1A)
             : Color.FromRgb(0xE8, 0xEA, 0xED);
 
-        var destaque = accent ?? Color.FromRgb(0xFF, 0xB2, 0x24);
+        var destaque = accent ?? Destaque(tinta);
 
         var traco = Math.Max(1.0, Math.Round(size / 16.0));
 
@@ -104,6 +111,20 @@ public static class Mark
         bitmap.Freeze();
         return bitmap;
     }
+
+    /// <summary>
+    /// O <c>accent</c> da paleta em uso, que é o que faz o arco do Timer e o
+    /// risco do Mic serem a mesma cor que o resto do app — inclusive em alto
+    /// contraste, onde o âmbar dá lugar à cor de destaque do sistema.
+    /// </summary>
+    /// <remarks>
+    /// Sem paleta carregada — num teste, ou antes de o Theme subir — arco e
+    /// risco saem na mesma tinta dos módulos. Escrever o âmbar aqui como
+    /// fallback recriaria exatamente o literal que o token existe para tirar
+    /// do código.
+    /// </remarks>
+    private static Color Destaque(Color tinta) =>
+        Application.Current?.TryFindResource("accent.color") as Color? ?? tinta;
 
     private static void DesenharArco(DrawingContext dc, int size, double fracao, Color cor, double traco)
     {
