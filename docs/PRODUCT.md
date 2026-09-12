@@ -2,7 +2,7 @@
 
 > Suíte de utilitários para Windows, open source, em processo único, acionada por teclado.
 
-**Status:** roadmap concluído — os doze módulos aprovados existem, mais os utilitários pequenos como comandos da Palette. `v0.2.0` foi o primeiro release, com nove; Shelf, Mic e Timer entram no próximo. `v0.1` publicado com as fases 1 e 2. Este documento é a fonte de verdade até o primeiro release.
+**Status:** roadmap concluído — os doze módulos aprovados existem, mais os utilitários pequenos como comandos da Palette. `v0.3.0` é o primeiro release público, com os doze e com o mark de verdade; nenhum rascunho anterior chegou a ser publicado. Este documento é a fonte de verdade.
 **Última revisão:** setembro de 2026
 
 ---
