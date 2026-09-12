@@ -21,7 +21,6 @@ public sealed record PaletteItem(string Text, string? Detail, string? Hint, Acti
 public class PaletteWindow : ArchetypeWindow
 {
     private readonly TextBox _input = new();
-    private readonly TextBlock _placeholder = new();
     private readonly ListBox _list = new();
     private readonly TextBlock _empty = new();
     private readonly ObservableCollection<PaletteItem> _visible = [];
@@ -45,8 +44,12 @@ public class PaletteWindow : ArchetypeWindow
 
     public string Placeholder
     {
-        get => _placeholder.Text;
-        set => _placeholder.Text = value;
+        // Vai no Tag: o template do TextBox mostra o Tag como dica quando o
+        // texto está vazio. A Palette tinha um TextBlock próprio por cima do
+        // campo, com margem de 24 contra os 23 do texto real — a dica pulava
+        // 1px ao digitar a primeira letra.
+        get => _input.Tag as string ?? string.Empty;
+        set => _input.Tag = value;
     }
 
     /// <summary>Estado vazio sempre tem texto explicando o que fazer.</summary>
@@ -79,17 +82,13 @@ public class PaletteWindow : ArchetypeWindow
     protected override FrameworkElement BuildChrome(ContentPresenter slot)
     {
         _input.SetResourceReference(Control.FontSizeProperty, "type.body-lg");
+        // FontSize sem LineHeight herda o line-height do corpo (18) numa fonte
+        // de 15, e a baseline do texto sai do lugar. Os dois andam juntos.
+        _input.SetResourceReference(Control.FontFamilyProperty, "font.ui");
         _input.SetResourceReference(FrameworkElement.MarginProperty, "inset.12");
-
-        _placeholder.SetResourceReference(TextBlock.ForegroundProperty, "text.muted");
-        _placeholder.SetResourceReference(TextBlock.FontSizeProperty, "type.body-lg");
-        _placeholder.IsHitTestVisible = false;
-        _placeholder.VerticalAlignment = VerticalAlignment.Center;
-        _placeholder.Margin = new Thickness(24, 0, 0, 0);
 
         var cabecalho = new Grid();
         cabecalho.Children.Add(_input);
-        cabecalho.Children.Add(_placeholder);
 
         _list.BorderThickness = new Thickness(0);
         _list.Background = null;
@@ -192,8 +191,6 @@ public class PaletteWindow : ArchetypeWindow
     private void Refilter()
     {
         var q = _input.Text.Trim();
-        _placeholder.Visibility = q.Length == 0 && _input.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-
         _visible.Clear();
         foreach (var item in _provider?.Invoke(q) ?? [])
         {
