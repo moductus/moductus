@@ -59,6 +59,9 @@ public class HudWindow : ArchetypeWindow
         _timer.Tick += (_, _) => Sair();
     }
 
+    /// <summary>A pílula é a superfície elevada, não o fundo da janela.</summary>
+    protected override string FundoTranslucido => "bg.raised.tint";
+
     /// <summary>Mostra o texto e reinicia a contagem para sumir.</summary>
     public void Flash(string text) => Flash(text, null);
 
@@ -131,6 +134,7 @@ public class HudWindow : ArchetypeWindow
         conteudo.Children.Add(slot);
 
         _pilula = new Border { Child = conteudo, Padding = new Thickness(16, 8, 16, 8) };
+        Superficie = _pilula;
 
         // Mensagem de erro carrega texto de exceção, que não tem tamanho. Sem
         // teto a pílula fica mais larga que o monitor e sangra pelas bordas.

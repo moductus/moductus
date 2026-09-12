@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Shell;
 using System.Windows.Input;
 using System.Windows.Interop;
 using Moductus.Core.Interop;
@@ -42,6 +43,20 @@ public abstract class ArchetypeWindow : Window
         ShowActivated = stealsFocus;
         WindowStartupLocation = WindowStartupLocation.Manual;
 
+        // Frame do DWM estendido para dentro da área de cliente. É o que
+        // devolve a sombra nativa a uma janela sem borda, e a condição para o
+        // Windows 11 aceitar pintar material atrás dela. CaptionHeight zero
+        // porque a barra de título é nossa; ResizeBorder zero porque o
+        // arquétipo controla o próprio redimensionamento.
+        WindowChrome.SetWindowChrome(this, new WindowChrome
+        {
+            GlassFrameThickness = new Thickness(-1),
+            CaptionHeight = 0,
+            ResizeBorderThickness = default,
+            CornerRadius = default,
+            UseAeroCaptionButtons = false,
+        });
+
         Content = BuildChrome(_slot);
 
         SourceInitialized += (_, _) => OnHandleCreated();
@@ -50,6 +65,25 @@ public abstract class ArchetypeWindow : Window
 
     /// <summary>Palette e Canvas roubam; HUD e Panel nunca.</summary>
     public bool StealsFocus { get; }
+
+    /// <summary>
+    /// O material do DWM atrás desta superfície. Acrylic para o que aparece
+    /// por cima e some, Mica para o que fica aberto durante o trabalho — é a
+    /// regra do Fluent, e a diferença é perceptível: Acrylic borra o que está
+    /// atrás, Mica só tinge o papel de parede.
+    /// </summary>
+    protected virtual Dwm.Backdrop Material => Dwm.Backdrop.Acrylic;
+
+    /// <summary>
+    /// A superfície que recebe a tinta quando o material entra. Cada
+    /// <see cref="BuildChrome"/> aponta para o próprio Border de fundo; sem
+    /// isso a janela fica com material atrás de um fundo opaco, ou seja, sem
+    /// efeito nenhum.
+    /// </summary>
+    protected Border? Superficie { get; set; }
+
+    /// <summary>Chave do fundo quando o material está no ar.</summary>
+    protected virtual string FundoTranslucido => "bg.base.tint";
 
     /// <summary>O que o módulo coloca dentro do arquétipo.</summary>
     public object? SlotContent
@@ -198,6 +232,7 @@ public abstract class ArchetypeWindow : Window
     protected virtual FrameworkElement BuildChrome(ContentPresenter slot)
     {
         var moldura = new Border { Child = slot };
+        Superficie = moldura;
         moldura.SetResourceReference(Border.BackgroundProperty, "bg.base");
         moldura.SetResourceReference(Border.BorderBrushProperty, "border.strong");
         moldura.SetResourceReference(Border.BorderThicknessProperty, "border.width");
@@ -215,6 +250,31 @@ public abstract class ArchetypeWindow : Window
         }
 
         Dwm.RoundCorners(Handle);
+        AplicarMaterial();
+    }
+
+    /// <summary>
+    /// Pede o material ao DWM e, só se ele aceitar, deixa o fundo translúcido.
+    /// O Windows recusa em Windows 10, em build antiga do 11 e quando a pessoa
+    /// desliga efeitos de transparência nas configurações — e nesses casos a
+    /// janela tem de continuar opaca, senão vira um retângulo preto com texto.
+    /// </summary>
+    private void AplicarMaterial()
+    {
+        if (Material == Dwm.Backdrop.None || Superficie is null)
+        {
+            return;
+        }
+
+        if (!Dwm.SetBackdrop(Handle, Material))
+        {
+            return;
+        }
+
+        // A janela precisa parar de pintar o próprio fundo para o material
+        // aparecer; a tinta vai no Border, que é quem desenha o conteúdo.
+        Background = System.Windows.Media.Brushes.Transparent;
+        Superficie.SetResourceReference(Border.BackgroundProperty, FundoTranslucido);
     }
 
     protected virtual void OnPresenting(nint foreground)

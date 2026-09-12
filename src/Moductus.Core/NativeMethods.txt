@@ -18,6 +18,7 @@ SetForegroundWindow
 FindWindowEx
 PostMessage
 DwmSetWindowAttribute
+DWM_SYSTEMBACKDROP_TYPE
 DWMWINDOWATTRIBUTE
 GetForegroundWindow
 IsWindow

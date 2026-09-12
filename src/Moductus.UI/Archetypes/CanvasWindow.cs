@@ -31,6 +31,12 @@ public class CanvasWindow : ArchetypeWindow
 
     public void SetBackdrop(ImageSource? frozen) => _backdrop.Source = frozen;
 
+    /// <summary>
+    /// Sem material: a Canvas cobre a tela inteira com o bitmap congelado, e
+    /// material atrás de imagem opaca é custo de composição sem efeito.
+    /// </summary>
+    protected override Dwm.Backdrop Material => Dwm.Backdrop.None;
+
     protected override FrameworkElement BuildChrome(ContentPresenter slot)
     {
         var camadas = new Grid();

@@ -43,6 +43,53 @@ public static class Dwm
     /// Cantos arredondados pelo DWM (Win11). Sem transparência de janela, que
     /// custa GPU: o DWM recorta a região e a borda do conteúdo acompanha.
     /// </summary>
+    /// <summary>Material que o DWM pinta atrás da janela.</summary>
+    public enum Backdrop
+    {
+        /// <summary>Sem material: a janela pinta o próprio fundo.</summary>
+        None = 1,
+
+        /// <summary>Mica — para superfície que fica aberta durante o trabalho.</summary>
+        Mica = 2,
+
+        /// <summary>Acrylic — para superfície transitória, que aparece por cima e some.</summary>
+        Acrylic = 3,
+
+        /// <summary>Mica Alt — variante mais escura, para janela com abas.</summary>
+        MicaAlt = 4,
+    }
+
+    /// <summary>
+    /// Pede ao DWM o material do fundo. Devolve <c>false</c> quando o sistema
+    /// recusa — Windows 10, build antiga do 11, ou transparência desligada nas
+    /// configurações de acessibilidade.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Quem chama precisa respeitar o retorno.</b> O material só aparece se
+    /// a janela deixar o fundo transparente; se o DWM recusar e a janela ficar
+    /// transparente mesmo assim, sobra um retângulo preto com texto por cima.
+    /// </para>
+    /// <para>
+    /// Não usamos <c>AllowsTransparency</c> do WPF para isso, de propósito: ele
+    /// liga <c>WS_EX_LAYERED</c>, que derruba a aceleração de hardware, mata a
+    /// sombra e os cantos arredondados nativos — e as APIs de material do
+    /// Windows 11 simplesmente ignoram janela layered. O caminho certo é
+    /// estender o frame com <c>WindowChrome.GlassFrameThickness = -1</c>.
+    /// </para>
+    /// </remarks>
+    public static unsafe bool SetBackdrop(nint window, Backdrop tipo)
+    {
+        var valor = (int)tipo;
+        var hr = PInvoke.DwmSetWindowAttribute(
+            (HWND)window,
+            DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE,
+            &valor,
+            sizeof(int));
+
+        return hr.Succeeded;
+    }
+
     public static unsafe void RoundCorners(nint window)
     {
         var preferencia = DWM_WINDOW_CORNER_PREFERENCE.DWMWCP_ROUND;

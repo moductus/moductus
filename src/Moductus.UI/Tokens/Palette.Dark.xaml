@@ -18,6 +18,12 @@
     <Color x:Key="danger.color">#F0554F</Color>
     <Color x:Key="shadow.color">#000000</Color>
 
+    <!-- Tinta sobre o material do DWM. Só entra quando o Windows aceita
+         pintar Mica ou Acrylic atrás da janela; se recusar, o fundo continua
+         opaco, senão sobraria um retângulo preto com texto por cima. -->
+    <SolidColorBrush x:Key="bg.base.tint" Color="#C8141517" />
+    <SolidColorBrush x:Key="bg.raised.tint" Color="#D81C1E22" />
+
     <SolidColorBrush x:Key="bg.base" Color="{StaticResource bg.base.color}" />
     <SolidColorBrush x:Key="bg.raised" Color="{StaticResource bg.raised.color}" />
     <SolidColorBrush x:Key="bg.hover" Color="{StaticResource bg.hover.color}" />

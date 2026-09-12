@@ -105,6 +105,13 @@ public class PanelWindow : ArchetypeWindow
             () => Keyboard.Focus(element));
     }
 
+    /// <summary>
+    /// Mica, não Acrylic: o Panel fica aberto enquanto a pessoa trabalha, e
+    /// Acrylic embaixo de conteúdo que se lê por minutos cansa a vista. É a
+    /// regra do Fluent para superfície de longa permanência.
+    /// </summary>
+    protected override Dwm.Backdrop Material => Dwm.Backdrop.Mica;
+
     protected override FrameworkElement BuildChrome(ContentPresenter slot)
     {
         _heading.SetResourceReference(TextBlock.FontWeightProperty, "weight.semibold");

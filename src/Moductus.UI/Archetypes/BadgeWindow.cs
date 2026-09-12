@@ -44,6 +44,13 @@ public class BadgeWindow : ArchetypeWindow
     {
     }
 
+    /// <summary>
+    /// Sem material: a janela cobre a união das pastilhas, vãos inclusive, e
+    /// o Acrylic pintaria os vãos também — viraria um bloco borrado em vez de
+    /// pastilhas soltas. Cada pastilha traz o próprio fundo.
+    /// </summary>
+    protected override Dwm.Backdrop Material => Dwm.Backdrop.None;
+
     /// <summary>Há alguma pastilha no ar?</summary>
     public bool TemAlguma => _entradas.Count > 0;
 
