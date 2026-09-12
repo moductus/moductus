@@ -294,9 +294,27 @@ internal sealed class Host : IDisposable
         _settings.Activate();
     }
 
+    /// <summary>
+    /// O menu da bandeja é a única superfície permanente do produto, e era só
+    /// "Configurações" e "Sair" — não dava para chegar a nenhum módulo por ali.
+    /// Agora cada módulo ativo tem entrada própria: a principal abre o módulo e
+    /// o submenu expõe os comandos que ele registrou na Palette. É a rota de
+    /// descoberta para quem ainda não decorou as letras, e a saída para quando
+    /// a tecla líder colide com outro app.
+    /// </summary>
     private void ShowMenu()
     {
         var menu = new ContextMenu();
+
+        foreach (var module in _modules.Where(m => _enabled.Contains(m.Id)))
+        {
+            menu.Items.Add(MenuDoModulo(module));
+        }
+
+        if (menu.Items.Count > 0)
+        {
+            menu.Items.Add(new Separator());
+        }
 
         var configuracoes = new MenuItem { Header = "Configurações" };
         configuracoes.Click += (_, _) => OpenSettings();
@@ -311,6 +329,33 @@ internal sealed class Host : IDisposable
         // A dança do foreground. Sem isto o menu não fecha ao clicar fora.
         _tray.PrepareForMenu();
         menu.IsOpen = true;
+    }
+
+    private MenuItem MenuDoModulo(IModule module)
+    {
+        var letra = _letters.All.FirstOrDefault(r => r.ModuleId == module.Id);
+
+        var item = new MenuItem
+        {
+            Header = module.Name,
+            // A letra aparece no lugar do atalho: quem usa o menu duas vezes
+            // aprende a tecla e para de precisar do menu.
+            InputGestureText = letra is { Active: true } ? letra.Key.ToString().ToUpperInvariant() : null,
+            ToolTip = module.Description,
+        };
+
+        // Módulo sem superfície (Awake, Mic, Timer) age no clique; os outros
+        // abrem a própria janela. Nos dois casos é o mesmo Invoke da hotkey.
+        item.Click += (_, _) => module.Invoke();
+
+        foreach (var comando in _commands.Of(module.Id))
+        {
+            var sub = new MenuItem { Header = comando.Text, ToolTip = comando.Detail };
+            sub.Click += (_, _) => comando.Execute();
+            item.Items.Add(sub);
+        }
+
+        return item;
     }
 
     public void Dispose()

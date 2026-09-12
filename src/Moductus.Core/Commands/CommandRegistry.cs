@@ -14,6 +14,14 @@ public sealed class CommandRegistry
 
     public IReadOnlyList<PaletteCommand> All => [.. _comandos.Select(c => c.Command).OrderBy(c => c.Text)];
 
+    /// <summary>
+    /// Os comandos de um dono só, na ordem em que ele registrou. O menu da
+    /// bandeja usa isto para montar o submenu de cada módulo; a Palette
+    /// continua vendo tudo junto, que é o ponto dela.
+    /// </summary>
+    public IReadOnlyList<PaletteCommand> Of(string owner) =>
+        [.. _comandos.Where(c => c.Owner == owner).Select(c => c.Command)];
+
     public void Register(string owner, PaletteCommand command)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(owner);
