@@ -540,4 +540,35 @@
         </Setter>
     </Style>
 
+    <!-- ═══ Dica ═════════════════════════════════════════════════════════ -->
+    <!--
+      O ToolTip do WPF nasce com o fundo do sistema, que é claro, e herda a
+      cor de texto do app, que é clara. Texto branco em fundo branco: a dica
+      do menu da bandeja era ilegível.
+    -->
+    <Style TargetType="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource bg.raised}" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
+        <Setter Property="FontFamily" Value="{DynamicResource font.ui}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.caption}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.strong}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource border.width}" />
+        <Setter Property="Padding" Value="{DynamicResource inset.8}" />
+        <Setter Property="MaxWidth" Value="320" />
+        <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{DynamicResource radius.control}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>
