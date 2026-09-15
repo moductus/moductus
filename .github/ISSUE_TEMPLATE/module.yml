@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Antes de preencher, vale ler os [não-objetivos](../blob/main/docs/PRODUCT.md#não-objetivos) e a lista de [módulos cortados](../blob/main/docs/PRODUCT.md#cortados). Boa parte das propostas já foi avaliada e recusada por um motivo técnico específico.
+        Antes de preencher, vale ler os [não-objetivos](https://github.com/moductus/moductus/blob/main/docs/PRODUCT.md#não-objetivos) e a lista de [módulos cortados](https://github.com/moductus/moductus/blob/main/docs/PRODUCT.md#cortados). Boa parte das propostas já foi avaliada e recusada por um motivo técnico específico.
 
   - type: input
     id: nome
