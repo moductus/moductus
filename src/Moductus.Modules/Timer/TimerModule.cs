@@ -156,7 +156,11 @@ public sealed class TimerModule(ModuleContext context) : IModule
         Consultar();
     }
 
-    private void Iniciar(TimeSpan duracao, string rotulo, bool pausa, bool avisar = true)
+    /// <summary>
+    /// Começar não dispara HUD: a pastilha já fica na tela com o horário de
+    /// término e os botões. Estado que fica é pastilha; evento que passa é HUD.
+    /// </summary>
+    private void Iniciar(TimeSpan duracao, string rotulo, bool pausa)
     {
         _total = duracao;
         _fim = DateTimeOffset.Now + duracao;
@@ -173,13 +177,6 @@ public sealed class TimerModule(ModuleContext context) : IModule
 
         Redesenhar();
         Repintar();
-
-        if (avisar)
-        {
-            context.Archetypes.Hud.Flash(
-                $"{rotulo} — {duracao.TotalMinutes:F0} min",
-                $"Termina às {_fim.LocalDateTime:HH:mm}. Repita o atalho para ver quanto falta.");
-        }
     }
 
     private void Consultar()
@@ -304,9 +301,9 @@ public sealed class TimerModule(ModuleContext context) : IModule
 
         if (eraFoco && PausaAutomatica)
         {
-            // Iniciar tem Flash próprio, e ele seria substituído no mesmo tique.
-            // Silencioso aqui, e a mensagem abaixo diz as duas coisas de uma vez.
-            Iniciar(Pausa, "Pausa", pausa: true, avisar: false);
+            // Iniciar só repinta a pastilha, então o HUD abaixo é o único aviso
+            // de que o bloco acabou — e diz as duas coisas de uma vez.
+            Iniciar(Pausa, "Pausa", pausa: true);
             context.Archetypes.Hud.Flash($"{rotulo} concluído.", $"A pausa de {Pausa.TotalMinutes:F0} min já começou.", HudTone.Sucesso);
             return;
         }
