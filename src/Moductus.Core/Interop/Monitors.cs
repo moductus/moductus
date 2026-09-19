@@ -92,4 +92,23 @@ public static class Monitors
         PInvoke.SetWindowPos(
             (HWND)window, HWND.Null, x, y, width, height,
             SET_WINDOW_POS_FLAGS.SWP_NOZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE);
+
+    /// <summary>
+    /// Onde a janela está agora, em pixels físicos, segundo o Win32.
+    /// </summary>
+    /// <remarks>
+    /// Existe para quem precisa comparar com o lugar que calculou. Guardar o
+    /// último <see cref="Place"/> e confiar nele é o que mente assim que
+    /// qualquer outra coisa mexe na janela — uma animação de Top, por exemplo.
+    /// Retângulo zerado para HWND que não existe mais.
+    /// </remarks>
+    public static (int X, int Y, int Width, int Height) Onde(nint window)
+    {
+        if (window == 0 || !PInvoke.GetWindowRect((HWND)window, out var r))
+        {
+            return default;
+        }
+
+        return (r.left, r.top, r.right - r.left, r.bottom - r.top);
+    }
 }

@@ -214,6 +214,15 @@ public abstract class ArchetypeWindow : Window
     {
         if (Handle != 0)
         {
+            // Colocar é a palavra final sobre onde a janela fica. A animação de
+            // entrada anima Top, e uma que ainda estivesse no ar sobrescreveria
+            // este SetWindowPos quadro a quadro, mirando um destino que deixou
+            // de valer — e, como ela devolve Top ao valor local no fim, e esse
+            // valor é o que o WM_MOVE da própria animação escreveu, a janela
+            // ficava no destino velho para sempre. Parar antes de mover deixa a
+            // entrada continuar existindo sem poder desmentir uma recolocação
+            // posterior: quem chega depois é quem manda.
+            BeginAnimation(TopProperty, null);
             Monitors.Place(Handle, x, y, width, height);
         }
         else

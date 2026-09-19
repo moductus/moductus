@@ -350,19 +350,28 @@ public class BadgeWindow : ArchetypeWindow
             return new BadgeSize(a.Px(ActualWidth), a.Px(ActualHeight));
         }
 
-        /// <summary>Coloca no lugar calculado, e só se ele tiver mudado.</summary>
+        /// <summary>Coloca no lugar calculado, e só se ela ainda não estiver nele.</summary>
+        /// <remarks>
+        /// Quem responde "ela já está lá" é o Win32, não um retângulo lembrado
+        /// do último posicionamento. O lembrado mente assim que algo além deste
+        /// método mexe na janela, e com ele mentindo nenhum reposicionamento
+        /// posterior conserta a pastilha fora do lugar — era o que deixava duas
+        /// pastilhas nascidas juntas sobrepostas para sempre. Perguntar custa um
+        /// <c>GetWindowRect</c> por pastilha por tique, e preserva o motivo de o
+        /// atalho existir: reposicionar as N a cada tique fazia a pilha tremer.
+        /// </remarks>
         public void Mover(MonitorArea a, BadgeSpot lugar)
         {
             // Guardado mesmo quando nada se move: é a escala deste monitor que
             // converte o limiar de arrasto do Windows, que vem em DIP.
             _area = a;
+            _lugar = lugar;
 
-            if (_lugar == lugar && IsVisible)
+            if (IsVisible && Monitors.Onde(Handle) == (lugar.X, lugar.Y, lugar.Width, lugar.Height))
             {
                 return;
             }
 
-            _lugar = lugar;
             Present(a);
         }
 
