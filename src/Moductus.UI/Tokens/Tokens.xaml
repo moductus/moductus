@@ -147,6 +147,18 @@
     <CornerRadius x:Key="radius.card">10</CornerRadius>
     <CornerRadius x:Key="radius.window">12</CornerRadius>
     <CornerRadius x:Key="radius.pill">999</CornerRadius>
+    <!-- O recorte que o DWM faz no HWND (DWMWCP_ROUND). Não é escolha nossa: o
+         sistema arredonda em 8 e não aceita outro valor. Toda superfície que
+         encosta na borda da janela — a pastilha e a pílula do HUD — usa
+         exatamente este raio, senão sobra uma lasca do fundo da janela entre a
+         curva do Border e o corte do sistema. Não é radius.card de propósito:
+         o cartão de dentro é desenho nosso, este raio é do Windows. -->
+    <CornerRadius x:Key="radius.clip">8</CornerRadius>
+    <!-- Sem recorte nativo — Windows 10, ou build do 11 anterior ao 22000 — o
+         HWND é um retângulo vivo e a superfície acompanha: cartão de cantos
+         vivos, opaco e legível, que se passa por desenho nativo daquele
+         Windows em vez de moldura vazando nos quatro cantos. -->
+    <CornerRadius x:Key="radius.clip.none">0</CornerRadius>
 
     <!-- ═══ Tamanho ══════════════════════════════════════════════════════ -->
     <sys:Double x:Key="size.row">32</sys:Double>

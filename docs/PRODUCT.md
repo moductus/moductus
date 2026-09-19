@@ -432,9 +432,16 @@ Grade base de **4px**. Escala: `4, 8, 12, 16, 24, 32`.
 | Controle (botão, input) | 6 |
 | Card | 10 |
 | Janela flutuante | 12 |
-| Badge | pill |
+| Superfície que encosta na borda da janela (pastilha, pílula do HUD) | 8 |
 
 O Windows 11 usa 8 em menu e 12 em janela, então isso encaixa sem parecer estrangeiro.
+
+O 8 da última linha não é escolha de estilo: sem `AllowsTransparency` quem
+arredonda a janela é o recorte do DWM, fixo nesse valor. Superfície com raio
+próprio maior deixa uma lasca do fundo da janela aparecendo entre a curva dela
+e o corte do sistema — foi por isso que a pílula do HUD deixou de ser pílula.
+Onde o sistema não recorta — Windows 10 —, a superfície acompanha e fica de
+cantos vivos.
 
 | Elemento | Tamanho |
 |---|---|

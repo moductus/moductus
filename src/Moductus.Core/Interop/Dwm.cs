@@ -39,10 +39,6 @@ public static class Dwm
         }
     }
 
-    /// <summary>
-    /// Cantos arredondados pelo DWM (Win11). Sem transparência de janela, que
-    /// custa GPU: o DWM recorta a região e a borda do conteúdo acompanha.
-    /// </summary>
     /// <summary>Material que o DWM pinta atrás da janela.</summary>
     public enum Backdrop
     {
@@ -90,10 +86,34 @@ public static class Dwm
         return hr.Succeeded;
     }
 
-    public static unsafe void RoundCorners(nint window)
+    /// <summary>
+    /// Cantos arredondados pelo DWM (Win11). Sem transparência de janela, que
+    /// custa GPU: o DWM recorta a região e a borda do conteúdo acompanha.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Devolve <c>false</c> quando o sistema não conhece o atributo — Windows
+    /// 10 e build do 11 anterior ao 22000 —, e aí o HWND continua sendo um
+    /// retângulo vivo. <b>Quem chama precisa respeitar o retorno:</b> superfície
+    /// arredondada dentro de janela quadrada deixa o fundo da janela aparecendo
+    /// nos quatro cantos, que é o mesmo defeito ao contrário.
+    /// </para>
+    /// <para>
+    /// O raio é do sistema e não se escolhe: <c>ROUND</c> recorta em 8px. Por
+    /// isso o token <c>radius.clip</c> existe e vale 8 — a superfície de dentro
+    /// copia o raio do recorte em vez de brigar com ele.
+    /// </para>
+    /// </remarks>
+    public static unsafe bool RoundCorners(nint window)
     {
         var preferencia = DWM_WINDOW_CORNER_PREFERENCE.DWMWCP_ROUND;
-        PInvoke.DwmSetWindowAttribute((HWND)window, DWMWINDOWATTRIBUTE.DWMWA_WINDOW_CORNER_PREFERENCE, &preferencia, sizeof(DWM_WINDOW_CORNER_PREFERENCE));
+        var hr = PInvoke.DwmSetWindowAttribute(
+            (HWND)window,
+            DWMWINDOWATTRIBUTE.DWMWA_WINDOW_CORNER_PREFERENCE,
+            &preferencia,
+            sizeof(DWM_WINDOW_CORNER_PREFERENCE));
+
+        return hr.Succeeded;
     }
 
     /// <summary>Devolve a barra de título ao sistema — usado no alto contraste.</summary>

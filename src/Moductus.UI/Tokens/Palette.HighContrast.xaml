@@ -12,6 +12,14 @@
     <SolidColorBrush x:Key="bg.base" Color="{x:Static SystemColors.WindowColor}" />
     <SolidColorBrush x:Key="bg.raised" Color="{x:Static SystemColors.ControlColor}" />
     <SolidColorBrush x:Key="bg.hover" Color="{x:Static SystemColors.HighlightColor}" />
+    <!-- Os dois "tint" são o fundo de quando o DWM aceita pintar material atrás
+         da janela. Em alto contraste não há translucidez que valha: quem ligou
+         o modo pediu contraste máximo, e fundo meio transparente sobre Acrylic
+         apaga o texto. Por isso são opacos, iguais aos de cima. Precisam existir
+         aqui de todo jeito — sem a chave o DynamicResource não resolve, o Border
+         fica sem fundo nenhum e a superfície some, sem erro nenhum. -->
+    <SolidColorBrush x:Key="bg.base.tint" Color="{x:Static SystemColors.WindowColor}" />
+    <SolidColorBrush x:Key="bg.raised.tint" Color="{x:Static SystemColors.ControlColor}" />
     <SolidColorBrush x:Key="border.subtle" Color="{x:Static SystemColors.ActiveBorderColor}" />
     <SolidColorBrush x:Key="border.strong" Color="{x:Static SystemColors.WindowFrameColor}" />
     <SolidColorBrush x:Key="text.primary" Color="{x:Static SystemColors.WindowTextColor}" />

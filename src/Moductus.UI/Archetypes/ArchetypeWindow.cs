@@ -85,6 +85,41 @@ public abstract class ArchetypeWindow : Window
     /// <summary>Chave do fundo quando o material está no ar.</summary>
     protected virtual string FundoTranslucido => "bg.base.tint";
 
+    /// <summary>
+    /// O DWM aceitou o pedido de recortar os cantos deste HWND? No Windows 10 e
+    /// em build do 11 anterior ao 22000 o atributo não existe, o pedido é
+    /// recusado, e a janela continua retangular por mais que o conteúdo seja
+    /// arredondado.
+    /// </summary>
+    /// <remarks>
+    /// Aceitar o atributo não é o mesmo que ter recortado: a API responde pelo
+    /// pedido, não pelo resultado, e não existe atributo para perguntar ao DWM
+    /// se ele de fato arredondou. Isto detecta com certeza a <b>ausência</b> do
+    /// recurso; a presença fica no melhor palpite que o sistema oferece.
+    /// </remarks>
+    protected bool CantosNativos { get; private set; }
+
+    /// <summary>
+    /// O DWM aceitou pintar material atrás desta janela? Falso quando o
+    /// arquétipo não pede material e quando o sistema recusa — e aí a janela
+    /// continua opaca, de propósito.
+    /// </summary>
+    protected bool MaterialAtivo { get; private set; }
+
+    /// <summary>
+    /// Chave do raio para a superfície que encosta na borda da janela.
+    /// </summary>
+    /// <remarks>
+    /// Sem <c>AllowsTransparency</c> o HWND não tem alfa por pixel: quem
+    /// arredonda a janela é o recorte do DWM, num raio fixo que não se escolhe.
+    /// Border com raio maior deixa uma lasca do fundo da janela entre a curva
+    /// dele e o corte do sistema; Border arredondado dentro de janela quadrada
+    /// deixa a lasca nos quatro cantos inteiros. Copiar o raio do recorte
+    /// resolve os dois casos, e cair para canto vivo quando não há recorte é o
+    /// que evita a moldura vazando num Windows sem cantos nativos.
+    /// </remarks>
+    protected string RaioDaSuperficie => CantosNativos ? "radius.clip" : "radius.clip.none";
+
     /// <summary>O que o módulo coloca dentro do arquétipo.</summary>
     public object? SlotContent
     {
@@ -236,8 +271,18 @@ public abstract class ArchetypeWindow : Window
             WindowStyles.MakeNoActivate(Handle);
         }
 
-        Dwm.RoundCorners(Handle);
+        CantosNativos = Dwm.RoundCorners(Handle);
         AplicarMaterial();
+        OnSuperficieDecidida();
+    }
+
+    /// <summary>
+    /// Depois de saber se o DWM deu material e se recortou os cantos. É onde a
+    /// superfície acerta o próprio raio com <see cref="RaioDaSuperficie"/>;
+    /// antes disto não há resposta do sistema para acertar com.
+    /// </summary>
+    protected virtual void OnSuperficieDecidida()
+    {
     }
 
     /// <summary>
@@ -257,6 +302,8 @@ public abstract class ArchetypeWindow : Window
         {
             return;
         }
+
+        MaterialAtivo = true;
 
         // A janela precisa parar de pintar o próprio fundo para o material
         // aparecer; a tinta vai no Border, que é quem desenha o conteúdo.
