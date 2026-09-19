@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Moductus.Core.Hotkeys;
 using Moductus.Core.Startup;
+using Moductus.Core.Theme;
 using Moductus.UI;
 
 namespace Moductus.App;
@@ -44,6 +45,10 @@ public partial class SettingsWindow : Window
         LiderDetalhe.Text = lider.Active
             ? "Clique no campo e pressione a combinação nova."
             : $"Em conflito: {lider.ConflictDetail}. Clique no campo e pressione outra combinação.";
+
+        OpacidadeCampo.Text = _model.Opacidade().ToString();
+        OpacidadeDetalhe.Text =
+            $"De {Opacidade.Minimo} a {Opacidade.Maximo}. Vale para a pastilha e para o Panel, e só onde o Windows aceita pintar material atrás da janela.";
 
         var estado = _model.Autostart.State;
 
@@ -156,6 +161,29 @@ public partial class SettingsWindow : Window
         AjusteCorpo.Content = null;
         AjusteCartao.Visibility = Visibility.Collapsed;
         _ajusteAberto = null;
+    }
+
+    private void OnOpacidadeLostFocus(object sender, RoutedEventArgs e) => GravarOpacidade();
+
+    // Enter aplica sem obrigar a sair do campo; Esc continua fechando a janela.
+    private void OnOpacidadeKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            GravarOpacidade();
+        }
+    }
+
+    /// <summary>
+    /// Grava no que sair do campo, não a cada tecla: "2" a caminho de "20" não
+    /// pode virar opacidade gravada. O que não for número volta ao valor em
+    /// vigor, e o <see cref="Refresh"/> devolve o valor já preso à faixa.
+    /// </summary>
+    private void GravarOpacidade()
+    {
+        _model.SetOpacidade(int.TryParse(OpacidadeCampo.Text, out var n) ? n : _model.Opacidade());
+        Refresh();
     }
 
     private void OnLiderKeyDown(object sender, KeyEventArgs e)

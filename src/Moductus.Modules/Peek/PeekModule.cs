@@ -6,6 +6,10 @@ using Moductus.Core.Modules;
 using Moductus.UI.Archetypes;
 using Moductus.UI.Modules;
 
+// A faixa e a conversão para alfa são do Core: a mesma escala serve à
+// miniatura do DWM e às superfícies do host.
+using static Moductus.Core.Theme.Opacidade;
+
 namespace Moductus.Modules.Peek;
 
 /// <summary>
@@ -17,7 +21,7 @@ public sealed class PeekModule(ModuleContext context) : IModule
     private const string ChaveOpacidade = "opacity";
     private const string ChaveFixado = "startPinned";
 
-    private const int OpacidadePadrao = 100;
+    private const int OpacidadePadrao = Padrao;
 
     private readonly Border _area = new() { Background = Brushes.Transparent };
     private readonly TextBlock _legenda = new();
@@ -183,7 +187,7 @@ public sealed class PeekModule(ModuleContext context) : IModule
         var x = origem.X * escala + (areaW - w) / 2;
         var y = origem.Y * escala + (areaH - h) / 2;
 
-        _thumbnail.Update((int)x, (int)y, (int)(x + w), (int)(y + h));
+        _thumbnail.Update((int)x, (int)y, (int)(x + w), (int)(y + h), Alfa(Opacidade));
     }
 
     private void SoltarAoFechar()
@@ -219,13 +223,11 @@ public sealed class PeekModule(ModuleContext context) : IModule
 
     // ---- Configuração ---------------------------------------------------------
 
-    private static int Faixa(int valor) => Math.Clamp(valor, 20, 100);
-
     public UserControl? BuildSettings()
     {
         var corpo = new StackPanel();
 
-        corpo.Children.Add(Campo("Opacidade", "de 20 a 100; abaixo de 100 a miniatura deixa ver o que está atrás", ChaveOpacidade));
+        corpo.Children.Add(Campo("Opacidade", $"de {Minimo} a {Maximo}; abaixo de {Maximo} a miniatura deixa ver o que está atrás", ChaveOpacidade));
 
         var fixado = new CheckBox { Content = "Abrir já fixado", IsChecked = AbrirFixado };
         fixado.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
@@ -234,7 +236,7 @@ public sealed class PeekModule(ModuleContext context) : IModule
         corpo.Children.Add(fixado);
 
         corpo.Children.Add(SettingsUI.Note("Fixado, a miniatura não fecha quando o atalho é repetido — é o que serve para acompanhar um build."));
-        corpo.Children.Add(SettingsUI.Note("As duas opções ficam gravadas, mas ainda não valem: a opacidade da miniatura e o estado do alfinete do Panel são decididos fora do módulo."));
+        corpo.Children.Add(SettingsUI.Note("\"Abrir já fixado\" fica gravado, mas ainda não vale: o estado do alfinete do Panel é decidido fora do módulo."));
 
         return new UserControl { Content = corpo };
     }
@@ -259,6 +261,10 @@ public sealed class PeekModule(ModuleContext context) : IModule
     {
         context.ConfigScope(Id)[chave] = valor;
         context.SaveConfig();
+
+        // Com a miniatura no ar, a opacidade nova vale agora: o DWM só relê o
+        // struct quando alguém o reenvia.
+        Reposicionar();
     }
 
     private void Gravar(string chave, bool valor)

@@ -35,7 +35,17 @@ public sealed class DwmThumbnail : IDisposable
         return (tamanho.cx, tamanho.cy);
     }
 
-    public void Update(int left, int top, int right, int bottom, bool visible = true)
+    /// <summary>
+    /// Move a miniatura e diz com quanta tinta desenhá-la.
+    /// </summary>
+    /// <remarks>
+    /// A opacidade vem por parâmetro porque nenhuma outra tem como chegar
+    /// aqui: o DWM pinta por cima do HWND, fora da árvore visual do WPF, e
+    /// opacidade de elemento ou de pincel não alcança um pixel que não é
+    /// nosso. Este campo do struct é o único lugar onde ela existe.
+    /// </remarks>
+    /// <param name="opacity">0 é invisível, 255 é a origem intacta.</param>
+    public void Update(int left, int top, int right, int bottom, byte opacity, bool visible = true)
     {
         var props = new DWM_THUMBNAIL_PROPERTIES
         {
@@ -43,7 +53,7 @@ public sealed class DwmThumbnail : IDisposable
             rcDestination = new RECT { left = left, top = top, right = right, bottom = bottom },
             fVisible = visible,
             fSourceClientAreaOnly = true,
-            opacity = 255,
+            opacity = opacity,
         };
 
         PInvoke.DwmUpdateThumbnailProperties(_id, in props);

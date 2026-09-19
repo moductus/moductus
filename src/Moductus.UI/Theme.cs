@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Media;
 using Moductus.Core.Interop;
 using Moductus.Core.Theme;
 
@@ -12,10 +13,17 @@ namespace Moductus.UI;
 /// sistema: claro, escuro, alto contraste e animações reduzidas.
 /// </summary>
 /// <remarks>
-/// A estrutura (tipografia, espaço, raio) é carregada uma vez. Só dois
-/// dicionários são trocados em tempo de execução — a paleta e o movimento —
-/// e todo consumidor usa <c>DynamicResource</c>, então a troca propaga sem
-/// reconstruir janela nenhuma.
+/// <para>
+/// A estrutura (tipografia, espaço, raio) é carregada uma vez. Só três
+/// dicionários são trocados em tempo de execução — a paleta, o movimento e os
+/// pincéis ajustáveis — e todo consumidor usa <c>DynamicResource</c>, então a
+/// troca propaga sem reconstruir janela nenhuma.
+/// </para>
+/// <para>
+/// É essa propagação que faz a opacidade das superfícies valer na hora: não
+/// existe observador de configuração neste app, e empurrar o valor para cada
+/// janela viva alcançaria as de agora e esqueceria as de depois.
+/// </para>
 /// </remarks>
 public sealed class Theme : IDisposable
 {
@@ -33,6 +41,7 @@ public sealed class Theme : IDisposable
 
     private ResourceDictionary? _paleta;
     private ResourceDictionary? _motion;
+    private ResourceDictionary? _tinta;
 
     public Theme(ISystemThemeSource source, MessageWindow messages, ResourceDictionary target)
     {
@@ -54,6 +63,15 @@ public sealed class Theme : IDisposable
 
     public bool ReducedMotion { get; private set; }
 
+    /// <summary>
+    /// Quanto das superfícies que ficam na tela — a pastilha e o Panel — se
+    /// pinta, em porcentagem do que a paleta já define. Só tem efeito onde o
+    /// DWM aceitou pintar material atrás da janela: sem material a superfície
+    /// continua opaca de propósito, senão sobraria o fundo da própria janela
+    /// aparecendo por baixo.
+    /// </summary>
+    public int Opacity { get; private set; } = Opacidade.Padrao;
+
     /// <summary>Disparado depois que a paleta ou o movimento mudam.</summary>
     public event Action? Changed;
 
@@ -71,6 +89,10 @@ public sealed class Theme : IDisposable
         {
             Swap(ref _paleta, new ResourceDictionary { Source = PaletaDe(mode) });
             Mode = mode;
+
+            // Os pincéis ajustáveis saem das cores da paleta: paleta nova,
+            // pincéis novos.
+            Tingir();
             mudou = true;
         }
 
@@ -85,6 +107,71 @@ public sealed class Theme : IDisposable
         {
             Changed?.Invoke();
         }
+    }
+
+    /// <summary>
+    /// Troca a opacidade das superfícies que ficam. Aplica de imediato nas
+    /// janelas já abertas e nas que ainda vão nascer, porque quem muda é o
+    /// recurso, não a instância.
+    /// </summary>
+    public void ApplyOpacity(int porcento)
+    {
+        porcento = Opacidade.Faixa(porcento);
+
+        if (porcento == Opacity && _tinta is not null)
+        {
+            return;
+        }
+
+        Opacity = porcento;
+        Tingir();
+    }
+
+    /// <summary>
+    /// Reconstrói os pincéis que dependem da opacidade escolhida, a partir das
+    /// cores da paleta em vigor.
+    /// </summary>
+    /// <remarks>
+    /// A transparência vai no canal alfa do pincel, nunca em
+    /// <see cref="UIElement.Opacity"/>: aquela cascateia para a árvore inteira
+    /// e levaria junto o texto, a dica, o glifo e o ponto colorido. E nunca em
+    /// <c>Window.Opacity</c> ou <c>AllowsTransparency</c>, que ligam
+    /// <c>WS_EX_LAYERED</c> e custam a sombra, os cantos e o material — o
+    /// motivo está escrito em <see cref="Dwm"/>.
+    /// </remarks>
+    private void Tingir()
+    {
+        if (_paleta is null)
+        {
+            return;
+        }
+
+        // Alto contraste não se dilui: lá os dois "tint" são cores opacas do
+        // sistema, e deixar ver o desktop através delas desfaz exatamente o
+        // contraste que a pessoa pediu.
+        var porcento = Mode == ThemeMode.HighContrast ? Opacidade.Maximo : Opacity;
+
+        var baseTint = Cor("bg.base.tint");
+        var raisedTint = Cor("bg.raised.tint");
+
+        Swap(ref _tinta, new ResourceDictionary
+        {
+            ["bg.base.tint.ajustada"] = Pincel(baseTint, baseTint.A, porcento),
+            ["bg.raised.tint.ajustada"] = Pincel(raisedTint, raisedTint.A, porcento),
+
+            // O hover da paleta é opaco. Sem um par ajustado, o primeiro passe
+            // do mouse devolveria a pastilha ao opaco e comeria a opacidade.
+            ["bg.hover.tint.ajustada"] = Pincel(Cor("bg.hover"), raisedTint.A, porcento),
+        });
+    }
+
+    private Color Cor(string chave) => ((SolidColorBrush)_paleta![chave]).Color;
+
+    private static SolidColorBrush Pincel(Color cor, byte referencia, int porcento)
+    {
+        var pincel = new SolidColorBrush(Color.FromArgb(Opacidade.Alfa(referencia, porcento), cor.R, cor.G, cor.B));
+        pincel.Freeze();
+        return pincel;
     }
 
     private static Uri PaletaDe(ThemeMode mode) => new(Pacote + mode switch

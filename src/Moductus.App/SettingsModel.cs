@@ -17,6 +17,8 @@ internal sealed record SettingsModel(
     string? ConfigWarning,
     Func<HotkeyRegistration> Leader,
     Func<HotkeyBinding, HotkeyRegistration> RebindLeader,
+    Func<int> Opacidade,
+    Action<int> SetOpacidade,
     IReadOnlyList<IModule> Modules,
     Func<string, bool> IsModuleEnabled,
     Action<string, bool> SetModuleEnabled);

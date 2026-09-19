@@ -39,6 +39,7 @@ public class PanelWindow : OwnedWindow
 {
     private readonly TextBlock _heading = new();
     private readonly ToggleButton _pin = new();
+    private DockPanel? _cabecalho;
     private PanelPlacement _placement;
     private bool _placed;
 
@@ -129,6 +130,12 @@ public class PanelWindow : OwnedWindow
     /// </summary>
     protected override Dwm.Backdrop Material => Dwm.Backdrop.Mica;
 
+    /// <summary>
+    /// O Panel é uma das duas superfícies que ficam na tela, então o fundo
+    /// dele obedece à opacidade que a pessoa escolheu nas configurações.
+    /// </summary>
+    protected override string FundoTranslucido => "bg.base.tint.ajustada";
+
     protected override FrameworkElement BuildChrome(ContentPresenter slot)
     {
         _heading.SetResourceReference(TextBlock.FontWeightProperty, "weight.semibold");
@@ -157,6 +164,8 @@ public class PanelWindow : OwnedWindow
         acoes.Children.Add(fechar);
 
         var cabecalho = new DockPanel { LastChildFill = true };
+        _cabecalho = cabecalho;
+
         // A barra é mais alta que os botões de propósito: com a mesma altura
         // eles encostam nas duas bordas e a barra parece achatada.
         cabecalho.SetResourceReference(FrameworkElement.HeightProperty, "size.titlebar");
@@ -179,6 +188,19 @@ public class PanelWindow : OwnedWindow
         corpo.Children.Add(slot);
 
         return base.BuildChrome(new ContentPresenter { Content = corpo });
+    }
+
+    /// <summary>
+    /// A barra de título tem fundo próprio, mais fechado que o corpo. Sem um
+    /// par translúcido ela ficaria opaca sobre um corpo que deixa ver o que
+    /// está atrás, e o painel sairia bicolor.
+    /// </summary>
+    protected override void OnSuperficieDecidida()
+    {
+        if (MaterialAtivo)
+        {
+            _cabecalho?.SetResourceReference(Panel.BackgroundProperty, "bg.raised.tint.ajustada");
+        }
     }
 
     protected override void Place(MonitorArea a)
