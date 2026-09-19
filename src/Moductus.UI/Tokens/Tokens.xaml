@@ -205,6 +205,14 @@
     <!-- Altura do overlay da tecla líder: cabe a grade dos doze módulos. -->
     <sys:Double x:Key="size.leader.height">200</sys:Double>
 
+    <!-- Prazo do overlay da tecla líder antes de devolver o foco sozinho. Não é
+         animação, é tempo de leitura: nove segundos é o que mede varrer a grade
+         dos doze módulos sem ter as letras decoradas. Por isso mora aqui e não
+         em Motion.*.xaml — ler não depende de o usuário ter desligado efeitos,
+         e com o dicionário reduzido a chave iria a zero e o overlay sumiria
+         antes de aparecer. -->
+    <Duration x:Key="motion.leader.timeout">0:0:9</Duration>
+
     <!-- Elevação é só isto: borda de 1px em border.strong mais uma sombra suave.
          Nunca empilhar sombras. -->
     <Thickness x:Key="border.width">1</Thickness>
