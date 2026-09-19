@@ -76,6 +76,12 @@
     <Thickness x:Key="inset.16">16</Thickness>
     <Thickness x:Key="inset.24">24</Thickness>
     <Thickness x:Key="inset.input">12,0</Thickness>
+    <!-- O WPF reserva 2px de cada lado do texto de um campo para o cursor
+         caber quando ele está na primeira ou na última posição. Esse recuo
+         nasce dentro do content host e não dá para desligar: é a dica, que
+         fica por fora dele, que precisa somá-lo ao recuo do campo para partir
+         do mesmo ponto que o texto digitado. -->
+    <Thickness x:Key="inset.caret">2,0</Thickness>
     <Thickness x:Key="inset.button">16,0</Thickness>
     <Thickness x:Key="inset.button.compact">12,0</Thickness>
     <!-- Linha de lista: o vão vertical é o que separa item de duas linhas do
