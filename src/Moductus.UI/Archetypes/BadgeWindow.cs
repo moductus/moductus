@@ -1,7 +1,9 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using Moductus.Core.Interop;
@@ -66,10 +68,33 @@ public sealed record BadgeAction(string Rotulo, string? Dica, Action Executar);
 /// Não rouba foco nem entra no Alt+Tab. Clique funciona mesmo sem ativação,
 /// que é o ponto de <c>WS_EX_NOACTIVATE</c>.
 /// </para>
+/// <para>
+/// <b>Arrastar move a pilha, não a pastilha.</b> O canto inferior direito é
+/// disputado — bandeja, notificação do Windows, o conteúdo do que estiver
+/// aberto — e quem arrasta uma pastilha leva o bloco inteiro junto, porque o
+/// que o gesto move é a âncora de <see cref="BadgeStack"/>. Fosse posição por
+/// pastilha, arrastar uma desmontaria o empilhamento das outras.
+/// </para>
+/// <para>
+/// A posição arrastada vale enquanto houver pastilha no ar e enquanto o
+/// processo viver, como o Panel — é o mesmo dilema da decisão em aberto nº 1 do
+/// <c>ARCHITECTURE.md</c>, e resolver metade dela dentro de um arquétipo seria
+/// decidir por fora. Soltar a última devolve o canto padrão: a pastilha
+/// acompanha um estado que acaba, não é superfície que se reabre.
+/// </para>
 /// </remarks>
 public class BadgeWindow : ArchetypeWindow
 {
     private readonly List<PastilhaWindow> _pastilhas = [];
+
+    /// <summary>Onde a pessoa largou a pilha. Nulo é o canto padrão.</summary>
+    private BadgeAnchor? _ancora;
+
+    /// <summary>A âncora que valeu no último posicionamento, já presa na área de trabalho.</summary>
+    private BadgeAnchor _valendo;
+
+    /// <summary>A âncora de quando o arrasto começou. O deslocamento do cursor soma nela.</summary>
+    private BadgeAnchor _aoPressionar;
 
     public BadgeWindow() : base(stealsFocus: false)
     {
@@ -119,6 +144,8 @@ public class BadgeWindow : ArchetypeWindow
             Prewarm();
 
             pastilha = new PastilhaWindow(owner) { Owner = this };
+            pastilha.ArrastoComecou += AoComecarArrasto;
+            pastilha.Arrastou += AoArrastar;
 
             // Cria o HWND e paga a primeira renderização antes de qualquer
             // conta de posição: sem isso ActualWidth vem zero e a pilha sai
@@ -144,6 +171,14 @@ public class BadgeWindow : ArchetypeWindow
 
         _pastilhas.Remove(pastilha);
 
+        if (_pastilhas.Count == 0)
+        {
+            // A posição arrastada vale enquanto houver pastilha no ar. Esvaziou,
+            // a próxima nasce no canto de novo — senão uma escolha de dez
+            // segundos atrás decidiria onde aparece o aviso de amanhã.
+            _ancora = null;
+        }
+
         // Some agora, some para valer depois. Soltar quase sempre vem de um
         // clique na própria pastilha — é o gesto que o arquétipo existe para
         // oferecer —, e destruir o HWND no meio do roteamento do evento dele
@@ -167,6 +202,13 @@ public class BadgeWindow : ArchetypeWindow
     /// contando —, e por isso só mexe na janela cujo retângulo mudou de fato:
     /// reposicionar as N a cada tique fazia a pilha tremer.
     /// </summary>
+    /// <remarks>
+    /// É também o que impede o tique de desfazer o arrasto, sem precisar do
+    /// <c>_placed</c> do Panel: a âncora é a mesma de antes, a conta devolve os
+    /// mesmos retângulos, e <c>Mover</c> não encosta em janela nenhuma. Guardar
+    /// a âncora, e não "já posicionei uma vez", é o que deixa a pilha continuar
+    /// acompanhando pastilha que entra, sai ou muda de largura.
+    /// </remarks>
     private void Reposicionar()
     {
         if (_pastilhas.Count == 0)
@@ -174,7 +216,7 @@ public class BadgeWindow : ArchetypeWindow
             return;
         }
 
-        var area = Monitors.Around(ForegroundWindow.Capture());
+        var area = AreaDaPilha();
 
         var tamanhos = new BadgeSize[_pastilhas.Count];
         for (var i = 0; i < _pastilhas.Count; i++)
@@ -182,16 +224,56 @@ public class BadgeWindow : ArchetypeWindow
             tamanhos[i] = _pastilhas[i].Medir(area);
         }
 
-        var lugares = BadgeStack.Empilhar(
-            area,
-            tamanhos,
-            folga: area.Px(Token("space.16")),
-            vao: area.Px(Token("space.8")));
+        var folga = area.Px(Token("space.16"));
+        var vao = area.Px(Token("space.8"));
+
+        _valendo = BadgeStack.Ancorar(area, _ancora, BadgeStack.Bloco(tamanhos, vao), folga);
+
+        var lugares = BadgeStack.Empilhar(area, tamanhos, folga, vao, _valendo);
 
         for (var i = 0; i < _pastilhas.Count; i++)
         {
             _pastilhas[i].Mover(area, lugares[i]);
         }
+    }
+
+    /// <summary>
+    /// Em que monitor a pilha mora: no da âncora, quando foi arrastada, e no da
+    /// janela em foreground quando não.
+    /// </summary>
+    /// <remarks>
+    /// Depois de arrastada a pilha deixa de seguir o foreground — senão mudar
+    /// de janela a puxaria de volta para o outro monitor e o arrasto não teria
+    /// valido de nada. Se o monitor onde ela foi largada não existe mais, a
+    /// âncora é descartada aqui, e não nas contas: só o Win32 sabe quais
+    /// monitores existem agora.
+    /// </remarks>
+    private MonitorArea AreaDaPilha()
+    {
+        if (_ancora is { } largada)
+        {
+            if (Monitors.Containing(largada.Right, largada.Bottom) is { } monitor)
+            {
+                return monitor;
+            }
+
+            _ancora = null;
+        }
+
+        return Monitors.Around(ForegroundWindow.Capture());
+    }
+
+    /// <summary>O arrasto parte de onde a pilha estava, não de onde a pessoa clicou.</summary>
+    private void AoComecarArrasto() => _aoPressionar = _valendo;
+
+    /// <summary>
+    /// Move a âncora junto com o cursor. A pilha inteira acompanha, com o vão
+    /// intacto, porque é dela que todas as pastilhas pendem.
+    /// </summary>
+    private void AoArrastar(int dx, int dy)
+    {
+        _ancora = new BadgeAnchor(_aoPressionar.Right + dx, _aoPressionar.Bottom + dy);
+        Reposicionar();
     }
 
     /// <summary>Esta janela não tem moldura: o slot fica vazio e nada é pintado.</summary>
@@ -212,6 +294,7 @@ public class BadgeWindow : ArchetypeWindow
         }
 
         _pastilhas.Clear();
+        _ancora = null;
         base.OnClosed(e);
     }
 
@@ -231,7 +314,18 @@ public class BadgeWindow : ArchetypeWindow
         private BadgeSpot _lugar;
         private string _fundo = "bg.raised";
 
+        private MonitorArea _area;
+        private (int X, int Y) _origem;
+        private bool _pressionada;
+        private bool _arrastando;
+
         public PastilhaWindow(string dono) : base(stealsFocus: false) => Dono = dono;
+
+        /// <summary>O limiar de arrasto foi vencido. Quem empilha guarda de onde a pilha partiu.</summary>
+        public event Action? ArrastoComecou;
+
+        /// <summary>Quanto o cursor andou desde que foi pressionado, em pixels físicos.</summary>
+        public event Action<int, int>? Arrastou;
 
         /// <summary>Id do módulo que fixou esta pastilha.</summary>
         public string Dono { get; }
@@ -254,6 +348,10 @@ public class BadgeWindow : ArchetypeWindow
         /// <summary>Coloca no lugar calculado, e só se ele tiver mudado.</summary>
         public void Mover(MonitorArea a, BadgeSpot lugar)
         {
+            // Guardado mesmo quando nada se move: é a escala deste monitor que
+            // converte o limiar de arrasto do Windows, que vem em DIP.
+            _area = a;
+
             if (_lugar == lugar && IsVisible)
             {
                 return;
@@ -337,6 +435,8 @@ public class BadgeWindow : ArchetypeWindow
                 _aoClicar?.Invoke();
             };
 
+            LigarArrasto(_moldura);
+
             _moldura.MouseEnter += (_, _) => _moldura.SetResourceReference(Border.BackgroundProperty, "bg.hover");
             _moldura.MouseLeave += (_, _) => _moldura.SetResourceReference(Border.BackgroundProperty, _fundo);
 
@@ -360,6 +460,141 @@ public class BadgeWindow : ArchetypeWindow
 
         protected override void Place(MonitorArea a) =>
             PlacePhysical(a, _lugar.X, _lugar.Y, _lugar.Width, _lugar.Height);
+
+        /// <summary>
+        /// O corpo inteiro arrasta, sem alça: a pastilha é pequena demais para
+        /// reservar um pedaço dela a um gesto.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// O que separa arrasto de clique é o limiar do próprio Windows —
+        /// <see cref="SystemParameters.MinimumHorizontalDragDistance"/> e a
+        /// vertical —, e não um número escolhido aqui: é o mesmo limiar que
+        /// decide o gesto em toda lista do Explorer, e a mão já o conhece.
+        /// Abaixo dele o gesto continua sendo clique, e o corpo desfaz o estado
+        /// como sempre.
+        /// </para>
+        /// <para>
+        /// <b>Por que não <c>DragMove</c>.</b> Ele funciona nesta janela — o
+        /// <c>WS_EX_NOACTIVATE</c> não o impede, e ele não rouba foco, o que foi
+        /// medido antes de decidir. Mas ele entra no laço modal de
+        /// <c>SC_MOVE</c> do sistema, e de lá dentro dois problemas não têm
+        /// conserto: o laço move só o HWND dele, então as irmãs ficariam para
+        /// trás e o empilhamento se desmontaria durante o gesto; e a subida do
+        /// botão ainda chega como <c>MouseLeftButtonUp</c> depois que ele
+        /// retorna, ou seja, arrastar dispararia a ação do corpo. Capturar o
+        /// mouse e mover a âncora resolve os dois, e ainda deixa prender a
+        /// pilha na área de trabalho enquanto ela anda, em vez de dar um pulo
+        /// no fim.
+        /// </para>
+        /// <para>
+        /// <b>A captura na descida, menos em cima de botão.</b> Sem capturar
+        /// logo, um puxão rápido sai da pastilha antes do limiar e o arrasto
+        /// nunca começa — o movimento deixa de chegar assim que o cursor passa
+        /// da borda. Capturando sempre, porém, os botões de ação morrem: o
+        /// <c>ButtonBase</c> não se arma quando a captura já é de um ancestral,
+        /// e o clique em "Pausar" simplesmente não acontece. Ambos foram
+        /// medidos, não deduzidos. A saída é não tomar a captura quando a
+        /// descida é num botão: lá a captura é dele, e os eventos de túnel
+        /// continuam passando por aqui do mesmo jeito, então o arrasto que
+        /// começa em cima de um botão funciona igual.
+        /// </para>
+        /// </remarks>
+        private void LigarArrasto(Border moldura)
+        {
+            moldura.PreviewMouseLeftButtonDown += (_, e) =>
+            {
+                _origem = Monitors.Cursor();
+                _pressionada = true;
+                _arrastando = false;
+
+                if (!EstaEmBotao(e.OriginalSource as DependencyObject))
+                {
+                    moldura.CaptureMouse();
+                }
+            };
+
+            moldura.PreviewMouseMove += (_, _) =>
+            {
+                if (!_pressionada)
+                {
+                    return;
+                }
+
+                var (x, y) = Monitors.Cursor();
+                var dx = x - _origem.X;
+                var dy = y - _origem.Y;
+
+                if (!_arrastando)
+                {
+                    if (Math.Abs(dx) < _area.Px(SystemParameters.MinimumHorizontalDragDistance)
+                        && Math.Abs(dy) < _area.Px(SystemParameters.MinimumVerticalDragDistance))
+                    {
+                        return;
+                    }
+
+                    _arrastando = true;
+
+                    // Avisar antes de capturar não é preciosismo de ordem.
+                    // CaptureMouse entrega um movimento na hora, ainda dentro
+                    // desta chamada, e esse movimento reentra aqui já com
+                    // _arrastando ligado: se a pilha ainda não soubesse de onde
+                    // o gesto partiu, ela partiria da âncora antiga e a pastilha
+                    // daria um pulo para o canto no primeiro pixel.
+                    ArrastoComecou?.Invoke();
+
+                    // Tira a captura de quem a tiver — o botão de ação, se o
+                    // gesto começou em cima de um. Sem captura o ButtonBase
+                    // larga o IsPressed e não dispara Click na subida.
+                    moldura.CaptureMouse();
+                }
+
+                Arrastou?.Invoke(dx, dy);
+            };
+
+            moldura.PreviewMouseLeftButtonUp += (_, e) =>
+            {
+                if (!_pressionada)
+                {
+                    return;
+                }
+
+                _pressionada = false;
+                moldura.ReleaseMouseCapture();
+
+                if (_arrastando)
+                {
+                    // Arrasto não é clique: nem o corpo desfaz o estado, nem o
+                    // botão debaixo do cursor executa.
+                    e.Handled = true;
+                    _arrastando = false;
+                }
+            };
+        }
+
+        /// <summary>O clique caiu dentro de um botão de ação da pastilha?</summary>
+        /// <remarks>
+        /// Sobe pela árvore visual porque quem é atingido é uma parte do
+        /// template do botão — um <c>ContentPresenter</c>, um <c>TextBlock</c>
+        /// —, nunca o botão em si. Sai pela lógica quando o nó não é visual,
+        /// que é o caso de conteúdo de texto em linha.
+        /// </remarks>
+        private static bool EstaEmBotao(DependencyObject? alvo)
+        {
+            for (var no = alvo; no is not null; )
+            {
+                if (no is ButtonBase)
+                {
+                    return true;
+                }
+
+                no = no is Visual or Visual3D
+                    ? VisualTreeHelper.GetParent(no)
+                    : LogicalTreeHelper.GetParent(no);
+            }
+
+            return false;
+        }
 
         /// <summary>
         /// Reaproveita os botões que já estão lá. Recriar a cada tique faria a
