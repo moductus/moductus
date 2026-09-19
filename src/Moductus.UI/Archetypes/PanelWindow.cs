@@ -192,14 +192,20 @@ public class PanelWindow : OwnedWindow
 
     /// <summary>
     /// A barra de título tem fundo próprio, mais fechado que o corpo. Sem um
-    /// par translúcido ela ficaria opaca sobre um corpo que deixa ver o que
-    /// está atrás, e o painel sairia bicolor.
+    /// par que dilua junto, ela ficaria opaca sobre um corpo que deixa ver o
+    /// que está atrás, e o painel sairia bicolor.
     /// </summary>
+    /// <remarks>
+    /// O pincel ajustado parte do <c>bg.raised</c> opaco, que é o que a barra
+    /// usa quando a opção está no máximo: assim quem nunca mexeu nela continua
+    /// vendo a barra de hoje, e a diferença de fechamento entre barra e corpo
+    /// se mantém na faixa inteira, em vez de só perto do mínimo.
+    /// </remarks>
     protected override void OnSuperficieDecidida()
     {
         if (MaterialAtivo)
         {
-            _cabecalho?.SetResourceReference(Panel.BackgroundProperty, "bg.raised.tint.ajustada");
+            _cabecalho?.SetResourceReference(Panel.BackgroundProperty, "bg.raised.ajustada");
         }
     }
 

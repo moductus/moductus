@@ -153,14 +153,21 @@ public sealed class Theme : IDisposable
 
         var baseTint = Cor("bg.base.tint");
         var raisedTint = Cor("bg.raised.tint");
+        var raised = Cor("bg.raised");
 
         Swap(ref _tinta, new ResourceDictionary
         {
             ["bg.base.tint.ajustada"] = Pincel(baseTint, baseTint.A, porcento),
             ["bg.raised.tint.ajustada"] = Pincel(raisedTint, raisedTint.A, porcento),
 
-            // O hover da paleta é opaco. Sem um par ajustado, o primeiro passe
-            // do mouse devolveria a pastilha ao opaco e comeria a opacidade.
+            // Este parte do pincel opaco, não do "tint": quem o usa — a barra
+            // de título do Panel — usa hoje o opaco, e escalar a partir do
+            // "tint" mudaria a aparência de quem deixou a opção no máximo.
+            ["bg.raised.ajustada"] = Pincel(raised, raised.A, porcento),
+
+            // O hover da paleta é opaco, e a pastilha em repouso não é: hoje
+            // ela pisca fechada ao primeiro passe do mouse. O par ajustado
+            // acerta isso e impede que o hover coma a opacidade escolhida.
             ["bg.hover.tint.ajustada"] = Pincel(Cor("bg.hover"), raisedTint.A, porcento),
         });
     }
