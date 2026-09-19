@@ -313,6 +313,7 @@ public class BadgeWindow : ArchetypeWindow
         private Action? _aoClicar;
         private BadgeSpot _lugar;
         private string _fundo = "bg.raised";
+        private string _hover = "bg.hover";
 
         private MonitorArea _area;
         private (int X, int Y) _origem;
@@ -330,8 +331,12 @@ public class BadgeWindow : ArchetypeWindow
         /// <summary>Id do módulo que fixou esta pastilha.</summary>
         public string Dono { get; }
 
-        /// <summary>A pastilha é a superfície elevada, não o fundo da janela.</summary>
-        protected override string FundoTranslucido => "bg.raised.tint";
+        /// <summary>
+        /// A pastilha é a superfície elevada, não o fundo da janela. E é uma
+        /// das duas que ficam na tela, então o fundo dela obedece à opacidade
+        /// escolhida nas configurações.
+        /// </summary>
+        protected override string FundoTranslucido => "bg.raised.tint.ajustada";
 
         /// <summary>
         /// Mede o cartão em pixels físicos do monitor de destino. Separado do
@@ -437,7 +442,7 @@ public class BadgeWindow : ArchetypeWindow
 
             LigarArrasto(_moldura);
 
-            _moldura.MouseEnter += (_, _) => _moldura.SetResourceReference(Border.BackgroundProperty, "bg.hover");
+            _moldura.MouseEnter += (_, _) => _moldura.SetResourceReference(Border.BackgroundProperty, _hover);
             _moldura.MouseLeave += (_, _) => _moldura.SetResourceReference(Border.BackgroundProperty, _fundo);
 
             return _moldura;
@@ -454,8 +459,11 @@ public class BadgeWindow : ArchetypeWindow
 
             // Com material no ar o fundo em repouso passa a ser o translúcido;
             // senão o MouseLeave devolveria o opaco e a pastilha mudaria de tom
-            // ao primeiro passe do mouse.
+            // ao primeiro passe do mouse. O hover anda junto pelo mesmo motivo:
+            // o pincel opaco da paleta comeria a opacidade escolhida assim que
+            // o mouse encostasse.
             _fundo = MaterialAtivo ? FundoTranslucido : "bg.raised";
+            _hover = MaterialAtivo ? "bg.hover.tint.ajustada" : "bg.hover";
         }
 
         protected override void Place(MonitorArea a) =>

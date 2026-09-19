@@ -32,6 +32,7 @@ internal sealed class Host : IDisposable
     private const string LeaderHotkeyKey = "hotkey";
     private const string EnabledKey = "enabled";
     private const string LeaderLetterKey = "leaderKey";
+    private const string SurfaceOpacityKey = "surfaceOpacity";
     // M de Moductus. Ctrl+Alt+Space era o padrão e colide com o Claude Code —
     // o público-alvo exato. Ver a tabela de combinações a evitar no PRODUCT.md.
     private const uint VkM = 0x4D;
@@ -93,6 +94,7 @@ internal sealed class Host : IDisposable
         // 6. Tokens e tema. Depois do ícone de propósito: carregar XAML não
         //    pertence ao caminho crítico, e nenhuma janela existe ainda.
         _theme = new Theme(sistema, _messages, _app.Resources);
+        _theme.ApplyOpacity(OpacidadeDaConfig());
 
         // Barra de tarefas clara pede mark escuro: o ícone acompanha o tema.
         _theme.Changed += _tray.Invalidate;
@@ -241,6 +243,27 @@ internal sealed class Host : IDisposable
         return _leader;
     }
 
+    // ---- Opacidade das superfícies -----------------------------------------
+
+    /// <summary>
+    /// Vale para a pastilha e para o Panel, e por isso mora na raiz: a
+    /// pastilha não é de módulo nenhum, é superfície do host.
+    /// </summary>
+    private int OpacidadeDaConfig() =>
+        Opacidade.Faixa(_config.Root[SurfaceOpacityKey]?.GetValue<int>() ?? Opacidade.Padrao);
+
+    private void SetOpacidade(int valor)
+    {
+        var novo = Opacidade.Faixa(valor);
+
+        _config.Root[SurfaceOpacityKey] = novo;
+        _config.Save();
+
+        // O tema repinta o que já está na tela trocando o recurso; nenhuma
+        // janela precisa ser avisada, nem reaberta.
+        _theme.ApplyOpacity(novo);
+    }
+
     private void OnLeader()
     {
         _overlay ??= new LeaderOverlay(_letters.TryInvoke);
@@ -286,6 +309,8 @@ internal sealed class Host : IDisposable
         _configWarning,
         Leader: () => _leader,
         RebindLeader: RebindLeader,
+        Opacidade: () => _theme.Opacity,
+        SetOpacidade: SetOpacidade,
         Modules: _modules,
         IsModuleEnabled: id => _enabled.Contains(id),
         SetModuleEnabled: SetModuleEnabled);

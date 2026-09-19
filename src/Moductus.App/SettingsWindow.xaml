@@ -142,6 +142,20 @@
                 </StackPanel>
             </Border>
 
+            <!-- Opacidade das superfícies que ficam na tela: a pastilha e o
+                 Panel. Global porque a pastilha não é de módulo nenhum. -->
+            <TextBlock Text="Opacidade das superfícies" FontWeight="{DynamicResource weight.semibold}" Margin="0,0,0,8" />
+            <TextBox x:Name="OpacidadeCampo"
+                     Width="{DynamicResource size.settings.field}"
+                     HorizontalAlignment="Left"
+                     HorizontalContentAlignment="Right"
+                     LostFocus="OnOpacidadeLostFocus"
+                     PreviewKeyDown="OnOpacidadeKeyDown" />
+            <TextBlock x:Name="OpacidadeDetalhe"
+                       Style="{DynamicResource style.caption}"
+                       TextWrapping="Wrap"
+                       Margin="0,4,0,24" />
+
             <CheckBox x:Name="IniciarComWindows"
                       Content="Iniciar com o Windows"
                       Click="OnAutostartClick" />
