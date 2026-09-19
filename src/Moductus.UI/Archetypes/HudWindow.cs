@@ -36,6 +36,11 @@ public enum HudTone
 /// de duas linhas não podem sumir no mesmo instante — o segundo nem terminou
 /// de ser lido.
 /// </para>
+/// <para>
+/// "Pílula" ficou como nome, não como forma: o raio é o do recorte do DWM, o
+/// único que a janela consegue ter sem <c>AllowsTransparency</c>. Com raio de
+/// pílula sobrava fundo quadrado em volta das duas pontas.
+/// </para>
 /// </remarks>
 public class HudWindow : ArchetypeWindow
 {
@@ -81,12 +86,6 @@ public class HudWindow : ArchetypeWindow
             HudTone.Alerta => "danger",
             _ => "accent",
         });
-
-        // Uma linha fecha em pílula; duas linhas em pílula viram um comprimido
-        // torto, então o raio cai para o de cartão.
-        _pilula?.SetResourceReference(
-            Border.CornerRadiusProperty,
-            _detalhe.Visibility == Visibility.Visible ? "radius.card" : "radius.pill");
 
         _timer.Stop();
         _timer.Interval = Permanencia(titulo, detalhe);
@@ -143,7 +142,14 @@ public class HudWindow : ArchetypeWindow
         _pilula.SetResourceReference(Border.BackgroundProperty, "bg.raised");
         _pilula.SetResourceReference(Border.BorderBrushProperty, "border.strong");
         _pilula.SetResourceReference(Border.BorderThicknessProperty, "border.width");
-        _pilula.SetResourceReference(Border.CornerRadiusProperty, "radius.pill");
+
+        // Não é pílula de raio 999, por mais que o nome tenha ficado: a janela
+        // é do tamanho exato dela e quem arredonda a janela é o recorte do DWM,
+        // em raio fixo. Com 999 as duas pontas ficavam dentro de um retângulo
+        // recortado em 8, e sobrava fundo quadrado em volta das curvas. O raio
+        // certo é o do recorte; OnSuperficieDecidida derruba para canto vivo
+        // onde o sistema nem conhece o atributo de recorte.
+        _pilula.SetResourceReference(Border.CornerRadiusProperty, "radius.clip");
 
         // Sem sombra: a janela é dimensionada exatamente na pílula e não tem
         // AllowsTransparency, então o halo inteiro cairia fora da área cliente.
@@ -152,6 +158,9 @@ public class HudWindow : ArchetypeWindow
 
         return _pilula;
     }
+
+    protected override void OnSuperficieDecidida() =>
+        _pilula?.SetResourceReference(Border.CornerRadiusProperty, RaioDaSuperficie);
 
     protected override void Enter()
     {

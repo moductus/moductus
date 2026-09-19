@@ -3,7 +3,9 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using Moductus.Core.Interop;
+using Moductus.Core.Layout;
 
 namespace Moductus.UI.Archetypes;
 
@@ -31,28 +33,53 @@ public sealed record BadgeAction(string Rotulo, string? Dica, Action Executar);
 /// resolvido por prioridade — e é por isso que os dois existem.
 /// </para>
 /// <para>
+/// <b>Uma janela por pastilha, e esta aqui não desenha nada.</b> Uma janela só,
+/// cobrindo a união das pastilhas, tinha um defeito que nenhuma API resolve:
+/// sem <c>AllowsTransparency</c> o HWND é um retângulo opaco, então o fundo da
+/// janela pintava também o vão entre duas pastilhas e fundia as duas num bloco.
+/// Com um HWND do tamanho exato de cada cartão o vão volta a ser o desktop por
+/// construção, cada pastilha ganha sombra nativa e material do DWM, e o
+/// empilhamento deixa de ser um StackPanel para virar conta de coordenada em
+/// <see cref="BadgeStack"/>.
+/// </para>
+/// <para>
+/// O que sobrou desta janela é ser dona das outras: toda pastilha tem este
+/// HWND como <c>Owner</c>. Ela própria nunca é exibida.
+/// </para>
+/// <para>
+/// <b>O que a posse compra, e o que não compra.</b> Compra destruição em
+/// cascata — fechar esta janela fecha as pastilhas que sobraram, que é o que
+/// garante nenhum HWND vivo depois do <c>Dispose</c> do host — e mantém as
+/// pastilhas juntas na mesma ordem de ativação. <b>Não</b> compra ordem entre
+/// as irmãs: a relação de posse só garante a filha acima da dona, e como a
+/// dona nunca aparece, nada impede uma terceira janela topmost de se intercalar
+/// entre duas pastilhas. Isso é degradação cosmética conhecida, não defeito
+/// funcional, e não há API que a resolva sem tirar as pastilhas do topo.
+/// </para>
+/// <para>
+/// A posse não custa o <c>WS_EX_NOACTIVATE</c>: o <c>Owner</c> do WPF escreve
+/// em <c>GWLP_HWNDPARENT</c>, e os estilos estendidos entram depois, em
+/// <c>SourceInitialized</c>, num índice diferente do mesmo HWND. A dona também
+/// é <c>stealsFocus: false</c>, então nem por ela a ativação volta.
+/// </para>
+/// <para>
 /// Não rouba foco nem entra no Alt+Tab. Clique funciona mesmo sem ativação,
 /// que é o ponto de <c>WS_EX_NOACTIVATE</c>.
 /// </para>
 /// </remarks>
 public class BadgeWindow : ArchetypeWindow
 {
-    private readonly StackPanel _pilha = new();
-    private readonly List<Entrada> _entradas = [];
+    private readonly List<PastilhaWindow> _pastilhas = [];
 
     public BadgeWindow() : base(stealsFocus: false)
     {
     }
 
-    /// <summary>
-    /// Sem material: a janela cobre a união das pastilhas, vãos inclusive, e
-    /// o Acrylic pintaria os vãos também — viraria um bloco borrado em vez de
-    /// pastilhas soltas. Cada pastilha traz o próprio fundo.
-    /// </summary>
+    /// <summary>Sem material: esta janela não aparece, quem aparece são as pastilhas.</summary>
     protected override Dwm.Backdrop Material => Dwm.Backdrop.None;
 
     /// <summary>Há alguma pastilha no ar?</summary>
-    public bool TemAlguma => _entradas.Count > 0;
+    public bool TemAlguma => _pastilhas.Count > 0;
 
     /// <summary>
     /// Mostra ou atualiza a pastilha de um dono. Chamar de novo com o mesmo
@@ -80,110 +107,186 @@ public class BadgeWindow : ArchetypeWindow
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(owner);
 
-        var entrada = _entradas.FirstOrDefault(e => e.Owner == owner);
+        var pastilha = _pastilhas.FirstOrDefault(p => p.Dono == owner);
 
-        if (entrada is null)
+        if (pastilha is null)
         {
-            entrada = new Entrada(owner, Construir());
+            // O HWND desta janela precisa existir antes de ela virar Owner de
+            // alguém: o WPF recusa Owner de janela que ainda não teve a source
+            // window criada. Prewarm é idempotente e sai na hora se já existe.
+            // Estar oculta não atrapalha — a posse é GWLP_HWNDPARENT, que não
+            // exige dona visível, e esconder a dona não esconde as pastilhas.
+            Prewarm();
 
-            // Vão só ENTRE pastilhas. Margem na primeira deixava uma faixa do
-            // fundo da janela aparecendo acima dela, como se fosse borda.
-            if (_entradas.Count > 0)
-            {
-                entrada.Raiz.SetResourceReference(FrameworkElement.MarginProperty, "inset.top.8");
-            }
+            pastilha = new PastilhaWindow(owner) { Owner = this };
 
-            _entradas.Add(entrada);
-            _pilha.Children.Add(entrada.Raiz);
+            // Cria o HWND e paga a primeira renderização antes de qualquer
+            // conta de posição: sem isso ActualWidth vem zero e a pilha sai
+            // torta na primeira aparição.
+            pastilha.Prewarm();
+
+            _pastilhas.Add(pastilha);
         }
 
-        entrada.Atualizar(texto, dica, tom, aoClicar, acoes);
-        Mostrar();
+        pastilha.Atualizar(texto, dica, tom, aoClicar, acoes);
+        Reposicionar();
     }
 
-    /// <summary>Tira a pastilha do dono. Sem nenhuma sobrando, a janela some.</summary>
+    /// <summary>Tira a pastilha do dono, fechando a janela dela.</summary>
     public void Soltar(string owner)
     {
-        var entrada = _entradas.FirstOrDefault(e => e.Owner == owner);
+        var pastilha = _pastilhas.FirstOrDefault(p => p.Dono == owner);
 
-        if (entrada is null)
+        if (pastilha is null)
         {
             return;
         }
 
-        _entradas.Remove(entrada);
-        _pilha.Children.Remove(entrada.Raiz);
+        _pastilhas.Remove(pastilha);
 
-        if (_entradas.Count == 0)
-        {
-            Dismiss();
-            return;
-        }
+        // Some agora, some para valer depois. Soltar quase sempre vem de um
+        // clique na própria pastilha — é o gesto que o arquétipo existe para
+        // oferecer —, e destruir o HWND no meio do roteamento do evento dele
+        // desmonta a árvore visual debaixo do WPF. Esconder é seguro dentro do
+        // handler; o Close vai para o fim da fila do dispatcher.
+        //
+        // E fecha, não só esconde: uma janela por pastilha vira HWND acumulado
+        // ao longo do processo se soltar apenas escondesse.
+        pastilha.Hide();
+        pastilha.Dispatcher.BeginInvoke(DispatcherPriority.Background, pastilha.Close);
 
-        Mostrar();
+        Reposicionar();
     }
 
     /// <summary>O dono tem pastilha no ar?</summary>
-    public bool TemDe(string owner) => _entradas.Any(e => e.Owner == owner);
+    public bool TemDe(string owner) => _pastilhas.Any(p => p.Dono == owner);
 
-    private void Mostrar()
+    /// <summary>
+    /// Mede todas, calcula a pilha e move quem saiu do lugar. É chamado a cada
+    /// atualização de texto — inclusive uma vez por segundo, com o Timer
+    /// contando —, e por isso só mexe na janela cujo retângulo mudou de fato:
+    /// reposicionar as N a cada tique fazia a pilha tremer.
+    /// </summary>
+    private void Reposicionar()
     {
-        // Present recoloca e redimensiona; com a janela já visível ele não
-        // reanima, que é o que queremos ao trocar só o texto.
-        Present();
+        if (_pastilhas.Count == 0)
+        {
+            return;
+        }
+
+        var area = Monitors.Around(ForegroundWindow.Capture());
+
+        var tamanhos = new BadgeSize[_pastilhas.Count];
+        for (var i = 0; i < _pastilhas.Count; i++)
+        {
+            tamanhos[i] = _pastilhas[i].Medir(area);
+        }
+
+        var lugares = BadgeStack.Empilhar(
+            area,
+            tamanhos,
+            folga: area.Px(Token("space.16")),
+            vao: area.Px(Token("space.8")));
+
+        for (var i = 0; i < _pastilhas.Count; i++)
+        {
+            _pastilhas[i].Mover(area, lugares[i]);
+        }
     }
 
-    protected override FrameworkElement BuildChrome(ContentPresenter slot)
-    {
-        _pilha.Orientation = Orientation.Vertical;
-
-        var raiz = new StackPanel();
-        raiz.Children.Add(_pilha);
-        raiz.Children.Add(slot);
-        return raiz;
-    }
+    /// <summary>Esta janela não tem moldura: o slot fica vazio e nada é pintado.</summary>
+    protected override FrameworkElement BuildChrome(ContentPresenter slot) => slot;
 
     protected override void Place(MonitorArea a)
     {
-        SizeToContent = SizeToContent.WidthAndHeight;
-        UpdateLayout();
-
-        var w = a.Px(ActualWidth);
-        var h = a.Px(ActualHeight);
-
-        // Canto inferior direito, acima da barra: é onde o olho já procura
-        // notificação no Windows, e é longe do centro, onde o trabalho está.
-        var folga = a.Px(Token("space.16"));
-        var x = a.WorkLeft + a.WorkWidth - w - folga;
-        var y = a.WorkTop + a.WorkHeight - h - folga;
-
-        PlacePhysical(a, x, y, w, h);
+        // Nunca exibida. Se alguém chamar Present, que seja sem tamanho e no
+        // canto do monitor — quem aparece são as janelas das pastilhas.
+        PlacePhysical(a, a.Left, a.Top, 0, 0);
     }
 
-    private static Pastilha Construir() => new();
-
-    private sealed class Entrada(string owner, Pastilha pastilha)
+    protected override void OnClosed(EventArgs e)
     {
-        public string Owner { get; } = owner;
+        foreach (var pastilha in _pastilhas.ToArray())
+        {
+            pastilha.Close();
+        }
 
-        public FrameworkElement Raiz => pastilha.Raiz;
-
-        public void Atualizar(string texto, string? dica, HudTone tom, Action? aoClicar, IReadOnlyList<BadgeAction>? acoes) =>
-            pastilha.Atualizar(texto, dica, tom, aoClicar, acoes);
+        _pastilhas.Clear();
+        base.OnClosed(e);
     }
 
-    /// <summary>Uma pastilha: ponto colorido, texto, dica, e o clique que desfaz.</summary>
-    private sealed class Pastilha
+    /// <summary>
+    /// Uma pastilha: ponto colorido, texto, dica e o clique que desfaz, numa
+    /// janela do tamanho exato do cartão.
+    /// </summary>
+    private sealed class PastilhaWindow : ArchetypeWindow
     {
         private readonly Ellipse _ponto = new() { VerticalAlignment = VerticalAlignment.Center };
         private readonly TextBlock _texto = new() { TextWrapping = TextWrapping.NoWrap };
         private readonly TextBlock _dica = new() { TextWrapping = TextWrapping.NoWrap };
         private readonly StackPanel _botoes = new();
-        private readonly Border _moldura;
 
+        private Border? _moldura;
         private Action? _aoClicar;
+        private BadgeSpot _lugar;
+        private string _fundo = "bg.raised";
 
-        public Pastilha()
+        public PastilhaWindow(string dono) : base(stealsFocus: false) => Dono = dono;
+
+        /// <summary>Id do módulo que fixou esta pastilha.</summary>
+        public string Dono { get; }
+
+        /// <summary>A pastilha é a superfície elevada, não o fundo da janela.</summary>
+        protected override string FundoTranslucido => "bg.raised.tint";
+
+        /// <summary>
+        /// Mede o cartão em pixels físicos do monitor de destino. Separado do
+        /// posicionamento porque a pilha inteira precisa das medidas antes de
+        /// qualquer uma saber onde fica.
+        /// </summary>
+        public BadgeSize Medir(MonitorArea a)
+        {
+            SizeToContent = SizeToContent.WidthAndHeight;
+            UpdateLayout();
+            return new BadgeSize(a.Px(ActualWidth), a.Px(ActualHeight));
+        }
+
+        /// <summary>Coloca no lugar calculado, e só se ele tiver mudado.</summary>
+        public void Mover(MonitorArea a, BadgeSpot lugar)
+        {
+            if (_lugar == lugar && IsVisible)
+            {
+                return;
+            }
+
+            _lugar = lugar;
+            Present(a);
+        }
+
+        public void Atualizar(string texto, string? dica, HudTone tom, Action? aoClicar, IReadOnlyList<BadgeAction>? acoes)
+        {
+            _texto.Text = texto;
+            _dica.Text = dica ?? string.Empty;
+            _dica.Visibility = string.IsNullOrEmpty(dica) ? Visibility.Collapsed : Visibility.Visible;
+
+            _aoClicar = aoClicar;
+
+            if (_moldura is not null)
+            {
+                _moldura.Cursor = aoClicar is null ? Cursors.Arrow : Cursors.Hand;
+            }
+
+            MontarBotoes(acoes);
+
+            _ponto.SetResourceReference(Shape.FillProperty, tom switch
+            {
+                HudTone.Sucesso => "success",
+                HudTone.Alerta => "danger",
+                _ => "accent",
+            });
+        }
+
+        protected override FrameworkElement BuildChrome(ContentPresenter slot)
         {
             _ponto.SetResourceReference(FrameworkElement.WidthProperty, "size.dot");
             _ponto.SetResourceReference(FrameworkElement.HeightProperty, "size.dot");
@@ -212,15 +315,21 @@ public class BadgeWindow : ArchetypeWindow
             linha.Children.Add(coluna);
 
             _moldura = new Border { Child = linha };
+            Superficie = _moldura;
+
             _moldura.SetResourceReference(Border.PaddingProperty, "inset.badge");
             _moldura.SetResourceReference(FrameworkElement.MaxWidthProperty, "size.badge.maxwidth");
 
-            _moldura.SetResourceReference(Border.BackgroundProperty, "bg.raised");
+            _moldura.SetResourceReference(Border.BackgroundProperty, _fundo);
             _moldura.SetResourceReference(Border.BorderBrushProperty, "border.strong");
             _moldura.SetResourceReference(Border.BorderThicknessProperty, "border.width");
-            // Cartão, não pílula: o raio de pílula é para uma linha só. Num
-            // bloco de duas linhas com botões ele vira um comprimido torto.
-            _moldura.SetResourceReference(Border.CornerRadiusProperty, "radius.card");
+
+            // O raio é o do recorte do DWM, não o de cartão: a janela é do
+            // tamanho exato deste Border, e raio maior que o corte do sistema
+            // deixa uma lasca do fundo da janela em cada canto.
+            // OnSuperficieDecidida derruba para canto vivo se o sistema nem
+            // conhecer o atributo de recorte.
+            _moldura.SetResourceReference(Border.CornerRadiusProperty, "radius.clip");
 
             _moldura.MouseLeftButtonUp += (_, e) =>
             {
@@ -229,29 +338,28 @@ public class BadgeWindow : ArchetypeWindow
             };
 
             _moldura.MouseEnter += (_, _) => _moldura.SetResourceReference(Border.BackgroundProperty, "bg.hover");
-            _moldura.MouseLeave += (_, _) => _moldura.SetResourceReference(Border.BackgroundProperty, "bg.raised");
+            _moldura.MouseLeave += (_, _) => _moldura.SetResourceReference(Border.BackgroundProperty, _fundo);
+
+            return _moldura;
         }
 
-        public FrameworkElement Raiz => _moldura;
-
-        public void Atualizar(string texto, string? dica, HudTone tom, Action? aoClicar, IReadOnlyList<BadgeAction>? acoes)
+        protected override void OnSuperficieDecidida()
         {
-            _texto.Text = texto;
-            _dica.Text = dica ?? string.Empty;
-            _dica.Visibility = string.IsNullOrEmpty(dica) ? Visibility.Collapsed : Visibility.Visible;
-
-            _aoClicar = aoClicar;
-            _moldura.Cursor = aoClicar is null ? Cursors.Arrow : Cursors.Hand;
-
-            MontarBotoes(acoes);
-
-            _ponto.SetResourceReference(Shape.FillProperty, tom switch
+            if (_moldura is null)
             {
-                HudTone.Sucesso => "success",
-                HudTone.Alerta => "danger",
-                _ => "accent",
-            });
+                return;
+            }
+
+            _moldura.SetResourceReference(Border.CornerRadiusProperty, RaioDaSuperficie);
+
+            // Com material no ar o fundo em repouso passa a ser o translúcido;
+            // senão o MouseLeave devolveria o opaco e a pastilha mudaria de tom
+            // ao primeiro passe do mouse.
+            _fundo = MaterialAtivo ? FundoTranslucido : "bg.raised";
         }
+
+        protected override void Place(MonitorArea a) =>
+            PlacePhysical(a, _lugar.X, _lugar.Y, _lugar.Width, _lugar.Height);
 
         /// <summary>
         /// Reaproveita os botões que já estão lá. Recriar a cada tique faria a
