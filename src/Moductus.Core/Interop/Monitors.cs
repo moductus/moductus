@@ -25,7 +25,7 @@ public readonly record struct MonitorArea(
 /// </summary>
 public static class Monitors
 {
-    public static unsafe MonitorArea Around(nint foreground)
+    public static MonitorArea Around(nint foreground)
     {
         HMONITOR monitor;
 
@@ -39,6 +39,35 @@ public static class Monitors
             monitor = PInvoke.MonitorFromPoint(cursor, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
         }
 
+        return Descrever(monitor);
+    }
+
+    /// <summary>
+    /// O monitor que contém este ponto físico, ou nulo se nenhum contém.
+    /// </summary>
+    /// <remarks>
+    /// Nulo é a resposta para "o monitor onde isto estava foi desligado ou
+    /// desconectado": quem guardou uma posição volta ao padrão em vez de ficar
+    /// num pedaço de desktop que não existe mais.
+    /// </remarks>
+    public static MonitorArea? Containing(int x, int y)
+    {
+        var monitor = PInvoke.MonitorFromPoint(
+            new System.Drawing.Point(x, y),
+            MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONULL);
+
+        return monitor.IsNull ? null : Descrever(monitor);
+    }
+
+    /// <summary>Onde o cursor está, em pixels físicos da área de trabalho virtual.</summary>
+    public static (int X, int Y) Cursor()
+    {
+        PInvoke.GetCursorPos(out var ponto);
+        return (ponto.X, ponto.Y);
+    }
+
+    private static unsafe MonitorArea Descrever(HMONITOR monitor)
+    {
         var info = new MONITORINFO { cbSize = (uint)sizeof(MONITORINFO) };
         PInvoke.GetMonitorInfo(monitor, ref info);
 
