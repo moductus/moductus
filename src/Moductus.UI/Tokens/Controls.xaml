@@ -141,25 +141,39 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="TextBox">
+                    <!-- O recuo do campo NÃO entra aqui: o WPF copia o Padding
+                         do TextBox para o ScrollViewer do content host, para que
+                         ele fique por dentro das barras de rolagem. Repeti-lo
+                         neste Border recuaria o texto digitado duas vezes — era
+                         daí que vinham 12 dos 14px entre a dica e o texto. -->
                     <Border x:Name="Fundo"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{DynamicResource radius.control}"
-                            Padding="{TemplateBinding Padding}">
+                            CornerRadius="{DynamicResource radius.control}">
                         <Grid>
                             <!-- Dica: campo vazio sem rótulo parece campo quebrado,
                                  porque o cursor fica sozinho no meio do nada. Vem
-                                 do Tag para não exigir controle nem anexada. -->
-                            <TextBlock x:Name="Dica"
-                                       Text="{TemplateBinding Tag}"
-                                       Foreground="{DynamicResource text.muted}"
-                                       FontSize="{TemplateBinding FontSize}"
-                                       VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                       TextWrapping="NoWrap"
-                                       TextTrimming="CharacterEllipsis"
-                                       IsHitTestVisible="False"
-                                       Visibility="Collapsed" />
+                                 do Tag para não exigir controle nem anexada.
+
+                                 Ela fica fora do content host, então o recuo do
+                                 campo e os 2px do cursor são refeitos aqui: o
+                                 Border repete o Padding e a margem soma o
+                                 inset.caret. Sem isso a dica parte 14px antes do
+                                 texto, e a primeira letra digitada salta. -->
+                            <Border Padding="{TemplateBinding Padding}" IsHitTestVisible="False">
+                                <TextBlock x:Name="Dica"
+                                           Text="{TemplateBinding Tag}"
+                                           Margin="{DynamicResource inset.caret}"
+                                           Foreground="{DynamicResource text.muted}"
+                                           FontFamily="{TemplateBinding FontFamily}"
+                                           FontSize="{TemplateBinding FontSize}"
+                                           LineHeight="Auto"
+                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
+                                           Visibility="Collapsed" />
+                            </Border>
                             <!-- Style nulo de propósito: o estilo implícito de
                                  ScrollViewer troca o template, e o presenter
                                  dele desloca o texto em relação à dica. As
@@ -167,7 +181,6 @@
                                  estilo de ScrollBar é implícito e independente. -->
                             <ScrollViewer x:Name="PART_ContentHost"
                                           Style="{x:Null}"
-                                          Padding="0"
                                           Margin="0"
                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                         </Grid>
@@ -175,6 +188,19 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="Text" Value="">
                             <Setter TargetName="Dica" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <!-- O alinhamento do conteúdo vale para a dica também: no
+                             campo de número o valor fica à direita, e uma dica à
+                             esquerda seria outro texto saltando ao digitar. Vai
+                             por gatilho, e não por TemplateBinding, porque o
+                             TextBlock alinha por TextAlignment, de outro tipo — e
+                             porque ele precisa continuar esticado para a dica
+                             longa sair cortada com reticências. -->
+                        <Trigger Property="HorizontalContentAlignment" Value="Right">
+                            <Setter TargetName="Dica" Property="TextAlignment" Value="Right" />
+                        </Trigger>
+                        <Trigger Property="HorizontalContentAlignment" Value="Center">
+                            <Setter TargetName="Dica" Property="TextAlignment" Value="Center" />
                         </Trigger>
                         <Trigger Property="IsKeyboardFocused" Value="True">
                             <Setter TargetName="Fundo" Property="BorderBrush" Value="{DynamicResource accent.border}" />
@@ -202,18 +228,19 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RichTextBox">
+                    <!-- Sem Padding pelo mesmo motivo do TextBox: o WPF já leva
+                         o do campo para o ScrollViewer do content host, e repetir
+                         aqui recuaria o texto duas vezes. -->
                     <Border x:Name="Fundo"
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{DynamicResource radius.control}"
-                            Padding="{TemplateBinding Padding}">
+                            CornerRadius="{DynamicResource radius.control}">
                         <!-- Style nulo pelo mesmo motivo do TextBox: o estilo
                              implícito de ScrollViewer troca o template e desloca
                              o texto. As barras seguem com o nosso visual. -->
                         <ScrollViewer x:Name="PART_ContentHost"
                                       Style="{x:Null}"
-                                      Padding="0"
                                       Margin="0" />
                     </Border>
                     <ControlTemplate.Triggers>

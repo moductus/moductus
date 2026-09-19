@@ -46,8 +46,10 @@ public class PaletteWindow : ArchetypeWindow
     {
         // Vai no Tag: o template do TextBox mostra o Tag como dica quando o
         // texto está vazio. A Palette tinha um TextBlock próprio por cima do
-        // campo, com margem de 24 contra os 23 do texto real — a dica pulava
-        // 1px ao digitar a primeira letra.
+        // campo, e acertar a margem dele contra o recuo do texto real nunca
+        // fechou — errava por 1px. Dentro do template a dica repete o Padding
+        // do campo e a folga que o WPF guarda para o cursor, então os dois
+        // partem do mesmo ponto.
         get => _input.Tag as string ?? string.Empty;
         set => _input.Tag = value;
     }
