@@ -20,16 +20,15 @@ public sealed record LeaderEntry(char Key, string Name, string Description);
 /// antivírus levantar a sobrancelha.
 /// </para>
 /// <para>
-/// Três regras que não são óbvias: o timeout existe e é curto, para não
-/// segurar o foco se a pessoa for interrompida; letra desconhecida <b>não</b>
-/// fecha, só pisca, porque fechar puniria erro de digitação com a perda do
-/// estado inteiro; e o foco volta <b>antes</b> de o módulo ser invocado.
+/// Três regras que não são óbvias: o timeout existe e se renova a cada tecla,
+/// porque ele está lá para não segurar o foco de quem foi interrompido, não
+/// para apressar quem está lendo; letra desconhecida <b>não</b> fecha, só
+/// pisca, porque fechar puniria erro de digitação com a perda do estado
+/// inteiro; e o foco volta <b>antes</b> de o módulo ser invocado.
 /// </para>
 /// </remarks>
 public sealed class LeaderOverlay : ArchetypeWindow
 {
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(3);
-
     private readonly Func<char, bool> _dispatch;
     private readonly WrapPanel _grade = new();
     private readonly TextBlock _empty = new();
@@ -42,7 +41,10 @@ public sealed class LeaderOverlay : ArchetypeWindow
     {
         _dispatch = dispatch ?? throw new ArgumentNullException(nameof(dispatch));
 
-        _timer = new DispatcherTimer { Interval = Timeout };
+        // O intervalo é lido em Armar, a cada exibição, e não aqui: a janela é
+        // singleton e vive o processo inteiro, então ler uma vez só prenderia
+        // o prazo ao dicionário que estava no ar quando ela nasceu.
+        _timer = new DispatcherTimer();
         _timer.Tick += (_, _) => Dismiss();
 
         // Interval não é DependencyProperty, então a duração é lida do
@@ -147,7 +149,19 @@ public sealed class LeaderOverlay : ArchetypeWindow
     protected override void OnPresented()
     {
         Focus();
+        Armar();
+    }
+
+    /// <summary>
+    /// (Re)arma o prazo. O relógio volta ao zero a cada tecla recebida: o
+    /// timeout existe para soltar o foco de quem foi interrompido, e quem
+    /// digita não foi interrompido — errar a letra encurtava o tempo que
+    /// sobrava para ler a grade, o contrário do que o "pisca, não fecha" quer.
+    /// </summary>
+    private void Armar()
+    {
         _timer.Stop();
+        _timer.Interval = Duracao("motion.leader.timeout");
         _timer.Start();
     }
 
@@ -166,6 +180,10 @@ public sealed class LeaderOverlay : ArchetypeWindow
     private void OnKey(object sender, KeyEventArgs e)
     {
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
+
+        // Qualquer tecla renova o prazo, inclusive a que não vira letra:
+        // quem está mexendo no teclado está usando o overlay, não largado.
+        Armar();
 
         // Só letra ou dígito, sem modificador: o líder já foi apertado.
         if (Keyboard.Modifiers != ModifierKeys.None || !TryChar(key, out var c))
