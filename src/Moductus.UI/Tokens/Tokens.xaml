@@ -1,7 +1,10 @@
 <!--
   FONTE ÚNICA de tamanho, tipografia, raio e movimento.
-  Cor vive em Palette.*.xaml e movimento em Motion.*.xaml porque os dois são
-  trocados em tempo de execução pelo Theme; o resto é fixo e mora aqui.
+  Cor, fonte e sombra vivem nos temas (Themes/*.xaml, mais o
+  Palette.HighContrast.xaml) e movimento em Motion.*.xaml, porque os dois são
+  trocados em tempo de execução pelo Theme; o resto é fixo e mora aqui. Um
+  tema escolhe cor, fonte, sombra e transparência — nunca espaço, raio,
+  tamanho ou movimento, senão trocar de tema reorganizaria as telas.
 
   As chaves seguem os nomes da seção 6 do PRODUCT.md, para que o documento
   seja a referência. Nenhum literal visual fora destes arquivos.
@@ -12,28 +15,26 @@
 
     <!-- ═══ Tipografia ═══════════════════════════════════════════════════ -->
     <!--
-      Segoe UI Variable no Win11, Segoe UI no Win10. Zero download.
+      font.ui, font.display e font.mono moram nos temas, para que um tema
+      possa trocar de letra. Os valores são os mesmos em todos por enquanto, e
+      o porquê de cada pilha fica escrito aqui, uma vez só:
 
-      O nome PRECISA trazer o sufixo óptico. "Segoe UI Variable" sozinho não é
-      uma família instalada — as que existem são Text, Small e Display — e o
-      WPF cai calado no Segoe UI do Windows 10. O app inteiro renderizava na
-      fonte antiga por causa disso.
-    -->
-    <FontFamily x:Key="font.ui">Segoe UI Variable Text, Segoe UI</FontFamily>
-    <!-- Display tem sizing óptico próprio: só para título e número grande. -->
-    <FontFamily x:Key="font.display">Segoe UI Variable Display, Segoe UI</FontFamily>
-    <!--
-      Pilha de fontes de dev, da preferida para o que sempre existe. Nerd Font
-      primeiro porque é o que quem vive em terminal já tem instalado, e o nome
-      com "NF" e o sem sufixo cobrem as duas convenções de nomeação que os
-      instaladores usam. Cascadia Code é o penúltimo degrau e vem no Windows 11
-      de fábrica; Consolas é o chão, presente desde o Vista.
+      font.ui e font.display: Segoe UI Variable no Win11, Segoe UI no Win10.
+      Zero download. O nome PRECISA trazer o sufixo óptico. "Segoe UI
+      Variable" sozinho não é uma família instalada — as que existem são Text,
+      Small e Display — e o WPF cai calado no Segoe UI do Windows 10. O app
+      inteiro renderizava na fonte antiga por causa disso. Display tem sizing
+      óptico próprio: só para título e número grande.
 
-      Nenhuma delas é embutida no pacote: uma Nerd Font sozinha passa de 10 MB,
-      e o app não baixa nada. Quem tem, vê; quem não tem, cai no degrau
+      font.mono: pilha de fontes de dev, da preferida para o que sempre
+      existe. Nerd Font primeiro porque é o que quem vive em terminal já tem
+      instalado, e o nome com "NF" e o sem sufixo cobrem as duas convenções de
+      nomeação que os instaladores usam. Cascadia Code é o penúltimo degrau e
+      vem no Windows 11 de fábrica; Consolas é o chão, presente desde o Vista.
+      Nenhuma delas é embutida no pacote: uma Nerd Font sozinha passa de
+      10 MB, e o app não baixa nada. Quem tem, vê; quem não tem, cai no degrau
       seguinte sem perceber.
     -->
-    <FontFamily x:Key="font.mono">JetBrainsMono Nerd Font, JetBrainsMono NF, CaskaydiaCove Nerd Font, CaskaydiaCove NF, FiraCode Nerd Font, Cascadia Code, Cascadia Mono, Consolas</FontFamily>
 
     <!--
       Ícones. Segoe Fluent Icons vem no Windows 11 e Segoe MDL2 Assets no
@@ -61,6 +62,21 @@
          some ao lado do texto que acompanha; com type.body compete com ele. -->
     <sys:Double x:Key="type.action">12</sys:Double>
     <sys:Double x:Key="type.display.line">34</sys:Double>
+    <!-- A letra dentro da keycap. Chave própria, embora valha o mesmo que
+         caption: keycap é desenho de tecla, e se a legenda crescer a tecla não
+         pode crescer junto. -->
+    <sys:Double x:Key="type.keycap">11</sys:Double>
+    <!-- Cabeçalho de seção em caixa-alta. Pequeno porque caixa-alta já pesa:
+         no tamanho do corpo ele grita mais alto que o conteúdo que nomeia. -->
+    <sys:Double x:Key="type.section">11</sys:Double>
+    <sys:Double x:Key="type.section.line">15</sys:Double>
+    <!-- O título na barra de título própria das janelas comuns: o tamanho da
+         barra do Windows 11. Abaixo do corpo porque a barra rotula a janela,
+         não compete com o cabeçalho que a tela já tem logo embaixo. -->
+    <sys:Double x:Key="type.titlebar">12</sys:Double>
+    <!-- Os glifos de minimizar, maximizar e fechar: 10, como os do sistema.
+         Maior que isso o "✕" engorda e parece um botão de outro app. -->
+    <sys:Double x:Key="type.caption.glyph">10</sys:Double>
 
     <!-- ═══ Espaço — grade de 4px ════════════════════════════════════════ -->
     <sys:Double x:Key="space.4">4</sys:Double>
@@ -112,12 +128,13 @@
     <Thickness x:Key="inset.y.4">0,4</Thickness>
     <Thickness x:Key="inset.y.16">0,16</Thickness>
 
-    <!-- Pílula do HUD: mais folga nos lados que em cima, porque a pílula é larga
-         e baixa, e a mesma folga nos quatro lados a deixaria gorda. -->
-    <Thickness x:Key="inset.pill">16,8</Thickness>
-    <!-- Pastilha de estado. A folga da direita é maior: é o lado que encosta na
-         borda da tela, e o botão de desfazer fica ali. -->
-    <Thickness x:Key="inset.badge">12,8,16,8</Thickness>
+    <!-- Pílula do HUD. À esquerda está o quadrado do ícone, e a folga dele é a
+         mesma de cima e de baixo, para o quadrado ficar encaixado no canto da
+         pílula; à direita é texto e ponto, que pedem mais ar. -->
+    <Thickness x:Key="inset.pill">8,8,16,8</Thickness>
+    <!-- Pastilha de estado: o mesmo encaixe do ícone. A folga da direita é
+         maior também porque é o lado que encosta na borda da tela. -->
+    <Thickness x:Key="inset.badge">8,8,16,8</Thickness>
     <!-- O botão dentro da pastilha, que tem altura própria e não precisa de
          folga vertical nenhuma. -->
     <Thickness x:Key="inset.badge.action">10,0</Thickness>
@@ -134,19 +151,150 @@
     <!-- Legenda sob uma imagem — o texto do QR. -->
     <Thickness x:Key="inset.legend">16,0,16,12</Thickness>
 
-    <!-- O overlay da tecla líder: a grade de letras, o título e o rodapé. -->
-    <Thickness x:Key="inset.leader.key">4,6</Thickness>
-    <Thickness x:Key="inset.leader.title">4,0,0,8</Thickness>
-    <Thickness x:Key="inset.leader.footer">4,8,0,0</Thickness>
+    <!-- O overlay da tecla líder em três faixas — cabeçalho, grade, rodapé —
+         separadas por divisor de ponta a ponta. Por isso a folga mora em cada
+         faixa, e não num recuo do corpo inteiro: com recuo o divisor não
+         chegaria às bordas. A grade tem 4 a menos que as outras porque cada
+         bloco carrega 4 de margem (inset.4), e os blocos de fora alinham com
+         o texto do cabeçalho. -->
+    <Thickness x:Key="inset.leader.header">16,12</Thickness>
+    <Thickness x:Key="inset.leader.grid">12</Thickness>
+    <Thickness x:Key="inset.leader.footer">16,8</Thickness>
+    <!-- Dentro do bloco: menos folga nos lados que em cima, porque o bloco é
+         estreito e o nome embaixo da tecla precisa da largura. -->
+    <Thickness x:Key="inset.leader.tile">8,12</Thickness>
     <!-- Afastamento entre a tecla desenhada e o nome do módulo, no overlay. -->
     <Thickness x:Key="inset.keycap">0,0,10,0</Thickness>
+    <!-- Folga da letra dentro da keycap. Só nas laterais: a altura é a da
+         tecla, e "Ctrl" precisa de ar dos lados para não encostar no degrau. -->
+    <Thickness x:Key="inset.keycap.text">6,0</Thickness>
+    <Thickness x:Key="inset.keycap.lg">8,0</Thickness>
+    <!-- Chip de estado em pílula — "Desligado", "Ouvindo tecla…". Mais largo
+         que o inset.chip das medidas do Freeze, porque aqui o texto é palavra
+         e não número, e a pílula estreita demais vira cápsula de remédio. -->
+    <Thickness x:Key="inset.chip.status">8,2</Thickness>
+    <!-- Item da barra lateral das configurações: o texto alinha com o recuo
+         da linha de lista, para a barra e a lista parecerem a mesma régua. -->
+    <Thickness x:Key="inset.nav">12,0</Thickness>
+    <!-- A barra de seleção não encosta em cima nem embaixo da linha: a linha
+         tem canto arredondado, e a barra da altura toda vazaria pela curva. -->
+    <Thickness x:Key="inset.selection.bar">0,8</Thickness>
+    <!-- Vão entre o polegar e a borda do trilho do switch: (20 - 14) / 2. -->
+    <Thickness x:Key="inset.switch.thumb">3</Thickness>
+    <!-- O anel de foco desenhado POR FORA do controle, onde o preenchimento é
+         da mesma cor do anel — o botão primário no Grafite, o switch ligado.
+         Ali a borda em accent.border não se distingue do fundo, e o foco de
+         teclado sumiria. -->
+    <Thickness x:Key="inset.focus.ring">-3</Thickness>
+    <!-- Janela principal. O cabeçalho (título e busca) não rola junto com a
+         grade, então os dois blocos têm recuo próprio; a grade recua 8 a menos
+         dos lados porque cada cartão já traz inset.8 de margem, e é a soma que
+         alinha a borda dos cartões com a do campo de busca. -->
+    <Thickness x:Key="inset.home.header">24,24,24,16</Thickness>
+    <Thickness x:Key="inset.home.grid">16,0,16,16</Thickness>
+    <!-- O campo de busca da janela principal tem a lupa à esquerda e a keycap
+         "/" à direita, desenhadas por cima dele: o texto (e a dica) começa
+         depois da lupa e para antes da keycap, senão passa por baixo delas. -->
+    <Thickness x:Key="inset.home.search">36,0,40,0</Thickness>
+    <Thickness x:Key="inset.home.search.top">0,16,0,0</Thickness>
+    <!-- Rodapé da janela principal e da ajuda: baixo na vertical, mas com o
+         mesmo recuo lateral do conteúdo, para o primeiro botão alinhar com a
+         borda dos cartões. -->
+    <Thickness x:Key="inset.home.footer">24,12</Thickness>
+    <!-- Vão entre keycaps vizinhas ("Ctrl" "Alt" "M"), à direita de cada
+         uma: menor que o vão entre palavras, para a combinação ler como um
+         objeto só. Também na ajuda, onde as teclas são as mesmas. -->
+    <Thickness x:Key="inset.home.keycap">0,0,4,0</Thickness>
+    <!-- O divisor do cartão, entre a descrição e as ações: o vão fica só
+         embaixo, porque em cima quem afasta é o inset.detail da descrição. Na
+         ajuda, o mesmo vão separa um passo do seguinte. -->
+    <Thickness x:Key="inset.home.divider">0,0,0,12</Thickness>
+    <!-- Cabeçalho de seção da ajuda: longe do cartão de cima, perto do seu. -->
+    <Thickness x:Key="inset.help.section">0,24,0,8</Thickness>
+    <!-- A barra de ferramentas e a dica da Canvas, centradas no topo e no pé
+         da tela. Afastadas da borda o bastante para não se confundirem com a
+         barra de título da janela congelada por baixo nem com a de tarefas. -->
+    <Thickness x:Key="inset.canvas.toolbar">0,16,0,0</Thickness>
+    <Thickness x:Key="inset.canvas.hint">0,0,0,24</Thickness>
+    <!-- O divisor vertical entre os grupos da barra da Canvas: mais curto que
+         a barra, senão encosta nas bordas dela e parte a barra em caixas. -->
+    <Thickness x:Key="inset.toolbar.divider">4,8</Thickness>
+    <!-- Entre as keycaps de um atalho e entre a última e o que ele faz, na
+         barra da Canvas: "Ctrl S salvar" lê como uma coisa só, não três. -->
+    <Thickness x:Key="inset.canvas.keycap">0,0,4,0</Thickness>
+    <!-- Barra de título e rodapé do Panel: o recuo do texto de uma linha de
+         tabela do painel (8 da linha até a borda, mais 8 dentro dela), para a
+         keycap da barra, a porta da primeira coluna e o texto do rodapé
+         caírem na mesma régua. Sem folga vertical: a altura é da barra. -->
+    <Thickness x:Key="inset.panel.bar">16,0</Thickness>
+    <!-- O rodapé do Panel: a régua da barra, mais um respiro vertical para a
+         dica que quebra em duas linhas no Shelf estreito não encostar nos
+         filetes. Em uma linha só, quem manda na altura é o size.row. -->
+    <Thickness x:Key="inset.panel.footer">16,4</Thickness>
+    <!-- Entre dois botões de ícone vizinhos, o fixar e o fechar da barra do
+         Panel. Com 8 eles pareciam dois grupos; colados, um alvo só. -->
+    <Thickness x:Key="inset.start.4">4,0,0,0</Thickness>
+    <!-- Entre colunas de uma tabela do Panel — pid, endereço, ação no Ports.
+         Mais que o vão da keycap, para números de colunas vizinhas não lerem
+         como um número só. -->
+    <Thickness x:Key="inset.column">12,0,0,0</Thickness>
+
+    <!-- A Palette. Chaves com o nome dela porque os números são da geometria
+         dela: a linha com ícone, o campo com lupa, o rodapé de dicas. -->
+    <!-- Em volta do campo de busca: a mesma folga dos lados, menos embaixo,
+         porque o cabeçalho da primeira seção já traz a dele. -->
+    <Thickness x:Key="inset.palette.header">12,12,12,4</Thickness>
+    <!-- O texto do campo começa depois da lupa: 12 até ela, 16 dela, 8 de ar.
+         A direita é só o mínimo; o chip do tipo empurra quando aparece. -->
+    <Thickness x:Key="inset.palette.input">36,0,12,0</Thickness>
+    <!-- A linha com o quadrado do ícone: 6 + 24 + 6 fecham os 36 do size.row.
+         Com o inset.row comum, o quadrado esticava a linha para 40. -->
+    <Thickness x:Key="inset.palette.row">12,6</Thickness>
+    <!-- Cabeçalho de seção: alinhado ao quadrado do ícone, mais ar em cima —
+         é ele que separa um grupo do outro — que embaixo. -->
+    <Thickness x:Key="inset.palette.section">12,8,12,4</Thickness>
+    <!-- O rodapé das dicas de teclado e da contagem. -->
+    <Thickness x:Key="inset.palette.footer">12,8</Thickness>
+    <!-- Entre duas keycaps de uma combinação (↑ ↓, Ctrl Shift C): perto o
+         bastante para lerem como uma coisa só. -->
+    <Thickness x:Key="inset.palette.keycap.gap">4,0,0,0</Thickness>
+    <!-- Configurações. Vão entre um grupo e o seguinte dentro de uma seção:
+         maior que o vão entre linhas, para o olho separar "Tema" de "Modo"
+         sem precisar de divisor. -->
+    <Thickness x:Key="inset.settings.group">0,0,0,24</Thickness>
+    <!-- O rodapé de dicas: baixo, como uma barra de status, e alinhado ao
+         recuo do conteúdo. -->
+    <Thickness x:Key="inset.settings.footer">16,8</Thickness>
+    <!-- Entre duas keycaps da mesma combinação: perto o bastante para
+         "Ctrl Alt M" ler como uma coisa só. -->
+    <Thickness x:Key="inset.settings.keycap">0,0,4,0</Thickness>
+    <!-- A grade de temas: cada cartão leva 4px em volta, e a grade recua os
+         mesmos 4px para fora, senão a primeira coluna sai desalinhada do
+         texto da seção. -->
+    <Thickness x:Key="inset.settings.theme.grid">-4</Thickness>
 
     <!-- ═══ Raio ═════════════════════════════════════════════════════════ -->
-    <!-- O Win11 usa 8 em menu e 12 em janela; isto encaixa sem parecer estrangeiro. -->
+    <!-- O Win11 usa 8 em menu e 12 em janela; isto encaixa sem parecer
+         estrangeiro. O cartão acompanha o menu: com 10 ele ficava mais redondo
+         que a janela de 8 que o contém na pastilha, e parecia solto. -->
     <CornerRadius x:Key="radius.control">6</CornerRadius>
-    <CornerRadius x:Key="radius.card">10</CornerRadius>
+    <CornerRadius x:Key="radius.card">8</CornerRadius>
     <CornerRadius x:Key="radius.window">12</CornerRadius>
     <CornerRadius x:Key="radius.pill">999</CornerRadius>
+    <!-- O WPF não faz cápsula com raio gigante como o CSS: CornerRadius maior
+         que metade da altura vira ELIPSE, e o trilho do switch saía com cara
+         de ovo. Cápsula de verdade é raio exatamente igual a metade da altura,
+         então cada uma tem a sua chave, amarrada ao tamanho que ela tem. -->
+    <CornerRadius x:Key="radius.switch">10</CornerRadius>
+    <!-- O anel de foco do switch passa 3px para fora em cada lado (inset.focus.ring). -->
+    <CornerRadius x:Key="radius.switch.ring">13</CornerRadius>
+    <!-- Igual ao do controle hoje, chave própria: a keycap é desenho de tecla,
+         e mexer no raio dos botões não pode amolecer as teclas junto. -->
+    <CornerRadius x:Key="radius.keycap">6</CornerRadius>
+    <!-- O anel de foco por fora: o raio do controle mais o afastamento do
+         inset.focus.ring, senão as duas curvas não ficam concêntricas e o anel
+         engrossa nos cantos. -->
+    <CornerRadius x:Key="radius.focus">9</CornerRadius>
     <!-- O recorte que o DWM faz no HWND (DWMWCP_ROUND). Não é escolha nossa: o
          sistema arredonda em 8 e não aceita outro valor. Toda superfície que
          encosta na borda da janela — a pastilha e a pílula do HUD — usa
@@ -159,10 +307,27 @@
          vivos, opaco e legível, que se passa por desenho nativo daquele
          Windows em vez de moldura vazando nos quatro cantos. -->
     <CornerRadius x:Key="radius.clip.none">0</CornerRadius>
+    <!-- A miniatura do cartão de tema: as linhas de texto têm 4px de altura
+         e a amostra do destaque 8, e cada raio é exatamente a metade — maior
+         que isso o WPF desenha elipse, não cápsula. -->
+    <CornerRadius x:Key="radius.theme.line">2</CornerRadius>
+    <CornerRadius x:Key="radius.theme.accent">4</CornerRadius>
+    <!-- O polegar da barra de rolagem, em repouso e com o mouse na barra.
+         Cápsula de verdade: exatamente metade de size.scroll.thumb e de
+         size.scroll.thumb.hover — o radius.pill de 999 virava elipse, como
+         o trilho do switch antes do radius.switch. -->
+    <CornerRadius x:Key="radius.scroll.thumb">2</CornerRadius>
+    <CornerRadius x:Key="radius.scroll.thumb.hover">4</CornerRadius>
 
     <!-- ═══ Tamanho ══════════════════════════════════════════════════════ -->
-    <sys:Double x:Key="size.row">32</sys:Double>
-    <sys:Double x:Key="size.input">32</sys:Double>
+    <!-- Linha e campo em 36: com o ícone em quadrado e a keycap à direita, 32
+         apertava os dois contra as bordas da linha. O botão fica em 32 — ao
+         lado de um campo ele é ação, não campo, e não precisa da mesma altura. -->
+    <sys:Double x:Key="size.row">36</sys:Double>
+    <sys:Double x:Key="size.input">36</sys:Double>
+    <!-- O campo de busca da Palette e da janela principal: é o elemento que a
+         tela inteira serve, e merece ser o maior campo dela. -->
+    <sys:Double x:Key="size.input.search">40</sys:Double>
     <sys:Double x:Key="size.button">32</sys:Double>
     <!-- Botão dentro de barra ou linha de lista. Precisa ser MENOR que a faixa
          que o contém, senão encosta nas duas bordas e fica achatado. -->
@@ -202,9 +367,6 @@
          lá sem virar painel. -->
     <sys:Double x:Key="size.badge.maxwidth">320</sys:Double>
     <sys:Double x:Key="size.badge.action">24</sys:Double>
-    <!-- Coluna da grade de letras do overlay: cabe a tecla e o nome do módulo
-         mais longo. -->
-    <sys:Double x:Key="size.leader.column">200</sys:Double>
     <sys:Double x:Key="size.palette.width">640</sys:Double>
     <sys:Double x:Key="size.palette.maxheight">480</sys:Double>
     <sys:Double x:Key="size.panel.minwidth">320</sys:Double>
@@ -220,8 +382,64 @@
          a fração da altura útil do monitor, que acompanha a tela em vez de
          fixar um número que sobra em 4K e falta em notebook. -->
     <sys:Double x:Key="size.panel.edge.height">0.6</sys:Double>
-    <!-- Altura do overlay da tecla líder: cabe a grade dos doze módulos. -->
-    <sys:Double x:Key="size.leader.height">200</sys:Double>
+    <!-- Largura do bloco do overlay da líder: keycap grande em cima, nome
+         embaixo. Cabe o nome de módulo mais longo em type.caption sem quebrar. -->
+    <sys:Double x:Key="size.leader.tile">96</sys:Double>
+    <!-- Colunas da grade do overlay: doze módulos viram 4×3, que cabe no
+         campo de visão sem varrer a tela de lado a lado. A janela segue a
+         grade, não o contrário — a largura dela sai daqui. -->
+    <sys:Int32 x:Key="size.leader.columns">4</sys:Int32>
+
+    <!-- Keycap: o desenho de uma tecla. O tamanho é MÍNIMO, nos dois eixos —
+         "M" fica quadrada, "Ctrl" cresce para os lados. A grande é a do
+         overlay da líder e a do cartão da janela principal. -->
+    <sys:Double x:Key="size.keycap">20</sys:Double>
+    <sys:Double x:Key="size.keycap.lg">28</sys:Double>
+
+    <!-- Switch de ligar e desligar. Proporção do Windows 11 em escala menor:
+         o app é denso, e o switch do sistema (40×20) disputava espaço com o
+         nome do módulo no cartão. -->
+    <sys:Double x:Key="size.switch.width">36</sys:Double>
+    <sys:Double x:Key="size.switch.height">20</sys:Double>
+    <sys:Double x:Key="size.switch.thumb">14</sys:Double>
+
+    <!-- A barra à esquerda da linha selecionada e do item marcado da barra
+         lateral. Ela, e não o preenchimento, é o sinal de seleção: preencher a
+         linha com accent no Grafite viraria uma faixa branca. -->
+    <sys:Double x:Key="size.selection.bar">2</sys:Double>
+    <!-- Barra lateral das configurações: cabe "Atalhos globais" com folga. -->
+    <sys:Double x:Key="size.nav.width">200</sys:Double>
+    <!-- Largura mínima de uma célula da grade da janela principal, margem do
+         cartão incluída. Menor que size.panel.minwidth, que era o que valia
+         antes: com ele a janela precisava de mais de mil pixels para três
+         colunas, e a grade de doze módulos virava seis linhas de rolagem. -->
+    <sys:Double x:Key="size.home.card">280</sys:Double>
+    <!-- O quadrado do ícone no HUD e na pastilha. Do tamanho das duas linhas
+         de texto ao lado, título e detalhe: menor, o ícone vira enfeite solto;
+         maior, a pílula engorda só por causa dele. -->
+    <sys:Double x:Key="size.status.icon">32</sys:Double>
+    <!-- O quadrado do ícone na linha da Palette. Diz o tipo do resultado antes
+         de se ler o nome; maior que isto não cabe nos 36 da linha. -->
+    <sys:Double x:Key="size.palette.icon">24</sys:Double>
+    <!-- A janela de configurações. Larga o bastante para a barra lateral e
+         três cartões de tema lado a lado; o mínimo ainda cabe a barra e uma
+         linha de módulo com a letra e o "Ajustar" sem quebrar. -->
+    <sys:Double x:Key="size.settings.width">880</sys:Double>
+    <sys:Double x:Key="size.settings.height">640</sys:Double>
+    <sys:Double x:Key="size.settings.minwidth">720</sys:Double>
+    <sys:Double x:Key="size.settings.minheight">480</sys:Double>
+    <!-- Teto da coluna de conteúdo: com a janela maximizada, a descrição de
+         um módulo corria a tela inteira e o "Ajustar" ia parar longe do nome. -->
+    <sys:Double x:Key="size.settings.content">720</sys:Double>
+    <!-- A janela do ajuste de um módulo: estreita, porque o painel é uma
+         coluna de rótulo e campo, e com altura que acompanha o conteúdo até
+         um teto — o painel mais longo rola em vez de passar da tela. -->
+    <sys:Double x:Key="size.settings.module.width">460</sys:Double>
+    <sys:Double x:Key="size.settings.module.minheight">200</sys:Double>
+    <sys:Double x:Key="size.settings.module.maxheight">720</sys:Double>
+    <!-- A miniatura de cada tema no cartão de escolha: cabe o fundo, um
+         cartão com duas linhas de texto e a cor de destaque. -->
+    <sys:Double x:Key="size.theme.preview">64</sys:Double>
 
     <!-- Prazo do overlay da tecla líder antes de devolver o foco sozinho. Não é
          animação, é tempo de leitura: nove segundos é o que mede varrer a grade
@@ -240,9 +458,74 @@
     <!-- A faixa invisível onde o cursor vira seta de redimensionar, no Panel.
          Não é borda desenhada: é alvo de mouse, e 1px é impossível de acertar. -->
     <Thickness x:Key="border.resize">6</Thickness>
-    <sys:Double x:Key="shadow.depth">0</sys:Double>
-    <sys:Double x:Key="shadow.blur">24</sys:Double>
-    <sys:Double x:Key="shadow.opacity">0.35</sys:Double>
+    <!-- O "degrau" da keycap: a borda de baixo mais grossa é o que faz o
+         retângulo ler como tecla, e não como mais um chip. -->
+    <Thickness x:Key="border.width.keycap">1,1,1,2</Thickness>
+    <!-- Só em cima: o brilho de 1px em border.highlight no topo interno da
+         superfície flutuante, o "stroke" do Fluent. -->
+    <Thickness x:Key="border.width.top">0,1,0,0</Thickness>
+    <!-- Só à direita: o divisor entre a barra lateral das configurações e o
+         conteúdo. -->
+    <Thickness x:Key="border.width.nav">0,0,1,0</Thickness>
+    <!-- shadow.blur, shadow.depth e shadow.opacity moram nos temas: a sombra
+         que funciona sobre fundo grafite some sobre fundo claro. -->
+    <!-- Só à esquerda: o divisor vertical entre grupos da barra da Canvas. -->
+    <Thickness x:Key="border.width.start">1,0,0,0</Thickness>
+    <!-- A seleção do Freeze: traço fino e tracejado, para a borda marcar o
+         recorte sem tampar o pixel da beira, que também vai para o clipboard.
+         O tracejado é em múltiplos da espessura, como todo StrokeDashArray. -->
+    <sys:Double x:Key="stroke.selection">1</sys:Double>
+    <DoubleCollection x:Key="dash.selection">4 3</DoubleCollection>
+    <!-- Só embaixo: o filete que separa a barra de título do Panel do
+         conteúdo, e o cabeçalho de colunas das linhas. O rodapé usa o
+         border.width.top, do lado oposto. -->
+    <Thickness x:Key="border.width.bottom">0,0,0,1</Thickness>
+    <!-- Barra de título própria das janelas comuns (a altura é a
+         size.titlebar, a mesma do Panel). O botão tem a largura dos botões
+         do Windows 11: quem já sabe onde o "fechar" mora acerta o nosso. -->
+    <sys:Double x:Key="size.caption.button">46</sys:Double>
+    <!-- O mark na barra de título: o tamanho do ícone de janela do sistema. -->
+    <sys:Double x:Key="size.mark">16</sys:Double>
+    <!-- O mark do Moductus a 16px, em vetor: os quatro módulos 2×2 da redução
+         que a bandeja usa (Mark.Render no tamanho 16 — margem 1, módulo 6,
+         vão 2, canto 1). Vetor, e não o bitmap da bandeja, porque o bitmap
+         segue a cor da barra de tarefas e borra fora de 100% de escala; aqui
+         ele pega a cor do tema e fica nítido em qualquer DPI. -->
+    <GeometryGroup x:Key="geometry.mark">
+        <RectangleGeometry Rect="1,1,6,6" RadiusX="1" RadiusY="1" />
+        <RectangleGeometry Rect="9,1,6,6" RadiusX="1" RadiusY="1" />
+        <RectangleGeometry Rect="1,9,6,6" RadiusX="1" RadiusY="1" />
+        <RectangleGeometry Rect="9,9,6,6" RadiusX="1" RadiusY="1" />
+    </GeometryGroup>
+    <!-- Barra de rolagem: a faixa que ela ocupa ao lado do conteúdo e a
+         espessura do polegar, fino em repouso e mais grosso com o mouse na
+         barra. A faixa tem folga dos dois lados do polegar grosso, senão ele
+         encosta no conteúdo e na borda da janela. -->
+    <sys:Double x:Key="size.scroll">12</sys:Double>
+    <sys:Double x:Key="size.scroll.thumb">4</sys:Double>
+    <sys:Double x:Key="size.scroll.thumb.hover">8</sys:Double>
+
+    <!-- ═══ Véus e opacidade ═════════════════════════════════════════════ -->
+    <!-- Quanto da cor cheia vai nos véus que o Theme deriva de cada tema:
+         accent.veil no miolo de seleção, success.veil e danger.veil no fundo
+         dos chips e da caixa de erro. Os semânticos são um pouco mais leves
+         porque o verde e o vermelho saturam mais que o accent na mesma dose. -->
+    <sys:Double x:Key="veil.accent.opacity">0.16</sys:Double>
+    <sys:Double x:Key="veil.semantic.opacity">0.14</sys:Double>
+    <!-- O véu do Canvas: escurece o desktop congelado para a anotação do
+         Freeze e o alvo do Kill se destacarem. Preto em todo tema e modo,
+         porque quem escurece não pode clarear no tema claro — e por isso mora
+         aqui e não nos temas. A opacidade mora no pincel para que o retângulo
+         não carregue número nenhum. -->
+    <SolidColorBrush x:Key="veil.canvas" Color="Black" Opacity="0.40" />
+    <!-- Hover do botão de preenchimento cheio (primário): o fundo dilui um
+         pouco sobre o que está atrás. Funciona em qualquer accent, claro ou
+         escuro, sem um token de "accent.hover" por tema. -->
+    <sys:Double x:Key="opacity.hover.solid">0.88</sys:Double>
+    <!-- O que está desligado, mas continua ali: o módulo desativado no cartão
+         e no overlay da líder. Atenuado, não escondido — e nunca em vermelho,
+         porque desligado não é perigo. -->
+    <sys:Double x:Key="opacity.disabled">0.45</sys:Double>
 
     <!-- ═══ Curvas ═══════════════════════════════════════════════════════ -->
     <!-- Sem mola, sem bounce. -->

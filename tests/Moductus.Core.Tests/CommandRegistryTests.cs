@@ -163,4 +163,36 @@ public class CommandRegistryTests
 
         Assert.Equal(["novo"], r.Search("alfa").Select(c => c.Id));
     }
+
+    [Fact]
+    public void Comando_sem_categoria_e_Comando_e_a_do_provedor_chega_ate_a_busca()
+    {
+        var r = Registro();
+        r.RegisterProvider("apps", _ => [new PaletteCommand("app", "Sair do jogo", null, null, () => { }, Category: CommandCategory.Aplicativo)]);
+
+        var resultado = r.Search("sair");
+
+        Assert.Equal(CommandCategory.Aplicativo, resultado.Single(c => c.Id == "app").Category);
+        Assert.Equal(CommandCategory.Comando, resultado.Single(c => c.Id == "quit").Category);
+    }
+
+    [Fact]
+    public void Secoes_seguem_a_primeira_aparicao_e_guardam_o_ranking_dentro()
+    {
+        string[] ranking = ["app1", "cmd1", "app2", "arq1", "cmd2"];
+
+        var agrupado = Sections.Grouped(ranking, s => s[..3]);
+
+        Assert.Equal(["app1", "app2", "cmd1", "cmd2", "arq1"], agrupado);
+    }
+
+    [Fact]
+    public void Secao_nula_e_uma_secao_como_as_outras()
+    {
+        string?[] secoes = ["a", null, "a", null];
+
+        var agrupado = Sections.Grouped(Enumerable.Range(0, 4), i => secoes[i]);
+
+        Assert.Equal([0, 2, 1, 3], agrupado);
+    }
 }

@@ -39,6 +39,22 @@ public static class Dwm
         }
     }
 
+    /// <summary>
+    /// Diz ao DWM se a janela é clara ou escura, sem mexer em cor nenhuma. É
+    /// o que decide o tom do material: Mica e Acrylic seguem este atributo, e
+    /// não o tema do sistema nem o fundo que a janela pinta.
+    /// </summary>
+    /// <remarks>
+    /// O padrão do atributo é claro. Janela que nunca o recebe nasce com
+    /// material claro mesmo com o app no escuro, e o "tint" escuro por cima
+    /// dele sai acinzentado.
+    /// </remarks>
+    public static unsafe void SetDarkMode(nint window, bool dark)
+    {
+        var imersivo = dark ? 1 : 0;
+        PInvoke.DwmSetWindowAttribute((HWND)window, DWMWINDOWATTRIBUTE.DWMWA_USE_IMMERSIVE_DARK_MODE, &imersivo, sizeof(int));
+    }
+
     /// <summary>Material que o DWM pinta atrás da janela.</summary>
     public enum Backdrop
     {
