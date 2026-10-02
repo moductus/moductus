@@ -12,38 +12,32 @@
     <!-- Nenhuma cor, tamanho ou raio aqui: tudo vem dos tokens. -->
 
     <Window.Resources>
-        <Style x:Key="Cartao" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource bg.raised}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource border.subtle}" />
-            <Setter Property="BorderThickness" Value="{DynamicResource border.width}" />
-            <Setter Property="CornerRadius" Value="{DynamicResource radius.card}" />
-            <Setter Property="Padding" Value="{DynamicResource inset.16}" />
-        </Style>
-
-        <Style x:Key="Secao" TargetType="TextBlock">
-            <Setter Property="FontWeight" Value="{DynamicResource weight.semibold}" />
-            <Setter Property="Margin" Value="0,24,0,8" />
-        </Style>
-
-        <!-- Linha de passo: número em mono, texto ao lado. -->
+        <!-- Linha de passo: as teclas desenhadas como keycaps — as mesmas da
+             janela principal e do overlay da líder —, texto ao lado. -->
         <DataTemplate x:Key="LinhaPasso">
-            <Grid Margin="0,0,0,12">
+            <Grid Margin="{DynamicResource inset.home.divider}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" SharedSizeGroup="PassoTecla" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Border Grid.Column="0"
-                        Background="{DynamicResource bg.base}"
-                        BorderBrush="{DynamicResource border.strong}"
-                        BorderThickness="{DynamicResource border.width}"
-                        CornerRadius="{DynamicResource radius.control}"
-                        Padding="{DynamicResource inset.8}"
-                        VerticalAlignment="Top"
-                        Margin="0,0,12,0">
-                    <TextBlock Text="{Binding Tecla}"
-                               FontFamily="{DynamicResource font.mono}"
-                               Foreground="{DynamicResource accent}" />
-                </Border>
+                <ItemsControl ItemsSource="{Binding Teclas}"
+                              Focusable="False"
+                              VerticalAlignment="Top"
+                              Margin="{DynamicResource inset.end.12}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{DynamicResource style.keycap.lg}"
+                                    Margin="{DynamicResource inset.home.keycap}">
+                                <TextBlock Text="{Binding}" Style="{DynamicResource style.keycap.lg.text}" />
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
                 <StackPanel Grid.Column="1">
                     <TextBlock Text="{Binding Titulo}" FontWeight="{DynamicResource weight.semibold}" />
                     <TextBlock Text="{Binding Detalhe}" Style="{DynamicResource style.secondary}" />
@@ -56,10 +50,13 @@
         <Border DockPanel.Dock="Bottom"
                 Background="{DynamicResource bg.raised}"
                 BorderBrush="{DynamicResource border.subtle}"
-                BorderThickness="0,1,0,0"
-                Padding="{DynamicResource inset.16}">
+                BorderThickness="{DynamicResource border.width.top}"
+                Padding="{DynamicResource inset.home.footer}">
             <DockPanel>
-                <Button DockPanel.Dock="Right" Content="Fechar" Click="OnFecharClick" />
+                <Button DockPanel.Dock="Right"
+                        Content="Fechar"
+                        Style="{DynamicResource style.button.ghost}"
+                        Click="OnFecharClick" />
                 <CheckBox x:Name="NaoMostrarMais"
                           Content="Não abrir isto quando o Moductus iniciar"
                           VerticalAlignment="Center"
@@ -68,44 +65,60 @@
         </Border>
 
         <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="{DynamicResource inset.24}" Grid.IsSharedSizeScope="True">
+            <StackPanel Margin="{DynamicResource inset.24}">
 
                 <TextBlock Text="Tudo a uma tecla de distância" Style="{DynamicResource style.title}" />
-                <TextBlock Style="{DynamicResource style.secondary}" Margin="0,4,0,0"
-                           Text="O Moductus não tem janela principal. Ele mora na bandeja e aparece quando você chama." />
+                <TextBlock Style="{DynamicResource style.secondary}" Margin="{DynamicResource inset.y.4}"
+                           Text="O Moductus mora na bandeja e aparece quando você chama. A janela principal abre no clique do ícone." />
 
-                <TextBlock Text="Os três passos" Style="{StaticResource Secao}" />
-                <Border Style="{StaticResource Cartao}">
-                    <ItemsControl x:Name="Passos" ItemTemplate="{StaticResource LinhaPasso}" />
+                <TextBlock Text="OS TRÊS PASSOS"
+                           Style="{DynamicResource style.section}"
+                           Margin="{DynamicResource inset.help.section}" />
+                <Border Style="{DynamicResource style.card}">
+                    <ItemsControl x:Name="Passos"
+                                  Focusable="False"
+                                  Grid.IsSharedSizeScope="True"
+                                  ItemTemplate="{StaticResource LinhaPasso}" />
                 </Border>
 
-                <TextBlock Text="Se a tecla líder não responder" Style="{StaticResource Secao}" />
-                <Border Style="{StaticResource Cartao}">
+                <TextBlock Text="SE A TECLA LÍDER NÃO RESPONDER"
+                           Style="{DynamicResource style.section}"
+                           Margin="{DynamicResource inset.help.section}" />
+                <Border Style="{DynamicResource style.card}">
                     <StackPanel>
                         <TextBlock TextWrapping="Wrap"
                                    Text="O Windows entrega uma hotkey global a um aplicativo só, e não avisa quem perdeu a disputa — o atalho simplesmente não funciona. Se outro programa já registrou a combinação, a tela de configurações mostra o conflito e o nome de quem está segurando." />
-                        <TextBlock TextWrapping="Wrap" Margin="0,8,0,0"
+                        <TextBlock TextWrapping="Wrap" Margin="{DynamicResource inset.top.8}"
                                    Text="Enquanto isso, clique com o botão direito no ícone da bandeja: todo módulo ativo está lá, com os comandos de cada um em submenu." />
                     </StackPanel>
                 </Border>
 
-                <TextBlock Text="Onde ver o que está ligado" Style="{StaticResource Secao}" />
-                <Border Style="{StaticResource Cartao}">
+                <TextBlock Text="ONDE VER O QUE ESTÁ LIGADO"
+                           Style="{DynamicResource style.section}"
+                           Margin="{DynamicResource inset.help.section}" />
+                <Border Style="{DynamicResource style.card}">
                     <StackPanel>
                         <TextBlock TextWrapping="Wrap"
                                    Text="Estado que dura — microfone mudo, Awake ligado, pomodoro contando — aparece como pastilha no canto inferior direito. Clicar na pastilha desfaz, sem precisar do atalho de novo." />
-                        <TextBlock TextWrapping="Wrap" Margin="0,8,0,0"
+                        <TextBlock TextWrapping="Wrap" Margin="{DynamicResource inset.top.8}"
                                    Text="O ícone da bandeja também muda: o pomodoro desenha o progresso em volta dele e o microfone mudo ganha um risco. Se você não enxerga o ícone, ele está atrás da setinha de estouro do Windows — arraste-o para fora para fixar." />
                     </StackPanel>
                 </Border>
 
-                <TextBlock Text="Os módulos" Style="{StaticResource Secao}" />
-                <Border Style="{StaticResource Cartao}">
-                    <ItemsControl x:Name="Modulos" ItemTemplate="{StaticResource LinhaPasso}" />
+                <TextBlock Text="OS MÓDULOS"
+                           Style="{DynamicResource style.section}"
+                           Margin="{DynamicResource inset.help.section}" />
+                <Border Style="{DynamicResource style.card}">
+                    <ItemsControl x:Name="Modulos"
+                                  Focusable="False"
+                                  Grid.IsSharedSizeScope="True"
+                                  ItemTemplate="{StaticResource LinhaPasso}" />
                 </Border>
 
-                <TextBlock Text="Privacidade" Style="{StaticResource Secao}" />
-                <Border Style="{StaticResource Cartao}">
+                <TextBlock Text="PRIVACIDADE"
+                           Style="{DynamicResource style.section}"
+                           Margin="{DynamicResource inset.help.section}" />
+                <Border Style="{DynamicResource style.card}">
                     <TextBlock TextWrapping="Wrap"
                                Text="Zero telemetria e zero rede: o aplicativo não faz nenhuma requisição HTTP, nem para checar atualização. O repositório é público desde o primeiro commit justamente porque um programa que registra hotkeys globais e lê o clipboard precisa ser auditável para merecer confiança." />
                 </Border>

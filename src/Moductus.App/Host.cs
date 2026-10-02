@@ -33,6 +33,8 @@ internal sealed class Host : IDisposable
     private const string EnabledKey = "enabled";
     private const string LeaderLetterKey = "leaderKey";
     private const string SurfaceOpacityKey = "surfaceOpacity";
+    private const string ThemeKey = "theme";
+    private const string ThemeModeKey = "themeMode";
     // M de Moductus. Ctrl+Alt+Space era o padrão e colide com o Claude Code —
     // o público-alvo exato. Ver a tabela de combinações a evitar no PRODUCT.md.
     private const uint VkM = 0x4D;
@@ -93,14 +95,22 @@ internal sealed class Host : IDisposable
 
         // 6. Tokens e tema. Depois do ícone de propósito: carregar XAML não
         //    pertence ao caminho crítico, e nenhuma janela existe ainda.
-        _theme = new Theme(sistema, _messages, _app.Resources);
+        _theme = new Theme(sistema, _messages, _app.Resources, TemaDaConfig(), ModoDaConfig());
         _theme.ApplyOpacity(OpacidadeDaConfig());
 
         // Barra de tarefas clara pede mark escuro: o ícone acompanha o tema.
+        // Também repinta na troca de tema escolhida nas configurações, porque o
+        // arco do Timer e o risco do Mic saem do accent.color em vigor.
         _theme.Changed += _tray.Invalidate;
 
         // 7. Os quatro arquétipos, pré-aquecidos quando o app estiver ocioso.
         _archetypes = new ArchetypeHost();
+
+        // A barra do Panel mostra a letra de quem a ocupa. Consulta na hora,
+        // e não uma cópia: a letra muda quando a pessoa troca nas
+        // configurações, e some quando o módulo é desligado ou entra em
+        // conflito.
+        _archetypes.LetterOf = id => _letters.All.FirstOrDefault(r => r.ModuleId == id) is { Active: true } r ? r.Key : null;
 
         // 8. Módulos: Enable() de cada um ativo, e a letra no registro central.
         //    O host oferece à Palette o que é dele: configurações e sair.
@@ -156,6 +166,16 @@ internal sealed class Host : IDisposable
         var configurada = _config.ModuleScope(module.Id)[LeaderLetterKey]?.GetValue<string>();
         return !string.IsNullOrEmpty(configurada) ? configurada[0] : module.SuggestedLeaderKey;
     }
+
+    /// <summary>
+    /// A letra que o módulo usaria, ligado ou não — a mesma que o overlay mostra
+    /// atenuada nos desligados. Nulo só para id desconhecido ou módulo sem
+    /// letra nenhuma, que é quando o "—" faz sentido.
+    /// </summary>
+    private char? LetraConfigurada(string id) =>
+        _modules.FirstOrDefault(m => m.Id == id) is { } m && LetterFor(m) is var l && char.IsAsciiLetterOrDigit(l)
+            ? l
+            : null;
 
     private void EnableModule(IModule module)
     {
@@ -264,6 +284,50 @@ internal sealed class Host : IDisposable
         _theme.ApplyOpacity(novo);
     }
 
+    // ---- Tema e modo -------------------------------------------------------
+
+    /// <summary>
+    /// Chave de topo, como a opacidade: o tema é do app inteiro, não de
+    /// módulo. Ausente é o padrão, e por isso não houve versão nova de
+    /// schema — config antiga já é config válida.
+    /// </summary>
+    /// <remarks>
+    /// Id desconhecido passa adiante sem ser corrigido no arquivo: o
+    /// <see cref="ThemeCatalog"/> cai no padrão na leitura, e reescrever a
+    /// config de quem só abriu o app apagaria um tema que uma versão mais
+    /// nova ainda reconheceria.
+    /// </remarks>
+    private string? TemaDaConfig() => TextoDaConfig(ThemeKey);
+
+    private ThemeModePreference ModoDaConfig() => ThemeModePreferences.Parse(TextoDaConfig(ThemeModeKey));
+
+    /// <summary>
+    /// Texto de uma chave de topo, ou nulo. Valor de outro tipo — um número
+    /// onde se esperava texto, num arquivo editado à mão — conta como
+    /// ausente: GetValue lançaria, e o app não pode deixar de subir por isso.
+    /// </summary>
+    private string? TextoDaConfig(string chave) =>
+        _config.Root[chave] is JsonValue valor && valor.TryGetValue<string>(out var texto) ? texto : null;
+
+    private void SetTheme(string id)
+    {
+        var tema = ThemeCatalog.Resolver(id);
+
+        _config.Root[ThemeKey] = tema.Id;
+        _config.Save();
+
+        // Como na opacidade: troca o recurso, e tudo o que está aberto acompanha.
+        _theme.ApplyTheme(tema.Id);
+    }
+
+    private void SetThemeMode(ThemeModePreference preferencia)
+    {
+        _config.Root[ThemeModeKey] = ThemeModePreferences.ToConfig(preferencia);
+        _config.Save();
+
+        _theme.ApplyModePreference(preferencia);
+    }
+
     private void OnLeader()
     {
         _overlay ??= new LeaderOverlay(_letters.TryInvoke);
@@ -274,9 +338,22 @@ internal sealed class Host : IDisposable
             return;
         }
 
-        _overlay.SetEntries(_letters.All
+        var ativas = _letters.All
             .Where(r => r.Active)
-            .Select(r => new LeaderEntry(r.Key, r.Name, r.Description)));
+            .Select(r => new LeaderEntry(r.Key, r.Name, r.Description))
+            .ToList();
+
+        // Os desligados entram atenuados, para a grade mostrar a suíte inteira.
+        // Só os que não disputam letra com um ativo: dois blocos com a mesma
+        // tecla deixariam a pessoa sem saber qual das duas o "p" dispara.
+        var desligadas = _modules
+            .Where(m => !_enabled.Contains(m.Id))
+            .Select(m => new LeaderEntry(char.ToLowerInvariant(LetterFor(m)), m.Name, m.Description, Active: false))
+            .Where(d => ativas.All(a => a.Key != d.Key))
+            .DistinctBy(d => d.Key);
+
+        _overlay.SetCombination(_leader.Binding.ToString());
+        _overlay.SetEntries([.. ativas, .. desligadas]);
         _overlay.Present();
     }
 
@@ -311,9 +388,14 @@ internal sealed class Host : IDisposable
         RebindLeader: RebindLeader,
         Opacidade: () => _theme.Opacity,
         SetOpacidade: SetOpacidade,
+        ThemeId: () => _theme.ThemeId,
+        SetTheme: SetTheme,
+        ThemeMode: () => _theme.ModePreference,
+        SetThemeMode: SetThemeMode,
         Modules: _modules,
         IsModuleEnabled: id => _enabled.Contains(id),
-        SetModuleEnabled: SetModuleEnabled);
+        SetModuleEnabled: SetModuleEnabled,
+        ConfiguredLetter: LetraConfigurada);
 
     private void OpenSettings()
     {

@@ -3,6 +3,7 @@ using Moductus.Core.Hotkeys;
 using Moductus.Core.Leader;
 using Moductus.Core.Modules;
 using Moductus.Core.Startup;
+using Moductus.Core.Theme;
 using Moductus.UI;
 
 namespace Moductus.App;
@@ -19,6 +20,11 @@ internal sealed record SettingsModel(
     Func<HotkeyBinding, HotkeyRegistration> RebindLeader,
     Func<int> Opacidade,
     Action<int> SetOpacidade,
+    Func<string> ThemeId,
+    Action<string> SetTheme,
+    Func<ThemeModePreference> ThemeMode,
+    Action<ThemeModePreference> SetThemeMode,
     IReadOnlyList<IModule> Modules,
     Func<string, bool> IsModuleEnabled,
-    Action<string, bool> SetModuleEnabled);
+    Action<string, bool> SetModuleEnabled,
+    Func<string, char?> ConfiguredLetter);

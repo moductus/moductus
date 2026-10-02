@@ -3,86 +3,129 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Moductus"
         Style="{DynamicResource {x:Type Window}}"
-        Width="760" Height="640"
+        Width="960" Height="680"
         MinWidth="420" MinHeight="420"
         WindowStartupLocation="CenterScreen"
         ShowInTaskbar="True"
         KeyDown="OnKeyDown"
+        PreviewTextInput="OnPreviewTextInput"
         SizeChanged="OnSizeChanged">
 
     <!-- Nenhuma cor, tamanho ou raio aqui: tudo vem dos tokens. -->
 
     <Window.Resources>
-        <Style x:Key="Cartao" TargetType="Border">
-            <Setter Property="Background" Value="{DynamicResource bg.raised}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource border.subtle}" />
-            <Setter Property="BorderThickness" Value="{DynamicResource border.width}" />
-            <Setter Property="CornerRadius" Value="{DynamicResource radius.card}" />
-            <Setter Property="Padding" Value="{DynamicResource inset.16}" />
-        </Style>
-
-        <!-- Cartão de módulo: keycap com a letra líder, nome, descrição e as
-             duas ações. O visual da keycap é o mesmo da ajuda, de propósito:
-             é o mesmo objeto — a tecla que chama o módulo. -->
+        <!-- Cartão de módulo: keycap com a letra líder, nome, switch de ligar,
+             descrição e as duas ações. A keycap é o mesmo desenho do overlay
+             da líder, de propósito: é o mesmo objeto — a tecla que chama o
+             módulo. -->
         <DataTemplate x:Key="CartaoModulo">
-            <Border Style="{StaticResource Cartao}"
-                    MinWidth="{DynamicResource size.panel.minwidth}"
+            <Border Style="{DynamicResource style.card}"
                     Margin="{DynamicResource inset.8}">
-                <!-- DockPanel e não StackPanel: o WrapPanel iguala a altura dos
-                     cartões da linha, e só com as ações ancoradas embaixo elas
-                     ficam alinhadas entre cartões de descrição desigual. -->
+                <!-- DockPanel e não StackPanel: o UniformGrid iguala a altura
+                     dos cartões da linha, e só com as ações ancoradas embaixo
+                     elas ficam alinhadas entre cartões de descrição desigual. -->
                 <DockPanel>
-                    <StackPanel DockPanel.Dock="Bottom"
-                                Orientation="Horizontal"
-                                HorizontalAlignment="Right"
-                                Margin="{DynamicResource inset.8}">
-                        <Button Content="Abrir"
-                                Style="{DynamicResource style.button.compact}"
-                                Tag="{Binding Id}"
-                                Click="OnAbrirClick" />
-                        <Button x:Name="Configurar"
-                                Content="Configurar"
-                                Style="{DynamicResource style.button.compact}"
-                                Tag="{Binding Id}"
-                                Click="OnConfigurarClick"
-                                Margin="{DynamicResource inset.4}"
-                                Visibility="Collapsed" />
+                    <StackPanel DockPanel.Dock="Bottom">
+                        <Border BorderBrush="{DynamicResource border.subtle}"
+                                BorderThickness="{DynamicResource border.width.top}"
+                                Margin="{DynamicResource inset.home.divider}" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="Abrir"
+                                    Content="Abrir"
+                                    Style="{DynamicResource style.button.ghost}"
+                                    Tag="{Binding Id}"
+                                    AutomationProperties.Name="{Binding Nome, StringFormat='Abrir {0}'}"
+                                    Click="OnAbrirClick" />
+                            <Button x:Name="Configurar"
+                                    Grid.Column="1"
+                                    Content="Configurar"
+                                    Style="{DynamicResource style.button.ghost}"
+                                    Tag="{Binding Id}"
+                                    AutomationProperties.Name="{Binding Nome, StringFormat='Configurar {0}'}"
+                                    Click="OnConfigurarClick"
+                                    Margin="{DynamicResource inset.start.8}" />
+                        </Grid>
                     </StackPanel>
 
-                    <Grid VerticalAlignment="Top">
+                    <Grid DockPanel.Dock="Top">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0"
-                                Background="{DynamicResource bg.base}"
-                                BorderBrush="{DynamicResource border.strong}"
-                                BorderThickness="{DynamicResource border.width}"
-                                CornerRadius="{DynamicResource radius.control}"
-                                Padding="{DynamicResource inset.8}"
-                                VerticalAlignment="Top"
-                                Margin="{DynamicResource inset.8}">
-                            <TextBlock Text="{Binding Letra}"
-                                       FontFamily="{DynamicResource font.mono}"
-                                       FontSize="{DynamicResource type.body-lg}"
-                                       Foreground="{DynamicResource accent}" />
+                        <Border x:Name="Tecla" Style="{DynamicResource style.keycap.lg}">
+                            <TextBlock Text="{Binding Letra}" Style="{DynamicResource style.keycap.lg.text}" />
                         </Border>
-                        <StackPanel Grid.Column="1" Margin="{DynamicResource inset.8}">
-                            <TextBlock Text="{Binding Nome}"
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center"
+                                    Margin="{DynamicResource inset.start.12}">
+                            <TextBlock x:Name="Nome"
+                                       Text="{Binding Nome}"
                                        FontSize="{DynamicResource type.body-lg}"
                                        LineHeight="{DynamicResource type.body-lg.line}"
-                                       FontWeight="{DynamicResource weight.semibold}" />
-                            <TextBlock Text="{Binding Descricao}"
-                                       Style="{DynamicResource style.secondary}" />
+                                       FontWeight="{DynamicResource weight.semibold}"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       VerticalAlignment="Center" />
+                            <!-- Desligado é estado, não perigo: chip neutro, e
+                                 nunca vermelho. -->
+                            <Border x:Name="Desligado"
+                                    Style="{DynamicResource style.chip}"
+                                    Margin="{DynamicResource inset.start.8}"
+                                    Visibility="Collapsed">
+                                <TextBlock Text="Desligado" Style="{DynamicResource style.chip.text}" />
+                            </Border>
                         </StackPanel>
+                        <!-- O switch fica fora do que se atenua quando o módulo
+                             está desligado: é por ele que se volta a ligar. -->
+                        <ToggleButton x:Name="Ativo"
+                                      Grid.Column="2"
+                                      Style="{DynamicResource style.switch}"
+                                      IsChecked="{Binding Ativo, Mode=OneWay}"
+                                      Tag="{Binding Id}"
+                                      AutomationProperties.Name="{Binding Nome, StringFormat='Ativar {0}'}"
+                                      Margin="{DynamicResource inset.start.8}"
+                                      Checked="OnAtivoChanged"
+                                      Unchecked="OnAtivoChanged" />
                     </Grid>
+
+                    <TextBlock x:Name="Descricao"
+                               Text="{Binding Descricao}"
+                               Style="{DynamicResource style.secondary}"
+                               Margin="{DynamicResource inset.detail}" />
                 </DockPanel>
             </Border>
             <DataTemplate.Triggers>
-                <DataTrigger Binding="{Binding TemPainel}" Value="True">
-                    <Setter TargetName="Configurar" Property="Visibility" Value="Visible" />
+                <!-- Sem painel de configuração, o Abrir ocupa a linha inteira:
+                     um vão vazio onde estaria o Configurar parece botão
+                     faltando. -->
+                <DataTrigger Binding="{Binding TemPainel}" Value="False">
+                    <Setter TargetName="Configurar" Property="Visibility" Value="Collapsed" />
+                    <Setter TargetName="Abrir" Property="Grid.ColumnSpan" Value="2" />
+                </DataTrigger>
+                <!-- Desligado: atenuado e não escondido. Continua na grade para
+                     poder ser religado daqui, mas Abrir não faz sentido — o
+                     módulo não está rodando. -->
+                <DataTrigger Binding="{Binding Ativo}" Value="False">
+                    <Setter TargetName="Desligado" Property="Visibility" Value="Visible" />
+                    <Setter TargetName="Tecla" Property="Opacity" Value="{DynamicResource opacity.disabled}" />
+                    <Setter TargetName="Nome" Property="Opacity" Value="{DynamicResource opacity.disabled}" />
+                    <Setter TargetName="Descricao" Property="Opacity" Value="{DynamicResource opacity.disabled}" />
+                    <Setter TargetName="Abrir" Property="IsEnabled" Value="False" />
                 </DataTrigger>
             </DataTemplate.Triggers>
+        </DataTemplate>
+
+        <!-- Uma keycap por parte da combinação da tecla líder. -->
+        <DataTemplate x:Key="TeclaLider">
+            <Border Style="{DynamicResource style.keycap}" Margin="{DynamicResource inset.home.keycap}">
+                <TextBlock Text="{Binding}" Style="{DynamicResource style.keycap.text}" />
+            </Border>
         </DataTemplate>
     </Window.Resources>
 
@@ -90,51 +133,141 @@
         <Border DockPanel.Dock="Bottom"
                 Background="{DynamicResource bg.raised}"
                 BorderBrush="{DynamicResource border.subtle}"
-                BorderThickness="0,1,0,0"
-                Padding="{DynamicResource inset.16}">
-            <StackPanel Orientation="Horizontal">
-                <Button Content="Como usar"
-                        Style="{DynamicResource style.button.compact}"
-                        Click="OnComoUsarClick" />
-                <Button Content="Configurações"
-                        Style="{DynamicResource style.button.compact}"
-                        Click="OnConfiguracoesClick"
-                        Margin="{DynamicResource inset.8}" />
-            </StackPanel>
+                BorderThickness="{DynamicResource border.width.top}"
+                Padding="{DynamicResource inset.home.footer}">
+            <DockPanel>
+                <!-- A promessa do produto, no rodapé de toda vez: é o que
+                     autoriza um app que registra hotkeys globais e lê o
+                     clipboard a ficar instalado. -->
+                <StackPanel DockPanel.Dock="Right"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center">
+                    <Ellipse Style="{DynamicResource style.dot.success}"
+                             Margin="{DynamicResource inset.end.8}" />
+                    <TextBlock Text="Zero telemetria · zero rede"
+                               Style="{DynamicResource style.caption}"
+                               TextWrapping="NoWrap"
+                               VerticalAlignment="Center" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Button Style="{DynamicResource style.button.ghost}"
+                            AutomationProperties.Name="Como usar"
+                            Click="OnComoUsarClick">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE897;"
+                                       Style="{DynamicResource style.icon}"
+                                       FontSize="{DynamicResource type.body}"
+                                       LineHeight="{DynamicResource type.body}"
+                                       Margin="{DynamicResource inset.end.8}" />
+                            <TextBlock Text="Como usar" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button Style="{DynamicResource style.button.ghost}"
+                            AutomationProperties.Name="Configurações"
+                            Margin="{DynamicResource inset.start.8}"
+                            Click="OnConfiguracoesClick">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE713;"
+                                       Style="{DynamicResource style.icon}"
+                                       FontSize="{DynamicResource type.body}"
+                                       LineHeight="{DynamicResource type.body}"
+                                       Margin="{DynamicResource inset.end.8}" />
+                            <TextBlock Text="Configurações" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </DockPanel>
         </Border>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <StackPanel Margin="{DynamicResource inset.24}">
+        <!-- O cabeçalho fica fora da rolagem: a busca é o que a tela inteira
+             serve, e não pode sumir quando a grade desce. -->
+        <StackPanel DockPanel.Dock="Top" Margin="{DynamicResource inset.home.header}">
+            <WrapPanel>
+                <TextBlock Text="Moductus"
+                           Style="{DynamicResource style.title}"
+                           FontSize="{DynamicResource type.display}"
+                           LineHeight="{DynamicResource type.display.line}"
+                           TextWrapping="NoWrap"
+                           VerticalAlignment="Center"
+                           Margin="{DynamicResource inset.end.12}" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock x:Name="Resumo"
+                               Style="{DynamicResource style.secondary}"
+                               TextWrapping="NoWrap"
+                               VerticalAlignment="Center" />
+                    <ItemsControl x:Name="Lider"
+                                  Focusable="False"
+                                  VerticalAlignment="Center"
+                                  Margin="{DynamicResource inset.start.8}"
+                                  ItemTemplate="{StaticResource TeclaLider}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <!-- Líder em conflito: a combinação continua desenhada,
+                         porque é ela que o usuário vai procurar nas
+                         configurações para trocar. -->
+                    <Border x:Name="LiderConflito"
+                            Style="{DynamicResource style.chip.danger}"
+                            Margin="{DynamicResource inset.start.8}"
+                            Visibility="Collapsed">
+                        <TextBlock Text="Em conflito" Style="{DynamicResource style.chip.text}" />
+                    </Border>
+                </StackPanel>
+            </WrapPanel>
 
-                <TextBlock Text="Moductus" Style="{DynamicResource style.title}" />
-                <TextBlock x:Name="Subtitulo"
-                           Style="{DynamicResource style.secondary}"
-                           Margin="{DynamicResource inset.4}" />
-
+            <Grid Margin="{DynamicResource inset.home.search.top}">
                 <TextBox x:Name="Busca"
-                         Tag="Buscar módulo"
+                         Style="{DynamicResource style.input.search}"
+                         Padding="{DynamicResource inset.home.search}"
+                         Tag="Buscar módulo…"
+                         AutomationProperties.Name="Buscar módulo"
                          TextChanged="OnBuscaChanged"
-                         Margin="{DynamicResource inset.16}" />
+                         KeyDown="OnBuscaKeyDown" />
+                <!-- Lupa e keycap por cima do campo, sem receber clique: o
+                     clique tem de cair no campo. O recuo do texto que abre
+                     espaço para as duas é o inset.home.search. -->
+                <TextBlock Text="&#xE721;"
+                           Style="{DynamicResource style.icon}"
+                           FontSize="{DynamicResource type.body}"
+                           LineHeight="{DynamicResource type.body}"
+                           Foreground="{DynamicResource text.muted}"
+                           HorizontalAlignment="Left"
+                           Margin="{DynamicResource inset.start.12}"
+                           IsHitTestVisible="False" />
+                <Border Style="{DynamicResource style.keycap}"
+                        HorizontalAlignment="Right"
+                        Margin="{DynamicResource inset.end.12}"
+                        IsHitTestVisible="False">
+                    <TextBlock Text="/" Style="{DynamicResource style.keycap.text}" />
+                </Border>
+            </Grid>
+        </StackPanel>
 
-                <ItemsControl x:Name="Modulos" ItemTemplate="{StaticResource CartaoModulo}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+            <StackPanel Margin="{DynamicResource inset.home.grid}">
+
+                <ItemsControl x:Name="Modulos"
+                              Focusable="False"
+                              ItemTemplate="{StaticResource CartaoModulo}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <!-- UniformGrid e não WrapPanel: com WrapPanel os
                                  cartões têm largura fixa e sobra uma faixa
                                  vazia à direita quando não cabe mais um. As
                                  colunas são recalculadas no SizeChanged. -->
-                            <UniformGrid x:Name="Grade" Columns="2" />
+                            <UniformGrid Columns="3" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                 </ItemsControl>
 
                 <TextBlock x:Name="Vazio"
                            Style="{DynamicResource style.secondary}"
-                           Text="Nenhum módulo com esse nome."
+                           Text="Nenhum módulo com esse nome. Apague a busca para ver todos."
                            Margin="{DynamicResource inset.8}"
                            Visibility="Collapsed" />
-
-                
 
             </StackPanel>
         </ScrollViewer>
