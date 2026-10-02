@@ -6,8 +6,8 @@
 
 Suíte de utilitários para Windows, open source, em processo único, acionada por teclado.
 
-[![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-FFB224)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/moductus/moductus?include_prereleases&color=FFB224)](https://github.com/moductus/moductus/releases)
+[![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-171717)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/moductus/moductus?include_prereleases&color=171717)](https://github.com/moductus/moductus/releases)
 
 ---
 

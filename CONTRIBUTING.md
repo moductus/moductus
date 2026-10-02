@@ -12,7 +12,7 @@ Vale ler [docs/PRODUCT.md](docs/PRODUCT.md#46-não-objetivos) antes de propor. A
 
 - **Um módulo por PR.** PR que toca dois módulos vira dois PRs.
 - **Todo módulo usa um dos quatro arquétipos de janela**, sem exceção: Palette, HUD, Panel ou Canvas. Módulo novo não desenha UI nova — escolhe um arquétipo e preenche o conteúdo.
-- **Nenhuma cor, tamanho, raio ou duração literal no código.** Tudo vem de chaves do `Tokens.xaml`. Se falta um token, o PR discute o token antes de usar um número solto.
+- **Nenhuma cor, tamanho, raio ou duração literal no código.** Tudo vem de chaves do `Tokens.xaml` e dos temas em `Themes/`. Se falta um token, o PR discute o token antes de usar um número solto.
 - **Nenhuma dependência NuGet nova sem justificativa explícita no PR.** "Facilita" não é justificativa.
 - **Nenhuma chamada de rede.** Não há exceção para isso, nem para checagem de atualização.
 - **Nenhum `MessageBox`.** Erro aparece inline, dentro do próprio overlay.
