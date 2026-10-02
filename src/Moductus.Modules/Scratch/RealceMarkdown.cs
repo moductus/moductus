@@ -331,9 +331,11 @@ internal static class RealceMarkdown
 
         var riscos = new TextDecorationCollection();
 
+        // accent.text, não accent: o accent é cor de preenchimento, e como
+        // letra ele some em tema claro — o lima sobre branco não se lê.
         if (estilo.HasFlag(MarkdownEstilo.Destaque))
         {
-            corrido.SetResourceReference(TextElement.ForegroundProperty, "accent");
+            corrido.SetResourceReference(TextElement.ForegroundProperty, "accent.text");
         }
         else if (estilo.HasFlag(MarkdownEstilo.Marcador))
         {
@@ -341,7 +343,7 @@ internal static class RealceMarkdown
         }
         else if (estilo.HasFlag(MarkdownEstilo.Link))
         {
-            corrido.SetResourceReference(TextElement.ForegroundProperty, "accent");
+            corrido.SetResourceReference(TextElement.ForegroundProperty, "accent.text");
 
             // Numa coleção, não atribuído: "[~~a~~](x)" é link e riscado ao mesmo
             // tempo, e quem atribuísse por último apagaria o outro.

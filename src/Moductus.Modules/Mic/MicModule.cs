@@ -85,14 +85,10 @@ public sealed class MicModule(ModuleContext context) : IModule
 
         Aplicar(mudo);
 
-        if (mudo)
-        {
-            context.Archetypes.Hud.Flash(
-                "Microfone mudo",
-                "Mudo no endpoint, ninguém te ouve. O ícone da bandeja fica marcado.",
-                HudTone.Neutro);
-        }
-        else
+        // Mutar não dispara HUD: a pastilha "Microfone mudo" aparece no mesmo
+        // instante, e a pílula no centro repetiria o aviso. Abrir continua no
+        // HUD, porque aí a pastilha sai e nada mais diz que voltou a captar.
+        if (!mudo)
         {
             context.Archetypes.Hud.Flash(
                 "Microfone aberto",

@@ -1,4 +1,5 @@
 using System.Windows.Controls;
+using Moductus.Core.Commands;
 using Moductus.Core.Modules;
 using Moductus.UI.Archetypes;
 using Moductus.UI.Modules;
@@ -83,9 +84,34 @@ public sealed class PaletteModule(ModuleContext context) : IModule
 
     public UserControl? BuildSettings() => null;
 
-    private IEnumerable<PaletteItem> Procurar(string consulta) => context.Commands
-        .Search(consulta)
-        .Select(c => new PaletteItem(c.Text, c.Detail, c.Hint, c.Execute));
+    private IEnumerable<PaletteItem> Procurar(string consulta)
+    {
+        // Sem texto, o que vem de aplicativo é a lista dos abertos por último,
+        // não o resultado de uma busca, e o cabeçalho diz isso.
+        var vazia = consulta.Trim().Length == 0;
+
+        return context.Commands
+            .Search(consulta)
+            .Select(c =>
+            {
+                var (secao, tipo, icone) = Aparencia(c.Category, vazia);
+                return new PaletteItem(c.Text, c.Detail, c.Hint, c.Execute) { Section = secao, Kind = tipo, Icon = icone };
+            });
+    }
+
+    /// <summary>
+    /// Cabeçalho da seção, nome do tipo no chip e glifo do quadrado, por
+    /// categoria. Os glifos são do Segoe Fluent Icons e existem com o mesmo
+    /// ponto de código no Segoe MDL2 Assets do Windows 10.
+    /// </summary>
+    private static (string Secao, string Tipo, string Icone) Aparencia(CommandCategory categoria, bool vazia) => categoria switch
+    {
+        CommandCategory.Calculadora => ("CALCULADORA", "Conta", ""),
+        CommandCategory.Aplicativo => (vazia ? "RECENTES" : "APLICATIVOS", "Aplicativo", ""),
+        CommandCategory.Arquivo => ("ARQUIVOS", "Arquivo", ""),
+        CommandCategory.Pasta => ("ARQUIVOS", "Pasta", ""),
+        _ => ("COMANDOS", "Comando", ""),
+    };
 
     /// <summary>
     /// App e arquivo chegam depois do texto digitado. Reaplicar o provedor

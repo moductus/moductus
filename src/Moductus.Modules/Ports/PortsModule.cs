@@ -2,9 +2,11 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 using Moductus.Core.Interop;
 using Moductus.Core.Modules;
+using Moductus.Core.Text;
 using Moductus.UI.Archetypes;
 using Moductus.UI.Modules;
 
@@ -30,12 +32,39 @@ public sealed class PortsModule(ModuleContext context) : IModule
     private const int SegundosPadrao = 0;
     private const int SegundosMaximo = 3600;
 
+    /// <summary>
+    /// As colunas que têm a largura do conteúdo. Cabeçalho e linhas são Grids
+    /// separados, e é o grupo compartilhado que mantém as colunas alinhadas.
+    /// </summary>
+    private const string ColunaPid = "pid";
+    private const string ColunaOnde = "onde";
+    private const string ColunaAcao = "acao";
+
     private readonly TextBox _filtro = new();
     private readonly StackPanel _linhas = new();
     private readonly TextBlock _estado = new();
+    private FrameworkElement _cabecalho = new Border();
+    private readonly Ellipse _ponto = new();
+    private readonly TextBlock _atualizado = new();
     private readonly DockPanel _corpo = new();
     private readonly DispatcherTimer _auto = new();
+
+    /// <summary>
+    /// Reescreve o "há N s" do rodapé. Um segundo é o degrau mais fino que o
+    /// texto mostra; mais rápido seria trabalho para nada.
+    /// </summary>
+    private readonly DispatcherTimer _relogio = new() { Interval = TimeSpan.FromSeconds(1) };
+
     private IReadOnlyList<Linha> _todas = [];
+
+    /// <summary>Quando a última leitura terminou bem. Nulo antes da primeira.</summary>
+    private DateTime? _lidoEm;
+
+    /// <summary>Lendo agora: o rodapé diz isso em vez da idade da leitura anterior.</summary>
+    private bool _lendo;
+
+    /// <summary>A última leitura falhou: o ponto do rodapé fica em perigo até a próxima dar certo.</summary>
+    private bool _falhou;
 
     /// <summary>A árvore visual só é construída uma vez, por mais que Enable repita.</summary>
     private bool _montado;
@@ -82,10 +111,12 @@ public sealed class PortsModule(ModuleContext context) : IModule
 
         _montado = true;
 
-        _filtro.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
         _filtro.Tag = "Filtrar por número da porta ou nome do processo";
         _filtro.TextChanged += (_, _) => Render();
-        _filtro.PreviewKeyDown += (_, e) =>
+
+        // F5 vale no painel inteiro, não só no filtro: com o foco num
+        // "Encerrar", recarregar para ver se a porta soltou é o passo seguinte.
+        _corpo.PreviewKeyDown += (_, e) =>
         {
             if (e.Key == Key.F5)
             {
@@ -96,32 +127,52 @@ public sealed class PortsModule(ModuleContext context) : IModule
 
         _estado.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
         _estado.HorizontalAlignment = HorizontalAlignment.Center;
+        _estado.TextAlignment = TextAlignment.Center;
         _estado.SetResourceReference(FrameworkElement.MarginProperty, "inset.y.16");
 
         _auto.Tick += (_, _) => Carregar();
+        _relogio.Tick += (_, _) => Rodape();
 
         // Construído uma vez: um elemento só pode ter um pai lógico.
-        var atualizar = new Button { Content = "Atualizar (F5)" };
-        atualizar.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
+        var atualizar = new Button { Content = "Atualizar", ToolTip = "Lê a tabela TCP de novo (F5)" };
+        atualizar.SetResourceReference(FrameworkElement.StyleProperty, "style.button.ghost");
+        atualizar.SetResourceReference(FrameworkElement.MarginProperty, "inset.start.8");
         atualizar.Click += (_, _) => Carregar();
 
         var topo = new DockPanel();
+        topo.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
         DockPanel.SetDock(atualizar, Dock.Right);
         topo.Children.Add(atualizar);
         topo.Children.Add(_filtro);
 
-        var rolagem = new ScrollViewer { Content = _linhas, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        // O cabeçalho rola junto com as linhas, dentro do mesmo painel: a barra
+        // de rolagem tira largura só de quem está dentro dela, e um cabeçalho
+        // de fora ficaria com as colunas da direita desencontradas das linhas.
+        var tabela = new StackPanel();
+        tabela.SetResourceReference(FrameworkElement.MarginProperty, "inset.list");
+        _cabecalho = Cabecalho();
+        _cabecalho.Visibility = Visibility.Collapsed;
+        tabela.Children.Add(_cabecalho);
+        tabela.Children.Add(_estado);
+        tabela.Children.Add(_linhas);
+
+        var rolagem = new ScrollViewer { Content = tabela, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+
+        var rodape = MontarRodape();
 
         DockPanel.SetDock(topo, Dock.Top);
-        DockPanel.SetDock(_estado, Dock.Top);
+        DockPanel.SetDock(rodape, Dock.Bottom);
         _corpo.Children.Add(topo);
-        _corpo.Children.Add(_estado);
+        _corpo.Children.Add(rodape);
         _corpo.Children.Add(rolagem);
+
+        Grid.SetIsSharedSizeScope(_corpo, true);
     }
 
     public void Disable()
     {
         _auto.Stop();
+        _relogio.Stop();
 
         // O Panel continuaria na tela operando um módulo desligado — e o botão
         // "Encerrar" continuaria matando processo.
@@ -148,6 +199,7 @@ public sealed class PortsModule(ModuleContext context) : IModule
 
         Carregar();
         ReiniciarAuto();
+        _relogio.Start();
     }
 
     /// <summary>
@@ -158,6 +210,7 @@ public sealed class PortsModule(ModuleContext context) : IModule
     {
         context.Archetypes.Panel.Dismissed -= PararAoFechar;
         _auto.Stop();
+        _relogio.Stop();
     }
 
     private void ReiniciarAuto()
@@ -176,8 +229,17 @@ public sealed class PortsModule(ModuleContext context) : IModule
 
     private async void Carregar()
     {
-        _estado.Text = "Lendo a tabela TCP…";
-        _estado.Visibility = Visibility.Visible;
+        _lendo = true;
+        Rodape();
+
+        // A mensagem no meio só quando não há lista para mostrar: com linhas na
+        // tela, a releitura automática faria o aviso piscar em cima delas a
+        // cada ciclo. O rodapé já diz que está lendo.
+        if (_todas.Count == 0)
+        {
+            _estado.Text = "Lendo a tabela TCP…";
+            _estado.Visibility = Visibility.Visible;
+        }
 
         IReadOnlyList<TcpListener> portas;
 
@@ -187,7 +249,11 @@ public sealed class PortsModule(ModuleContext context) : IModule
         }
         catch (Exception e)
         {
+            _lendo = false;
+            _falhou = true;
             _estado.Text = $"Não deu para ler a tabela TCP: {e.Message}";
+            _estado.Visibility = Visibility.Visible;
+            Rodape();
             return;
         }
 
@@ -206,7 +272,20 @@ public sealed class PortsModule(ModuleContext context) : IModule
             .OrderBy(l => l.Porta.Port)
             .ToList();
 
+        _lendo = false;
+        _falhou = false;
+        _lidoEm = DateTime.Now;
+
+        // A leitura volta depois do Panel ter ido para outro módulo: a contagem
+        // é desta lista, e escrevê-la na barra do vizinho seria mentir.
+        var panel = context.Archetypes.Panel;
+        if (panel.IsShowingFor(Id))
+        {
+            panel.ShowChip($"{_todas.Count} em escuta");
+        }
+
         Render();
+        Rodape();
     }
 
     private void Render()
@@ -221,8 +300,18 @@ public sealed class PortsModule(ModuleContext context) : IModule
                 || l.Porta.Port.ToString().Contains(q, StringComparison.Ordinal)
                 || l.Processo.Contains(q, StringComparison.OrdinalIgnoreCase))).ToList();
 
+        // Sem linha, sem cabeçalho: as colunas automáticas não têm o que medir,
+        // e os títulos encolhidos se amontoavam no canto em cima do aviso.
+        _cabecalho.Visibility = visiveis.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+
         if (visiveis.Count == 0)
         {
+            // Ainda lendo pela primeira vez: o aviso de leitura fica.
+            if (_lendo && _todas.Count == 0)
+            {
+                return;
+            }
+
             _estado.Text = _todas.Count == 0 ? "Nenhuma porta TCP em escuta."
                 : q.Length == 0 ? "Só portas de sistema em escuta. Desmarque a opção em Ajustar para vê-las."
                 : $"Nada com \"{q}\". Filtra por número da porta ou nome do processo.";
@@ -238,6 +327,67 @@ public sealed class PortsModule(ModuleContext context) : IModule
         }
     }
 
+    // ---- Tabela ---------------------------------------------------------------
+
+    /// <summary>
+    /// As cinco colunas, iguais no cabeçalho e em cada linha: porta, processo
+    /// (a que estica), pid, onde escuta e a ação.
+    /// </summary>
+    private static Grid Colunas()
+    {
+        var grade = new Grid();
+        grade.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grade.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grade.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, SharedSizeGroup = ColunaPid });
+        grade.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, SharedSizeGroup = ColunaOnde });
+        grade.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto, SharedSizeGroup = ColunaAcao });
+        return grade;
+    }
+
+    private static void Por(Grid grade, UIElement filho, int coluna)
+    {
+        Grid.SetColumn(filho, coluna);
+        grade.Children.Add(filho);
+    }
+
+    private static FrameworkElement Cabecalho()
+    {
+        var grade = Colunas();
+
+        Por(grade, Titulo("PORTA", "size.port"), 0);
+        Por(grade, Titulo("PROCESSO"), 1);
+        Por(grade, Titulo("PID", margem: "inset.column"), 2);
+        Por(grade, Titulo("ONDE", margem: "inset.column"), 3);
+
+        // Mesmo recuo da linha, mais a altura de uma: o cabeçalho é a régua
+        // que as linhas de baixo seguem.
+        var faixa = new Border { Child = grade };
+        faixa.SetResourceReference(Border.PaddingProperty, "inset.8.h");
+        faixa.SetResourceReference(FrameworkElement.MinHeightProperty, "size.row");
+        faixa.SetResourceReference(Border.BorderBrushProperty, "border.subtle");
+        faixa.SetResourceReference(Border.BorderThicknessProperty, "border.width.bottom");
+        faixa.SetResourceReference(FrameworkElement.MarginProperty, "inset.bottom.8");
+        return faixa;
+    }
+
+    private static TextBlock Titulo(string texto, string? largura = null, string? margem = null)
+    {
+        var t = new TextBlock { Text = texto, VerticalAlignment = VerticalAlignment.Center };
+        t.SetResourceReference(FrameworkElement.StyleProperty, "style.section");
+
+        if (largura is not null)
+        {
+            t.SetResourceReference(FrameworkElement.WidthProperty, largura);
+        }
+
+        if (margem is not null)
+        {
+            t.SetResourceReference(FrameworkElement.MarginProperty, margem);
+        }
+
+        return t;
+    }
+
     private FrameworkElement BuildLinha(Linha l)
     {
         var porta = new TextBlock { Text = l.Porta.Port.ToString(), VerticalAlignment = VerticalAlignment.Center };
@@ -247,7 +397,7 @@ public sealed class PortsModule(ModuleContext context) : IModule
 
         var processo = new TextBlock
         {
-            Text = $"{l.Processo} · pid {l.Porta.ProcessId}",
+            Text = l.Processo,
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
             TextWrapping = TextWrapping.NoWrap,
@@ -258,21 +408,103 @@ public sealed class PortsModule(ModuleContext context) : IModule
             processo.SetResourceReference(TextBlock.ForegroundProperty, "text.muted");
         }
 
+        // O pid em mono e atenuado: é número de consulta, não o que se lê
+        // primeiro. Sem pid quando é o próprio sistema, que tem pid 0.
+        var pid = new TextBlock
+        {
+            Text = l.Porta.ProcessId == 0 ? "—" : l.Porta.ProcessId.ToString(),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        pid.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        pid.SetResourceReference(TextBlock.FontFamilyProperty, "font.mono");
+        pid.SetResourceReference(FrameworkElement.MarginProperty, "inset.column");
+
         var endereco = new TextBlock { Text = l.Enderecos, VerticalAlignment = VerticalAlignment.Center };
-        endereco.SetResourceReference(FrameworkElement.MarginProperty, "inset.8.h");
         endereco.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        endereco.SetResourceReference(FrameworkElement.MarginProperty, "inset.column");
 
         var encerrar = new Button { Content = "Encerrar", IsEnabled = !l.Desconhecido };
-        encerrar.SetResourceReference(FrameworkElement.StyleProperty, "style.button.compact");
+        encerrar.SetResourceReference(FrameworkElement.HeightProperty, "size.button.compact");
+        encerrar.SetResourceReference(Control.PaddingProperty, "inset.button.compact");
+        encerrar.SetResourceReference(Control.FontSizeProperty, "type.caption");
+        encerrar.SetResourceReference(FrameworkElement.MarginProperty, "inset.column");
+        encerrar.VerticalAlignment = VerticalAlignment.Center;
+
+        if (l.Desconhecido)
+        {
+            encerrar.ToolTip = "Sem elevação não dá para encerrar este processo daqui.";
+        }
+
+        var grade = Colunas();
+        Por(grade, porta, 0);
+        Por(grade, processo, 1);
+        Por(grade, pid, 2);
+        Por(grade, endereco, 3);
+        Por(grade, encerrar, 4);
+
+        var linha = new Border { Child = grade, Background = System.Windows.Media.Brushes.Transparent };
+        linha.SetResourceReference(FrameworkElement.MinHeightProperty, "size.row");
+        linha.SetResourceReference(Border.PaddingProperty, "inset.8.h");
+        linha.SetResourceReference(Border.CornerRadiusProperty, "radius.control");
+
         var confirmando = false;
+
+        // Fantasma parado, perigo quando a linha está na mira — mouse em cima
+        // ou foco de teclado nela. Uma lista inteira de botões vermelhos
+        // gritaria "perigo" em cada linha; o vermelho só aparece onde a pessoa
+        // está prestes a agir.
+        void Pintar()
+        {
+            var naMira = linha.IsMouseOver || linha.IsKeyboardFocusWithin;
+
+            if (naMira)
+            {
+                linha.SetResourceReference(Border.BackgroundProperty, "bg.hover");
+            }
+            else
+            {
+                linha.Background = System.Windows.Media.Brushes.Transparent;
+            }
+
+            var perigo = (naMira || confirmando) && encerrar.IsEnabled;
+            encerrar.SetResourceReference(FrameworkElement.StyleProperty, perigo ? "style.button.danger" : "style.button.ghost");
+
+            // Parado, o texto do fantasma vai em secundário: em text.primary a
+            // coluna de "Encerrar" pesava mais que a de processos. O valor local
+            // ganharia do vermelho do perigo e do atenuado do desabilitado, então
+            // só vale no fantasma habilitado.
+            if (!perigo && encerrar.IsEnabled)
+            {
+                encerrar.SetResourceReference(Control.ForegroundProperty, "text.secondary");
+            }
+            else
+            {
+                encerrar.ClearValue(Control.ForegroundProperty);
+            }
+
+            // Pedindo confirmação, o véu de perigo fica parado, sem depender do
+            // hover: é o que diz que a segunda pressão vai matar o processo.
+            if (confirmando)
+            {
+                encerrar.SetResourceReference(Control.BackgroundProperty, "danger.veil");
+            }
+            else
+            {
+                encerrar.ClearValue(Control.BackgroundProperty);
+            }
+        }
+
+        linha.MouseEnter += (_, _) => Pintar();
+        linha.MouseLeave += (_, _) => Pintar();
+        linha.IsKeyboardFocusWithinChanged += (_, _) => Pintar();
+
         var volta = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
         volta.Tick += (_, _) =>
         {
             volta.Stop();
             confirmando = false;
             encerrar.Content = "Encerrar";
-            encerrar.SetResourceReference(Control.BackgroundProperty, "bg.raised");
-            encerrar.SetResourceReference(Control.ForegroundProperty, "text.primary");
+            Pintar();
         };
         encerrar.Click += (_, _) =>
         {
@@ -280,8 +512,7 @@ public sealed class PortsModule(ModuleContext context) : IModule
             {
                 confirmando = true;
                 encerrar.Content = "Confirmar";
-                encerrar.SetResourceReference(Control.BackgroundProperty, "danger");
-                encerrar.SetResourceReference(Control.ForegroundProperty, "accent.fg");
+                Pintar();
                 volta.Start();
                 return;
             }
@@ -290,17 +521,76 @@ public sealed class PortsModule(ModuleContext context) : IModule
             Encerrar(l);
         };
 
-        var linha = new DockPanel();
-        linha.SetResourceReference(FrameworkElement.MinHeightProperty, "size.row");
-        linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.8.h");
-        DockPanel.SetDock(porta, Dock.Left);
-        DockPanel.SetDock(encerrar, Dock.Right);
-        DockPanel.SetDock(endereco, Dock.Right);
-        linha.Children.Add(porta);
-        linha.Children.Add(encerrar);
-        linha.Children.Add(endereco);
-        linha.Children.Add(processo);
+        Pintar();
         return linha;
+    }
+
+    // ---- Rodapé ---------------------------------------------------------------
+
+    private Border MontarRodape()
+    {
+        _ponto.SetResourceReference(FrameworkElement.StyleProperty, "style.dot.muted");
+        _ponto.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.8");
+
+        _atualizado.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        _atualizado.VerticalAlignment = VerticalAlignment.Center;
+        _atualizado.TextTrimming = TextTrimming.CharacterEllipsis;
+        _atualizado.TextWrapping = TextWrapping.NoWrap;
+
+        var dica = new TextBlock { Text = "F5 atualiza", VerticalAlignment = VerticalAlignment.Center };
+        dica.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        dica.SetResourceReference(FrameworkElement.MarginProperty, "inset.start.8");
+
+        var conteudo = new DockPanel();
+        DockPanel.SetDock(_ponto, Dock.Left);
+        DockPanel.SetDock(dica, Dock.Right);
+        conteudo.Children.Add(_ponto);
+        conteudo.Children.Add(dica);
+        conteudo.Children.Add(_atualizado);
+
+        var rodape = new Border { Child = conteudo };
+        rodape.SetResourceReference(FrameworkElement.StyleProperty, "style.panel.footer");
+        return rodape;
+    }
+
+    /// <summary>
+    /// O ponto e a frase do rodapé: verde com a idade da última leitura,
+    /// neutro enquanto lê, vermelho quando a leitura falhou.
+    /// </summary>
+    private void Rodape()
+    {
+        string texto;
+        string ponto;
+
+        if (_lendo)
+        {
+            texto = "Lendo a tabela TCP…";
+            ponto = "style.dot.muted";
+        }
+        else if (_falhou)
+        {
+            texto = "A última leitura falhou";
+            ponto = "style.dot.danger";
+        }
+        else if (_lidoEm is { } quando)
+        {
+            texto = $"Atualizado {Elapsed.Since(DateTime.Now - quando)}";
+            ponto = "style.dot.success";
+        }
+        else
+        {
+            texto = string.Empty;
+            ponto = "style.dot.muted";
+        }
+
+        var segundos = SegundosAteRecarregar;
+        if (segundos > 0 && texto.Length > 0)
+        {
+            texto += $" · recarrega a cada {segundos} s";
+        }
+
+        _atualizado.Text = texto;
+        _ponto.SetResourceReference(FrameworkElement.StyleProperty, ponto);
     }
 
     private void Encerrar(Linha l)

@@ -82,7 +82,9 @@ public sealed class LinksModule(ModuleContext context) : IModule
         _zona.Child = zonaTexto;
         _zona.SetResourceReference(FrameworkElement.HeightProperty, "size.dropzone");
         _zona.AllowDrop = true;
-        _zona.SetResourceReference(Border.BackgroundProperty, "bg.raised");
+        // Rebaixada, como o campo de busca: lê como "solte aqui" antes de
+        // qualquer arrasto, onde o bg.raised lia como mais um cartão.
+        _zona.SetResourceReference(Border.BackgroundProperty, "bg.inset");
         _zona.SetResourceReference(Border.BorderBrushProperty, "border.strong");
         _zona.SetResourceReference(Border.BorderThicknessProperty, "border.width");
         _zona.SetResourceReference(Border.CornerRadiusProperty, "radius.card");
@@ -112,18 +114,27 @@ public sealed class LinksModule(ModuleContext context) : IModule
         _destino.Tag = "Onde o atalho vai aparecer";
         _destino.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
 
+        // Switch e não botão de alternar: marcado, o botão comum vira um bloco
+        // de accent, que no Grafite é uma faixa branca maior que o próprio
+        // Criar — a opção avançada gritava mais que a ação.
         _symlink.Content = "Symlink (avançado)";
-        _symlink.SetResourceReference(FrameworkElement.StyleProperty, "style.toggle.compact");
+        _symlink.SetResourceReference(FrameworkElement.StyleProperty, "style.switch");
         _symlink.ToolTip = "Symlink exige Modo Desenvolvedor ou admin. Junction, o padrão, não exige nada.";
 
+        // A ação da tela, e a do Enter: primário. No tamanho compacto, que é o
+        // de antes, para a linha das ações não crescer.
         var criar = new Button { Content = "Criar" };
-        criar.SetResourceReference(FrameworkElement.MarginProperty, "inset.start.8");
-        criar.SetResourceReference(FrameworkElement.StyleProperty, "style.button.compact");
+        criar.SetResourceReference(FrameworkElement.StyleProperty, "style.button.primary");
+        criar.SetResourceReference(FrameworkElement.HeightProperty, "size.button.compact");
+        criar.SetResourceReference(Control.PaddingProperty, "inset.button.compact");
+        criar.SetResourceReference(Control.FontSizeProperty, "type.caption");
         criar.IsDefault = true; // Enter nos TextBox cria o link.
         criar.Click += (_, _) => Criar();
 
-        var acoes = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var acoes = new DockPanel { LastChildFill = false };
         acoes.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
+        DockPanel.SetDock(_symlink, Dock.Left);
+        DockPanel.SetDock(criar, Dock.Right);
         acoes.Children.Add(_symlink);
         acoes.Children.Add(criar);
 

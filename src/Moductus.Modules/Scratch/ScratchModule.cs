@@ -6,6 +6,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Moductus.Core.Modules;
+using Moductus.Core.Text;
 using Moductus.UI.Archetypes;
 using Moductus.UI.Modules;
 
@@ -33,7 +34,8 @@ public sealed class ScratchModule(ModuleContext context) : IModule
 
     private readonly RichTextBox _texto = new();
     private readonly TextBlock _dica = new();
-    private readonly TextBlock _estado = new();
+    private readonly TextBlock _arquivo = new();
+    private readonly TextBlock _contagem = new();
     private readonly Grid _folha = new();
     private readonly DockPanel _corpo = new();
     private readonly DispatcherTimer _salvar = new() { Interval = Debounce };
@@ -44,6 +46,14 @@ public sealed class ScratchModule(ModuleContext context) : IModule
     /// indo para o disco com o módulo desligado.
     /// </summary>
     private TextChangedEventHandler? _aoMudarTexto;
+
+    /// <summary>
+    /// O chip da barra de título: "Salvo", "Salvando…". Guardado aqui porque a
+    /// barra é do Panel, que troca de dono — quem volta a ocupá-lo repõe o
+    /// próprio estado, em vez de herdar o do vizinho ou ficar sem nenhum.
+    /// </summary>
+    private (string? Texto, PanelChip Tom) _chip;
+
     private bool _carregado;
     private bool _sujo;
 
@@ -96,8 +106,14 @@ public sealed class ScratchModule(ModuleContext context) : IModule
                 return;
             }
 
+            // Só no primeiro toque depois de salvo: reescrever o chip a cada
+            // tecla trocaria o estilo dele à toa enquanto se digita.
+            if (!_sujo)
+            {
+                Estado("Salvando…", PanelChip.Neutro);
+            }
+
             _sujo = true;
-            _estado.Text = "…";
             _salvar.Stop();
             _salvar.Start();
         };
@@ -126,7 +142,10 @@ public sealed class ScratchModule(ModuleContext context) : IModule
         // dica, que fica por fora dele, cair 12px à esquerda do texto de verdade.
         _texto.Padding = default;
         _texto.SetResourceReference(Control.FontSizeProperty, "type.body");
-        _texto.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
+
+        // 16 e não 8: o texto começa na mesma régua da keycap da barra de
+        // título e do nome do arquivo no rodapé, em vez de 8px fora dela.
+        _texto.SetResourceReference(FrameworkElement.MarginProperty, "inset.16");
 
         // O documento é o arquivo: sem recuo de página, sem margem de parágrafo.
         // Quem dá o respiro é a margem do campo, que vem do token.
@@ -144,7 +163,7 @@ public sealed class ScratchModule(ModuleContext context) : IModule
         _dica.IsHitTestVisible = false;
         _dica.SetResourceReference(TextBlock.ForegroundProperty, "text.muted");
         _dica.SetResourceReference(TextBlock.FontSizeProperty, "type.body");
-        _dica.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
+        _dica.SetResourceReference(FrameworkElement.MarginProperty, "inset.16");
         _dica.VerticalAlignment = VerticalAlignment.Top;
 
         _salvar.Tick += (_, _) =>
@@ -153,18 +172,73 @@ public sealed class ScratchModule(ModuleContext context) : IModule
             Gravar();
         };
 
-        _estado.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        _estado.HorizontalAlignment = HorizontalAlignment.Right;
-        _estado.SetResourceReference(FrameworkElement.MarginProperty, "inset.status");
+        // Rodapé: de que arquivo é este bloco, à esquerda, e quanto já se
+        // escreveu nele, à direita. Ações não há o que pôr: o bloco salva
+        // sozinho, e copiar ou limpar é o Ctrl+A de qualquer campo de texto.
+        _arquivo.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        _arquivo.SetResourceReference(TextBlock.FontFamilyProperty, "font.mono");
+        _arquivo.VerticalAlignment = VerticalAlignment.Center;
+        _arquivo.TextTrimming = TextTrimming.CharacterEllipsis;
+        _arquivo.TextWrapping = TextWrapping.NoWrap;
+
+        _contagem.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        _contagem.SetResourceReference(FrameworkElement.MarginProperty, "inset.start.8");
+        _contagem.VerticalAlignment = VerticalAlignment.Center;
+        _contagem.TextWrapping = TextWrapping.NoWrap;
+
+        var linhaRodape = new DockPanel();
+        DockPanel.SetDock(_contagem, Dock.Right);
+        linhaRodape.Children.Add(_contagem);
+        linhaRodape.Children.Add(_arquivo);
+
+        var rodape = new Border { Child = linhaRodape };
+        rodape.SetResourceReference(FrameworkElement.StyleProperty, "style.panel.footer");
 
         // Construído uma vez. Um elemento só pode ter um pai lógico: montar
         // um painel novo a cada Invoke com os mesmos filhos derruba o app.
         _folha.Children.Add(_texto);
         _folha.Children.Add(_dica);
 
-        DockPanel.SetDock(_estado, Dock.Bottom);
-        _corpo.Children.Add(_estado);
+        DockPanel.SetDock(rodape, Dock.Bottom);
+        _corpo.Children.Add(rodape);
         _corpo.Children.Add(_folha);
+    }
+
+    /// <summary>
+    /// Escreve o chip na barra, se a barra ainda for deste módulo. A gravação
+    /// do debounce e a do fechamento chegam com o Panel já de outro dono, ou
+    /// escondido; aí o estado só fica guardado para a próxima abertura.
+    /// </summary>
+    private void Estado(string? texto, PanelChip tom = PanelChip.Neutro)
+    {
+        _chip = (texto, tom);
+
+        var panel = context.Archetypes.Panel;
+        if (panel.IsShowingFor(Id))
+        {
+            panel.ShowChip(texto, tom);
+        }
+    }
+
+    /// <summary>O nome do arquivo no rodapé, com o caminho inteiro na dica.</summary>
+    private void Rodape(string arquivo)
+    {
+        _arquivo.Text = Path.GetFileName(arquivo);
+        _arquivo.ToolTip = arquivo;
+        _arquivo.ClearValue(TextBlock.ForegroundProperty);
+    }
+
+    /// <summary>
+    /// O erro inteiro no rodapé, em perigo: o chip só cabe "Não salvou", e a
+    /// pessoa precisa do motivo — disco cheio, pasta sem permissão — para
+    /// resolver.
+    /// </summary>
+    private void Erro(string chip, string mensagem)
+    {
+        Estado(chip, PanelChip.Perigo);
+        _arquivo.Text = mensagem;
+        _arquivo.ToolTip = mensagem;
+        _arquivo.SetResourceReference(TextBlock.ForegroundProperty, "danger");
     }
 
     /// <summary>
@@ -243,6 +317,7 @@ public sealed class ScratchModule(ModuleContext context) : IModule
 
         panel.Dismissed += GravarAoFechar;
         panel.Occupy(Id, "Scratch", PanelPlacement.Top, _corpo);
+        panel.ShowChip(_chip.Texto, _chip.Tom);
         panel.TakeFocus(_texto);
 
         if (_carregado)
@@ -257,7 +332,7 @@ public sealed class ScratchModule(ModuleContext context) : IModule
         // entra primeiro; o texto chega no passo seguinte do Dispatcher, que é
         // de prioridade mais alta que a do teclado e portanto acontece antes de
         // qualquer tecla ser processada.
-        _estado.Text = "lendo…";
+        Estado("Lendo…");
         panel.Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
         {
             Carregar();
@@ -316,11 +391,16 @@ public sealed class ScratchModule(ModuleContext context) : IModule
         {
             var conteudo = File.Exists(arquivo) ? File.ReadAllText(arquivo, Encoding.UTF8) : string.Empty;
             RealceMarkdown.Escrever(_texto.Document, conteudo);
-            _estado.Text = conteudo.Length == 0 ? string.Empty : "Salvo";
+            Rodape(arquivo);
+            _contagem.Text = TextStats.Label(conteudo);
+
+            // Arquivo vazio não tem o que estar salvo: o chip só aparece quando
+            // há texto que a pessoa poderia ter medo de perder.
+            Estado(conteudo.Length == 0 ? null : "Salvo", PanelChip.Sucesso);
         }
         catch (Exception e)
         {
-            _estado.Text = $"Não deu para ler {arquivo}: {e.Message}";
+            Erro("Não abriu", $"Não deu para ler {arquivo}: {e.Message}");
         }
         finally
         {
@@ -349,7 +429,8 @@ public sealed class ScratchModule(ModuleContext context) : IModule
             }
 
             var temp = arquivo + ".tmp";
-            File.WriteAllText(temp, RealceMarkdown.Ler(_texto.Document), Utf8);
+            var texto = RealceMarkdown.Ler(_texto.Document);
+            File.WriteAllText(temp, texto, Utf8);
             if (File.Exists(arquivo))
             {
                 File.Replace(temp, arquivo, null);
@@ -360,11 +441,18 @@ public sealed class ScratchModule(ModuleContext context) : IModule
             }
 
             _sujo = false;
-            _estado.Text = "Salvo";
+            Rodape(arquivo);
+
+            // Conta no salvar, não a cada tecla: o texto já foi lido do
+            // documento para ir ao disco, e contar de novo a cada letra seria
+            // percorrer o bloco inteiro por nada. O debounce é curto o bastante
+            // para o número acompanhar quem escreve.
+            _contagem.Text = TextStats.Label(texto);
+            Estado("Salvo", PanelChip.Sucesso);
         }
         catch (Exception e)
         {
-            _estado.Text = $"Não salvou: {e.Message}";
+            Erro("Não salvou", $"Não salvou: {e.Message}");
         }
     }
 

@@ -53,7 +53,7 @@ internal sealed class Calculator(ModuleContext context)
 
         return
         [
-            new PaletteCommand("calc", texto, q, "Enter copia", () => Copiar(texto), Primary: true),
+            new PaletteCommand("calc", texto, q, "Enter copia", () => Copiar(texto), Primary: true, Category: CommandCategory.Calculadora),
         ];
     }
 

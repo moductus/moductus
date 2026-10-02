@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 using Moductus.Core.Interop;
 using Moductus.Core.Modules;
@@ -31,7 +32,9 @@ public sealed class KillModule(ModuleContext context) : IModule
     private readonly Border _cartao = new() { Visibility = Visibility.Collapsed };
     private readonly TextBlock _titulo = new();
     private readonly TextBlock _detalhe = new();
-    private readonly TextBlock _dica = new();
+
+    /// <summary>A camada da mira com a barra e o cartão por cima, centrados pela grade.</summary>
+    private readonly Grid _raiz = new();
 
     private MonitorArea _area;
     private TopLevelWindow? _alvo;
@@ -68,39 +71,58 @@ public sealed class KillModule(ModuleContext context) : IModule
 
         _montado = true;
 
+        // O chip diz o que o Enter vai fazer antes do nome da vítima. É o
+        // único vermelho da tela, e só aparece quando já há um alvo.
+        var aviso = new TextBlock { Text = "Encerrar janela" };
+        aviso.SetResourceReference(FrameworkElement.StyleProperty, "style.chip.text");
+        var chip = new Border { Child = aviso };
+        chip.SetResourceReference(FrameworkElement.StyleProperty, "style.chip.danger");
+        chip.SetResourceReference(FrameworkElement.MarginProperty, "inset.bottom.8");
+
         _titulo.SetResourceReference(FrameworkElement.StyleProperty, "style.title");
         _titulo.TextTrimming = TextTrimming.CharacterEllipsis;
         _titulo.TextWrapping = TextWrapping.NoWrap;
         _titulo.SetResourceReference(FrameworkElement.MaxWidthProperty, "size.card.maxwidth");
 
+        // Processo e pid em mono: é o que se confere contra o Gerenciador de
+        // Tarefas, e número em mono se lê de relance.
         _detalhe.SetResourceReference(FrameworkElement.StyleProperty, "style.secondary");
+        _detalhe.SetResourceReference(TextBlock.FontFamilyProperty, "font.mono");
         _detalhe.SetResourceReference(FrameworkElement.MarginProperty, "inset.detail");
 
+        var atalhos = new StackPanel { Orientation = Orientation.Horizontal };
+        atalhos.SetResourceReference(FrameworkElement.MarginProperty, "inset.top.8");
+        atalhos.Children.Add(CanvasWindow.Shortcut("encerra", "Enter"));
+        atalhos.Children.Add(CanvasWindow.Shortcut("cancela", "Esc"));
+
         var pilha = new StackPanel();
+        pilha.Children.Add(chip);
         pilha.Children.Add(_titulo);
         pilha.Children.Add(_detalhe);
-        pilha.Children.Add(Rotulo("Enter encerra   ·   Esc cancela"));
+        pilha.Children.Add(new Separator());
+        pilha.Children.Add(atalhos);
 
-        _cartao.Child = pilha;
-        _cartao.SetResourceReference(Border.BackgroundProperty, "bg.raised");
-        _cartao.SetResourceReference(Border.BorderBrushProperty, "danger");
-        _cartao.SetResourceReference(Border.BorderThicknessProperty, "border.width.strong");
-        _cartao.SetResourceReference(Border.CornerRadiusProperty, "radius.window");
-        _cartao.SetResourceReference(Border.PaddingProperty, "inset.24");
+        // Centrado pela grade, não por conta: o cartão muda de largura com o
+        // título, e a grade recentra sozinha a cada medida.
+        CanvasWindow.Dress(_cartao, pilha, "inset.16");
+        _cartao.HorizontalAlignment = HorizontalAlignment.Center;
+        _cartao.VerticalAlignment = VerticalAlignment.Center;
 
-        _dica.Text = "clique na janela travada   ·   Esc: cancelar";
-        _dica.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        var dica = CanvasWindow.Card(_dica);
+        // A mesma barra do topo do Freeze. A mira é a única ferramenta e já
+        // está ativa, então a barra só diz onde clicar e como sair.
+        var instrucao = new TextBlock { Text = "Clique na janela travada", TextWrapping = TextWrapping.NoWrap, VerticalAlignment = VerticalAlignment.Center };
+        instrucao.SetResourceReference(FrameworkElement.MarginProperty, "inset.8.h");
+        var ponto = new Ellipse();
+        ponto.SetResourceReference(FrameworkElement.StyleProperty, "style.dot.accent");
+        ponto.SetResourceReference(FrameworkElement.MarginProperty, "inset.start.8");
+        var mira = new StackPanel { Orientation = Orientation.Horizontal };
+        mira.Children.Add(ponto);
+        mira.Children.Add(instrucao);
 
-        _camada.Children.Add(dica);
-        _camada.Children.Add(_cartao);
+        _raiz.Children.Add(_camada);
+        _raiz.Children.Add(CanvasWindow.Toolbar(mira, CanvasWindow.Shortcut("cancelar", "Esc")));
+        _raiz.Children.Add(_cartao);
         _camada.MouseLeftButtonDown += OnClick;
-        _camada.SizeChanged += (_, _) =>
-        {
-            Canvas.SetLeft(dica, (_camada.ActualWidth - dica.ActualWidth) / 2);
-            Canvas.SetTop(dica, _camada.ActualHeight - 64);
-            Centralizar();
-        };
     }
 
     public void Disable()
@@ -149,7 +171,7 @@ public sealed class KillModule(ModuleContext context) : IModule
         }
 
         canvas.Owner = Id;
-        canvas.SlotContent = _camada;
+        canvas.SlotContent = _raiz;
         canvas.Present(_area);
     }
 
@@ -184,7 +206,6 @@ public sealed class KillModule(ModuleContext context) : IModule
         _titulo.Text = string.IsNullOrWhiteSpace(janela.Title) ? "(sem título)" : janela.Title;
         _detalhe.Text = $"{processo} · pid {janela.ProcessId}";
         _cartao.Visibility = Visibility.Visible;
-        Centralizar();
     }
 
     private void OnKey(object sender, KeyEventArgs e)
@@ -296,20 +317,6 @@ public sealed class KillModule(ModuleContext context) : IModule
         {
             processo.Dispose();
         }
-    }
-
-    private void Centralizar()
-    {
-        _cartao.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        Canvas.SetLeft(_cartao, (_camada.ActualWidth - _cartao.DesiredSize.Width) / 2);
-        Canvas.SetTop(_cartao, (_camada.ActualHeight - _cartao.DesiredSize.Height) / 2);
-    }
-
-    private static TextBlock Rotulo(string texto)
-    {
-        var t = new TextBlock { Text = texto };
-        t.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        return t;
     }
 
     // ---- Configuração ---------------------------------------------------------

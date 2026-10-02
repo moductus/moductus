@@ -4,6 +4,9 @@ using System.Windows.Shell;
 using System.Windows.Input;
 using System.Windows.Interop;
 using Moductus.Core.Interop;
+// Apelido, e não ThemeMode: dentro de Window o nome cai na propriedade
+// Window.ThemeMode do tema Fluent do WPF.
+using ModoDoTema = Moductus.Core.Theme.ThemeMode;
 
 namespace Moductus.UI.Archetypes;
 
@@ -25,6 +28,19 @@ namespace Moductus.UI.Archetypes;
 /// </remarks>
 public abstract class ArchetypeWindow : Window
 {
+    /// <summary>
+    /// O modo do tema em vigor, preso ao recurso que o <see cref="Theme"/>
+    /// publica. É <c>object</c> porque, na troca de paleta, o dicionário velho
+    /// sai antes de o novo entrar, e por um instante o recurso não resolve:
+    /// tipado como o enum, esse instante viraria "escuro" de mentira e o DWM
+    /// trocaria o material duas vezes.
+    /// </summary>
+    private static readonly DependencyProperty ModoProperty = DependencyProperty.Register(
+        "Modo",
+        typeof(object),
+        typeof(ArchetypeWindow),
+        new PropertyMetadata(null, (d, _) => ((ArchetypeWindow)d).AplicarModo()));
+
     private readonly ContentPresenter _slot = new();
     private bool _dismissing;
 
@@ -35,6 +51,12 @@ public abstract class ArchetypeWindow : Window
         // Estilo implícito não casa com subclasse. Sem esta linha, a janela
         // nasce branca com texto claro.
         SetResourceReference(StyleProperty, typeof(Window));
+
+        // O DWM pinta o material no tom que a janela declara, não no do app.
+        // As janelas do host declaram pelo TitleBar.Sync; o arquétipo não tem
+        // o Theme na mão, então acompanha o modo pelo recurso — e reage à
+        // troca de tema do mesmo jeito que as cores reagem.
+        SetResourceReference(ModoProperty, Theme.ModeKey);
 
         WindowStyle = WindowStyle.None;
         ResizeMode = ResizeMode.NoResize;
@@ -281,6 +303,7 @@ public abstract class ArchetypeWindow : Window
         }
 
         CantosNativos = Dwm.RoundCorners(Handle);
+        AplicarModo();
         AplicarMaterial();
         OnSuperficieDecidida();
     }
@@ -318,6 +341,32 @@ public abstract class ArchetypeWindow : Window
         // aparecer; a tinta vai no Border, que é quem desenha o conteúdo.
         Background = System.Windows.Media.Brushes.Transparent;
         Superficie.SetResourceReference(Border.BackgroundProperty, FundoTranslucido);
+    }
+
+    /// <summary>
+    /// Conta ao DWM se a janela é clara ou escura. Sem isto o atributo fica no
+    /// padrão, que é claro: no escuro o "tint" ia por cima de um Acrylic claro
+    /// e a superfície saía acinzentada. Alto contraste não importa aqui — lá
+    /// os "tint" são opacos e o material não aparece.
+    /// </summary>
+    /// <remarks>
+    /// Na troca o material é pedido de novo, só se já estava no ar: há build do
+    /// Windows 11 que só repinta o fundo no tom novo quando o pedido chega
+    /// outra vez.
+    /// </remarks>
+    private void AplicarModo()
+    {
+        if (Handle == 0 || GetValue(ModoProperty) is not ModoDoTema modo)
+        {
+            return;
+        }
+
+        Dwm.SetDarkMode(Handle, modo == ModoDoTema.Dark);
+
+        if (MaterialAtivo)
+        {
+            Dwm.SetBackdrop(Handle, Material);
+        }
     }
 
     protected virtual void OnPresenting(nint foreground)
