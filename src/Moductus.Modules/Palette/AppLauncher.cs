@@ -171,7 +171,7 @@ internal sealed class AppLauncher(ModuleContext context)
     }
 
     private PaletteCommand Comando(Atalho atalho)
-        => new($"app:{atalho.Caminho}", atalho.Nome, "Abrir aplicativo", null, () => Abrir(atalho));
+        => new($"app:{atalho.Caminho}", atalho.Nome, "Abrir aplicativo", null, () => Abrir(atalho), Category: CommandCategory.Aplicativo);
 
     /// <summary>Onde o atalho está na lista de recentes; fora dela, no fim da fila.</summary>
     private int Posicao(string caminho)

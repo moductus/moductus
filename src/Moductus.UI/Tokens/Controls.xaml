@@ -11,7 +11,188 @@
   retângulo pontilhado padrão do WPF fica desligado.
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ui="clr-namespace:Moductus.UI">
+
+    <!-- ═══ Moldura das janelas comuns ═══════════════════════════════════ -->
+    <!--
+      Os botões da barra de título própria: minimizar, maximizar e fechar.
+      Medidas do Windows 11 — 46 de largura, a altura da barra, sem borda e
+      sem canto —, para a mão que já sabe onde o "fechar" mora acertar o
+      nosso. Fora da ordem de Tab, como os do sistema: pelo teclado eles
+      continuam no menu da janela (Alt+Espaço) e em Win+↑/↓.
+
+      O glifo herda a cor do botão (a armadilha do Button, mais abaixo). Com a
+      janela inativa ele apaga para text.muted, como a barra do sistema; o
+      hover vem depois e acende mesmo assim.
+    -->
+    <Style x:Key="style.caption.button" TargetType="Button">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Width" Value="{DynamicResource size.caption.button}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource text.secondary}" />
+        <Setter Property="FontFamily" Value="{DynamicResource font.icon}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.caption.glyph}" />
+        <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="{TemplateBinding Background}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <!-- Ver a armadilha no Button. -->
+                            <ContentPresenter.Resources>
+                                <Style TargetType="TextBlock" />
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsActive, RelativeSource={RelativeSource AncestorType=Window}}" Value="False">
+                <Setter Property="Foreground" Value="{DynamicResource text.muted}" />
+            </DataTrigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource bg.hover}" />
+                <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
+            </Trigger>
+            <!-- O maximizar com o mouse em cima, visto pela área não-cliente:
+                 ver WindowFrame.IsHot. -->
+            <Trigger Property="ui:WindowFrame.IsHot" Value="True">
+                <Setter Property="Background" Value="{DynamicResource bg.hover}" />
+                <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{DynamicResource border.subtle}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!--
+      Fechar: danger cheio no hover, como o vermelho do sistema, mas na cor do
+      tema. O glifo vira bg.base, e não branco fixo: nos temas escuros o
+      danger é um coral claro, onde branco mal passa de 3:1 e o fundo escuro
+      passa de 6:1; nos claros o danger é escuro e o bg.base é quase branco.
+      E no alto contraste o par é WindowText/Window, que é o que o sistema
+      garante legível.
+    -->
+    <Style x:Key="style.caption.close" TargetType="Button" BasedOn="{StaticResource style.caption.button}">
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource danger}" />
+                <Setter Property="Foreground" Value="{DynamicResource bg.base}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter Property="Background" Value="{DynamicResource danger}" />
+                <Setter Property="Foreground" Value="{DynamicResource bg.base}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!--
+      A janela comum com barra de título nossa. Só o desenho mora aqui; os
+      comandos, o WindowChrome, o Snap Layouts e o recuo da janela maximizada
+      estão no WindowFrame, que o gatilho do estilo de Window liga.
+
+      O recuo da maximizada vai no Padding da raiz, e não na Margin: o
+      WindowChrome mexe na Margin do primeiro elemento do template quando
+      ajusta a borda, e tomaria o valor de volta.
+    -->
+    <ControlTemplate x:Key="template.window" TargetType="Window">
+        <Border Background="{TemplateBinding Background}"
+                Padding="{Binding (ui:WindowFrame.MaximizedInset), RelativeSource={RelativeSource TemplatedParent}}">
+            <DockPanel>
+                <!-- Barra em bg.raised com filete embaixo: a mesma faixa da
+                     barra do Panel e do rodapé da janela principal, e a
+                     janela lê como uma moldura só, de cima a baixo. -->
+                <Border x:Name="Barra"
+                        DockPanel.Dock="Top"
+                        Height="{DynamicResource size.titlebar}"
+                        Background="{DynamicResource bg.raised}"
+                        BorderBrush="{DynamicResource border.subtle}"
+                        BorderThickness="{DynamicResource border.width.bottom}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+    
+                        <!-- O mark: os quatro módulos, em vetor, na cor de
+                             destaque legível como texto — o accent puro some no
+                             tema claro de accent claro, como o Lima. -->
+                        <Path x:Name="Marca"
+                              Data="{DynamicResource geometry.mark}"
+                              Fill="{DynamicResource accent.text}"
+                              Width="{DynamicResource size.mark}"
+                              Height="{DynamicResource size.mark}"
+                              Margin="{DynamicResource inset.start.16}"
+                              VerticalAlignment="Center"
+                              SnapsToDevicePixels="True" />
+    
+                        <TextBlock x:Name="Titulo"
+                                   Grid.Column="1"
+                                   Text="{TemplateBinding Title}"
+                                   Foreground="{DynamicResource text.secondary}"
+                                   FontSize="{DynamicResource type.titlebar}"
+                                   LineHeight="{DynamicResource type.titlebar}"
+                                   TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis"
+                                   VerticalAlignment="Center"
+                                   Margin="{DynamicResource inset.start.12}" />
+    
+                        <Button x:Name="Minimizar"
+                                Grid.Column="2"
+                                Style="{DynamicResource style.caption.button}"
+                                Content="&#xE921;"
+                                Command="{x:Static SystemCommands.MinimizeWindowCommand}"
+                                AutomationProperties.Name="Minimizar" />
+                        <Button x:Name="PART_MaximizeButton"
+                                Grid.Column="3"
+                                Style="{DynamicResource style.caption.button}"
+                                Content="&#xE922;"
+                                Command="{x:Static SystemCommands.MaximizeWindowCommand}"
+                                AutomationProperties.Name="Maximizar" />
+                        <Button x:Name="Fechar"
+                                Grid.Column="4"
+                                Style="{DynamicResource style.caption.close}"
+                                Content="&#xE8BB;"
+                                Command="{x:Static SystemCommands.CloseWindowCommand}"
+                                AutomationProperties.Name="Fechar" />
+                    </Grid>
+                </Border>
+
+                <AdornerDecorator>
+                    <ContentPresenter />
+                </AdornerDecorator>
+            </DockPanel>
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="WindowState" Value="Maximized">
+                <Setter TargetName="PART_MaximizeButton" Property="Content" Value="&#xE923;" />
+                <Setter TargetName="PART_MaximizeButton" Property="Command" Value="{x:Static SystemCommands.RestoreWindowCommand}" />
+                <Setter TargetName="PART_MaximizeButton" Property="AutomationProperties.Name" Value="Restaurar" />
+            </Trigger>
+            <!-- Os botões seguem o ResizeMode como os do sistema: sem
+                 redimensionar não há maximizar nem minimizar; só minimizar,
+                 some o maximizar. -->
+            <Trigger Property="ResizeMode" Value="NoResize">
+                <Setter TargetName="Minimizar" Property="Visibility" Value="Collapsed" />
+                <Setter TargetName="PART_MaximizeButton" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="ResizeMode" Value="CanMinimize">
+                <Setter TargetName="PART_MaximizeButton" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="IsActive" Value="False">
+                <Setter TargetName="Titulo" Property="Foreground" Value="{DynamicResource text.muted}" />
+                <Setter TargetName="Marca" Property="Opacity" Value="{DynamicResource opacity.disabled}" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
 
     <Style TargetType="Window">
         <Setter Property="Background" Value="{DynamicResource bg.base}" />
@@ -20,6 +201,14 @@
         <Setter Property="FontSize" Value="{DynamicResource type.body}" />
         <Setter Property="UseLayoutRounding" Value="True" />
         <Setter Property="TextOptions.TextFormattingMode" Value="Ideal" />
+        <Style.Triggers>
+            <!-- Janela que ainda tem a moldura do sistema ganha a nossa. Os
+                 arquétipos põem WindowStyle.None e ficam de fora. -->
+            <Trigger Property="WindowStyle" Value="SingleBorderWindow">
+                <Setter Property="ui:WindowFrame.IsCustom" Value="True" />
+                <Setter Property="Template" Value="{StaticResource template.window}" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <Style TargetType="TextBlock">
@@ -67,7 +256,21 @@
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="{DynamicResource radius.control}"
                             Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <!-- ARMADILHA: o estilo implícito de TextBlock deste
+                                 dicionário mora nos recursos da Application, e
+                                 dali ele alcança o TextBlock que o
+                                 ContentPresenter cria para conteúdo de texto —
+                                 fixando a cor em text.primary. Todo Foreground
+                                 do botão (desabilitado, marcado, perigo) era
+                                 ignorado; no Grafite, onde accent é a própria
+                                 tinta, o texto do botão marcado sumia. Este
+                                 estilo vazio é achado primeiro e deixa o texto
+                                 herdar a cor do botão. -->
+                            <ContentPresenter.Resources>
+                                <Style TargetType="TextBlock" />
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -106,7 +309,13 @@
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="{DynamicResource radius.control}"
                             Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <!-- Ver a armadilha no Button: sem isto o texto do
+                                 botão marcado fica em text.primary sobre accent. -->
+                            <ContentPresenter.Resources>
+                                <Style TargetType="TextBlock" />
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
@@ -333,6 +542,18 @@
         </Setter>
     </Style>
 
+    <!-- Linha de lista. Selecionada = véu de accent mais a barra de 2px em
+         accent.border à esquerda; o texto continua na cor de sempre. Antes a
+         linha inteira se pintava de accent: com o âmbar passava, mas no
+         Grafite o accent é a própria tinta, e a seleção virava uma faixa
+         branca com o texto secundário sumindo dentro dela.
+
+         Hover é só bg.hover, sem barra. Os dois já dividiram o mesmo fundo, e
+         aí o mouse parado numa linha fazia a lista parecer ter duas
+         selecionadas; no claro o bg.hover é quase o branco da superfície, e a
+         seleção sumia. O véu sai do accent de cada tema, então fica visível
+         nos dois modos e nunca se confunde com o hover. A seleção vem depois
+         do hover nos gatilhos para ganhar quando o mouse está em cima dela. -->
     <Style TargetType="ListBoxItem">
         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -344,23 +565,34 @@
                 <ControlTemplate TargetType="ListBoxItem">
                     <Border x:Name="Linha"
                             Background="Transparent"
-                            CornerRadius="{DynamicResource radius.control}"
-                            Padding="{TemplateBinding Padding}">
-                        <ContentPresenter VerticalAlignment="Center" />
+                            CornerRadius="{DynamicResource radius.control}">
+                        <Grid>
+                            <Rectangle x:Name="Barra"
+                                       Width="{DynamicResource size.selection.bar}"
+                                       Margin="{DynamicResource inset.selection.bar}"
+                                       HorizontalAlignment="Left"
+                                       Fill="{DynamicResource accent.border}"
+                                       Visibility="Collapsed" />
+                            <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center" />
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Linha" Property="Background" Value="{DynamicResource bg.hover}" />
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Linha" Property="Background" Value="{DynamicResource accent}" />
-                            <Setter Property="Foreground" Value="{DynamicResource accent.fg}" />
+                            <Setter TargetName="Linha" Property="Background" Value="{DynamicResource accent.veil}" />
+                            <Setter TargetName="Barra" Property="Visibility" Value="Visible" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
     </Style>
+
+    <!-- O mesmo da linha implícita, com nome: para ItemContainerStyle, onde
+         a lista precisa dizer explicitamente qual estilo de linha usa. -->
+    <Style x:Key="style.row" TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}" />
 
     <Style TargetType="Separator">
         <Setter Property="Background" Value="{DynamicResource border.subtle}" />
@@ -374,25 +606,44 @@
       larga, com setas nas pontas. É a peça que mais denuncia janela feita às
       pressas, e aparece em toda lista do app.
 
-      A barra daqui é um trilho invisível com um polegar que engorda no hover,
-      como no Edge e no VS Code. Sem setas: ninguém clica em seta de rolagem
-      desde que a roda do mouse existe, e elas custam 34px de altura útil.
+      A barra daqui é um trilho invisível com um polegar fino, que engorda
+      quando o mouse entra na BARRA — não só no polegar, que fino assim é alvo
+      difícil —, como no macOS e no Fluent. Sem setas: ninguém clica em seta
+      de rolagem desde que a roda do mouse existe, e elas custam 34px de
+      altura útil.
+
+      O raio do polegar é metade da espessura, chave por chave
+      (radius.scroll.thumb para size.scroll.thumb, .hover para .hover). Raio
+      "pílula" de 999 não serve: o WPF transforma CornerRadius maior que
+      metade do lado em elipse, e o polegar saía com ponta de ovo — o mesmo
+      defeito que o switch teve. A troca animada de espessura e raio é do
+      ScrollMotion.
     -->
     <Style x:Key="style.scroll.thumb" TargetType="Thumb">
         <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Thumb">
-                    <!-- O Border externo é a área de clique; o interno é o que se vê. -->
-                    <Border Background="Transparent" Padding="3">
+                    <!-- O Border externo é a área de clique, a largura toda da
+                         barra; o interno é o que se vê. -->
+                    <Border Background="Transparent">
                         <Border x:Name="Barra"
+                                Width="{DynamicResource size.scroll.thumb}"
+                                HorizontalAlignment="Center"
                                 Background="{DynamicResource border.strong}"
-                                CornerRadius="{DynamicResource radius.pill}" />
+                                CornerRadius="{DynamicResource radius.scroll.thumb}"
+                                ui:ScrollMotion.Expanded="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ScrollBar}}" />
                     </Border>
                     <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
+                        <DataTrigger Binding="{Binding Orientation, RelativeSource={RelativeSource AncestorType=ScrollBar}}" Value="Horizontal">
+                            <Setter TargetName="Barra" Property="Width" Value="Auto" />
+                            <Setter TargetName="Barra" Property="HorizontalAlignment" Value="Stretch" />
+                            <Setter TargetName="Barra" Property="Height" Value="{DynamicResource size.scroll.thumb}" />
+                            <Setter TargetName="Barra" Property="VerticalAlignment" Value="Center" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ScrollBar}}" Value="True">
                             <Setter TargetName="Barra" Property="Background" Value="{DynamicResource text.muted}" />
-                        </Trigger>
+                        </DataTrigger>
                         <Trigger Property="IsDragging" Value="True">
                             <Setter TargetName="Barra" Property="Background" Value="{DynamicResource text.secondary}" />
                         </Trigger>
@@ -420,8 +671,8 @@
 
     <Style TargetType="ScrollBar">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Width" Value="10" />
-        <Setter Property="MinWidth" Value="10" />
+        <Setter Property="Width" Value="{DynamicResource size.scroll}" />
+        <Setter Property="MinWidth" Value="{DynamicResource size.scroll}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ScrollBar">
@@ -442,8 +693,8 @@
                         <Trigger Property="Orientation" Value="Horizontal">
                             <Setter Property="Width" Value="Auto" />
                             <Setter Property="MinWidth" Value="0" />
-                            <Setter Property="Height" Value="10" />
-                            <Setter Property="MinHeight" Value="10" />
+                            <Setter Property="Height" Value="{DynamicResource size.scroll}" />
+                            <Setter Property="MinHeight" Value="{DynamicResource size.scroll}" />
                             <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" />
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -697,5 +948,653 @@
         <Setter Property="LineHeight" Value="{DynamicResource type.caption}" />
         <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
     </Style>
+
+    <!-- ═══ Superfícies ══════════════════════════════════════════════════ -->
+    <!--
+      Cartão: o bloco de conteúdo dentro de uma janela — o módulo na janela
+      principal, um grupo nas configurações. Existe para que as duas janelas
+      deixem de ter, cada uma, o seu "Cartao" local com valores próprios.
+    -->
+    <Style x:Key="style.card" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource bg.raised}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.subtle}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource border.width}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource radius.card}" />
+        <Setter Property="Padding" Value="{DynamicResource inset.16}" />
+    </Style>
+
+    <!--
+      O "stroke" do Fluent: 1px claro no topo interno da superfície flutuante,
+      que faz a borda de cima pegar luz e a janela parecer elevada sem uma
+      segunda sombra. Vai POR CIMA do conteúdo, como camada própria, sem
+      fundo e sem receber clique; o raio padrão é o do recorte do DWM, e quem
+      usa numa superfície de outro raio troca o CornerRadius.
+    -->
+    <Style x:Key="style.surface.highlight" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{DynamicResource border.highlight}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource border.width.top}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource radius.clip}" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
+
+    <!-- ═══ Keycap ═══════════════════════════════════════════════════════ -->
+    <!--
+      O desenho de uma tecla: Ctrl, Alt, a letra do módulo. O "degrau" — a
+      borda de baixo mais grossa — é o que faz o retângulo ler como tecla e
+      não como mais um chip.
+
+      A cor do texto vem da keycap, não do texto: o Border passa
+      TextElement.Foreground para dentro, e o style.keycap.text não declara
+      cor nenhuma, de propósito. Assim a variante accent troca o fundo e a
+      letra num lugar só, e o mesmo style.keycap.text serve às duas.
+    -->
+    <Style x:Key="style.keycap" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource bg.inset}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.subtle}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource border.width.keycap}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource radius.keycap}" />
+        <Setter Property="MinWidth" Value="{DynamicResource size.keycap}" />
+        <Setter Property="MinHeight" Value="{DynamicResource size.keycap}" />
+        <Setter Property="Padding" Value="{DynamicResource inset.keycap.text}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource text.secondary}" />
+    </Style>
+
+    <!-- A tecla ativa: a combinação que acabou de ser apertada, a letra do
+         módulo em foco. A borda acompanha o fundo e o degrau some — tecla
+         apertada não tem degrau. -->
+    <Style x:Key="style.keycap.accent" TargetType="Border" BasedOn="{StaticResource style.keycap}">
+        <Setter Property="Background" Value="{DynamicResource accent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource accent}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource accent.fg}" />
+    </Style>
+
+    <!-- A grande: o bloco do overlay da líder e o cartão da janela principal,
+         onde a letra é o elemento que se procura com o olho. -->
+    <Style x:Key="style.keycap.lg" TargetType="Border" BasedOn="{StaticResource style.keycap}">
+        <Setter Property="MinWidth" Value="{DynamicResource size.keycap.lg}" />
+        <Setter Property="MinHeight" Value="{DynamicResource size.keycap.lg}" />
+        <Setter Property="Padding" Value="{DynamicResource inset.keycap.lg}" />
+    </Style>
+
+    <Style x:Key="style.keycap.lg.accent" TargetType="Border" BasedOn="{StaticResource style.keycap.lg}">
+        <Setter Property="Background" Value="{DynamicResource accent}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource accent}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource accent.fg}" />
+    </Style>
+
+    <!-- Sem BasedOn de propósito: o estilo implícito de TextBlock fixa a cor
+         em text.primary, e aqui a cor tem de vir herdada da keycap. Mono
+         porque é nome de tecla, e a pilha de dev desenha "Ctrl" e "M" com o
+         mesmo peso visual. -->
+    <Style x:Key="style.keycap.text" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource font.mono}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.keycap}" />
+        <Setter Property="FontWeight" Value="{DynamicResource weight.semibold}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="TextAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="style.keycap.lg.text" TargetType="TextBlock" BasedOn="{StaticResource style.keycap.text}">
+        <Setter Property="FontSize" Value="{DynamicResource type.body}" />
+    </Style>
+
+    <!-- ═══ Switch ═══════════════════════════════════════════════════════ -->
+    <!--
+      Ligar e desligar com efeito imediato — o módulo no cartão, uma opção nas
+      configurações. A caixa de marcar continua para escolha que só vale
+      depois; o switch diz "isto já está valendo".
+
+      Serve a CheckBox e a ToggleButton: as duas derivam de ToggleButton, e
+      estilo explícito, ao contrário do implícito, casa com subclasse.
+
+      O polegar desliza pelo SwitchMotion, e não por Storyboard: ver o porquê
+      lá. O anel de foco fica POR FORA do trilho, porque ligado o trilho é
+      accent, e no Grafite accent e accent.border são a mesma tinta.
+    -->
+    <Style x:Key="style.switch" TargetType="ToggleButton">
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
+        <Setter Property="FontFamily" Value="{DynamicResource font.ui}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.body}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Grid x:Name="Raiz" Background="Transparent">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid Width="{DynamicResource size.switch.width}"
+                              Height="{DynamicResource size.switch.height}"
+                              VerticalAlignment="Center">
+                            <Border x:Name="Anel"
+                                    Margin="{DynamicResource inset.focus.ring}"
+                                    BorderBrush="{DynamicResource accent.border}"
+                                    BorderThickness="{DynamicResource border.width.strong}"
+                                    CornerRadius="{DynamicResource radius.switch.ring}"
+                                    Visibility="Collapsed" />
+                            <Border x:Name="Trilho"
+                                    Background="{DynamicResource border.strong}"
+                                    CornerRadius="{DynamicResource radius.switch}" />
+                            <Ellipse x:Name="Polegar"
+                                     Width="{DynamicResource size.switch.thumb}"
+                                     Height="{DynamicResource size.switch.thumb}"
+                                     Margin="{DynamicResource inset.switch.thumb}"
+                                     HorizontalAlignment="Left"
+                                     VerticalAlignment="Center"
+                                     Fill="{DynamicResource bg.raised}"
+                                     ui:SwitchMotion.On="{TemplateBinding IsChecked}" />
+                        </Grid>
+                        <ContentPresenter x:Name="Rotulo"
+                                          Grid.Column="1"
+                                          Margin="{DynamicResource inset.start.8}"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <!-- Sem rótulo, sem a margem dele: o switch sozinho no
+                             canto do cartão não pode ficar 8px fora do lugar. -->
+                        <Trigger Property="Content" Value="{x:Null}">
+                            <Setter TargetName="Rotulo" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Trilho" Property="Background" Value="{DynamicResource text.muted}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Trilho" Property="Background" Value="{DynamicResource accent}" />
+                            <Setter TargetName="Polegar" Property="Fill" Value="{DynamicResource accent.fg}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Anel" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Raiz" Property="Opacity" Value="{DynamicResource opacity.disabled}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ═══ Chip e ponto de estado ═══════════════════════════════════════ -->
+    <!--
+      Chip: rótulo curto de estado em pílula — "Desligado", "Salvo", "Ouvindo
+      tecla…", uma contagem. O neutro é cinza, em border.subtle e não em
+      bg.hover: no alto contraste o hover é a cor de seleção do sistema, e o
+      chip neutro viraria uma seleção falsa. As variantes usam o véu da cor
+      no fundo e a cor cheia no texto, que é o que deixa o verde e o vermelho
+      legíveis sem gritar.
+
+      Como na keycap, a cor do texto vem do chip pelo TextElement.Foreground,
+      e o style.chip.text não declara cor.
+    -->
+    <Style x:Key="style.chip" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource border.subtle}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource radius.keycap}" />
+        <Setter Property="Padding" Value="{DynamicResource inset.chip.status}" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource text.secondary}" />
+    </Style>
+
+    <!-- O accent como texto é o accent.text, não o accent: no Lima claro o
+         preenchimento lima sobre fundo claro é ilegível como letra. -->
+    <Style x:Key="style.chip.accent" TargetType="Border" BasedOn="{StaticResource style.chip}">
+        <Setter Property="Background" Value="{DynamicResource accent.veil}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource accent.text}" />
+    </Style>
+
+    <Style x:Key="style.chip.success" TargetType="Border" BasedOn="{StaticResource style.chip}">
+        <Setter Property="Background" Value="{DynamicResource success.veil}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource success}" />
+    </Style>
+
+    <Style x:Key="style.chip.danger" TargetType="Border" BasedOn="{StaticResource style.chip}">
+        <Setter Property="Background" Value="{DynamicResource danger.veil}" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource danger}" />
+    </Style>
+
+    <!-- Sem BasedOn, pelo mesmo motivo do style.keycap.text. -->
+    <Style x:Key="style.chip.text" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource font.ui}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.caption}" />
+        <Setter Property="LineHeight" Value="{DynamicResource type.caption.line}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+        <Setter Property="FontWeight" Value="{DynamicResource weight.semibold}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Ponto de estado antes de um texto: sinal, não desenho. O neutro é
+         text.muted — estado desconhecido não pode parecer estado bom. -->
+    <Style x:Key="style.dot" TargetType="Ellipse">
+        <Setter Property="Width" Value="{DynamicResource size.dot}" />
+        <Setter Property="Height" Value="{DynamicResource size.dot}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Fill" Value="{DynamicResource text.muted}" />
+    </Style>
+
+    <Style x:Key="style.dot.success" TargetType="Ellipse" BasedOn="{StaticResource style.dot}">
+        <Setter Property="Fill" Value="{DynamicResource success}" />
+    </Style>
+
+    <Style x:Key="style.dot.danger" TargetType="Ellipse" BasedOn="{StaticResource style.dot}">
+        <Setter Property="Fill" Value="{DynamicResource danger}" />
+    </Style>
+
+    <Style x:Key="style.dot.accent" TargetType="Ellipse" BasedOn="{StaticResource style.dot}">
+        <Setter Property="Fill" Value="{DynamicResource accent}" />
+    </Style>
+
+    <Style x:Key="style.dot.muted" TargetType="Ellipse" BasedOn="{StaticResource style.dot}">
+        <Setter Property="Fill" Value="{DynamicResource text.muted}" />
+    </Style>
+
+    <!-- ═══ Cabeçalho de seção ═══════════════════════════════════════════ -->
+    <!-- "APLICATIVOS", "COMANDOS", "APARÊNCIA". O texto já chega em caixa-alta
+         de quem o escreve: Typography.Capitals só funciona se a fonte trouxer
+         as formas próprias, e numa pilha com fallback isso não é garantido — o
+         resultado seria caixa-alta em uma máquina e minúscula em outra. -->
+    <Style x:Key="style.section" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+        <Setter Property="FontSize" Value="{DynamicResource type.section}" />
+        <Setter Property="LineHeight" Value="{DynamicResource type.section.line}" />
+        <Setter Property="FontWeight" Value="{DynamicResource weight.semibold}" />
+        <Setter Property="Foreground" Value="{DynamicResource text.muted}" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+
+    <!-- ═══ Botões com papel ═════════════════════════════════════════════ -->
+    <!--
+      Primário: a ação que a tela existe para fazer. Uma por tela, no máximo.
+      Template próprio por dois motivos: o hover do botão comum troca o fundo
+      por bg.hover, o que apagaria o accent; e o anel de foco precisa ficar
+      por fora, porque no Grafite o accent.border é a mesma tinta do fundo e
+      uma borda nele seria invisível.
+
+      O hover dilui só o fundo, nunca o texto: o ContentPresenter fica fora
+      do Border que perde opacidade.
+    -->
+    <Style x:Key="style.button.primary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="{DynamicResource accent}" />
+        <Setter Property="Foreground" Value="{DynamicResource accent.fg}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource accent}" />
+        <Setter Property="FontWeight" Value="{DynamicResource weight.semibold}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid x:Name="Raiz">
+                        <Border x:Name="Anel"
+                                Margin="{DynamicResource inset.focus.ring}"
+                                BorderBrush="{DynamicResource accent.border}"
+                                BorderThickness="{DynamicResource border.width.strong}"
+                                CornerRadius="{DynamicResource radius.focus}"
+                                Visibility="Collapsed" />
+                        <Border x:Name="Fundo"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{DynamicResource radius.control}" />
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True">
+                            <!-- Ver a armadilha no Button: sem isto o texto
+                                 sai em text.primary, e no Grafite escuro é
+                                 branco sobre o accent branco. -->
+                            <ContentPresenter.Resources>
+                                <Style TargetType="TextBlock" />
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Fundo" Property="Opacity" Value="{DynamicResource opacity.hover.solid}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Anel" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Raiz" Property="Opacity" Value="{DynamicResource opacity.disabled}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Fantasma: ação secundária que não deve competir com o conteúdo — o
+         "Abrir" e o "Configurar" do cartão. Transparente até o hover, que é o
+         do botão comum. -->
+    <Style x:Key="style.button.ghost" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.subtle}" />
+    </Style>
+
+    <!--
+      Perigo: ação destrutiva — encerrar processo, apagar. Contorno e texto em
+      danger, e o véu de danger só no hover: um botão vermelho cheio parado
+      na tela grita mais do que a ação merece enquanto ninguém aponta para
+      ele. E texto sobre vermelho cheio não tem cor que passe nos cinco temas.
+    -->
+    <Style x:Key="style.button.danger" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource danger}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource danger}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Fundo"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{DynamicResource radius.control}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True">
+                            <!-- Ver a armadilha no Button. -->
+                            <ContentPresenter.Resources>
+                                <Style TargetType="TextBlock" />
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Fundo" Property="Background" Value="{DynamicResource danger.veil}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Fundo" Property="BorderBrush" Value="{DynamicResource accent.border}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{DynamicResource text.muted}" />
+                            <Setter TargetName="Fundo" Property="BorderBrush" Value="{DynamicResource border.subtle}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ═══ Barra lateral ════════════════════════════════════════════════ -->
+    <!--
+      Item da navegação das configurações. RadioButton porque é exatamente a
+      semântica: um, e só um, marcado no grupo, com setas do teclado andando
+      entre eles. Marcado = fundo elevado, barra de 2px à esquerda e texto
+      primário; o resto fica em texto secundário para a seção atual se
+      destacar sem cor.
+    -->
+    <!-- O anel de foco do item da barra lateral. Vai pelo FocusVisualStyle, e
+         não por um gatilho de IsKeyboardFocused, porque o WPF só desenha o
+         FocusVisualStyle quando o foco chegou pelo teclado: o clique de mouse
+         também foca o RadioButton, e com o gatilho todo clique deixava um
+         anel em volta do item. Recuado em inset.4 para dentro da linha: assim
+         não esconde a barra de seleção, que mora na borda esquerda, e o anel
+         e a barra continuam sendo duas coisas — antes o anel de borda inteira
+         passava por cima da barra e os dois se fundiam. -->
+    <Style x:Key="style.nav.focus" TargetType="Control">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate>
+                    <Border Margin="{DynamicResource inset.4}"
+                            BorderBrush="{DynamicResource accent.border}"
+                            BorderThickness="{DynamicResource border.width}"
+                            CornerRadius="{DynamicResource radius.control}"
+                            SnapsToDevicePixels="True" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="style.nav.item" TargetType="RadioButton">
+        <Setter Property="FocusVisualStyle" Value="{StaticResource style.nav.focus}" />
+        <Setter Property="MinHeight" Value="{DynamicResource size.row}" />
+        <Setter Property="Padding" Value="{DynamicResource inset.nav}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource text.secondary}" />
+        <Setter Property="FontFamily" Value="{DynamicResource font.ui}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.body}" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Fundo"
+                            MinHeight="{TemplateBinding MinHeight}"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="Transparent"
+                            BorderThickness="{DynamicResource border.width}"
+                            CornerRadius="{DynamicResource radius.control}">
+                        <Grid>
+                            <Rectangle x:Name="Barra"
+                                       Width="{DynamicResource size.selection.bar}"
+                                       Margin="{DynamicResource inset.selection.bar}"
+                                       HorizontalAlignment="Left"
+                                       Fill="{DynamicResource accent.border}"
+                                       Visibility="Collapsed" />
+                            <ContentPresenter Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True">
+                                <!-- Ver a armadilha no Button: é o que deixa o
+                                     item não marcado em text.secondary. -->
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock" />
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Fundo" Property="Background" Value="{DynamicResource bg.hover}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Fundo" Property="Background" Value="{DynamicResource bg.raised}" />
+                            <Setter TargetName="Barra" Property="Visibility" Value="Visible" />
+                            <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ═══ Busca ════════════════════════════════════════════════════════ -->
+    <!-- O campo de busca da Palette e da janela principal: maior que o campo
+         comum, e rebaixado em bg.inset para ler como "digite aqui" antes de
+         ter qualquer texto. O foco em accent.border vem do TextBox implícito. -->
+    <Style x:Key="style.input.search" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+        <Setter Property="Height" Value="{DynamicResource size.input.search}" />
+        <Setter Property="Background" Value="{DynamicResource bg.inset}" />
+    </Style>
+
+    <!-- ═══ Ícone de estado ══════════════════════════════════════════════ -->
+    <!--
+      O quadrado do ícone na pílula do HUD e na pastilha: rebaixado em
+      bg.inset como a keycap, mas sem o degrau — é moldura de ícone, não
+      tecla. Como na keycap, a cor do glifo vem do quadrado pelo
+      TextElement.Foreground, e o style.status.glyph não declara cor: quem usa
+      troca o tom num lugar só.
+    -->
+    <Style x:Key="style.status.icon" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource bg.inset}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource border.subtle}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource border.width}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource radius.control}" />
+        <Setter Property="Width" Value="{DynamicResource size.status.icon}" />
+        <Setter Property="Height" Value="{DynamicResource size.status.icon}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextElement.Foreground" Value="{DynamicResource text.secondary}" />
+    </Style>
+
+    <!-- Sem BasedOn, pelo mesmo motivo do style.keycap.text. No tamanho do
+         ícone inline, e com LineHeight igual a ele pelo motivo do style.icon:
+         a linha padrão empurra o glifo para baixo dentro do quadrado. -->
+    <Style x:Key="style.status.glyph" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{DynamicResource font.icon}" />
+        <Setter Property="FontSize" Value="{DynamicResource size.icon}" />
+        <Setter Property="LineHeight" Value="{DynamicResource size.icon}" />
+        <Setter Property="LineStackingStrategy" Value="BlockLineHeight" />
+        <Setter Property="TextWrapping" Value="NoWrap" />
+        <Setter Property="TextAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ═══ Ferramenta da Canvas ═════════════════════════════════════════ -->
+    <!--
+      Item da barra flutuante da Canvas: ícone, nome e a keycap da letra.
+      Ativa = sublinhado em accent e texto primário, não preenchimento: a
+      barra mora sobre a tela congelada, e um bloco accent cheio no Grafite
+      seria uma faixa branca disputando o olho com a seleção.
+
+      O sublinhado usa o Padding como margem, para começar e terminar onde o
+      conteúdo começa e termina, sem número próprio.
+
+      A cor do texto do conteúdo NÃO vem daqui sozinha: quem monta o conteúdo
+      põe um estilo vazio de TextBlock nos recursos dele (ver a armadilha no
+      Button), senão o estilo implícito fixa text.primary e o item inativo
+      não atenua.
+
+      Desabilitada — antes de haver seleção — a cor sobe para text.primary e
+      quem atenua é só o opacity.disabled da raiz. Partindo do text.secondary
+      a ferramenta era atenuada duas vezes, e no claro o nome e a letra
+      ficavam num cinza que não se lia. Habilitada e não escolhida, volta ao
+      text.secondary de sempre, com a keycap normal.
+    -->
+    <Style x:Key="style.tool" TargetType="ToggleButton">
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Height" Value="{DynamicResource size.button}" />
+        <Setter Property="Padding" Value="{DynamicResource inset.button.compact}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource text.secondary}" />
+        <Setter Property="FontFamily" Value="{DynamicResource font.ui}" />
+        <Setter Property="FontSize" Value="{DynamicResource type.body}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Grid x:Name="Raiz">
+                        <Border x:Name="Fundo"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="{DynamicResource radius.control}" />
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center">
+                            <ContentPresenter.Resources>
+                                <Style TargetType="TextBlock" />
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
+                        <Rectangle x:Name="Sublinhado"
+                                   Height="{DynamicResource size.selection.bar}"
+                                   Margin="{TemplateBinding Padding}"
+                                   VerticalAlignment="Bottom"
+                                   Fill="{DynamicResource accent}"
+                                   Visibility="Collapsed" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Fundo" Property="Background" Value="{DynamicResource bg.hover}" />
+                            <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Sublinhado" Property="Visibility" Value="Visible" />
+                            <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Raiz" Property="Opacity" Value="{DynamicResource opacity.disabled}" />
+                            <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ═══ Barra de título e rodapé do Panel ════════════════════════════ -->
+    <!--
+      Os botões de ícone da barra de título — fechar, fixar. Sem fundo e sem
+      contorno até o hover: o style.button.icon tem moldura própria, e dois
+      quadrados contornados no canto disputavam o olho com o nome do módulo.
+      O glifo fica em text.secondary e acende no hover; o contorno só aparece
+      com foco de teclado, pelo trigger do Button.
+    -->
+    <Style x:Key="style.titlebar.button" TargetType="Button" BasedOn="{StaticResource style.button.icon}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource text.secondary}" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!--
+      O alfinete. Marcado não vira bloco de accent como o ToggleButton comum:
+      no Grafite seria um quadrado branco no canto da barra, gritando mais que
+      o conteúdo. Véu de accent e glifo em accent.text dizem "ligado" na
+      altura de um ícone.
+    -->
+    <Style x:Key="style.titlebar.toggle" TargetType="ToggleButton">
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Height" Value="{DynamicResource size.button.icon}" />
+        <Setter Property="Width" Value="{DynamicResource size.button.icon}" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="{DynamicResource border.width}" />
+        <Setter Property="Foreground" Value="{DynamicResource text.secondary}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Fundo"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{DynamicResource radius.control}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <!-- Ver a armadilha no Button. -->
+                            <ContentPresenter.Resources>
+                                <Style TargetType="TextBlock" />
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Fundo" Property="Background" Value="{DynamicResource bg.hover}" />
+                            <Setter Property="Foreground" Value="{DynamicResource text.primary}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Fundo" Property="Background" Value="{DynamicResource accent.veil}" />
+                            <Setter Property="Foreground" Value="{DynamicResource accent.text}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Fundo" Property="BorderBrush" Value="{DynamicResource accent.border}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+      Rodapé de status do Panel: "Atualizado há 3 s" no Ports, a contagem de
+      palavras no Scratch, a dica de teclado do Shelf. Filete em cima, sem
+      fundo próprio — é parte do corpo, não uma segunda barra de título —, e
+      a altura de uma linha de lista para o rodapé não pular quando o texto
+      dele troca por um botão.
+    -->
+    <Style x:Key="style.panel.footer" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{DynamicResource border.subtle}" />
+        <Setter Property="BorderThickness" Value="{DynamicResource border.width.top}" />
+        <Setter Property="Padding" Value="{DynamicResource inset.panel.footer}" />
+        <Setter Property="MinHeight" Value="{DynamicResource size.row}" />
+    </Style>
+
 
 </ResourceDictionary>

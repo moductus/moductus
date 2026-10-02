@@ -363,55 +363,63 @@ Mais duas superfícies que não são arquétipos mas fazem parte do sistema: o *
 
 ### Tokens
 
-Tudo num `Tokens.xaml` único, um `ResourceDictionary` que todo módulo referencia. Fonte única de verdade, e o modelo para de inventar cor a cada arquivo.
+O sistema separa o que varia do que é fixo. Espaço, raio, tamanho e movimento são fixos e moram em `Tokens.xaml`. Cores, fontes, sombras e transparência moram nos temas (`Themes/*.xaml`) e em `Tokens/Palette.HighContrast.xaml`. Nenhum módulo declara valor literal no código: tudo é referenciado via `DynamicResource`.
 
-#### Cor — tema escuro (padrão)
+#### Temas
 
-| Token | Valor | Uso |
+Um tema define exclusivamente cores, fontes, sombras e transparência. Todo o restante (espaçamento, raio de borda, dimensões e animações) permanece idêntico entre os temas, garantindo que alternar o visual nunca reorganize nem quebre a disposição das telas.
+
+O modo claro ou escuro é uma preferência separada do tema: a pessoa escolhe entre **Sistema**, **Claro** ou **Escuro** (com **Sistema** como padrão, lendo `AppsUseLightTheme` no registro e reagindo a `WM_SETTINGCHANGE`). O modo de alto contraste do Windows ganha de tudo: quando ativo, ignora o tema escolhido e adota as cores do sistema via `Palette.HighContrast.xaml`.
+
+O catálogo disponibiliza cinco temas:
+
+| Tema | ID | Descrição |
 |---|---|---|
-| `bg.base` | `#141517` | Fundo de overlay opaco |
-| `bg.raised` | `#1C1E22` | Card, input, linha selecionada |
-| `bg.hover` | `#24262B` | Hover de linha |
-| `border.subtle` | `#2E3138` | Divisores internos |
-| `border.strong` | `#3C4048` | Borda externa de toda janela flutuante |
-| `text.primary` | `#E8EAED` | Texto principal |
-| `text.secondary` | `#9AA0A9` | Descrição, atalho, metadado |
-| `text.muted` | `#6B717A` | Placeholder, estado vazio |
-| `accent` | `#FFB224` | Seleção, foco, ícone ativo |
-| `accent.fg` | `#1A1204` | Texto sobre o accent |
-| `success` | `#3DD68C` | Porta livre, processo saudável |
-| `danger` | `#F0554F` | Ação destrutiva |
+| **Grafite** (padrão) | `grafite` | Monocromático: a própria tinta é o destaque, sem cor nenhuma. |
+| **Meia-noite** | `meia-noite` | Azul-marinho profundo, com destaque em azul. |
+| **Alumínio** | `aluminio` | Cinzas neutros e o azul de sistema, sóbrio como um Mac. |
+| **Lima** | `lima` | Grafite frio com um destaque verde-lima. |
+| **Âmbar** | `ambar` | O tema de origem do Moductus: grafite quente e destaque âmbar. |
 
-Âmbar foi escolhido porque a barra de tarefas e a maioria dos apps de dev vivem em azul e roxo. Âmbar destaca sem gritar e funciona bem no ícone monocromático da bandeja.
+O padrão da suíte virou o Grafite monocromático, com visual sóbrio no estilo Vercel e macOS — o destaque é a própria tinta (branco no escuro, preto no claro), garantindo que nenhuma cor dispute atenção com o conteúdo da ferramenta. O Âmbar, que era a identidade visual original, foi preservado como tema selecionável.
 
 **Não existe token de "warning" separado.** Num utilitário desse tamanho, atenção e destaque são o mesmo sinal, e três cores semânticas bastam. Menos token, menos decisão errada.
 
-#### Cor — tema claro
+#### Chaves de cor
 
-| Token | Valor |
-|---|---|
-| `bg.base` | `#FAFAFA` |
-| `bg.raised` | `#FFFFFF` |
-| `bg.hover` | `#F0F1F3` |
-| `border.subtle` | `#E8EAED` |
-| `border.strong` | `#D8DBDF` |
-| `text.primary` | `#17181A` |
-| `text.secondary` | `#5A6069` |
-| `text.muted` | `#8A9099` |
-| `accent` | `#FFB224` |
-| `accent.fg` | `#1A1204` |
-| `success` | `#1E9E63` |
-| `danger` | `#D93B35` |
+Cada tema declara as cores base (`*.color`), convertidas automaticamente em pincéis (`SolidColorBrush`) congelados pelo motor de temas em tempo de execução, além das tintas translúcidas de fundo e dos véus derivados. A tabela abaixo lista a finalidade de cada chave e os valores do tema padrão (**Grafite**, nos modos escuro e claro lidos diretamente dos arquivos XAML); os valores dos demais temas encontram-se em seus respectivos arquivos em `src/Moductus.UI/Themes/`.
 
-`success` e `danger` são mais escuros que no tema escuro porque os originais somem sobre branco.
-
-Herdar do sistema por padrão, lendo `AppsUseLightTheme` no registro e escutando `WM_SETTINGCHANGE`.
+| Chave | Grafite Escuro | Grafite Claro | Uso |
+|---|---|---|---|
+| `bg.base` | `#0A0A0A` | `#FAFAFA` | Fundo principal de janela e overlay |
+| `bg.raised` | `#141414` | `#FFFFFF` | Cartão, item selecionado em lista, barra de título |
+| `bg.hover` | `#1F1F1F` | `#F2F2F2` | Hover sobre linhas e botões |
+| `bg.inset` | `#050505` | `#F4F4F4` | Campo de busca, fundo de keycap, área rebaixada |
+| `border.subtle` | `#232323` | `#EAEAEA` | Divisores internos e contorno de cartão |
+| `border.strong` | `#5D5D5D` | `#919191` | Borda externa de janela flutuante e contorno de controle (mínimo 3:1 sobre `bg.base`) |
+| `border.highlight` | `#14FFFFFF` | `#CCFFFFFF` | Traço Fluent de 1px no topo de superfícies flutuantes (branco a ~8% no escuro; branco a ~80% no claro) |
+| `text.primary` | `#EDEDED` | `#171717` | Texto principal |
+| `text.secondary` | `#A1A1A1` | `#5C5C5C` | Descrição, atalhos secundários e metadados |
+| `text.muted` | `#8A8A8A` | `#6E6E6E` | Placeholder e texto de estado vazio |
+| `accent` | `#EDEDED` | `#171717` | Preenchimento ativo (switch ligado, keycap ativa, botão primário) |
+| `accent.fg` | `#0A0A0A` | `#FFFFFF` | Texto ou glifo desenhado sobre fundo em `accent` |
+| `accent.border` | `#EDEDED` | `#171717` | Anel de foco e barra de seleção de 2px (contraste ≥ 3:1 sobre `bg.base`) |
+| `accent.text` | `#FFFFFF` | `#000000` | Destaque aplicado como texto sobre `bg.base` ou `bg.raised` (contraste ≥ 4.5:1) |
+| `success` | `#3DD68C` | `#17804F` | Semântica de sucesso: porta livre, processo saudável |
+| `danger` | `#F0554F` | `#D93B35` | Semântica de perigo: erro inline, ação destrutiva |
+| `shadow.color` | `#000000` | `#000000` | Cor base da sombra de elevação |
+| `bg.base.tint` | `#C80A0A0A` | `#C8FAFAFA` | Tinta translúcida sobre Mica/Acrylic do DWM na janela base |
+| `bg.raised.tint` | `#D8141414` | `#D8FFFFFF` | Tinta translúcida sobre superfícies elevadas com material DWM |
+| `accent.veil` | `#EDEDED` a 16% | `#171717` a 16% | Fundo suave de seleção ativa (derivado em tempo de execução) |
+| `success.veil` | `#3DD68C` a 14% | `#17804F` a 14% | Fundo translúcido para chips de estado positivo (derivado em tempo de execução) |
+| `danger.veil` | `#F0554F` a 14% | `#D93B35` a 14% | Fundo translúcido para caixa de erro e ações destrutivas (derivado em tempo de execução) |
+| `veil.canvas` | `#000000` a 40% | `#000000` a 40% | Fundo escurecido do desktop congelado no Freeze e Kill (fixo em `Tokens.xaml`) |
 
 #### Tipografia
 
-**Segoe UI Variable** (Win11) com fallback para **Segoe UI** (Win10). Monoespaçado: **Consolas**, que existe em toda instalação.
+Para interface geral (`font.ui` e `font.display`), **Segoe UI Variable** (Windows 11) com fallback automático para **Segoe UI** (Windows 10). Para código e números tabulares (`font.mono`), o sistema usa uma pilha de fontes de desenvolvedor: Nerd Fonts em primeiro lugar (`JetBrainsMono Nerd Font`, `JetBrainsMono NF`, `CaskaydiaCove Nerd Font`, `CaskaydiaCove NF`, `FiraCode Nerd Font`), seguidas por `Cascadia Code` e `Cascadia Mono` (nativas no Windows 11), tendo **Consolas** como piso presente desde o Windows Vista.
 
-Zero download, zero licença, zero peso no binário, e é o que faz o app parecer nativo em vez de web embrulhada.
+Zero download, zero licença, zero peso no binário: quem tem uma fonte de desenvolvedor instalada vê a família preferida; quem não tem cai no degrau seguinte sem qualquer degradação.
 
 | Nível | Tamanho (DIP) | Peso | Uso |
 |---|---|---|---|
@@ -430,7 +438,7 @@ Grade base de **4px**. Escala: `4, 8, 12, 16, 24, 32`.
 | Elemento | Raio |
 |---|---|
 | Controle (botão, input) | 6 |
-| Card | 10 |
+| Card | 8 |
 | Janela flutuante | 12 |
 | Superfície que encosta na borda da janela (pastilha, pílula do HUD) | 8 |
 
@@ -445,7 +453,7 @@ cantos vivos.
 
 | Elemento | Tamanho |
 |---|---|
-| Altura de linha de lista | 32px |
+| Altura de linha de lista | 36px |
 | Altura de input | 36px |
 | Altura de botão | 32px |
 | Ícone inline | 16px |
@@ -526,7 +534,7 @@ O mark são **quatro módulos arredondados num arranjo 2×2**, cada um com um gl
 - **O tamanho vem por parâmetro.** A bandeja pede 16, 20, 24 ou 32 conforme o scaling, e cada um é traçado na hora, com aritmética que fecha em inteiro nos quatro. `MarkTests` lê os pixels que saíram e falha se a borda escorregar da grade.
 - **O ícone carrega estado.** O Timer pinta um arco em volta, o Mic mudo risca na diagonal. Os blocos recuam quando o arco aparece, porque arco e blocos disputam a mesma moldura de 16px.
 
-Acento: `#FFB224`. Tagline: *"Tudo a uma tecla de distância."*
+O mark nos assets segue âmbar por ora; o ícone da bandeja usa a cor de destaque do tema em vigor. Tagline: *"Tudo a uma tecla de distância."*
 
 ---
 
@@ -553,9 +561,10 @@ moductus/
 │  ├─ Moductus.UI/
 │  │  ├─ Tokens/
 │  │  │  ├─ Tokens.xaml              # FONTE ÚNICA de tamanho, tipo e raio
-│  │  │  ├─ Palette.*.xaml           # cor: Dark, Light, HighContrast
+│  │  │  ├─ Palette.HighContrast.xaml # cor do alto contraste (ignora o tema)
 │  │  │  ├─ Motion.*.xaml            # duração: normal e reduzida
 │  │  │  └─ Controls.xaml            # estilos implícitos sobre os tokens
+│  │  ├─ Themes/                     # cor, fonte e sombra: {Tema}.Dark e .Light
 │  │  ├─ Theme.cs                    # troca paleta e movimento ao vivo
 │  │  ├─ LeaderOverlay.xaml          # a superfície da tecla líder (≠ Palette)
 │  │  └─ Archetypes/                 # PaletteWindow, HudWindow,

@@ -20,7 +20,11 @@ public partial class HelpWindow : Window
 {
     private readonly Action<bool> _guardarPreferencia;
 
-    private sealed record Passo(string Tecla, string Titulo, string Detalhe);
+    /// <summary>
+    /// Um passo ou um módulo. As teclas vêm separadas porque cada uma é
+    /// desenhada como keycap própria: "Ctrl+Alt+M" vira três teclas.
+    /// </summary>
+    private sealed record Passo(IReadOnlyList<string> Teclas, string Titulo, string Detalhe);
 
     internal HelpWindow(
         Theme theme,
@@ -39,9 +43,9 @@ public partial class HelpWindow : Window
 
         Passos.ItemsSource = new List<Passo>
         {
-            new(atalhoLider, "Chame o Moductus", "De qualquer lugar, em qualquer aplicativo. Uma tecla só, e ela é configurável."),
-            new("letra", "Escolha o módulo", "A tela mostra as letras disponíveis. Você não precisa decorar nada para começar."),
-            new("Esc", "Saia de qualquer lugar", "Esc fecha o que estiver aberto. Repetir o atalho do módulo também fecha."),
+            new(atalhoLider.Split('+'), "Chame o Moductus", "De qualquer lugar, em qualquer aplicativo. Uma tecla só, e ela é configurável."),
+            new(["letra"], "Escolha o módulo", "A tela mostra as letras disponíveis. Você não precisa decorar nada para começar."),
+            new(["Esc"], "Saia de qualquer lugar", "Esc fecha o que estiver aberto. Repetir o atalho do módulo também fecha."),
         };
 
         // A letra vem do registro, não da inicial do nome: três módulos
@@ -50,7 +54,7 @@ public partial class HelpWindow : Window
 
         Modulos.ItemsSource = modulos
             .Select(m => new Passo(
-                porModulo.TryGetValue(m.Id, out var l) && l.Active ? l.Key.ToString().ToUpperInvariant() : "—",
+                [porModulo.TryGetValue(m.Id, out var l) && l.Active ? l.Key.ToString().ToUpperInvariant() : "—"],
                 m.Name,
                 m.Description))
             .ToList();

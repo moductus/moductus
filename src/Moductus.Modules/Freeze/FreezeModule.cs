@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -42,18 +43,29 @@ public sealed class FreezeModule(ModuleContext context) : IModule
     private const double AberturaDaSeta = Math.PI / 7;
 
     private readonly Canvas _camada = new() { Cursor = Cursors.Cross, Background = Brushes.Transparent, Focusable = true };
-    private readonly Rectangle _selecao = new() { StrokeThickness = 1, Visibility = Visibility.Collapsed };
+    private readonly Rectangle _selecao = new();
+    private readonly Rectangle _contorno = new();
+    private readonly Grid _moldura = new() { Visibility = Visibility.Collapsed };
     private readonly Tinta _tinta = new();
-    private readonly TextBlock _dimensoes = new() { Visibility = Visibility.Collapsed };
+    private readonly TextBlock _medida = new() { TextWrapping = TextWrapping.NoWrap };
+    private readonly TextBlock _modo = new() { Text = "OCR", TextWrapping = TextWrapping.NoWrap };
+    private Border? _dimensoes;
+    private FrameworkElement? _rotuloCor;
     private readonly Border _lupa = new() { Width = LupaTamanho, Height = LupaTamanho };
     private readonly Rectangle _lupaImagem = new();
-    private readonly TextBlock _cor = new();
+    private readonly TextBlock _cor = new() { TextWrapping = TextWrapping.NoWrap };
     private readonly Rectangle _amostra = new();
-    private readonly TextBlock _dica = new();
     private readonly StackPanel _ferramentas = new() { Orientation = Orientation.Horizontal };
-    private readonly TextBlock _traco = new();
-    private readonly Border _barra = new() { Visibility = Visibility.Collapsed };
+    private readonly StackPanel _espessuraGrupo = new() { Orientation = Orientation.Horizontal };
+    private readonly StackPanel _acoes = new() { Orientation = Orientation.Horizontal };
+    private readonly TextBlock _traco = new() { TextWrapping = TextWrapping.NoWrap };
     private readonly Dictionary<Ferramenta, ToggleButton> _botoes = [];
+
+    /// <summary>
+    /// A camada de desenho com a barra e a dica por cima. A barra fica fora da
+    /// camada para o clique nela não começar um recorte.
+    /// </summary>
+    private readonly Grid _raiz = new();
 
     private readonly List<Anotacao> _anotacoes = [];
 
@@ -105,58 +117,117 @@ public sealed class FreezeModule(ModuleContext context) : IModule
 
         _montado = true;
 
-        _selecao.SetResourceReference(Shape.StrokeProperty, "accent");
-        _selecao.SetResourceReference(Shape.FillProperty, "accent.veil");
+        // Tracejada em accent.border, véu accent.veil: a borda é sinal de
+        // foco, como em todo controle do app, e o tracejado a separa de
+        // qualquer linha reta que já existisse na tela congelada.
+        //
+        // Por baixo do tracejado, um contorno contínuo em bg.raised: no
+        // Grafite claro o accent é preto, e preto tracejado sobre um editor
+        // escuro sumia — a seleção ficava invisível. Com o contorno, o vão
+        // entre os traços sempre tem a cor oposta à do traço.
+        _contorno.SetResourceReference(Shape.StrokeProperty, "bg.raised");
+        _contorno.SetResourceReference(Shape.StrokeThicknessProperty, "stroke.selection");
+        _contorno.SetResourceReference(Shape.FillProperty, "accent.veil");
+        _selecao.SetResourceReference(Shape.StrokeProperty, "accent.border");
+        _selecao.SetResourceReference(Shape.StrokeThicknessProperty, "stroke.selection");
+        _selecao.SetResourceReference(Shape.StrokeDashArrayProperty, "dash.selection");
 
         _tinta.Pintor = Pintar;
         _tinta.SetResourceReference(Tinta.CorProperty, "accent");
         _tinta.SetResourceReference(Tinta.FonteProperty, "font.ui");
 
-        _dimensoes.SetResourceReference(TextBlock.FontFamilyProperty, "font.mono");
-        _dimensoes.SetResourceReference(TextBlock.ForegroundProperty, "accent.fg");
-        _dimensoes.SetResourceReference(TextBlock.BackgroundProperty, "accent");
-        _dimensoes.SetResourceReference(Control.PaddingProperty, "inset.chip");
+        // A medida: chip mono que acompanha a seleção. "OCR" só aparece no
+        // arraste com Shift, para o usuário saber o que vai acontecer ao soltar.
+        _modo.SetResourceReference(TextBlock.FontWeightProperty, "weight.semibold");
+        _modo.SetResourceReference(TextBlock.ForegroundProperty, "accent.text");
+        _modo.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.8");
+        _modo.VerticalAlignment = VerticalAlignment.Center;
+        _medida.SetResourceReference(TextBlock.FontFamilyProperty, "font.mono");
+        _medida.VerticalAlignment = VerticalAlignment.Center;
+        var medida = new StackPanel { Orientation = Orientation.Horizontal };
+        medida.Children.Add(_modo);
+        medida.Children.Add(_medida);
+        _dimensoes = CanvasWindow.Chip(medida);
+        _dimensoes.Visibility = Visibility.Collapsed;
 
         RenderOptions.SetBitmapScalingMode(_lupaImagem, BitmapScalingMode.NearestNeighbor);
         var mira = new Grid();
         mira.Children.Add(_lupaImagem);
-        var alvo = new Rectangle { Width = LupaZoom, Height = LupaZoom, StrokeThickness = 1, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var alvo = new Rectangle { Width = LupaZoom, Height = LupaZoom, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         alvo.SetResourceReference(Shape.StrokeProperty, "accent");
+        alvo.SetResourceReference(Shape.StrokeThicknessProperty, "stroke.selection");
         mira.Children.Add(alvo);
+        // Moldura de cartão em volta da ampliação: filete border.strong por
+        // fora e um aro de bg.raised por dentro. Só o filete se confundia com
+        // a tela atrás — sob o véu da Canvas, o cinza do border.strong claro é
+        // quase o cinza do congelado escurecido —, e a lupa parecia um pedaço
+        // solto da imagem. O aro contrasta com o que estiver em volta, e o
+        // filete o separa do que estiver dentro.
         _lupa.Child = mira;
+        _lupa.SetResourceReference(Border.BackgroundProperty, "bg.raised");
         _lupa.SetResourceReference(Border.BorderBrushProperty, "border.strong");
-        _lupa.SetResourceReference(Border.BorderThicknessProperty, "border.width.strong");
-        _lupa.SetResourceReference(Border.CornerRadiusProperty, "radius.control");
+        _lupa.SetResourceReference(Border.BorderThicknessProperty, "border.width");
+        _lupa.SetResourceReference(Border.PaddingProperty, "border.width.strong");
+        _lupa.SetResourceReference(Border.CornerRadiusProperty, "radius.card");
         _lupa.ClipToBounds = true;
 
         _amostra.SetResourceReference(FrameworkElement.WidthProperty, "size.swatch");
         _amostra.SetResourceReference(FrameworkElement.HeightProperty, "size.swatch");
         _amostra.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.8");
+        _amostra.SetResourceReference(Shape.StrokeProperty, "border.strong");
+        _amostra.SetResourceReference(Shape.StrokeThicknessProperty, "stroke.selection");
 
         _cor.SetResourceReference(TextBlock.FontFamilyProperty, "font.mono");
         _cor.VerticalAlignment = VerticalAlignment.Center;
 
-        _ferramentas.Children.Add(Botao(Ferramenta.Retangulo, "Retângulo  R"));
-        _ferramentas.Children.Add(Botao(Ferramenta.Seta, "Seta  A"));
-        _ferramentas.Children.Add(Botao(Ferramenta.Livre, "Livre  L"));
-        _ferramentas.Children.Add(Botao(Ferramenta.Texto, "Texto  T"));
+        // Glifos do Segoe Fluent Icons que também existem no MDL2 do Windows
+        // 10: Checkbox (o quadrado vazio), Forward, Edit e Font.
+        _ferramentas.Children.Add(Botao(Ferramenta.Retangulo, "\uE739", "Retângulo", "R"));
+        _ferramentas.Children.Add(Botao(Ferramenta.Seta, "\uE72A", "Seta", "A"));
+        _ferramentas.Children.Add(Botao(Ferramenta.Livre, "\uE70F", "Livre", "L"));
+        _ferramentas.Children.Add(Botao(Ferramenta.Texto, "\uE8D2", "Texto", "T"));
 
-        _traco.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
-        _traco.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
+        // A espessura: o número em mono, entre as duas teclas que o mudam.
+        var tracoRotulo = new TextBlock { Text = "Traço", TextWrapping = TextWrapping.NoWrap, VerticalAlignment = VerticalAlignment.Center };
+        tracoRotulo.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        tracoRotulo.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.8");
+        _traco.SetResourceReference(TextBlock.FontFamilyProperty, "font.mono");
+        _traco.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.8");
         _traco.VerticalAlignment = VerticalAlignment.Center;
-        _ferramentas.Children.Add(_traco);
-        CanvasWindow.Dress(_barra, _ferramentas);
+        var menos = CanvasWindow.Keycap("[");
+        menos.SetResourceReference(FrameworkElement.MarginProperty, "inset.canvas.keycap");
+        _espessuraGrupo.SetResourceReference(FrameworkElement.MarginProperty, "inset.8.h");
+        _espessuraGrupo.Children.Add(tracoRotulo);
+        _espessuraGrupo.Children.Add(_traco);
+        _espessuraGrupo.Children.Add(menos);
+        _espessuraGrupo.Children.Add(CanvasWindow.Keycap("]"));
 
-        _dica.Text = "clique: cor   ·   arraste: recorte   ·   Shift + arraste: OCR   ·   R A L T: anotar   ·   [ ]: traço   ·   Ctrl+Z: desfazer   ·   Enter: copiar   ·   Ctrl+S: salvar   ·   Esc: fechar";
-        _dica.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        _acoes.Children.Add(CanvasWindow.Shortcut("copiar", "Enter"));
+        _acoes.Children.Add(CanvasWindow.Shortcut("salvar", "Ctrl", "S"));
 
-        _camada.Children.Add(_selecao);
+        var barra = CanvasWindow.Toolbar(_ferramentas, _espessuraGrupo, _acoes, CanvasWindow.Shortcut("fechar", "Esc"));
+
+        // O que faz a seleção nascer. As ferramentas da barra só valem depois
+        // dela, e é esta dica que diz como chegar lá.
+        var dica = new StackPanel { Orientation = Orientation.Horizontal };
+        dica.Children.Add(Gesto("Clique", "cor"));
+        dica.Children.Add(Gesto("Arraste", "recorte"));
+        dica.Children.Add(CanvasWindow.Shortcut("+ arraste: OCR", "Shift"));
+        dica.Children.Add(CanvasWindow.Shortcut("desfazer", "Ctrl", "Z"));
+
+        _moldura.Children.Add(_contorno);
+        _moldura.Children.Add(_selecao);
+        _camada.Children.Add(_moldura);
         _camada.Children.Add(_tinta);
         _camada.Children.Add(_dimensoes);
         _camada.Children.Add(_lupa);
-        _camada.Children.Add(Rotulo(_amostra, _cor));
-        _camada.Children.Add(_barra);
-        _camada.Children.Add(CanvasWindow.Card(_dica));
+        _rotuloCor = Rotulo(_amostra, _cor);
+        _camada.Children.Add(_rotuloCor);
+
+        _raiz.Children.Add(_camada);
+        _raiz.Children.Add(barra);
+        _raiz.Children.Add(CanvasWindow.Hint(dica));
+        Habilitar(false);
 
         // A tinta desenha em coordenadas do Canvas; sem tamanho ela nasce com
         // zero e o layout não reserva nada para ela.
@@ -204,7 +275,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
 
         canvas.Owner = Id;
         canvas.SetBackdrop(_bitmap);
-        canvas.SlotContent = _camada;
+        canvas.SlotContent = _raiz;
         canvas.Dismissed += SoltarAoFechar;
         canvas.PreviewKeyDown += OnTecla;
         canvas.PreviewTextInput += OnDigitacao;
@@ -248,11 +319,6 @@ public sealed class FreezeModule(ModuleContext context) : IModule
 
     private void OnDown(object sender, MouseButtonEventArgs e)
     {
-        if (NaBarra(e.OriginalSource))
-        {
-            return;
-        }
-
         var pos = e.GetPosition(_camada);
 
         if (_ferramenta != Ferramenta.Nenhuma && _regiao is not null)
@@ -323,7 +389,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         {
             _regiao = r;
             MostrarSelecao(r);
-            MostrarBarra(r);
+            Habilitar(true);
             CopiarQuieto($"{recorte.Width}×{recorte.Height}");
             return;
         }
@@ -501,7 +567,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         AtualizarTraco();
     }
 
-    private void AtualizarTraco() => _traco.Text = $"traço {_espessura:0}";
+    private void AtualizarTraco() => _traco.Text = $"{_espessura:0}";
 
     private void Desfazer()
     {
@@ -788,10 +854,13 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         Canvas.SetLeft(_lupa, x);
         Canvas.SetTop(_lupa, y);
 
-        if (_amostra.Parent is FrameworkElement rotulo)
+        // O rótulo da cor é o chip inteiro, e não o pai da amostra: o pai é o
+        // painel de dentro do chip, que não é filho do Canvas, e posicionar
+        // ele deixava o rótulo parado no canto da tela.
+        if (_rotuloCor is { } rotulo)
         {
             Canvas.SetLeft(rotulo, x);
-            Canvas.SetTop(rotulo, y + LupaTamanho + 4);
+            Canvas.SetTop(rotulo, y + LupaTamanho + (double)_camada.FindResource("space.4"));
         }
     }
 
@@ -823,55 +892,93 @@ public sealed class FreezeModule(ModuleContext context) : IModule
 
     private void MostrarSelecao(Rect r)
     {
-        Canvas.SetLeft(_selecao, r.X);
-        Canvas.SetTop(_selecao, r.Y);
-        _selecao.Width = r.Width;
-        _selecao.Height = r.Height;
-        _selecao.Visibility = Visibility.Visible;
+        Canvas.SetLeft(_moldura, r.X);
+        Canvas.SetTop(_moldura, r.Y);
+        _moldura.Width = r.Width;
+        _moldura.Height = r.Height;
+        _moldura.Visibility = Visibility.Visible;
+
+        if (_dimensoes is not { } chip)
+        {
+            return;
+        }
 
         var recorte = Recorte(r);
-        _dimensoes.Text = _ocr ? $"OCR  {recorte.Width} × {recorte.Height}" : $"{recorte.Width} × {recorte.Height}";
-        Canvas.SetLeft(_dimensoes, r.X);
-        Canvas.SetTop(_dimensoes, Math.Max(0, r.Y - 24));
-        _dimensoes.Visibility = Visibility.Visible;
+        _medida.Text = $"{recorte.Width} × {recorte.Height} px";
+        _modo.Visibility = _ocr ? Visibility.Visible : Visibility.Collapsed;
+        chip.Visibility = Visibility.Visible;
+
+        // Em cima da seleção, alinhado à esquerda dela; sem espaço em cima
+        // (seleção encostada no topo), desce para dentro do recorte.
+        chip.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var folga = (double)_camada.FindResource("space.8");
+        var acima = r.Y - folga - chip.DesiredSize.Height;
+        Canvas.SetLeft(chip, Math.Clamp(r.X, 0, Math.Max(0, _camada.ActualWidth - chip.DesiredSize.Width)));
+        Canvas.SetTop(chip, acima >= 0 ? acima : r.Y + folga);
     }
 
     private void EsconderSelecao()
     {
         _regiao = null;
-        _selecao.Visibility = Visibility.Collapsed;
-        _dimensoes.Visibility = Visibility.Collapsed;
-        _barra.Visibility = Visibility.Collapsed;
+        _moldura.Visibility = Visibility.Collapsed;
+
+        if (_dimensoes is not null)
+        {
+            _dimensoes.Visibility = Visibility.Collapsed;
+        }
+
+        Habilitar(false);
     }
 
-    private void MostrarBarra(Rect r)
+    /// <summary>
+    /// A barra fica de pé o tempo todo, mas as ferramentas, a espessura e as
+    /// ações só valem sobre uma seleção: antes dela aparecem atenuadas, para
+    /// a barra ensinar o que existe sem fingir que já dá para usar.
+    /// </summary>
+    private void Habilitar(bool comSelecao)
     {
-        _barra.Visibility = Visibility.Visible;
-        _barra.UpdateLayout();
+        _ferramentas.IsEnabled = comSelecao;
 
-        var folga = (double)_camada.FindResource("space.8");
-        var abaixo = r.Bottom + folga;
+        foreach (var grupo in new FrameworkElement[] { _espessuraGrupo, _acoes })
+        {
+            grupo.IsEnabled = comSelecao;
 
-        Canvas.SetLeft(_barra, Math.Clamp(r.X, 0, Math.Max(0, _camada.ActualWidth - _barra.ActualWidth)));
-        Canvas.SetTop(_barra, abaixo + _barra.ActualHeight > _camada.ActualHeight
-            ? Math.Max(0, r.Y - folga - _barra.ActualHeight)
-            : abaixo);
+            if (comSelecao)
+            {
+                grupo.ClearValue(UIElement.OpacityProperty);
+            }
+            else
+            {
+                grupo.SetResourceReference(UIElement.OpacityProperty, "opacity.disabled");
+            }
+        }
     }
 
-    private bool NaBarra(object origem) =>
-        ReferenceEquals(origem, _barra) || (origem is Visual v && _barra.IsAncestorOf(v));
-
-    private ToggleButton Botao(Ferramenta ferramenta, string texto)
+    private ToggleButton Botao(Ferramenta ferramenta, string glifo, string nome, string tecla)
     {
-        // Focusable false: o foco tem de ficar na camada, ou a digitação do
-        // texto anotado passaria a ir para o botão.
-        var botao = new ToggleButton { Content = texto, Focusable = false };
-        botao.SetResourceReference(FrameworkElement.StyleProperty, "style.toggle.compact");
-        botao.SetResourceReference(FrameworkElement.MarginProperty, "inset.4");
+        var botao = CanvasWindow.Tool(glifo, nome, tecla);
         botao.Click += (_, _) => EscolherFerramenta(ferramenta);
 
         _botoes[ferramenta] = botao;
         return botao;
+    }
+
+    /// <summary>
+    /// Um gesto de mouse na dica do pé: o gesto em destaque, o efeito em
+    /// legenda. Não é keycap — clique não é tecla.
+    /// </summary>
+    private static TextBlock Gesto(string gesto, string efeito)
+    {
+        var nome = new Run(gesto);
+        nome.SetResourceReference(TextElement.FontWeightProperty, "weight.semibold");
+        nome.SetResourceReference(TextElement.ForegroundProperty, "text.primary");
+
+        var texto = new TextBlock { TextWrapping = TextWrapping.NoWrap, VerticalAlignment = VerticalAlignment.Center };
+        texto.SetResourceReference(FrameworkElement.StyleProperty, "style.caption");
+        texto.SetResourceReference(FrameworkElement.MarginProperty, "inset.8.h");
+        texto.Inlines.Add(nome);
+        texto.Inlines.Add(new Run(" " + efeito));
+        return texto;
     }
 
     // ---- Auxiliares ------------------------------------------------------------
@@ -937,7 +1044,7 @@ public sealed class FreezeModule(ModuleContext context) : IModule
         var painel = new StackPanel { Orientation = Orientation.Horizontal };
         painel.Children.Add(amostra);
         painel.Children.Add(texto);
-        return CanvasWindow.Card(painel);
+        return CanvasWindow.Chip(painel);
     }
 
     public UserControl? BuildSettings() => null;

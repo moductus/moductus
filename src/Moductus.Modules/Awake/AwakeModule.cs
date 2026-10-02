@@ -68,16 +68,19 @@ public sealed class AwakeModule(ModuleContext context) : IModule
 
         if (_on)
         {
-            var tela = MantemTela;
-            Power.KeepAwake(keepDisplayOn: tela);
+            Power.KeepAwake(keepDisplayOn: MantemTela);
             Agendar();
 
             // Estado que dura e some da vista: sem a pastilha, a máquina fica
             // acordada a noite inteira porque ninguém lembrou de desligar.
+            //
+            // Ligar não dispara HUD, como no Timer: a pastilha já está no
+            // canto dizendo a mesma coisa, e a pílula no centro era um segundo
+            // aviso do mesmo estado. Estado que fica é pastilha; evento que
+            // passa é HUD — desligar continua no HUD porque aí não sobra
+            // pastilha para avisar.
             context.Archetypes.Badge.Fixar(Id, "Awake ligado",
                 "Clique para soltar a máquina", HudTone.Neutro, Invoke);
-
-            context.Archetypes.Hud.Flash("Awake ligado", Explicacao(tela), HudTone.Neutro);
         }
         else
         {
@@ -89,18 +92,6 @@ public sealed class AwakeModule(ModuleContext context) : IModule
                 "O plano de energia do Windows volta a valer.",
                 HudTone.Neutro);
         }
-    }
-
-    private string Explicacao(bool tela)
-    {
-        var inicio = tela
-            ? "A máquina não hiberna e a tela não apaga"
-            : "A máquina não hiberna, mas a tela apaga no tempo de sempre";
-
-        var horas = HorasAteDesligar;
-        return horas > 0
-            ? $"{inicio}. Desliga sozinho em {horas} h."
-            : $"{inicio} até você repetir o atalho.";
     }
 
     /// <summary>

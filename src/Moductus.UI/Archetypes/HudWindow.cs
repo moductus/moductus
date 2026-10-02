@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Shapes;
@@ -8,7 +9,9 @@ using Moductus.Core.Interop;
 
 namespace Moductus.UI.Archetypes;
 
-/// <summary>Como o HUD se colore. Muda só o ponto, nunca o fundo.</summary>
+/// <summary>
+/// Como o HUD e a pastilha se colorem. Muda o ponto e o ícone, nunca o fundo.
+/// </summary>
 public enum HudTone
 {
     /// <summary>Aconteceu. O caso comum.</summary>
@@ -19,6 +22,50 @@ public enum HudTone
 
     /// <summary>Não deu, mas não é erro de programa.</summary>
     Alerta,
+}
+
+/// <summary>
+/// O que cada tom pinta e desenha. Num lugar só, para a pílula do HUD e a
+/// pastilha não divergirem no dia em que alguém mexer numa delas.
+/// </summary>
+/// <remarks>
+/// O glifo sai do tom porque nenhum módulo escolhe ícone hoje: o contrato do
+/// HUD é título, detalhe e tom. Com isso o quadrado diz "deu certo", "deu
+/// errado" ou "aconteceu" antes de o texto ser lido — o mesmo que o ponto diz,
+/// em tamanho que se acha com o canto do olho.
+/// </remarks>
+internal static class TomVisual
+{
+    /// <summary>Preenchimento do ponto de estado.</summary>
+    public static string Ponto(HudTone tom) => tom switch
+    {
+        HudTone.Sucesso => "success",
+        HudTone.Alerta => "danger",
+        _ => "accent",
+    };
+
+    /// <summary>
+    /// Cor do glifo. O neutro é accent.text e não accent: glifo é traço fino,
+    /// lê como texto, e o accent cheio do Lima claro some sobre bg.inset.
+    /// </summary>
+    public static string Glifo(HudTone tom) => tom switch
+    {
+        HudTone.Sucesso => "success",
+        HudTone.Alerta => "danger",
+        _ => "accent.text",
+    };
+
+    /// <summary>
+    /// CheckMark, Warning e Info do Segoe Fluent Icons — pontos de código que
+    /// o Segoe MDL2 Assets do Windows 10 também tem, por isso a pilha de
+    /// font.icon funciona nos dois.
+    /// </summary>
+    public static string Simbolo(HudTone tom) => tom switch
+    {
+        HudTone.Sucesso => "",
+        HudTone.Alerta => "",
+        _ => "",
+    };
 }
 
 /// <summary>
@@ -53,6 +100,9 @@ public class HudWindow : ArchetypeWindow
     private readonly TextBlock _titulo = new();
     private readonly TextBlock _detalhe = new();
     private readonly Ellipse _ponto = new();
+    private readonly Border _icone = new();
+    private readonly TextBlock _glifo = new();
+    private readonly Border _brilho = new();
     private readonly DispatcherTimer _timer = new();
 
     private Border? _pilula;
@@ -71,8 +121,8 @@ public class HudWindow : ArchetypeWindow
     public void Flash(string text) => Flash(text, null);
 
     /// <summary>
-    /// Mostra título, detalhe opcional e o tom do ponto, e reinicia a
-    /// contagem para sumir.
+    /// Mostra título, detalhe opcional e o tom do ponto e do ícone, e
+    /// reinicia a contagem para sumir.
     /// </summary>
     public void Flash(string titulo, string? detalhe, HudTone tom = HudTone.Neutro)
     {
@@ -80,12 +130,9 @@ public class HudWindow : ArchetypeWindow
         _detalhe.Text = detalhe ?? string.Empty;
         _detalhe.Visibility = string.IsNullOrEmpty(detalhe) ? Visibility.Collapsed : Visibility.Visible;
 
-        _ponto.SetResourceReference(Shape.FillProperty, tom switch
-        {
-            HudTone.Sucesso => "success",
-            HudTone.Alerta => "danger",
-            _ => "accent",
-        });
+        _ponto.SetResourceReference(Shape.FillProperty, TomVisual.Ponto(tom));
+        _glifo.Text = TomVisual.Simbolo(tom);
+        _icone.SetResourceReference(TextElement.ForegroundProperty, TomVisual.Glifo(tom));
 
         _timer.Stop();
         _timer.Interval = Permanencia(titulo, detalhe);
@@ -107,10 +154,16 @@ public class HudWindow : ArchetypeWindow
 
     protected override FrameworkElement BuildChrome(ContentPresenter slot)
     {
-        _ponto.SetResourceReference(FrameworkElement.WidthProperty, "size.dot");
-        _ponto.SetResourceReference(FrameworkElement.HeightProperty, "size.dot");
-        _ponto.VerticalAlignment = VerticalAlignment.Center;
-        _ponto.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.12");
+        // Ícone à esquerda, ponto à direita: o quadrado é o que o olho acha
+        // primeiro, e o ponto fecha a linha no lado oposto em vez de disputar
+        // com ele o mesmo canto.
+        _glifo.SetResourceReference(FrameworkElement.StyleProperty, "style.status.glyph");
+        _icone.Child = _glifo;
+        _icone.SetResourceReference(FrameworkElement.StyleProperty, "style.status.icon");
+        _icone.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.12");
+
+        _ponto.SetResourceReference(FrameworkElement.StyleProperty, "style.dot");
+        _ponto.SetResourceReference(FrameworkElement.MarginProperty, "inset.start.12");
 
         _titulo.SetResourceReference(TextBlock.FontSizeProperty, "type.body-lg");
         _titulo.SetResourceReference(TextBlock.LineHeightProperty, "type.body-lg.line");
@@ -128,12 +181,21 @@ public class HudWindow : ArchetypeWindow
         texto.Children.Add(_detalhe);
 
         var conteudo = new StackPanel { Orientation = Orientation.Horizontal };
-        conteudo.Children.Add(_ponto);
+        conteudo.SetResourceReference(FrameworkElement.MarginProperty, "inset.pill");
+        conteudo.Children.Add(_icone);
         conteudo.Children.Add(texto);
         conteudo.Children.Add(slot);
+        conteudo.Children.Add(_ponto);
 
-        _pilula = new Border { Child = conteudo };
-        _pilula.SetResourceReference(Border.PaddingProperty, "inset.pill");
+        // A folga é margem do conteúdo, não Padding da pílula: o brilho de
+        // cima tem de encostar na borda, e Padding o empurraria para dentro.
+        _brilho.SetResourceReference(FrameworkElement.StyleProperty, "style.surface.highlight");
+
+        var camadas = new Grid();
+        camadas.Children.Add(conteudo);
+        camadas.Children.Add(_brilho);
+
+        _pilula = new Border { Child = camadas };
         Superficie = _pilula;
 
         // Mensagem de erro carrega texto de exceção, que não tem tamanho. Sem
@@ -159,8 +221,14 @@ public class HudWindow : ArchetypeWindow
         return _pilula;
     }
 
-    protected override void OnSuperficieDecidida() =>
+    protected override void OnSuperficieDecidida()
+    {
         _pilula?.SetResourceReference(Border.CornerRadiusProperty, RaioDaSuperficie);
+
+        // O brilho acompanha a curva da pílula; com o raio do recorte num
+        // canto vivo ele sobraria arredondado por dentro do retângulo.
+        _brilho.SetResourceReference(Border.CornerRadiusProperty, RaioDaSuperficie);
+    }
 
     protected override void Enter()
     {

@@ -91,6 +91,51 @@ public class MarkTests
         Assert.Contains(mudo, EhAmbar);
     }
 
+    /// <summary>
+    /// O caso que motivou o destaque depender da barra: o Grafite usa a própria
+    /// tinta como accent. App claro com barra escura punha arco preto em barra
+    /// preta; app escuro com barra clara, arco branco em barra clara.
+    /// </summary>
+    [Theory]
+    [InlineData(false, 0x17)]
+    [InlineData(true, 0xED)]
+    public void Accent_que_some_na_barra_cai_no_destaque_de_reserva(bool barraClara, byte cinzaDoGrafite)
+    {
+        var grafite = Color.FromRgb(cinzaDoGrafite, cinzaDoGrafite, cinzaDoGrafite);
+        var arco = Ler(Renderizar(() => Mark.Render(32, barraClara, progress: 0.7, accent: grafite)), 32);
+        var risco = Ler(Renderizar(() => Mark.Render(32, barraClara, slashed: true, accent: grafite)), 32);
+
+        Predicate<Cor> reserva = barraClara ? EhAmbarEscuro : EhAmbar;
+
+        Assert.Contains(arco, reserva);
+        Assert.Contains(risco, reserva);
+        Assert.DoesNotContain(arco, c => EhCinza(c, cinzaDoGrafite));
+    }
+
+    /// <summary>
+    /// Accent cinza com contraste de sobra contra a barra também não serve: é
+    /// a cor dos módulos, e o risco do Mic sumiria em cima deles.
+    /// </summary>
+    [Fact]
+    public void Accent_sem_matiz_cai_no_destaque_de_reserva_mesmo_com_contraste()
+    {
+        var grafiteEscuro = Color.FromRgb(0xED, 0xED, 0xED);
+        var mudo = Ler(Renderizar(() => Mark.Render(32, onLightTaskbar: false, slashed: true, accent: grafiteEscuro)), 32);
+
+        Assert.Contains(mudo, EhAmbar);
+    }
+
+    /// <summary>A reserva é reserva: accent colorido e legível na barra continua valendo.</summary>
+    [Fact]
+    public void Accent_colorido_e_legivel_e_respeitado()
+    {
+        var azul = Color.FromRgb(0x6E, 0x9B, 0xFF);
+        var arco = Ler(Renderizar(() => Mark.Render(32, onLightTaskbar: false, progress: 0.7, accent: azul)), 32);
+
+        Assert.Contains(arco, c => c.A > 128 && c.B > 200 && c.R < 160);
+        Assert.DoesNotContain(arco, EhAmbar);
+    }
+
     // ---- Apoio ---------------------------------------------------------------
 
     /// <summary>
@@ -101,6 +146,11 @@ public class MarkTests
     private static readonly Color Ambar = Color.FromRgb(0xFF, 0xB2, 0x24);
 
     private static bool EhAmbar(Cor c) => c.A > 128 && c.R > 180 && c.G is > 100 and < 220 && c.B < 120;
+
+    /// <summary>O âmbar que se lê sobre barra clara (#9A5B00).</summary>
+    private static bool EhAmbarEscuro(Cor c) => c.A > 128 && c.R is > 120 and < 180 && c.G is > 60 and < 120 && c.B < 40;
+
+    private static bool EhCinza(Cor c, byte valor) => c.A > 128 && Math.Abs(c.R - valor) < 8 && Math.Abs(c.G - valor) < 8 && Math.Abs(c.B - valor) < 8;
 
     private readonly record struct Cor(byte B, byte G, byte R, byte A);
 

@@ -2,26 +2,39 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Style="{DynamicResource {x:Type Window}}"
-        Width="460"
+        Width="{DynamicResource size.settings.module.width}"
         SizeToContent="Height"
-        MinHeight="200"
-        MaxHeight="720"
+        MinHeight="{DynamicResource size.settings.module.minheight}"
+        MaxHeight="{DynamicResource size.settings.module.maxheight}"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         KeyDown="OnKeyDown">
 
-    <!-- Nenhuma cor, tamanho ou raio aqui: tudo vem dos tokens. -->
+    <!-- Nenhuma cor, tamanho ou raio aqui: tudo vem dos tokens. A janela
+         repete a gramática das configurações — título, descrição, o ajuste
+         num cartão e o rodapé de dicas — para o ajuste de um módulo parecer
+         uma seção que saiu da janela, e não outro app. -->
 
     <DockPanel>
         <Border DockPanel.Dock="Bottom"
-                Background="{DynamicResource bg.raised}"
                 BorderBrush="{DynamicResource border.subtle}"
-                BorderThickness="0,1,0,0"
-                Padding="{DynamicResource inset.16}">
-            <Button Content="Fechar"
-                    HorizontalAlignment="Right"
-                    Click="OnFecharClick" />
+                BorderThickness="{DynamicResource border.width.top}"
+                Padding="{DynamicResource inset.settings.footer}">
+            <DockPanel>
+                <!-- Tudo aqui vale na hora, como nas configurações: o único
+                     botão é o de sair. -->
+                <Button DockPanel.Dock="Right"
+                        Style="{DynamicResource style.button.ghost}"
+                        Content="Fechar"
+                        Click="OnFecharClick" />
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Style="{DynamicResource style.keycap}" Margin="{DynamicResource inset.settings.keycap}">
+                        <TextBlock Text="Esc" Style="{DynamicResource style.keycap.text}" />
+                    </Border>
+                    <TextBlock Text="fechar" Style="{DynamicResource style.caption}" VerticalAlignment="Center" />
+                </StackPanel>
+            </DockPanel>
         </Border>
 
         <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -29,8 +42,10 @@
                 <TextBlock x:Name="Titulo" Style="{DynamicResource style.title}" />
                 <TextBlock x:Name="Descricao"
                            Style="{DynamicResource style.secondary}"
-                           Margin="0,4,0,16" />
-                <ContentControl x:Name="Corpo" />
+                           Margin="{DynamicResource inset.detail}" />
+                <Border Style="{DynamicResource style.card}">
+                    <ContentControl x:Name="Corpo" Focusable="False" />
+                </Border>
             </StackPanel>
         </ScrollViewer>
     </DockPanel>

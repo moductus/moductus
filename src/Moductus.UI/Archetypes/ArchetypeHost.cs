@@ -18,7 +18,15 @@ public sealed class ArchetypeHost : IDisposable
 
     public HudWindow Hud => _hud ??= new HudWindow();
 
-    public PanelWindow Panel => _panel ??= new PanelWindow();
+    /// <summary>
+    /// A letra da tecla líder de um módulo, pelo id; nulo sem letra ativa. O
+    /// host preenche, porque é ele quem tem o registro de letras. Mora aqui, e
+    /// não direto no Panel, para não obrigar o host a construir a janela no
+    /// startup só para entregar a pergunta — ela nasce no pré-aquecimento.
+    /// </summary>
+    public Func<string, char?> LetterOf { get; set; } = _ => null;
+
+    public PanelWindow Panel => _panel ??= new PanelWindow { LetterOf = id => LetterOf(id) };
 
     public CanvasWindow Canvas => _canvas ??= new CanvasWindow();
 

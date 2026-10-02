@@ -127,7 +127,8 @@ internal sealed class FileFinder(ModuleContext context)
                 a.Nome,
                 Detalhe(a),
                 null,
-                () => Abrir(a))),
+                () => Abrir(a),
+                Category: a.EhPasta ? CommandCategory.Pasta : CommandCategory.Arquivo)),
         ];
     }
 

@@ -1,18 +1,61 @@
 namespace Moductus.Core.Commands;
 
+/// <summary>
+/// De que tipo é um resultado da Palette. É o que ela usa para agrupar a lista
+/// em seções e para dizer, no chip ao lado da busca, o que o Enter vai abrir.
+/// </summary>
+/// <remarks>
+/// Dado de quem registra, e não palpite da Palette pelo prefixo do <c>Id</c>:
+/// só o provedor sabe o que oferece. O padrão é <see cref="Comando"/>, então
+/// todo comando estático registrado sem dizer nada continua na seção de sempre.
+/// </remarks>
+public enum CommandCategory
+{
+    Comando,
+    Calculadora,
+    Aplicativo,
+    Arquivo,
+    Pasta,
+}
+
 /// <summary>Uma ação que a Palette lista. <see cref="Hint"/> aparece à direita.</summary>
 /// <param name="Primary">
 /// Verdadeiro no resultado que <b>é</b> a resposta à consulta — a conta
 /// resolvida. Vem antes de tudo, sem passar pelo ranking. Só provedor
 /// dinâmico marca isto.
 /// </param>
+/// <param name="Category">A seção da Palette em que o resultado aparece.</param>
 public sealed record PaletteCommand(
     string Id,
     string Text,
     string? Detail,
     string? Hint,
     Action Execute,
-    bool Primary = false);
+    bool Primary = false,
+    CommandCategory Category = CommandCategory.Comando);
+
+/// <summary>
+/// A ordem de uma lista dividida em seções: cada seção uma vez só, na posição
+/// em que o primeiro membro dela aparecia, e dentro dela a ordem que a lista
+/// já tinha.
+/// </summary>
+/// <remarks>
+/// É o que deixa a Palette agrupar sem desfazer o ranking. A seção do melhor
+/// resultado vem primeiro, e o melhor resultado continua sendo o primeiro da
+/// lista — é ele que o Enter executa sem a pessoa tocar numa seta.
+/// </remarks>
+public static class Sections
+{
+    public static IReadOnlyList<T> Grouped<T>(IEnumerable<T> items, Func<T, string?> section)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        ArgumentNullException.ThrowIfNull(section);
+
+        // GroupBy guarda a ordem da primeira aparição de cada chave e a ordem
+        // dos membros dentro dela; é exatamente o contrato daqui.
+        return [.. items.GroupBy(section).SelectMany(g => g)];
+    }
+}
 
 /// <summary>
 /// Registro central de comandos da Palette. Host e módulos registram; a

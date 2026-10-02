@@ -58,6 +58,33 @@ public static class ThemeResolver
         ArgumentNullException.ThrowIfNull(source);
         return Resolve(source.AppsUseLightTheme, source.HighContrast);
     }
+
+    /// <summary>
+    /// Com a preferência da pessoa. Alto contraste continua ganhando de tudo,
+    /// inclusive de "Escuro" escolhido à mão: a escolha foi de gosto, o alto
+    /// contraste é de necessidade, e a configuração do app não pode desfazer
+    /// a do sistema.
+    /// </summary>
+    public static ThemeMode Resolve(bool appsUseLightTheme, bool highContrast, ThemeModePreference preference)
+    {
+        if (highContrast)
+        {
+            return ThemeMode.HighContrast;
+        }
+
+        return preference switch
+        {
+            ThemeModePreference.Light => ThemeMode.Light,
+            ThemeModePreference.Dark => ThemeMode.Dark,
+            _ => Resolve(appsUseLightTheme, highContrast: false),
+        };
+    }
+
+    public static ThemeMode Resolve(ISystemThemeSource source, ThemeModePreference preference)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return Resolve(source.AppsUseLightTheme, source.HighContrast, preference);
+    }
 }
 
 /// <summary>A fonte real: registro do usuário e <see cref="SystemParameters"/>.</summary>

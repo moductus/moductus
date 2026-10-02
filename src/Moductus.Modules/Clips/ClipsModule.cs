@@ -30,6 +30,9 @@ namespace Moductus.Modules.Clips;
 public sealed class ClipsModule(ModuleContext context) : IModule
 {
     private const int Preview = 70;
+
+    /// <summary>Paste do Segoe Fluent Icons: a prancheta, o desenho do clipboard no Windows.</summary>
+    private const string Glifo = "";
     private const int MaxRetries = 4;
 
     private const string ChaveMaxItens = "maxItems";
@@ -143,9 +146,25 @@ public sealed class ClipsModule(ModuleContext context) : IModule
                     Summary.OneLine(c.Text, Preview),
                     Detalhe(c, agora),
                     null,
-                    () => Copiar(c.Text))));
+                    () => Copiar(c.Text))
+                {
+                    Section = Secao(ClipPeriods.Of(c.When, agora)),
+                    Icon = Glifo,
+                }));
             });
     }
+
+    /// <summary>
+    /// O histórico em seções de calendário. Sem chip de tipo: na lista do
+    /// Clips tudo é texto copiado, e um chip repetindo isso a cada seta não
+    /// diria nada.
+    /// </summary>
+    private static string Secao(ClipPeriod periodo) => periodo switch
+    {
+        ClipPeriod.Hoje => "HOJE",
+        ClipPeriod.Ontem => "ONTEM",
+        _ => "ANTES",
+    };
 
     // O clipboard pode estar trancado por quem acabou de escrever nele.
     // Tenta em seguida, e de novo algumas vezes com intervalo curto.

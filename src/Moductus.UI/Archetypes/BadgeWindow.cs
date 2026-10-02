@@ -1,10 +1,10 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
-using System.Windows.Shapes;
 using System.Windows.Threading;
 using Moductus.Core.Interop;
 using Moductus.Core.Layout;
@@ -113,7 +113,7 @@ public class BadgeWindow : ArchetypeWindow
     /// <param name="owner">Id do módulo. Uma pastilha por dono.</param>
     /// <param name="texto">Curto: cabe numa pastilha, não numa frase.</param>
     /// <param name="dica">O que o clique faz. Aparece menor, embaixo.</param>
-    /// <param name="tom">Cor do ponto.</param>
+    /// <param name="tom">Cor e glifo do ícone.</param>
     /// <param name="aoClicar">
     /// O que o clique no corpo da pastilha faz. Nulo deixa o corpo inerte —
     /// use quando houver botões, senão clicar sem querer dispara a ação.
@@ -299,12 +299,14 @@ public class BadgeWindow : ArchetypeWindow
     }
 
     /// <summary>
-    /// Uma pastilha: ponto colorido, texto, dica e o clique que desfaz, numa
+    /// Uma pastilha: ícone no tom do estado, texto, dica e o clique que desfaz, numa
     /// janela do tamanho exato do cartão.
     /// </summary>
     private sealed class PastilhaWindow : ArchetypeWindow
     {
-        private readonly Ellipse _ponto = new() { VerticalAlignment = VerticalAlignment.Center };
+        private readonly Border _icone = new();
+        private readonly TextBlock _glifo = new();
+        private readonly Border _brilho = new();
         private readonly TextBlock _texto = new() { TextWrapping = TextWrapping.NoWrap };
         private readonly TextBlock _dica = new() { TextWrapping = TextWrapping.NoWrap };
         private readonly StackPanel _botoes = new();
@@ -390,19 +392,20 @@ public class BadgeWindow : ArchetypeWindow
 
             MontarBotoes(acoes);
 
-            _ponto.SetResourceReference(Shape.FillProperty, tom switch
-            {
-                HudTone.Sucesso => "success",
-                HudTone.Alerta => "danger",
-                _ => "accent",
-            });
+            _glifo.Text = TomVisual.Simbolo(tom);
+            _icone.SetResourceReference(TextElement.ForegroundProperty, TomVisual.Glifo(tom));
         }
 
         protected override FrameworkElement BuildChrome(ContentPresenter slot)
         {
-            _ponto.SetResourceReference(FrameworkElement.WidthProperty, "size.dot");
-            _ponto.SetResourceReference(FrameworkElement.HeightProperty, "size.dot");
-            _ponto.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.12");
+            // Sem ponto, ao contrário da pílula do HUD: a pastilha é estreita e
+            // mora no canto, e o glifo colorido já diz o tom. Alinhado ao topo
+            // para acompanhar texto e dica quando os botões crescem embaixo.
+            _glifo.SetResourceReference(FrameworkElement.StyleProperty, "style.status.glyph");
+            _icone.Child = _glifo;
+            _icone.SetResourceReference(FrameworkElement.StyleProperty, "style.status.icon");
+            _icone.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.12");
+            _icone.VerticalAlignment = VerticalAlignment.Top;
 
             _texto.SetResourceReference(TextBlock.FontSizeProperty, "type.body");
             _texto.SetResourceReference(TextBlock.LineHeightProperty, "type.body.line");
@@ -423,13 +426,21 @@ public class BadgeWindow : ArchetypeWindow
             coluna.Children.Add(_botoes);
 
             var linha = new StackPanel { Orientation = Orientation.Horizontal };
-            linha.Children.Add(_ponto);
+            linha.SetResourceReference(FrameworkElement.MarginProperty, "inset.badge");
+            linha.Children.Add(_icone);
             linha.Children.Add(coluna);
 
-            _moldura = new Border { Child = linha };
+            // Folga como margem do conteúdo, não Padding da moldura, pelo mesmo
+            // motivo da pílula do HUD: o brilho de cima encosta na borda.
+            _brilho.SetResourceReference(FrameworkElement.StyleProperty, "style.surface.highlight");
+
+            var camadas = new Grid();
+            camadas.Children.Add(linha);
+            camadas.Children.Add(_brilho);
+
+            _moldura = new Border { Child = camadas };
             Superficie = _moldura;
 
-            _moldura.SetResourceReference(Border.PaddingProperty, "inset.badge");
             _moldura.SetResourceReference(FrameworkElement.MaxWidthProperty, "size.badge.maxwidth");
 
             _moldura.SetResourceReference(Border.BackgroundProperty, _fundo);
@@ -465,6 +476,7 @@ public class BadgeWindow : ArchetypeWindow
             }
 
             _moldura.SetResourceReference(Border.CornerRadiusProperty, RaioDaSuperficie);
+            _brilho.SetResourceReference(Border.CornerRadiusProperty, RaioDaSuperficie);
 
             // Com material no ar o fundo em repouso passa a ser o translúcido;
             // senão o MouseLeave devolveria o opaco e a pastilha mudaria de tom
@@ -629,7 +641,10 @@ public class BadgeWindow : ArchetypeWindow
 
             while (_botoes.Children.Count < quantos)
             {
+                // Fantasma: a ação compacta não pode pesar mais que o estado
+                // que ela ajusta, e o fundo cheio do botão comum pesava.
                 var novo = new Button();
+                novo.SetResourceReference(FrameworkElement.StyleProperty, "style.button.ghost");
                 novo.SetResourceReference(FrameworkElement.HeightProperty, "size.badge.action");
                 novo.SetResourceReference(Control.PaddingProperty, "inset.badge.action");
                 novo.SetResourceReference(FrameworkElement.MarginProperty, "inset.end.8");

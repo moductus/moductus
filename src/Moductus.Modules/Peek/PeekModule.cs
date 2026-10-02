@@ -138,7 +138,12 @@ public sealed class PeekModule(ModuleContext context) : IModule
         _legenda.Text = "Ao vivo. A hotkey fecha; Fixar mantém aberto.";
 
         panel.Dismissed += SoltarAoFechar;
-        panel.Occupy(Id, $"Peek · {janela.Title}", PanelPlacement.Center, _corpo);
+        panel.Occupy(Id, "Peek", PanelPlacement.Center, _corpo);
+
+        // O título da janela espelhada vai no detalhe, que é o que corta
+        // quando a barra aperta: título de navegador é longo, e no cabeçalho
+        // ele empurrava o nome do módulo para fora.
+        panel.Detail = janela.Title;
 
         _thumbnail = DwmThumbnail.Register(new System.Windows.Interop.WindowInteropHelper(panel).Handle, _alvo);
 

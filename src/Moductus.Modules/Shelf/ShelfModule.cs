@@ -109,15 +109,24 @@ public sealed class ShelfModule(ModuleContext context) : IModule
         _vazio.SetResourceReference(FrameworkElement.MarginProperty, "inset.24");
         _vazio.VerticalAlignment = VerticalAlignment.Center;
 
-        var limpar = new Button { Content = "Esvaziar" };
-        limpar.SetResourceReference(FrameworkElement.StyleProperty, "style.button.compact");
+        // Fantasma no tamanho compacto: cabe na altura do rodapé sem encostar
+        // nas bordas, e não disputa o olho com a lista, que é o conteúdo.
+        var limpar = new Button { Content = "Esvaziar", ToolTip = "Solta os arquivos guardados, sem apagar nada" };
+        limpar.SetResourceReference(FrameworkElement.StyleProperty, "style.button.ghost");
+        limpar.SetResourceReference(FrameworkElement.HeightProperty, "size.button.compact");
+        limpar.SetResourceReference(Control.PaddingProperty, "inset.button.compact");
+        limpar.SetResourceReference(Control.FontSizeProperty, "type.caption");
+        limpar.SetResourceReference(FrameworkElement.MarginProperty, "inset.start.8");
+        limpar.VerticalAlignment = VerticalAlignment.Center;
         limpar.Click += (_, _) => { _caminhos.Clear(); Render(); Salvar(); };
 
-        var rodape = new DockPanel();
-        rodape.SetResourceReference(FrameworkElement.MarginProperty, "inset.8");
+        var linhaRodape = new DockPanel();
         DockPanel.SetDock(limpar, Dock.Right);
-        rodape.Children.Add(limpar);
-        rodape.Children.Add(Dica());
+        linhaRodape.Children.Add(limpar);
+        linhaRodape.Children.Add(Dica());
+
+        var rodape = new Border { Child = linhaRodape };
+        rodape.SetResourceReference(FrameworkElement.StyleProperty, "style.panel.footer");
 
         // A zona de soltar precisa cobrir a área toda, inclusive quando vazia.
         var area = new Grid { AllowDrop = true, Background = System.Windows.Media.Brushes.Transparent };
@@ -162,9 +171,11 @@ public sealed class ShelfModule(ModuleContext context) : IModule
             return;
         }
 
-        Render();
+        panel.Occupy(Id, "Shelf", PanelPlacement.Edge, _corpo);
 
-        panel.Occupy(Id, $"Shelf · {_caminhos.Count} item(ns)", PanelPlacement.Edge, _corpo);
+        // Depois do Occupy: o Render escreve a contagem no chip da barra, e a
+        // barra só passa a ser deste módulo quando ele ocupa o Panel.
+        Render();
 
         // Toma o foco porque a lista tem teclado próprio — Delete tira da
         // bandeja, Esc fecha. Panel sem foco não recebe tecla nenhuma.
@@ -232,7 +243,6 @@ public sealed class ShelfModule(ModuleContext context) : IModule
 
         Render();
         Salvar();
-        context.Archetypes.Panel.Heading = $"Shelf · {_caminhos.Count} item(ns)";
     }
 
     private void OnMouseMove(object sender, MouseEventArgs e)
@@ -322,7 +332,30 @@ public sealed class ShelfModule(ModuleContext context) : IModule
         }
         _vazio.Visibility = _caminhos.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         _lista.Visibility = _caminhos.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        Contar();
         Repintar();
+    }
+
+    /// <summary>
+    /// A contagem no chip da barra. Sai do Render, e não só do drop, para o
+    /// Delete e o Esvaziar também a atualizarem — antes a barra continuava
+    /// dizendo "3 item(ns)" com a bandeja vazia. Só escreve se a barra for
+    /// deste módulo: a conferência do disco volta com o Panel já de outro.
+    /// </summary>
+    private void Contar()
+    {
+        var panel = context.Archetypes.Panel;
+        if (!panel.IsShowingFor(Id))
+        {
+            return;
+        }
+
+        panel.ShowChip(_caminhos.Count switch
+        {
+            0 => null,
+            1 => "1 item",
+            var n => $"{n} itens",
+        });
     }
 
     /// <summary>
