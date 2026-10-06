@@ -10,7 +10,7 @@ Enquanto a fase 1 não começa, o código no repositório é a suíte `v0.4.0` e
 
 ## Regras não negociáveis
 
-- **Funciona sem IA.** Toda área precisa funcionar sem provedor ligado. A regra de negócio mora na área; o agente só chama a mesma função que a interface chama.
+- **Regra de negócio mora na área, não no prompt.** O agente chama a mesma função que a interface chama; nada que importa depende de o modelo acertar uma conta ou um formato.
 - **Ação externa sempre com aprovação.** Ferramenta com efeito fora do Moductus é declarada como `externo` e passa pelo cartão de aprovação. Sem exceção.
 - **Nenhuma cor, tamanho, raio ou duração literal.** Tudo vem dos tokens de [DESIGN.md](docs/DESIGN.md). Componente não conhece o nome do tema. Se falta um token, o PR discute o token antes de usar um número solto.
 - **Rede só para provedor e conexões ligadas pelo usuário.** Nenhuma telemetria, nenhum serviço de terceiros por padrão.

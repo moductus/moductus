@@ -49,7 +49,7 @@ Cada agente escolhe o próprio modelo: um agente CLI com a assinatura que você 
 
 ## Princípios
 
-- **Funciona sem IA.** Toda área tem caminho próprio; a IA melhora o que já funciona.
+- **Agentes no centro.** Você pede, eles fazem e avisam; as telas servem para acompanhar e agir rápido.
 - **Você escolhe o modelo.** Por agente, e trocar não muda nada no resto do app.
 - **Seus dados ficam com você.** Banco local, chaves no Gerenciador de Credenciais do Windows, sem conta e sem servidor. Rede só para o que você ligar. Sem telemetria.
 - **O agente propõe, você aprova.** Nada sai do Moductus — comentário, mensagem, arquivo movido — sem o seu sim.

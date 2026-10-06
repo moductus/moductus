@@ -117,7 +117,7 @@ servico/
 
 ### Regras
 
-- **As áreas não sabem de IA.** `areas/tarefas` cria, lista e conclui tarefas; a interface e as ferramentas dos agentes chamam a mesma função. É o que garante o princípio "funciona sem IA".
+- **A regra de negócio mora na área, não no prompt.** `areas/tarefas` cria, lista e conclui tarefas; a interface e as ferramentas dos agentes chamam a mesma função. Assim agente e tela nunca divergem, nada que importa depende de o modelo acertar uma conta ou um formato, e as ferramentas são testáveis sem modelo.
 - **Ferramenta é uma área exposta.** Cada ferramenta é um schema Zod, uma função de área e um nível de efeito (`leitura`, `interno`, `externo`). `externo` sempre gera cartão de aprovação.
 - **Um único catálogo** alimenta o tool calling das APIs, o servidor MCP e a lista de capacidades mostrada na interface.
 

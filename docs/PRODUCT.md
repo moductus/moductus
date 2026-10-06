@@ -61,7 +61,7 @@ Para quem passa o dia no PC, trabalha com código e quer um único lugar para o 
 
 ## 2. Princípios
 
-1. **Funciona sem IA.** Toda área tem caminho próprio: dá para criar tarefa, lançar gasto e rodar pomodoro sem nenhum provedor ligado. A IA melhora o que já funciona, não é condição para funcionar.
+1. **Agentes no centro.** O jeito principal de usar o Moductus é pedir aos agentes e deixar que eles trabalhem sozinhos. Telas e botões existem para acompanhar, corrigir e agir rápido. Conectar um modelo faz parte da configuração inicial.
 2. **Você escolhe o modelo.** Cada agente pode usar um provedor diferente: um agente CLI (Claude Code, Codex, Gemini, Antigravity) com a sua assinatura, ou uma API (Anthropic, OpenAI ou qualquer endpoint compatível, inclusive modelo local). Trocar de modelo não muda nada no resto do app.
 3. **Seus dados ficam com você.** Tudo em um banco local; chaves no Gerenciador de Credenciais do Windows. Rede só para o que você ligou, e cada conexão diz o que envia.
 4. **O agente propõe, você aprova.** Ação com efeito fora do Moductus — comentar no GitHub, mover arquivo, enviar mensagem — sempre passa por um cartão de aprovação. Dentro do Moductus (criar tarefa, lançar gasto), o agente age e mostra o que fez, com desfazer.
@@ -228,7 +228,7 @@ A seção que substitui a barra de tarefas: agrupamento por programa, prévia ao
 | 2 | Tauri 2 + React + TypeScript, no lugar de .NET + WPF | Liberdade visual (janelas translúcidas, animação, componentes web) e o ecossistema de agentes, que é mais maduro em TypeScript. Tauri em vez de Electron pelo peso: o app fica sempre rodando |
 | 3 | Dock lateral em vez de ilha no topo | Lista vertical acomoda áreas, sessões de IA e apps abertos; monitor largo tem sobra lateral, não vertical |
 | 4 | O dock também mostra apps abertos e mídia | Um lugar só para o que está acontecendo no PC |
-| 5 | Funciona sem IA | A IA não pode ser ponto único de falha do seu dia |
+| 5 | Agentes no centro do produto, não camada opcional | O valor do Moductus está no que os agentes fazem sozinhos; tratar a IA como opcional diluiria o produto. Substitui o "funciona sem IA" do primeiro desenho |
 | 6 | Modelo escolhido por agente, com adaptadores CLI e API | Usar a assinatura que você já paga, ou chave própria, ou modelo local |
 | 7 | Ferramentas expostas por MCP | Um catálogo só, que serve tanto aos agentes CLI quanto às APIs, e que agentes externos também podem usar |
 | 8 | Rede só para provedor e conexões ligadas, sem telemetria | Substitui o "zero rede" do v0 mantendo o espírito |

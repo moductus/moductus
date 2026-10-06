@@ -32,8 +32,8 @@ body:
   - type: textarea
     id: sem-ia
     attributes:
-      label: Como funciona sem IA
-      description: Todo o Moductus funciona sem provedor ligado. Diga o caminho determinístico, e o que a IA acrescenta por cima.
+      label: Como os agentes usam isso
+      description: Quais ferramentas o agente ganha, o que ele faz sozinho e o que precisa da sua aprovação.
     validations:
       required: true
 
@@ -58,7 +58,7 @@ body:
     attributes:
       label: Cabe nos princípios
       options:
-        - label: Funciona sem IA
+        - label: A regra de negócio fica na área, não no prompt
           required: true
         - label: Nenhuma ação externa acontece sem aprovação
           required: true

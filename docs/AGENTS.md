@@ -98,9 +98,11 @@ O serviço roda o ciclo de agente ele mesmo: manda mensagens e ferramentas, exec
 
 As chaves ficam no Gerenciador de Credenciais; o serviço pede à casca na hora do uso.
 
-### Sem provedor
+### Primeiro uso e falha de provedor
 
-Agente sem provedor continua existindo: os gatilhos rodam a parte determinística (o briefing vira uma lista sem texto corrido, o Dev lista PRs sem resumo) e o chat aceita os comandos que não precisam de modelo (`/foco 25`, `/hoje`, `/capacidades`, `/relatorio`).
+- **Primeiro uso:** a configuração inicial pede para conectar pelo menos um modelo, CLI ou API, e já o atribui aos quatro agentes. Dá para trocar por agente depois.
+- **Provedor fora do ar ou sem limite de uso:** a execução fica marcada, o agente mostra o erro no dock e tenta de novo no próximo gatilho. Os dados e as telas continuam acessíveis, e o que você fizer à mão nesse meio-tempo os agentes enxergam quando voltarem.
+- **Provedor reserva (opcional):** cada agente pode ter um segundo provedor, usado quando o principal falha.
 
 ---
 
