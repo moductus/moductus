@@ -1,0 +1,20 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Main.dc.html": { "h": 900, "title": "A · Grafite", "w": 1440, "x": 0, "y": 0 },
+    "Papel.dc.html": { "h": 900, "title": "B · Papel", "w": 1440, "x": 1520, "y": 0 },
+    "Vidro.dc.html": { "h": 900, "title": "C · Vidro", "w": 1440, "x": 3040, "y": 0 },
+    "Sistema.dc.html": { "h": 900, "title": "Sistema · Início (troca de tema)", "w": 1440, "x": 0, "y": 1320, "is_interactive": true }
+  },
+  "createdOnFiles": { "at": "2026-10-06T15:00:00Z", "v": 1 },
+  "designSystems": [],
+  "launch": { "view": "canvas" },
+  "notes": {
+    "titulo": { "kind": "title1", "maxW": 4480, "text": "Dock e painel Hoje — três temas", "w": 240, "x": 0, "y": -300 },
+    "titulo2": { "kind": "title1", "maxW": 4480, "text": "Sistema — a janela completa", "x": 0, "y": 1020 }
+  },
+  "order": ["Main.dc.html", "Papel.dc.html", "Vidro.dc.html", "Sistema.dc.html"],
+  "pages": [],
+  "title": "Moductus — identidade visual"
+}

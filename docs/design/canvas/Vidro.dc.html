@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Moductus · Vidro</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;600&amp;family=IBM+Plex+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#EEF0F6}a:hover{color:#FFFFFF}
+button{font:inherit;cursor:pointer}
+input::placeholder{color:#8990A0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; position: relative; overflow: hidden; background: #161B26; font-family: 'Onest', 'Segoe UI', system-ui, sans-serif; color: #EEF0F6; font-size: 13px; line-height: 1.45">
+
+<div style="position: absolute; left: -120px; top: 80px; width: 720px; height: 720px; border-radius: 360px; background: #2C3A5C; opacity: 0.9"></div>
+<div style="position: absolute; left: 260px; top: -200px; width: 560px; height: 560px; border-radius: 280px; background: #3A2F52; opacity: 0.8"></div>
+<div style="position: absolute; right: -160px; bottom: -220px; width: 760px; height: 760px; border-radius: 380px; background: #1F3B44; opacity: 0.9"></div>
+
+<div style="position: absolute; left: 480px; top: 56px; right: 56px; bottom: 56px; background: rgba(18,21,29,0.82); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; display: flex; flex-direction: column; gap: 14px; padding: 18px 22px; box-sizing: border-box">
+<div style="display: flex; gap: 8px">
+<div style="width: 10px; height: 10px; border-radius: 5px; background: #2B303C"></div>
+<div style="width: 10px; height: 10px; border-radius: 5px; background: #2B303C"></div>
+<div style="width: 10px; height: 10px; border-radius: 5px; background: #2B303C"></div>
+</div>
+<div style="width: 46%; height: 10px; border-radius: 5px; background: #222733"></div>
+<div style="width: 64%; height: 10px; border-radius: 5px; background: #222733"></div>
+<div style="width: 38%; height: 10px; border-radius: 5px; background: #222733"></div>
+<div style="width: 58%; height: 10px; border-radius: 5px; background: #222733"></div>
+</div>
+
+<nav aria-label="Dock" style="position: absolute; left: 12px; top: 12px; bottom: 12px; width: 64px; background: rgba(20,23,31,0.55); backdrop-filter: blur(28px) saturate(140%); border: 1px solid rgba(255,255,255,0.10); border-radius: 20px; display: flex; flex-direction: column; align-items: center; padding: 14px 0; box-sizing: border-box; gap: 6px">
+<button aria-label="Abrir o Sistema" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; margin-bottom: 6px">
+<div style="width: 26px; height: 26px; border-radius: 9px; background: #A3B5FF; box-sizing: border-box; display: flex; padding: 4px; gap: 3px">
+<div style="width: 5px; border-radius: 2px; background: #10131C"></div>
+</div>
+</button>
+<sc-for list="{{areas}}" as="a" hint-placeholder-count="7">
+<button aria-label="{{a.nome}}" style="{{a.estilo}}">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{a.d}}"></path></svg>
+<sc-if value="{{a.temBadge}}" hint-placeholder-val="{{ false }}">
+<span style="position: absolute; top: 4px; right: 3px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: #A3B5FF; color: #10131C; font-size: 11px; font-weight: 600; line-height: 16px; text-align: center">{{a.badge}}</span>
+</sc-if>
+<sc-if value="{{a.temTempo}}" hint-placeholder-val="{{ false }}">
+<span style="position: absolute; bottom: 2px; left: 0; right: 0; text-align: center; font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 11px; color: #EEF0F6">{{a.tempo}}</span>
+</sc-if>
+</button>
+</sc-for>
+<div style="width: 24px; height: 1px; background: rgba(255,255,255,0.10); margin: 8px 0"></div>
+<sc-for list="{{sessoes}}" as="s" hint-placeholder-count="3">
+<button aria-label="{{s.rotulo}}" style="width: 44px; height: 40px; border: 0; background: transparent; position: relative; display: flex; align-items: center; justify-content: center">
+<span style="width: 30px; height: 30px; border-radius: 15px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.10); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: #D6DAE4">{{s.ini}}</span>
+<span style="{{s.ponto}}"></span>
+</button>
+</sc-for>
+<div style="width: 24px; height: 1px; background: rgba(255,255,255,0.10); margin: 8px 0"></div>
+<sc-for list="{{apps}}" as="p" hint-placeholder-count="4">
+<button aria-label="{{p.nome}}" style="width: 44px; height: 40px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center">
+<span style="width: 28px; height: 28px; border-radius: 8px; background: rgba(255,255,255,0.08); color: #AEB4C2; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{p.ini}}</span>
+</button>
+</sc-for>
+<div style="flex: 1"></div>
+<button aria-label="Mídia: pausar" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center">
+<span style="width: 30px; height: 30px; border-radius: 8px; background: #4A5578; display: flex; align-items: center; justify-content: center; color: #EEF0F6">
+<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"></path></svg>
+</span>
+</button>
+<button aria-label="Microfone" style="width: 44px; height: 40px; border: 0; background: transparent; color: #AEB4C2; display: flex; align-items: center; justify-content: center">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v3"></path></svg>
+</button>
+<button aria-label="Manter acordado" style="width: 44px; height: 40px; border: 0; background: transparent; color: #AEB4C2; display: flex; align-items: center; justify-content: center">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"></path></svg>
+</button>
+<div style="font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 12px; color: #AEB4C2; margin-top: 6px">14:32</div>
+</nav>
+
+<section aria-label="Painel Hoje" style="position: absolute; left: 88px; top: 12px; width: 368px; background: rgba(22,25,34,0.66); backdrop-filter: blur(32px) saturate(140%); border: 1px solid rgba(255,255,255,0.10); border-radius: 18px; padding: 18px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px">
+
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h1 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Hoje</h1>
+<span style="color: #9AA1B1; font-size: 12px">terça, 6 de outubro</span>
+</div>
+<a href="#" style="display: flex; align-items: center; gap: 6px; text-decoration: none; color: #9AA1B1; font-size: 12px">Abrir sistema <span style="font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 11px; padding: 2px 5px; border-radius: 4px; background: rgba(255,255,255,0.08); color: #D6DAE4">Ctrl Alt N</span></a>
+</div>
+
+<div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; color: #9AA1B1; font-size: 12px"><span>Foco</span><span>2 de 4</span></div>
+<div style="display: flex; align-items: center; gap: 14px">
+<div style="width: 56px; height: 56px; border-radius: 28px; flex: none; background: conic-gradient(#A3B5FF 0 25%, rgba(255,255,255,0.10) 25% 100%); display: flex; align-items: center; justify-content: center">
+<div style="width: 46px; height: 46px; border-radius: 23px; background: #1B1F2B"></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+<div style="font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 30px; line-height: 1">18:42</div>
+<div style="color: #C4C9D4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Revisar PR do relatório mensal</div>
+</div>
+</div>
+<div style="display: flex; gap: 8px">
+<button style="height: 32px; padding: 0 14px; border-radius: 10px; border: 0; background: rgba(255,255,255,0.10); color: #EEF0F6; font-size: 12px">Pausar</button>
+<button style="height: 32px; padding: 0 14px; border-radius: 10px; border: 0; background: transparent; color: #9AA1B1; font-size: 12px">Encerrar</button>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="display: flex; justify-content: space-between; color: #9AA1B1; font-size: 12px; padding-bottom: 6px"><span>Tarefas</span><span>3 de 7</span></div>
+<sc-for list="{{tarefas}}" as="t" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 10px; height: 34px">
+<span style="{{t.caixa}}"></span>
+<span style="{{t.texto}}">{{t.nome}}</span>
+<span style="font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 11px; color: #9AA1B1">{{t.meta}}</span>
+</div>
+</sc-for>
+<label for="captura-c" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Captura rápida</label>
+<div style="display: flex; align-items: center; gap: 8px; height: 40px; margin-top: 8px; padding: 0 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.10); background: rgba(0,0,0,0.18)">
+<input id="captura-c" placeholder="ligar pro banco amanhã 15h" style="flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: #EEF0F6; font: inherit">
+<span style="font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 11px; padding: 2px 5px; border-radius: 4px; background: rgba(255,255,255,0.08); color: #9AA1B1">Enter</span>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; color: #9AA1B1; font-size: 12px"><span>Outubro</span><span>62% do orçamento</span></div>
+<div style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 20px; font-weight: 600">R$ 1.240</span><span style="color: #9AA1B1">de R$ 1.980</span></div>
+<div style="height: 4px; border-radius: 2px; background: rgba(255,255,255,0.10)"><div style="width: 62%; height: 4px; border-radius: 2px; background: #7CCBA2"></div></div>
+</div>
+
+<div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px">
+<span style="width: 7px; height: 7px; border-radius: 4px; background: #E8B86A"></span>
+<span style="font-weight: 600">Claude Code</span>
+<span style="color: #9AA1B1">api-pedidos</span>
+<span style="margin-left: auto; color: #9AA1B1">agora</span>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: #C4C9D4">Quer rodar <code style="font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 12px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.08); color: #EEF0F6">npm test</code></div>
+<div style="display: flex; gap: 8px; justify-content: flex-end">
+<button style="height: 32px; padding: 0 14px; border-radius: 10px; border: 0; background: rgba(255,255,255,0.08); color: #EEF0F6; font-size: 12px">Negar</button>
+<button style="height: 32px; padding: 0 14px; border-radius: 10px; border: 0; background: #A3B5FF; color: #10131C; font-size: 12px; font-weight: 600">Permitir</button>
+</div>
+</div>
+
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var base = 'width: 44px; height: 44px; border: 0; border-radius: 12px; position: relative; display: flex; align-items: center; justify-content: center; ';
+    var areas = [
+      { nome: 'Hoje', d: 'M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z', ativo: true },
+      { nome: 'Tarefas', d: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11', badge: '4' },
+      { nome: 'Foco', d: 'M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z', tempo: '18' },
+      { nome: 'Finanças', d: 'M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4' },
+      { nome: 'Dev', d: 'M6 9v12M18 15V9a3 3 0 0 0-3-3h-4M14 3l-3 3 3 3M9 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM21 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z', badge: '2' },
+      { nome: 'Notas', d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8' },
+      { nome: 'Arquivos', d: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z' }
+    ].map(function (a) {
+      return Object.assign({}, a, {
+        estilo: base + (a.ativo ? 'background: rgba(255,255,255,0.12); color: #FFFFFF;' : 'background: transparent; color: #AEB4C2;'),
+        temBadge: !!a.badge,
+        temTempo: !!a.tempo
+      });
+    });
+    var ponto = function (cor) { return 'position: absolute; right: 6px; bottom: 6px; width: 8px; height: 8px; border-radius: 4px; border: 2px solid #1B1F2B; background: ' + cor + ';'; };
+    var sessoes = [
+      { ini: 'C', rotulo: 'Claude Code em moductus: trabalhando', ponto: ponto('#7CCBA2') },
+      { ini: 'C', rotulo: 'Claude Code em api-pedidos: esperando você', ponto: ponto('#E8B86A') },
+      { ini: 'X', rotulo: 'Codex em site: terminou', ponto: ponto('#6B7285') }
+    ];
+    var apps = [
+      { ini: 'Co', nome: 'Editor de código' },
+      { ini: 'Na', nome: 'Navegador' },
+      { ini: 'Te', nome: 'Terminal' },
+      { ini: 'No', nome: 'Notas' }
+    ];
+    var caixa = function (feita) { return 'width: 16px; height: 16px; border-radius: 5px; box-sizing: border-box; flex: none; ' + (feita ? 'background: #A3B5FF; border: 1px solid #A3B5FF;' : 'border: 1.5px solid #6B7285;'); };
+    var texto = function (feita) { return 'flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; ' + (feita ? 'color: #7C8394; text-decoration: line-through;' : 'color: #EEF0F6;'); };
+    var tarefas = [
+      { nome: 'Revisar PR do relatório mensal', meta: 'dev' },
+      { nome: 'Pagar fatura do cartão', meta: 'qui' },
+      { nome: 'Ligar para o contador', meta: '15h' },
+      { nome: 'Daily', meta: '9h30', feita: true }
+    ].map(function (t) { return Object.assign({}, t, { caixa: caixa(t.feita), texto: texto(t.feita) }); });
+    return { areas: areas, sessoes: sessoes, apps: apps, tarefas: tarefas };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>Moductus dock</title>
+<style>
+html,body{margin:0;height:100%;background:#0D0E10;color:#8C9097;font-family:'Segoe UI',system-ui,sans-serif;overflow:hidden;user-select:none}
+nav{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0;height:100%;box-sizing:border-box;border-right:1px solid rgba(255,255,255,.06)}
+button{width:44px;height:44px;border:0;border-radius:10px;background:transparent;color:inherit;font:600 12px/1 'Segoe UI';cursor:pointer}
+button:hover{background:rgba(255,255,255,.06);color:#E8E9EB}
+button.ativo{background:rgba(255,255,255,.08);color:#F4F5F6}
+.marca{width:26px;height:26px;border:1.5px solid #E8E9EB;border-radius:7px;box-sizing:border-box;display:flex;padding:3px}
+.marca i{width:5px;border-radius:2px;background:#E8E9EB}
+#cont{margin-top:auto;font:12px Consolas,monospace}
+</style>
+</head>
+<body>
+<nav>
+<button aria-label="Sistema" data-q="sistema"><div class="marca"><i></i></div></button>
+<button class="ativo" data-q="hoje">Hj</button>
+<button data-q="tarefas">Tf</button>
+<button data-q="foco">Fc</button>
+<button data-q="financas">R$</button>
+<button data-q="dev">Dv</button>
+<div id="cont">0</div>
+</nav>
+<script>
+let n = 0;
+document.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+  n++; document.getElementById('cont').textContent = n;
+  window.__TAURI__.core.invoke('clicou', { qual: b.dataset.q });
+}));
+</script>
+</body>
+</html>

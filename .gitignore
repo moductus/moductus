@@ -38,3 +38,10 @@ $RECYCLE.BIN/
 ## Configuração local do Moductus em modo portable
 portable.txt
 config.json
+
+## Node, Rust e Tauri
+node_modules/
+target/
+dist/
+gen/
+*.db

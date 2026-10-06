@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Moductus · Sistema</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&amp;family=Geist+Mono:wght@400;600&amp;family=Instrument+Sans:wght@400;600&amp;family=JetBrains+Mono:wght@400;600&amp;family=Onest:wght@400;600&amp;family=IBM+Plex+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit}a:hover{color:inherit}
+button{font:inherit;cursor:pointer}
+input::placeholder{color:inherit;opacity:0.7}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; position: relative; overflow: hidden; background: {{t.paredeFundo}}; font-family: {{t.fonte}}; color: {{t.texto}}; font-size: 13px; line-height: 1.45">
+
+<sc-if value="{{t.vidro}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: -120px; top: 80px; width: 720px; height: 720px; border-radius: 360px; background: #2C3A5C"></div>
+<div style="position: absolute; left: 520px; top: -260px; width: 640px; height: 640px; border-radius: 320px; background: #3A2F52"></div>
+<div style="position: absolute; right: -160px; bottom: -220px; width: 760px; height: 760px; border-radius: 380px; background: #1F3B44"></div>
+</sc-if>
+
+<div style="position: absolute; inset: 20px; display: flex; flex-direction: column; background: {{t.janela}}; backdrop-filter: {{t.desfoque}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioJanela}}; overflow: hidden; box-shadow: {{t.sombra}}">
+
+<div style="height: 40px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; border-bottom: 1px solid {{t.borda}}">
+<div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: {{t.texto3}}">
+<div style="width: 16px; height: 16px; border-radius: 5px; background: {{t.destaque}}; box-sizing: border-box; display: flex; padding: 3px">
+<div style="width: 3px; border-radius: 1px; background: {{t.sobreDestaque}}"></div>
+</div>
+<span>Moductus</span>
+</div>
+<div style="display: flex; gap: 2px; color: {{t.texto3}}">
+<button aria-label="Minimizar" style="width: 40px; height: 30px; border: 0; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 12h16"></path></svg></button>
+<button aria-label="Maximizar" style="width: 40px; height: 30px; border: 0; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 5h14v14H5z"></path></svg></button>
+<button aria-label="Fechar" style="width: 40px; height: 30px; border: 0; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+</div>
+</div>
+
+<div style="flex: 1; min-height: 0; display: flex">
+
+<nav aria-label="Áreas" style="width: 232px; flex: none; border-right: 1px solid {{t.borda}}; background: {{t.lateral}}; padding: 14px 10px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px">
+<label for="busca-sistema" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Buscar</label>
+<div style="display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; margin-bottom: 10px; border-radius: {{t.raioControle}}; border: 1px solid {{t.borda}}; background: {{t.campo}}; color: {{t.texto3}}">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-3.5-3.5"></path></svg>
+<input id="busca-sistema" placeholder="Buscar" style="flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: {{t.texto}}; font: inherit">
+<span style="font-family: {{t.mono}}; font-size: 11px; padding: 1px 5px; border-radius: 4px; background: {{t.chip}}">Ctrl K</span>
+</div>
+<sc-for list="{{nav}}" as="n" hint-placeholder-count="11">
+<a href="#" style="{{n.estilo}}">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{n.d}}"></path></svg>
+<span style="flex: 1">{{n.nome}}</span>
+<sc-if value="{{n.temContagem}}" hint-placeholder-val="{{ false }}"><span style="font-family: {{t.mono}}; font-size: 11px; color: {{t.texto3}}">{{n.contagem}}</span></sc-if>
+</a>
+</sc-for>
+<div style="flex: 1"></div>
+<div style="font-size: 11px; color: {{t.texto3}}; padding: 0 6px 6px">Tema</div>
+<div role="radiogroup" aria-label="Tema" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; padding: 3px; border-radius: {{t.raioControle}}; background: {{t.chip}}">
+<sc-for list="{{temas}}" as="o" hint-placeholder-count="3">
+<button role="radio" aria-checked="{{o.marcado}}" onClick="{{o.escolher}}" style="{{o.estilo}}">{{o.nome}}</button>
+</sc-for>
+</div>
+</nav>
+
+<main style="flex: 1; min-width: 0; padding: 28px 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px; overflow: hidden">
+
+<div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="color: {{t.texto3}}; font-size: 12px">Terça, 6 de outubro</span>
+<h1 style="margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.02em">Início</h1>
+</div>
+<div style="display: flex; gap: 8px">
+<button style="height: 34px; padding: 0 14px; border-radius: {{t.raioBotao}}; border: 1px solid {{t.bordaForte}}; background: transparent; color: {{t.texto}}; font-size: 12px">Editar blocos</button>
+<button style="height: 34px; padding: 0 14px; border-radius: {{t.raioBotao}}; border: 0; background: {{t.destaque}}; color: {{t.sobreDestaque}}; font-size: 12px; font-weight: 600">Nova tarefa</button>
+</div>
+</div>
+
+<div style="background: {{t.elevada}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioCartao}}; padding: 16px 18px; display: flex; gap: 14px; align-items: flex-start">
+<div style="width: 28px; height: 28px; border-radius: 14px; flex: none; background: {{t.chip}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600">D</div>
+<div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+<div style="font-size: 12px; color: {{t.texto3}}">Demandas · briefing da manhã</div>
+<p style="margin: 0; color: {{t.texto2}}; text-wrap: pretty">Dois PRs esperam seu review desde ontem e a fatura do cartão vence quinta. O próximo foco cabe no PR do relatório mensal; a ligação para o contador fica para depois das 15h.</p>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; flex: 1; min-height: 0">
+
+<section aria-label="Tarefas" style="background: {{t.cartao}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioCartao}}; padding: 16px; display: flex; flex-direction: column; gap: 2px">
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: {{t.texto3}}; padding-bottom: 8px"><span>Tarefas de hoje</span><span>3 de 7</span></div>
+<sc-for list="{{tarefas}}" as="x" hint-placeholder-count="5">
+<div style="display: flex; align-items: center; gap: 10px; height: 36px; border-bottom: 1px solid {{t.borda}}">
+<span style="{{x.caixa}}"></span>
+<span style="{{x.texto}}">{{x.nome}}</span>
+<span style="font-family: {{t.mono}}; font-size: 11px; color: {{t.texto3}}">{{x.meta}}</span>
+</div>
+</sc-for>
+</section>
+
+<div style="display: flex; flex-direction: column; gap: 16px; min-height: 0">
+<section aria-label="Foco" style="background: {{t.cartao}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioCartao}}; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: {{t.texto3}}"><span>Foco</span><span>1h 15 hoje</span></div>
+<div style="font-family: {{t.mono}}; font-size: 34px; line-height: 1; letter-spacing: -0.02em">18:42</div>
+<div style="color: {{t.texto2}}">Revisar PR do relatório mensal</div>
+<div style="height: 4px; border-radius: 2px; background: {{t.trilho}}"><div style="width: 25%; height: 4px; border-radius: 2px; background: {{t.destaque}}"></div></div>
+</section>
+<section aria-label="Finanças" style="background: {{t.cartao}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioCartao}}; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: {{t.texto3}}"><span>Outubro</span><span>R$ 1.240 de 1.980</span></div>
+<sc-for list="{{categorias}}" as="c" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 5px">
+<div style="display: flex; justify-content: space-between"><span>{{c.nome}}</span><span style="font-family: {{t.mono}}; font-size: 12px; color: {{c.corValor}}">{{c.valor}}</span></div>
+<div style="height: 4px; border-radius: 2px; background: {{t.trilho}}"><div style="{{c.barra}}"></div></div>
+</div>
+</sc-for>
+</section>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 16px; min-height: 0">
+<section aria-label="Dev" style="background: {{t.cartao}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioCartao}}; padding: 16px; display: flex; flex-direction: column; gap: 2px">
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: {{t.texto3}}; padding-bottom: 8px"><span>Dev</span><span>esperando você</span></div>
+<sc-for list="{{prs}}" as="p" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-bottom: 1px solid {{t.borda}}">
+<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{p.titulo}}</span>
+<span style="font-family: {{t.mono}}; font-size: 11px; color: {{t.texto3}}">{{p.repo}}</span>
+</div>
+</sc-for>
+</section>
+<section aria-label="Sessões de IA" style="background: {{t.cartao}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioCartao}}; padding: 16px; display: flex; flex-direction: column; gap: 2px">
+<div style="font-size: 12px; color: {{t.texto3}}; padding-bottom: 8px">Sessões de IA</div>
+<sc-for list="{{sessoes}}" as="s" hint-placeholder-count="3">
+<div style="display: flex; align-items: center; gap: 10px; height: 34px">
+<span style="{{s.ponto}}"></span>
+<span style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{s.ferramenta}} <span style="color: {{t.texto3}}">· {{s.projeto}}</span></span>
+<span style="font-size: 12px; color: {{s.corEstado}}">{{s.estado}}</span>
+</div>
+</sc-for>
+</section>
+</div>
+
+</div>
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tema":{"editor":"enum","options":["Grafite","Papel","Vidro"],"default":"Grafite"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { tema: null };
+  }
+  renderVals() {
+    var self = this;
+    var TEMAS = {
+      Grafite: {
+        paredeFundo: '#191B1F', janela: '#111214', lateral: '#0D0E10', cartao: '#16181B', elevada: '#1A1C20', campo: '#0F1012', chip: 'rgba(255,255,255,0.06)', trilho: 'rgba(255,255,255,0.08)',
+        borda: 'rgba(255,255,255,0.07)', bordaForte: 'rgba(255,255,255,0.14)', ativo: 'rgba(255,255,255,0.08)',
+        texto: '#E8E9EB', texto2: '#B5B8BD', texto3: '#8C9097', apagado: '#6F737A',
+        destaque: '#E8E9EB', sobreDestaque: '#0D0E10', sucesso: '#7FB89E', aviso: '#E3B262', perigo: '#E5787A',
+        raioJanela: '10px', raioCartao: '10px', raioControle: '8px', raioBotao: '8px', raioCaixa: '4px',
+        fonte: "'Geist', 'Segoe UI', system-ui, sans-serif", mono: "'Geist Mono', Consolas, monospace",
+        desfoque: 'none', sombra: '0 24px 64px rgba(0,0,0,0.45)', vidro: false
+      },
+      Papel: {
+        paredeFundo: '#E3E1DC', janela: '#FFFFFF', lateral: '#F6F5F2', cartao: '#FFFFFF', elevada: '#F6F5F2', campo: '#FFFFFF', chip: '#EFEEEA', trilho: '#E6E4DF',
+        borda: 'rgba(20,20,19,0.08)', bordaForte: 'rgba(20,20,19,0.16)', ativo: '#EAE8E3',
+        texto: '#1A1A18', texto2: '#3E3D39', texto3: '#6B6A64', apagado: '#8A8983',
+        destaque: '#1A1A18', sobreDestaque: '#FBFAF8', sucesso: '#2F7A52', aviso: '#B5761A', perigo: '#B4443C',
+        raioJanela: '14px', raioCartao: '14px', raioControle: '10px', raioBotao: '17px', raioCaixa: '8px',
+        fonte: "'Instrument Sans', 'Segoe UI', system-ui, sans-serif", mono: "'JetBrains Mono', Consolas, monospace",
+        desfoque: 'none', sombra: '0 24px 64px rgba(40,36,28,0.16)', vidro: false
+      },
+      Vidro: {
+        paredeFundo: '#161B26', janela: 'rgba(18,21,29,0.62)', lateral: 'rgba(0,0,0,0.16)', cartao: 'rgba(255,255,255,0.05)', elevada: 'rgba(255,255,255,0.07)', campo: 'rgba(0,0,0,0.18)', chip: 'rgba(255,255,255,0.08)', trilho: 'rgba(255,255,255,0.10)',
+        borda: 'rgba(255,255,255,0.09)', bordaForte: 'rgba(255,255,255,0.18)', ativo: 'rgba(255,255,255,0.10)',
+        texto: '#EEF0F6', texto2: '#C4C9D4', texto3: '#9AA1B1', apagado: '#7C8394',
+        destaque: '#A3B5FF', sobreDestaque: '#10131C', sucesso: '#7CCBA2', aviso: '#E8B86A', perigo: '#F08A8A',
+        raioJanela: '16px', raioCartao: '14px', raioControle: '10px', raioBotao: '10px', raioCaixa: '5px',
+        fonte: "'Onest', 'Segoe UI', system-ui, sans-serif", mono: "'IBM Plex Mono', Consolas, monospace",
+        desfoque: 'blur(40px) saturate(140%)', sombra: '0 24px 64px rgba(0,0,0,0.35)', vidro: true
+      }
+    };
+    var nome = this.state.tema || this.props.tema || 'Grafite';
+    var t = TEMAS[nome] || TEMAS.Grafite;
+
+    var temas = ['Grafite', 'Papel', 'Vidro'].map(function (n) {
+      var marcado = n === nome;
+      return {
+        nome: n,
+        marcado: marcado ? 'true' : 'false',
+        escolher: function () { self.setState({ tema: n }); },
+        estilo: 'height: 28px; border: 0; border-radius: 6px; font-size: 12px; ' + (marcado ? 'background: ' + t.janela + '; color: ' + t.texto + '; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.12);' : 'background: transparent; color: ' + t.texto3 + ';')
+      };
+    });
+
+    var item = 'display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: ' + t.raioControle + '; text-decoration: none; font-size: 13px; ';
+    var nav = [
+      { nome: 'Início', d: 'M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z', ativo: true },
+      { nome: 'Agentes', d: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
+      { nome: 'Sessões de IA', d: 'M4 17l6-6-6-6M12 19h8', contagem: '3' },
+      { nome: 'Tarefas', d: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11', contagem: '7' },
+      { nome: 'Foco', d: 'M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z' },
+      { nome: 'Finanças', d: 'M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4' },
+      { nome: 'Dev', d: 'M6 9v12M18 15V9a3 3 0 0 0-3-3h-4M14 3l-3 3 3 3M9 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM21 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z', contagem: '2' },
+      { nome: 'Notas', d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8' },
+      { nome: 'Arquivos', d: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z' },
+      { nome: 'Memória', d: 'M12 3a9 9 0 1 0 9 9M12 7v5l3 3M21 3v6h-6' },
+      { nome: 'Ferramentas', d: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z' },
+      { nome: 'Configurações', d: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z' }
+    ].map(function (n) {
+      return Object.assign({}, n, {
+        estilo: item + (n.ativo ? 'background: ' + t.ativo + '; color: ' + t.texto + '; font-weight: 600;' : 'background: transparent; color: ' + t.texto2 + ';'),
+        temContagem: !!n.contagem
+      });
+    });
+
+    var caixa = function (feita) { return 'width: 16px; height: 16px; border-radius: ' + t.raioCaixa + '; box-sizing: border-box; flex: none; ' + (feita ? 'background: ' + t.apagado + '; border: 1px solid ' + t.apagado + ';' : 'border: 1.5px solid ' + t.apagado + ';'); };
+    var texto = function (feita) { return 'flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; ' + (feita ? 'color: ' + t.apagado + '; text-decoration: line-through;' : 'color: ' + t.texto + ';'); };
+    var tarefas = [
+      { nome: 'Revisar PR do relatório mensal', meta: 'dev' },
+      { nome: 'Pagar fatura do cartão', meta: 'qui' },
+      { nome: 'Ligar para o contador', meta: '15h' },
+      { nome: 'Separar comprovantes do mês', meta: 'sex' },
+      { nome: 'Daily', meta: '9h30', feita: true }
+    ].map(function (x) { return Object.assign({}, x, { caixa: caixa(x.feita), texto: texto(x.feita) }); });
+
+    var categorias = [
+      { nome: 'Mercado', valor: 'R$ 512 de 600', pct: 85, alerta: true },
+      { nome: 'Transporte', valor: 'R$ 188 de 400', pct: 47 },
+      { nome: 'Lazer', valor: 'R$ 140 de 300', pct: 47 }
+    ].map(function (c) {
+      return Object.assign({}, c, {
+        corValor: c.alerta ? t.aviso : t.texto3,
+        barra: 'width: ' + c.pct + '%; height: 4px; border-radius: 2px; background: ' + (c.alerta ? t.aviso : t.sucesso) + ';'
+      });
+    });
+
+    var prs = [
+      { titulo: 'Importação de pedidos em lote', repo: 'api-pedidos #412' },
+      { titulo: 'Filtros na exportação de CSV', repo: 'relatorios #388' },
+      { titulo: 'Cache das consultas de estoque', repo: 'api-pedidos #405' }
+    ];
+
+    var ponto = function (cor) { return 'width: 8px; height: 8px; border-radius: 4px; flex: none; background: ' + cor + ';'; };
+    var sessoes = [
+      { ferramenta: 'Claude Code', projeto: 'moductus', estado: 'trabalhando', cor: t.sucesso },
+      { ferramenta: 'Claude Code', projeto: 'api-pedidos', estado: 'esperando você', cor: t.aviso },
+      { ferramenta: 'Codex', projeto: 'site', estado: 'terminou', cor: t.apagado }
+    ].map(function (s) { return Object.assign({}, s, { ponto: ponto(s.cor), corEstado: s.cor === t.apagado ? t.texto3 : s.cor }); });
+
+    return { t: t, temas: temas, nav: nav, tarefas: tarefas, categorias: categorias, prs: prs, sessoes: sessoes };
+  }
+}
+</script>
+</body>
+</html>

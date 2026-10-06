@@ -1,0 +1,143 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hooks",
+            "headers": {
+              "Authorization": "Bearer $MODUCTUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "MODUCTUS_TOKEN"
+            ],
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hooks",
+            "headers": {
+              "Authorization": "Bearer $MODUCTUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "MODUCTUS_TOKEN"
+            ],
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hooks",
+            "headers": {
+              "Authorization": "Bearer $MODUCTUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "MODUCTUS_TOKEN"
+            ],
+            "timeout": 120
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hooks",
+            "headers": {
+              "Authorization": "Bearer $MODUCTUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "MODUCTUS_TOKEN"
+            ],
+            "timeout": 120
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hooks",
+            "headers": {
+              "Authorization": "Bearer $MODUCTUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "MODUCTUS_TOKEN"
+            ],
+            "timeout": 120
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hooks",
+            "headers": {
+              "Authorization": "Bearer $MODUCTUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "MODUCTUS_TOKEN"
+            ],
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hooks",
+            "headers": {
+              "Authorization": "Bearer $MODUCTUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "MODUCTUS_TOKEN"
+            ],
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:47821/hooks",
+            "headers": {
+              "Authorization": "Bearer $MODUCTUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "MODUCTUS_TOKEN"
+            ],
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+import { DatabaseSync } from 'node:sqlite';
+import { createServer } from 'node:http';
+const t0 = performance.now();
+const db = new DatabaseSync(process.env.DB || 'node.db');
+db.exec('CREATE TABLE IF NOT EXISTS tarefas (id INTEGER PRIMARY KEY, nome TEXT, feita INTEGER)');
+const ins = db.prepare('INSERT INTO tarefas (nome, feita) VALUES (?, 0)');
+db.exec('BEGIN'); for (let i = 0; i < 1000; i++) ins.run('tarefa ' + i); db.exec('COMMIT');
+const cont = db.prepare('SELECT count(*) AS n FROM tarefas');
+const srv = createServer((req, res) => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(cont.get())); });
+srv.listen(0, '127.0.0.1', () => console.log(JSON.stringify({ pronto_ms: +(performance.now() - t0).toFixed(1), porta: srv.address().port })));
