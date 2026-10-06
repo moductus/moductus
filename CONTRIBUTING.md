@@ -1,62 +1,40 @@
 # Contribuindo com o Moductus
 
-Obrigado pelo interesse. As regras abaixo são curtas de propósito, e existem para que a suíte continue parecendo uma coisa só à medida que cresce.
+Obrigado pelo interesse. O Moductus está no meio de um pivô: de suíte de utilitários para sistema pessoal com agentes de IA. As regras abaixo valem para o produto novo.
 
 ## Antes de escrever código
 
-**Proposta de módulo vai como issue primeiro**, usando o template [Proposta de módulo](.github/ISSUE_TEMPLATE/module.yml). Um módulo que não passa pelos três filtros da tese — nasce de tecla, aparece e some, cabe no processo único — não entra na suíte, e é melhor descobrir isso antes de você escrever qualquer linha.
+**Proposta vai como issue primeiro**, usando o template [Proposta](.github/ISSUE_TEMPLATE/proposta.yml): área nova, agente novo, integração ou ferramenta. Leia antes os [princípios](docs/PRODUCT.md#2-princípios) e os [não-objetivos](docs/PRODUCT.md#não-objetivos) — eles existem para poupar o seu tempo.
 
-Vale ler [docs/PRODUCT.md](docs/PRODUCT.md#46-não-objetivos) antes de propor. A lista de não-objetivos e a de módulos cortados existem justamente para poupar seu tempo.
+Enquanto a fase 1 não começa, o código no repositório é a suíte `v0.4.0` em .NET. Correções nela ainda são bem-vindas; funcionalidade nova vai para o produto novo.
 
 ## Regras não negociáveis
 
-- **Um módulo por PR.** PR que toca dois módulos vira dois PRs.
-- **Todo módulo usa um dos quatro arquétipos de janela**, sem exceção: Palette, HUD, Panel ou Canvas. Módulo novo não desenha UI nova — escolhe um arquétipo e preenche o conteúdo.
-- **Nenhuma cor, tamanho, raio ou duração literal no código.** Tudo vem de chaves do `Tokens.xaml` e dos temas em `Themes/`. Se falta um token, o PR discute o token antes de usar um número solto.
-- **Nenhuma dependência NuGet nova sem justificativa explícita no PR.** "Facilita" não é justificativa.
-- **Nenhuma chamada de rede.** Não há exceção para isso, nem para checagem de atualização.
-- **Nenhum `MessageBox`.** Erro aparece inline, dentro do próprio overlay.
+- **Funciona sem IA.** Toda área precisa funcionar sem provedor ligado. A regra de negócio mora na área; o agente só chama a mesma função que a interface chama.
+- **Ação externa sempre com aprovação.** Ferramenta com efeito fora do Moductus é declarada como `externo` e passa pelo cartão de aprovação. Sem exceção.
+- **Nenhuma cor, tamanho, raio ou duração literal.** Tudo vem dos tokens de [DESIGN.md](docs/DESIGN.md). Componente não conhece o nome do tema. Se falta um token, o PR discute o token antes de usar um número solto.
+- **Rede só para provedor e conexões ligadas pelo usuário.** Nenhuma telemetria, nenhum serviço de terceiros por padrão.
+- **Chave e token só no Gerenciador de Credenciais.** Nunca no banco, em arquivo de configuração ou em log.
+- **Dependência nova com justificativa no PR.** "Facilita" não é justificativa.
+- **Um assunto por PR.**
 
 ## Contrato de interação
 
-Vale para todo módulo:
-
-- `Esc` fecha, sempre, sem confirmar nada
-- `Enter` executa a ação primária
-- Toda hotkey é toggle: apertar de novo fecha
-- HUD e Panel nunca roubam foco
-- Zero som por padrão
-- Zero diálogo de confirmação, exceto ação irreversível de verdade
-- Estado vazio sempre tem texto explicando o que fazer, nunca fica em branco
-- Toda ação alcançável por teclado
-
-## Interop com o Windows
-
-**Use o [CsWin32](https://github.com/microsoft/CsWin32) para todo P/Invoke.** Adicione o nome exato da função ao `NativeMethods.txt` e deixe o gerador escrever a assinatura.
-
-Assinatura de struct escrita à mão é a maior fonte de bug difícil deste tipo de projeto — o código compila, roda, e corrompe memória em silêncio numa versão específica do Windows. PR com `[DllImport]` manual será pedido para migrar.
+- `Esc` fecha painel, captura ou modal, sem confirmar nada.
+- `Enter` executa a ação primária.
+- O dock não rouba foco; o teclado só vai para ele quando um painel pede digitação.
+- Animação curta: entrada até 140 ms, saída até 90 ms, nada acima de 200 ms.
+- Estado vazio sempre explica o que fazer.
+- Erro aparece no próprio painel, nunca em diálogo.
+- Confirmação só em ação irreversível de verdade.
+- Toda ação alcançável por teclado.
 
 ## Testes
 
-O escopo de teste é deliberadamente estreito, e isso é decisão registrada, não descuido:
+- **Regra de área e de agente:** teste no serviço, com Vitest. Provedor de modelo é sempre falso nos testes; nenhum teste chama rede.
+- **Casca nativa:** `cargo test` no que der para separar da API do Windows.
+- **Interface:** Playwright para os fluxos principais (captura, aprovação, troca de tema).
 
-- **Testado:** o que está em `Moductus.Core` — registro e conflito de hotkeys, registro e colisão de letras, config portable versus instalado, migração de schema.
-- **Não testado:** UI e interop com o Windows. Ambos exigem sessão gráfica real e o custo de manutenção supera o retorno.
+## Idioma
 
-Se o seu módulo tem lógica que dá para separar da UI e da API do Windows, separe e teste essa parte.
-
-### Smoke test manual: não confie em `HasExited`
-
-Quando o app crasha, o diálogo do Windows Error Reporting **segura o processo vivo** até alguém fechá-lo. `Process.HasExited` diz `false`, o pid continua na lista, e um script que só olha isso conclui "subiu sem erro". Três smoke tests deste projeto passaram assim, com o app morto por baixo.
-
-O que funciona: depois de subir, consultar o log de eventos do Windows (`Application`, provedor `.NET Runtime`) por entradas com `Moductus` desde o início do teste. É lá que a exceção e a stack aparecem.
-
-Para exercitar a tecla líder sem tocar na sua configuração real, use o modo portable: um `portable.txt` e um `config.json` na pasta do executável em `bin/`, que já está no `.gitignore`.
-
-## Estilo
-
-Siga o código vizinho. Nomenclatura, injeção de dependência, separação de camadas e formato de teste devem ser indistinguíveis do que já está no repositório.
-
-## Como escrever um módulo
-
-O passo a passo, com a interface `IModule` e o prompt base, está em [docs/MODULES.md](docs/MODULES.md).
+Documentação, comentários e mensagens de commit em português do Brasil. Commits seguem Conventional Commits (`feat(dock):`, `fix(agentes):`, `docs:`) e dizem o que a mudança entrega.

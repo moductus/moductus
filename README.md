@@ -1,111 +1,81 @@
-<img src="assets/mark-192.png" alt="" width="96" align="right">
-
 # Moductus
 
-**Tudo a uma tecla de distância.**
+**O seu dia no PC, num dock só.**
 
-Suíte de utilitários para Windows, open source, em processo único, acionada por teclado.
+Um sistema pessoal para Windows, open source: fica sempre à mão num dock lateral e é cuidado por um time de agentes de IA, com o modelo que você escolher.
 
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-171717)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/moductus/moductus?include_prereleases&color=171717)](https://github.com/moductus/moductus/releases)
 
 ---
 
-> **Status: v0.3.0, o primeiro release público.** Os doze módulos do roadmap existem, e o mark saiu do provisório. Nenhum rascunho anterior chegou a ser publicado.
+> **Status: pivô em desenho.** O Moductus está deixando de ser uma suíte de utilitários para virar um sistema pessoal com agentes. O desenho (fase 0) está em [docs/](docs/); o código ainda é a suíte `v0.4.0`, que continua disponível nas releases até a fase 1 substituí-la.
 
 ## O que é
 
-Um único processo leve que coloca utilitários de sistema a um atalho de distância, aparecendo e sumindo sem nunca virar mais uma janela pra gerenciar.
+Tarefas, foco, dinheiro, código e memória num lugar que nunca sai do lado da tela, com agentes que trabalham em segundo plano e avisam quando precisam de você.
 
-Três regras carregam o produto inteiro, e um módulo que não cabe nas três não entra na suíte:
+O app existe em duas camadas:
 
-- **Atalho** — nada se abre com clique de ícone. Tudo nasce de tecla.
-- **Aparece e some** — nenhuma superfície é permanente, exceto o ícone de bandeja.
-- **Um processo** — 18 utilitários não podem custar 18 processos.
+- **O dock**, na lateral da tela: o estado de cada área ao vivo, as sessões de IA de cada projeto, a mídia tocando, os apps abertos. Cada ícone abre um painel de ações rápidas ao lado.
+- **O Sistema**, uma janela normal: o app completo, com todas as áreas, a conversa com os agentes e as configurações.
 
-## A tecla líder
+Entre os dois, a **captura rápida** transforma uma frase solta em tarefa, gasto, nota ou memória.
 
-Registrar dezoito hotkeys globais garante conflito com outros aplicativos, e o Windows não avisa quando o registro falha — o atalho simplesmente não funciona, sem explicação. Então existe **uma** hotkey, e uma letra escolhe o módulo:
+## As áreas
 
-```
-Ctrl+Alt+M  →  o  →  Ports
-Ctrl+Alt+M  →  s  →  Scratch
-Ctrl+Alt+M  →  k  →  Peek
-Ctrl+Alt+M  →  a  →  Awake
-```
+| Área | O que faz |
+|---|---|
+| **Tarefas** | Listas, datas, recorrência, entrada em linguagem natural |
+| **Foco** | Pomodoro ligado à tarefa, com histórico |
+| **Finanças** | Contas, lançamentos, orçamento, recorrentes, importação de extrato |
+| **Dev** | PRs esperando você, reviews a atender, issues atribuídas, CI quebrado |
+| **Sessões de IA** | O que o Claude Code, o Codex e afins estão fazendo em cada projeto, com aprovação pelo dock |
+| **Notas** | Markdown que salva sozinho |
+| **Arquivos** | Caixa de entrada que os agentes resumem, classificam e lançam |
+| **Memória** | O que você e os agentes precisam lembrar |
+| **Ferramentas** | Os utilitários da suíte original: Freeze, Ports, Links, Kill, Peek, Awake, Mic |
 
-A combinação é configurável na tela de configurações — clique no campo e pressione a nova. Se ela colidir com outro aplicativo, a anterior é mantida e o motivo aparece na hora.
+## Os agentes
 
-Isso entrega três coisas de uma vez: um único ponto de conflito para resolver, descoberta dos módulos sem abrir configuração, e a sensação de leader key que torna um conjunto de ferramentas pequenas agradável de operar.
+| Agente | Cuida de |
+|---|---|
+| **Demandas** | Tarefas, agenda e foco; briefing da manhã e fechamento do dia |
+| **Finanças** | Lançamentos por texto, print ou extrato; orçamento e recorrências |
+| **Dev** | GitHub e as sessões de agentes de código |
+| **Memória** | Guarda e recupera contexto para os outros agentes |
 
-Atalho direto continua existindo, mas como opção para dois ou três favoritos — nunca como padrão de fábrica.
+Cada agente escolhe o próprio modelo: um agente CLI com a assinatura que você já tem (Claude Code, Codex, Gemini) ou uma API (Anthropic, OpenAI ou qualquer endpoint compatível, inclusive modelo local).
 
-## Os módulos
+## Princípios
 
-| Módulo | O que faz | Fase |
-|---|---|---|
-| **Awake** | Impede hibernar e desligar a tela | 1 |
-| **Peek** | Miniatura flutuante ao vivo de qualquer janela | 2 |
-| **Ports** | Lista portas locais ocupadas e mata o processo | 2 |
-| **Scratch** | Bloco de notas que desliza do topo e salva sozinho | 2 |
-| **Palette** | Lançador: resolve contas, abre aplicativos instalados, acha arquivos, transforma o clipboard (slug, camelCase, JSON, Base64, JWT) e executa comando avisando quando termina | 3 |
-| **Clips** | Histórico de clipboard navegável por teclado | 4 |
-| **Freeze** | Tela congelada com régua, conta-gotas, lupa e OCR | 4 |
-| **Shelf** | Bandeja temporária na borda para segurar arquivos | 4 |
-| **Mic** | Mudo de microfone com indicador na bandeja | 4 |
-| **Links** | Cria junction e symlink arrastando pasta | 4 |
-| **Kill** | Mira que encerra janela travada com um clique | 4 |
-| **Timer** | Pomodoro desenhado dentro do ícone da bandeja | 4 |
+- **Funciona sem IA.** Toda área tem caminho próprio; a IA melhora o que já funciona.
+- **Você escolhe o modelo.** Por agente, e trocar não muda nada no resto do app.
+- **Seus dados ficam com você.** Banco local, chaves no Gerenciador de Credenciais do Windows, sem conta e sem servidor. Rede só para o que você ligar. Sem telemetria.
+- **O agente propõe, você aprova.** Nada sai do Moductus — comentário, mensagem, arquivo movido — sem o seu sim.
 
-Os doze existem. Cada um tem uma letra, ajustável, e o **Kill nasce desligado** — anti-cheat de jogo marca quem encerra processo alheio, então ligar é decisão sua.
+## Visual
 
-O que ficou de fora, e por quê, está em [docs/PRODUCT.md](docs/PRODUCT.md#5-módulos) — a lista de módulos cortados é tão importante quanto a de aprovados.
+Três temas de fábrica sobre a mesma estrutura: **Grafite** (escuro e monocromático), **Papel** (claro e calmo) e **Vidro** (translúcido, integrado ao Windows 11). Ou automático, seguindo o modo do Windows.
 
-## As três superfícies
+## Stack
 
-Nenhuma janela é permanente, mas três coisas precisam existir fora do atalho:
-
-- **A janela principal** abre no clique do ícone de bandeja. Um cartão por módulo, com a letra, o que ele faz, e botões para abrir e para configurar.
-- **A pastilha**, no canto inferior direito, fica enquanto durar um estado que você vai querer desfazer — microfone mudo, Awake ligado, pomodoro contando. Clicar nela desfaz, sem repetir o atalho. Ela existe porque o Windows 11 esconde ícone de bandeja novo atrás da setinha de estouro, e estado que ninguém vê não comunica nada.
-- **O menu da bandeja**, no botão direito, lista todo módulo ativo com os comandos de cada um em submenu. É a saída para quando a tecla líder colidir com outro programa.
-
-## Privacidade
-
-**Zero telemetria, zero rede.** O aplicativo não faz nenhuma requisição HTTP, nem para checar atualização.
-
-Isso é decisão de produto antes de ser decisão de privacidade. Um programa que roda em segundo plano, registra hotkeys globais e lê o clipboard precisa ser auditável para merecer confiança, e é por isso que o repositório é público desde o primeiro commit.
-
-Se algum dia houver checagem de atualização, ela será opt-in explícito e documentada.
-
-## Instalação
-
-Baixe na [página de releases](https://github.com/moductus/moductus/releases). Dois canais:
-
-| Canal | Formato | Tamanho |
-|---|---|---|
-| Download direto | Zip portable, self-contained | ~63 MB |
-| `winget` e `scoop` | Framework-dependent (requer .NET Desktop Runtime) | ~7 MB |
-
-Números medidos no build do v0.3.0, não estimados. Os ~6 MB do pacote pequeno são a projeção WinRT que o OCR do Freeze exige; sem ela o app tinha 0,3 MB. O zip é maior porque carrega o runtime inteiro dentro dele — o WPF não pode ser *trimmed*, então não há como encolher isso. Em troca, ele extrai e roda em qualquer máquina, sem instalar nada. Pelo `winget` o runtime vira dependência declarada e o pacote é só o app.
-
-### Sobre o aviso do SmartScreen
-
-O Moductus não é assinado digitalmente. Um certificado de code signing custa entre US$ 200 e 400 por ano e não existe alternativa gratuita reconhecida pelo Windows, então o SmartScreen vai exibir "aplicativo desconhecido" na primeira execução.
-
-O que dá para fazer sem dinheiro, e está sendo feito: todo binário é construído pelo GitHub Actions com [attestation](https://docs.github.com/actions/security-guides/using-artifact-attestations), o que permite a qualquer pessoa verificar que o arquivo publicado veio exatamente daquele commit deste repositório.
+Tauri 2 com uma casca fina em Rust para o que é nativo do Windows, interface em React e TypeScript, e um serviço em segundo plano em TypeScript para dados, agentes e ferramentas (com servidor MCP).
 
 ## Documentação
 
 | Documento | O que responde |
 |---|---|
-| [docs/PRODUCT.md](docs/PRODUCT.md) | O que o produto é, por que existe, e as 21 decisões registradas |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Como funciona por dentro — ciclo de vida, tecla líder, foco, latência |
-| [docs/MODULES.md](docs/MODULES.md) | Como escrever um módulo |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Regras não negociáveis de PR |
+| [docs/PRODUCT.md](docs/PRODUCT.md) | O que o produto é, por que existe, roadmap e decisões |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Como funciona por dentro: processos, casca nativa, serviço, dados |
+| [docs/AGENTS.md](docs/AGENTS.md) | Agentes, provedores de modelo, ferramentas, aprovação, sessões de IA |
+| [docs/DESIGN.md](docs/DESIGN.md) | Os três temas e os tokens |
+| [docs/v0/](docs/v0/) | A suíte de utilitários original, como registro |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Como contribuir durante o pivô |
 
-## Contribuindo
+## A suíte original (v0)
 
-Propostas de módulo vão como issue antes do código, usando o [template](.github/ISSUE_TEMPLATE/module.yml). As regras são curtas e não negociáveis — leia o [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir um PR, e o [docs/MODULES.md](docs/MODULES.md) antes de escrever um módulo.
+A `v0.4.0` é a última versão da suíte de utilitários: doze módulos acionados por uma tecla líder, em .NET e WPF. Ela continua [nas releases](https://github.com/moductus/moductus/releases) e o desenho dela está em [docs/v0/](docs/v0/). Nenhum módulo é descartado no pivô; todos mudam de lugar, como mostra a [seção 7 do PRODUCT.md](docs/PRODUCT.md#7-o-que-vem-do-moductus-v0).
 
 ## Licença
 
