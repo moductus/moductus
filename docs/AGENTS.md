@@ -77,7 +77,7 @@ O serviço inicia o CLI como subprocesso, envia o pedido e lê a saída estrutur
 
 | Provedor | Comando base | Ferramentas | Observação |
 |---|---|---|---|
-| Claude Code | `claude -p --output-format stream-json --verbose` | `--mcp-config` apontando para o MCP do Moductus, `--allowedTools` restrito às ferramentas do agente | Instruções via `--append-system-prompt`; continuidade com `--resume` |
+| Claude Code | `claude -p --output-format stream-json --verbose` | `--mcp-config` apontando para o MCP do Moductus, `--allowedTools` restrito às ferramentas do agente | Instruções via `--append-system-prompt`; continuidade com `--resume`; aprovação pelo hook `PreToolUse`, porque no `-p` o `PermissionRequest` não dispara (seção 5.1) |
 | Codex | `codex exec --json` | Servidor MCP na configuração do Codex **(validar formato por flag)** | |
 | Gemini CLI | `gemini -p` com saída JSON **(validar flag)** | MCP na configuração do Gemini | |
 | Antigravity | **(validar)** o que ele expõe fora do editor | | Se não houver CLI, entra só como sessão acompanhada (seção 5) |
@@ -153,8 +153,8 @@ O serviço abre um endpoint HTTP local (`127.0.0.1`, porta fixa configurável, t
 
 | Ferramenta | Mecanismo | O que dá para saber |
 |---|---|---|
-| **Claude Code** | Hooks no `settings.json` do usuário: `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `Notification`, `Stop`, `SessionEnd`. Cada hook roda um comando pequeno do Moductus que repassa o JSON do evento ao endpoint | Projeto (diretório), sessão, ferramenta em uso, pedido de permissão, fim de turno |
-| **Aprovar pelo dock** | O hook de permissão espera a decisão do Moductus e devolve permitir ou negar **(validar evento e formato de resposta da versão atual)** | Aprovar ou negar sem voltar ao terminal; se o Moductus não responder a tempo, cai no fluxo normal do terminal |
+| **Claude Code** | Hooks do tipo `http` no `settings.json` do usuário, apontando direto para o endpoint, com o token no cabeçalho `Authorization` lido de variável de ambiente (`allowedEnvVars`): `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PermissionRequest`, `Notification`, `Stop`, `SessionEnd`. Nenhum script intermediário | Projeto (`cwd`), sessão, ferramenta e comando em uso, pedido de permissão, fim de turno, ociosidade (`Notification` com `idle_prompt`) |
+| **Aprovar pelo dock** | O hook `PermissionRequest` segura a resposta HTTP até você decidir no dock e devolve `decision.behavior` `allow` ou `deny`, com mensagem | Aprovar ou negar sem voltar ao terminal. Validado (seção 5.1) |
 | **Codex** | `notify` na configuração do Codex chama o comando do Moductus ao fim de cada turno **(validar se há eventos mais finos)** | Projeto, fim de turno, última mensagem |
 | **Outros** | Varredura de processos (`claude`, `codex`, `gemini`) com diretório de trabalho | Só "está rodando neste projeto" |
 
@@ -162,9 +162,26 @@ O serviço abre um endpoint HTTP local (`127.0.0.1`, porta fixa configurável, t
 
 `trabalhando` · `esperando você` · `terminou` · `erro` · `parada` (sem evento há muito tempo)
 
+### 5.1 Resultado do teste de viabilidade
+
+Feito em 06/10/2026 com o Claude Code 2.1, hooks `http` apontando para um servidor local que simulava o dock, esperando 3 s antes de responder.
+
+| Situação | Resultado |
+|---|---|
+| Eventos chegando ao endpoint | ✅ Todos, com o token no cabeçalho |
+| Sessão interativa, `PermissionRequest` | ✅ O Claude Code esperou a resposta; `allow` executou o comando, `deny` bloqueou e o modelo recebeu a mensagem "Negado pelo dock do Moductus" sem tentar contornar. O diálogo do terminal continua na tela enquanto o dock decide |
+| Modo `claude -p`, `PermissionRequest` | ❌ Não dispara: comando que pede permissão é negado direto |
+| Modo `claude -p`, `PreToolUse` com `permissionDecision` | ✅ Espera a resposta; `allow` executa, `deny` bloqueia com o motivo |
+| Comandos considerados seguros (`echo`) | Não pedem permissão, então não geram `PermissionRequest`; aparecem só em `PreToolUse` e `PostToolUse` |
+
+**Consequências para o desenho:**
+- Sessões interativas do Claude Code são aprovadas pelo `PermissionRequest`.
+- O adaptador CLI do Moductus (seção 3), que roda `claude -p`, aprova pelo `PreToolUse`: o hook decide sozinho as ferramentas do próprio Moductus pelo nível de efeito, e manda ao dock só o que for `externo`.
+- O primeiro comando Bash de uma sessão levou cerca de 14 s entre a aprovação e a execução, enquanto o segundo foi imediato. A explicação provável é o Claude Code preparando o shell na primeira chamada, não o hook.
+
 ### Consumo e limites
 
-Uso e limites de cada ferramenta (janela de 5 horas, semana) aparecem em Sessões de IA quando a ferramenta expõe esse dado de forma local e estável **(validar fonte por ferramenta)**. Sem fonte confiável, a área não inventa número.
+O Claude Code não expõe uso nem limites por hook ou por arquivo local. Sessões de IA mostram o que dá para contar pelos eventos (sessões, turnos, ferramentas usadas) e o uso de limites fica fora até existir uma fonte estável. Codex, Gemini e Antigravity **(validar)**. Sem fonte confiável, a área não inventa número.
 
 ---
 

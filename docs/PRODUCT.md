@@ -247,7 +247,7 @@ As 21 decisões do v0 estão em [v0/PRODUCT.md](v0/PRODUCT.md#10-decisões-regis
 
 - **Substituir a barra de tarefas** é o item mais frágil: vários monitores, janelas que não se declaram, apps que dependem da barra. Por isso fica na fase 6 e a barra do Windows nunca é removida, só ocultada.
 - **Latência dos agentes CLI:** abrir `claude -p` ou `codex exec` custa segundos por chamada. Agentes em segundo plano toleram; o chat precisa mostrar progresso desde o primeiro instante.
-- **Consumo de memória:** WebView2 mais o serviço de agentes. Meta: abaixo de 150 MB em repouso, medido a cada release.
+- **Consumo de memória:** WebView2 mais o serviço de agentes. Meta: abaixo de 200 MB de memória privada em repouso, medido a cada release (o teste de viabilidade mediu cerca de 150 MB em build de debug).
 - **Integração com agentes de código** depende de hooks e formatos que essas ferramentas mudam com frequência. Cada integração fica isolada num adaptador.
 - **Assinatura de código:** continua sem certificado; o mesmo tratamento do v0 (build pelo Actions com attestation, aviso honesto no README).
 - **Curva de Rust:** a camada nativa fica fina de propósito; a maior parte do código é TypeScript.

@@ -55,7 +55,7 @@ São três processos, cada um com um papel:
 | Estilo | CSS com variáveis (tokens) + Tailwind | Tokens definidos na fase 0 de identidade |
 | Animação | Motion | Curta: nada acima de 200 ms |
 | Estado na UI | Zustand + TanStack Query | Query para dados do serviço, Zustand para estado de janela |
-| Serviço | Node 22+ empacotado como sidecar | Alternativa a avaliar: Bun compilado em binário único |
+| Serviço | Node 24 LTS empacotado como sidecar | Escolhido no teste de viabilidade (seção 9) |
 | Banco | SQLite (`node:sqlite` ou `better-sqlite3`), FTS5 para busca | Migrações versionadas no repositório |
 | Validação | Zod | Mesmo schema para API interna, ferramentas e MCP |
 | Testes | Vitest (TS), `cargo test` (Rust), Playwright para fluxos da UI | |
@@ -69,7 +69,7 @@ Expõe comandos Tauri pequenos e eventos. Tudo o que ela sabe fazer:
 
 | Capacidade | API do Windows | Usado por |
 |---|---|---|
-| Dock que reserva espaço | `SHAppBarMessage` (AppBar), lado e monitor configuráveis | Dock no modo fixo |
+| Dock que reserva espaço | `SHAppBarMessage` (AppBar), lado e monitor configuráveis, com limpeza de reserva órfã (seção 9) | Dock no modo fixo |
 | Mostrar ao encostar na borda | Posição do cursor + janela fina na borda | Dock no modo esconder |
 | Tela cheia e apresentação | `SHQueryUserNotificationState` | Dock some |
 | Mídia tocando | `GlobalSystemMediaTransportControlsSessionManager` (WinRT) | Seção Mídia |
@@ -189,13 +189,58 @@ O código .NET do v0 sai da árvore quando a fase 1 começar; a tag `v0.4.0` pre
 - **CI:** GitHub Actions em `windows-latest`: `pnpm` (tipos, lint, Vitest), `cargo test`, build do Tauri.
 - **Release:** instalador NSIS e zip portable, com attestation do Actions, como no v0.
 - **Atualização:** plugin updater do Tauri, opt-in nas configurações, manifesto assinado publicado no GitHub Releases.
-- **Orçamentos medidos a cada release:** memória em repouso abaixo de 150 MB; dock visível em menos de 1 s após o login; painel abre em menos de 100 ms.
+- **Orçamentos medidos a cada release:** memória privada em repouso abaixo de 200 MB somando casca, WebView2 e serviço (o teste de viabilidade mediu cerca de 150 MB em build de debug); dock visível em menos de 1 s após o login; painel abre em menos de 100 ms.
 
 ---
 
 ## 8. Questões em aberto
 
-- **Node empacotado ou Bun compilado** para o serviço: Bun gera binário único e sobe mais rápido; Node tem compatibilidade garantida com os SDKs. Decidir com um spike medindo tamanho e memória.
 - **Prévia de janela** com `DwmRegisterThumbnail` exige uma janela nativa por cima da WebView; validar no spike da fase 6 antes de prometer.
-- **Translucidez (Mica/Acrylic)** no dock: Tauri expõe efeitos de janela no Windows 11; definir o fallback sólido para o Windows 10.
+- **Translucidez (Acrylic)** no tema Vidro: só dá para validar no Windows 11; o teste de viabilidade rodou no Windows 10, onde vale o fallback sólido.
 - **Vários monitores:** dock em todos ou só no principal — começar pelo principal.
+- **Memória em release:** os números da seção 9 são de build de debug; medir de novo no primeiro build de release da fase 1.
+
+---
+
+## 9. Testes de viabilidade
+
+Feitos em 06/10/2026, numa máquina com Windows 10 Pro, monitor de 2560×1080 e barra de tarefas no topo. O código dos testes fica fora do repositório; aqui estão os resultados.
+
+### Dock no Tauri
+
+| O que | Resultado |
+|---|---|
+| Reservar espaço como AppBar | ✅ A área de trabalho passou de `0,40,2560,1080` para `64,40,2560,1080`; janela maximizada respeitou o dock; convive com a barra de tarefas em outra borda |
+| Não roubar foco | ✅ Com `WS_EX_NOACTIVATE`, abrir o dock e clicar num botão dele não tirou o foco da janela em primeiro plano, e o clique chegou ao Rust |
+| Sumir em tela cheia | ✅ `SHQueryUserNotificationState` devolveu `QUNS_BUSY`; o dock escondeu e voltou ao fechar a tela cheia, com consulta a cada 500 ms |
+| Memória | Cerca de 112 MB privados (291 MB de working set, com a memória compartilhada do WebView2) em 8 processos, build de debug |
+
+**Achado: o Windows não devolve a reserva sozinho.** Se o processo cai, e até no fechamento normal quando a janela já foi destruída antes da limpeza, a faixa fica reservada e a próxima execução empilha outra. A correção, validada:
+
+1. Ao registrar a AppBar, gravar o identificador da janela num arquivo.
+2. Ao iniciar, chamar `ABM_REMOVE` com o identificador gravado — funciona mesmo com a janela morta — antes de registrar de novo.
+3. Ao sair, fazer o mesmo com o valor guardado, sem depender da janela ainda existir.
+
+Com isso, fechamento normal libera a faixa e uma queda seguida de nova execução não empilha reservas.
+
+### Serviço: Node ou Bun
+
+Serviço mínimo com SQLite (1.000 inserções) e HTTP, mediana de 5 execuções:
+
+| | Subida até pronto | Memória em repouso | Tamanho |
+|---|---|---|---|
+| Node 22 (`node:sqlite`) | ~555 ms | ~38 MB | 82 MB (`node.exe`) + scripts |
+| Bun 1.3 compilado | ~260 ms | ~51 MB | 94 MB, binário único |
+
+**Decisão: Node.** O serviço sobe uma vez por login, então a diferença de subida não pesa; a memória fica ligada o dia inteiro, e os SDKs de agentes e de MCP têm compatibilidade garantida no Node. Usar Node 24 LTS, em que o `node:sqlite` já não é experimental como no 22.
+
+### Mídia e janelas abertas
+
+| O que | Resultado |
+|---|---|
+| Mídia tocando (`GlobalSystemMediaTransportControlsSessionManager`) | ✅ Sessões em 22 ms, com app de origem, título, artista, estado e capa |
+| Janelas abertas (`EnumWindows`) | ✅ Filtro de janela de app (visível, sem dono, não ferramenta, não camuflada pelo DWM) e agrupamento por executável, em menos de 1 ms |
+
+### Aprovação do Claude Code
+
+Resultado em [AGENTS.md](AGENTS.md#5-sessões-de-ia-externas).
