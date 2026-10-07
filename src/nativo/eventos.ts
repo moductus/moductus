@@ -21,3 +21,30 @@ export function useTelaCheia(): boolean {
   }, []);
   return cheia;
 }
+
+export interface EstadoMidia {
+  app: string;
+  titulo: string;
+  artista: string;
+  tocando: boolean;
+  pode_anterior: boolean;
+  pode_proxima: boolean;
+  capa: string | null;
+}
+
+/** Mídia tocando no Windows; `null` quando não há sessão (o controle some). */
+export function useMidia(): EstadoMidia | null {
+  const [midia, setMidia] = useState<EstadoMidia | null>(null);
+  useEffect(() => {
+    void invoke<EstadoMidia | null>("midia_estado").then(setMidia);
+    const parar = listen<EstadoMidia | null>("midia", (evento) => {
+      setMidia(evento.payload);
+      const m = evento.payload;
+      registrar(m ? `midia ${m.titulo} ${m.tocando ? "tocando" : "pausada"}` : "midia sem sessão");
+    });
+    return () => {
+      void parar.then((f) => f());
+    };
+  }, []);
+  return midia;
+}

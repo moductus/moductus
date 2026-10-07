@@ -5,6 +5,7 @@ mod dados;
 mod dock;
 mod inicio;
 mod janelas;
+mod midia;
 mod registro;
 mod tela_cheia;
 
@@ -38,6 +39,10 @@ pub fn run() {
             atalhos::atalhos_falhas,
             inicio::autostart_obter,
             inicio::autostart_definir,
+            midia::midia_estado,
+            midia::midia_alternar,
+            midia::midia_proxima,
+            midia::midia_anterior,
         ])
         .setup(move |app| {
             for rotulo in JANELAS {
@@ -51,6 +56,7 @@ pub fn run() {
             tela_cheia::vigiar(app.handle().clone());
             atalhos::iniciar(app.handle(), atalhos::padrao());
             bandeja::iniciar(app.handle())?;
+            midia::iniciar(app.handle().clone());
             Ok(())
         })
         .on_window_event(|janela, evento| {

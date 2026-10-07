@@ -15,14 +15,16 @@
     janelas    painel abre ao lado do dock em menos de 100 ms (5 aberturas) sem tirar o foco
     atalhos    Ctrl+Alt+N, D e Espaço; atalho de outro programa é recusado com motivo e o anterior vale
     inicio     segunda execução foca a primeira; autostart liga e desliga
+    midia      o dock acompanha uma sessão de mídia de teste (tocar, pausar por fora, fim) por evento
+               (pede: cargo build --example sessao_midia)
 
 .EXAMPLE
   pnpm tauri build --debug --no-bundle
   pwsh -File scripts\verificar.ps1 -Roteiro appbar
 #>
 param(
-  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio')]
-  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio'),
+  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia')]
+  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia'),
   [string]$Exe = (Join-Path $PSScriptRoot '..\src-tauri\target\debug\moductus.exe')
 )
 
@@ -316,6 +318,39 @@ function Roteiro-Inicio {
   Start-Process $Exe -ArgumentList '--autostart', 'desligar' -Wait; Start-Sleep 1
   $valor = (Get-ItemProperty $chave -ErrorAction SilentlyContinue).Moductus
   Conferir 'autostart desliga' (-not $valor) "Run\Moductus = '$valor'"
+  Fechar-Dock $d
+}
+
+function Linhas-Novas($log, [int]$desde, [string]$padrao) {
+  @(Get-Content $log | Select-Object -Skip $desde | Where-Object { $_ -match $padrao })
+}
+
+function Roteiro-Midia {
+  Write-Host "`n== midia =="
+  Get-Process moductus -ErrorAction SilentlyContinue | Stop-Process -Force
+  Start-Sleep 1
+  $log = Join-Path $env:APPDATA 'Moductus\moductus.log'
+  $sessao = Join-Path (Split-Path $Exe) 'examples\sessao_midia.exe'
+  $d = Iniciar-Dock
+  $inicio = (Get-Content $log).Count
+
+  $p = Start-Process $sessao -ArgumentList 10 -PassThru -WindowStyle Hidden
+  Start-Sleep 3
+  $casca = Linhas-Novas $log $inicio 'mídia: .*Teste do Moductus \(tocando\)'
+  $ui = Linhas-Novas $log $inicio 'interface: midia Teste do Moductus tocando'
+  Conferir 'sessão nova chega ao dock' ($casca.Count -ge 1 -and $ui.Count -ge 1) "casca: $($casca.Count), interface: $($ui.Count)"
+
+  $marca = (Get-Content $log).Count
+  [W]::keybd_event(0xB3, 0, 0, [IntPtr]::Zero); [W]::keybd_event(0xB3, 0, 2, [IntPtr]::Zero); Start-Sleep 1.5
+  $ui = Linhas-Novas $log $marca 'interface: midia Teste do Moductus pausada'
+  Conferir 'pausa feita fora do Moductus chega ao dock' ($ui.Count -ge 1) "eventos: $($ui.Count)"
+
+  $p.WaitForExit(15000) | Out-Null; Start-Sleep 2
+  $fim = Linhas-Novas $log $marca 'interface: midia (sem sessão|(?!Teste do Moductus))'
+  Conferir 'fim da sessão chega ao dock' ($fim.Count -ge 1) "último: $(($fim | Select-Object -Last 1) -replace '^\d+ ', '')"
+
+  $verificacoes = Linhas-Novas $log $inicio '^\d+ mídia:'
+  Write-Host "        $($verificacoes.Count) avisos da casca em ~15 s (só nas mudanças, sem consulta periódica)"
   Fechar-Dock $d
 }
 
