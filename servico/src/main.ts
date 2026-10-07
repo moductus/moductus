@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { abrirBanco, pastaDeDados } from "./banco/conexao.ts";
 import { CanalCasca } from "./casca/canal.ts";
 
 /**
@@ -6,6 +7,7 @@ import { CanalCasca } from "./casca/canal.ts";
  * por variável de ambiente, abre o servidor em 127.0.0.1 numa porta aleatória e avisa
  * a casca pelo stdout. Se cair, a casca sobe outro.
  */
+const banco = abrirBanco(pastaDeDados());
 const canal = new CanalCasca(process.stdout);
 canal.ouvir(process.stdin);
 
@@ -22,4 +24,7 @@ servidor.listen(0, "127.0.0.1", () => {
 });
 
 // A casca fechou o stdin: ela saiu, então o serviço sai junto.
-process.stdin.on("end", () => process.exit(0));
+process.stdin.on("end", () => {
+  banco.close();
+  process.exit(0);
+});
