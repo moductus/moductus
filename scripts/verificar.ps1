@@ -13,14 +13,15 @@
     modos      fixo, esconder e inteligente; colada e flutuante, alternando sem reiniciar
     telacheia  inteligente some em tela cheia e volta; fixo perde o topo; evento chega à interface
     janelas    painel abre ao lado do dock em menos de 100 ms (5 aberturas) sem tirar o foco
+    atalhos    Ctrl+Alt+N, D e Espaço; atalho de outro programa é recusado com motivo e o anterior vale
 
 .EXAMPLE
   pnpm tauri build --debug --no-bundle
   pwsh -File scripts\verificar.ps1 -Roteiro appbar
 #>
 param(
-  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas')]
-  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas'),
+  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas', 'atalhos')]
+  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas', 'atalhos'),
   [string]$Exe = (Join-Path $PSScriptRoot '..\src-tauri\target\debug\moductus.exe')
 )
 
@@ -38,6 +39,14 @@ public static class W {
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
   [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr h, int i);
+  [DllImport("user32.dll")] public static extern bool RegisterHotKey(IntPtr h, int id, uint mods, uint vk);
+  [DllImport("user32.dll")] public static extern bool UnregisterHotKey(IntPtr h, int id);
+  [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, int flags, IntPtr extra);
+  public static void Teclar(byte vk) {
+    keybd_event(0x11, 0, 0, IntPtr.Zero); keybd_event(0x12, 0, 0, IntPtr.Zero);
+    keybd_event(vk, 0, 0, IntPtr.Zero); keybd_event(vk, 0, 2, IntPtr.Zero);
+    keybd_event(0x12, 0, 2, IntPtr.Zero); keybd_event(0x11, 0, 2, IntPtr.Zero);
+  }
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string c, string t);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern uint RegisterWindowMessage(string s);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
@@ -239,6 +248,50 @@ function Roteiro-Janelas {
   Conferir 'painel abre em menos de 100 ms' ($tempos.Count -ge 5 -and ($tempos | Measure-Object -Maximum).Maximum -lt 100) "aberturas (ms): $($tempos -join ', '); mediana $mediana"
   Fechar-Dock $d
   $janela.Close()
+}
+
+function Roteiro-Atalhos {
+  Write-Host "`n== atalhos =="
+  Get-Process moductus -ErrorAction SilentlyContinue | Stop-Process -Force
+  Start-Sleep 1
+  $log = Join-Path $env:APPDATA 'Moductus\moductus.log'
+  $antes = [W]::Trabalho()
+  $d = Iniciar-Dock
+  $hSis = [W]::FindWindow([NullString]::Value, 'Moductus')
+  $hCap = [W]::FindWindow([NullString]::Value, 'Moductus captura')
+
+  [W]::Teclar(0x4E); Start-Sleep 1
+  Conferir 'Ctrl+Alt+N abre o Sistema' ([W]::IsWindowVisible($hSis)) "Sistema visível: $([W]::IsWindowVisible($hSis))"
+  [W]::Teclar(0x4E); Start-Sleep 1
+  Conferir 'Ctrl+Alt+N de novo esconde' (-not [W]::IsWindowVisible($hSis)) "Sistema visível: $([W]::IsWindowVisible($hSis))"
+
+  [W]::Teclar(0x44); Start-Sleep 1
+  $a = [W]::Trabalho()
+  Conferir 'Ctrl+Alt+D esconde o dock e devolve a faixa' (-not [W]::IsWindowVisible($d.Hwnd) -and (Texto $a) -eq (Texto $antes)) "dock visível: $([W]::IsWindowVisible($d.Hwnd)), área $(Texto $a)"
+  [W]::Teclar(0x44); Start-Sleep 1
+  $a = [W]::Trabalho()
+  Conferir 'Ctrl+Alt+D de novo mostra e reserva' ([W]::IsWindowVisible($d.Hwnd) -and (Texto $a) -ne (Texto $antes)) "área $(Texto $a)"
+
+  $ocupado = @(Get-Content $log | Where-Object { $_ -match 'Ctrl\+Alt\+Space .* não registrado' }).Count -gt 0
+  if ($ocupado) {
+    Write-Host '        Ctrl+Alt+Espaço está em uso por outro programa nesta máquina: a casca registrou a falha'
+  } else {
+    [W]::Teclar(0x20); Start-Sleep 1
+    Conferir 'Ctrl+Alt+Espaço abre a captura' ([W]::IsWindowVisible($hCap)) "captura visível: $([W]::IsWindowVisible($hCap))"
+    [W]::Teclar(0x20); Start-Sleep 1
+  }
+
+  $inicioLog = (Get-Content $log).Count
+  $ok = [W]::RegisterHotKey([IntPtr]::Zero, 77, 0x3, 0x4B)
+  $msg = [W]::RegisterWindowMessage('MODUCTUS_TESTE_ATALHO')
+  [W]::PostMessage($d.Hwnd, $msg, [IntPtr][int][char]'K', [IntPtr]::Zero) | Out-Null; Start-Sleep 1.5
+  $recusa = @(Get-Content $log | Select-Object -Skip $inicioLog | Where-Object { $_ -match 'atalho recusado' })
+  Conferir 'atalho de outro programa é recusado com motivo' ($ok -and $recusa.Count -eq 1) "registrado pelo roteiro: $ok; $(($recusa | ForEach-Object { ($_ -split ' ', 2)[1] }) -join ' | ')"
+  [W]::UnregisterHotKey([IntPtr]::Zero, 77) | Out-Null
+  [W]::Teclar(0x4E); Start-Sleep 1
+  Conferir 'o anterior continua valendo' ([W]::IsWindowVisible($hSis)) "Sistema visível com Ctrl+Alt+N: $([W]::IsWindowVisible($hSis))"
+  [W]::Teclar(0x4E); Start-Sleep 0.5
+  Fechar-Dock $d
 }
 
 foreach ($r in $Roteiro) { & "Roteiro-$($r.Substring(0,1).ToUpper())$($r.Substring(1))" }

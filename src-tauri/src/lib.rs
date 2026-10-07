@@ -1,4 +1,5 @@
 mod appbar;
+mod atalhos;
 mod dados;
 mod dock;
 mod janelas;
@@ -18,6 +19,7 @@ pub fn run() {
     appbar::iniciar(pasta.clone());
 
     tauri::Builder::default()
+        .plugin(atalhos::plugin())
         .invoke_handler(tauri::generate_handler![dock::dock_configuracao, dock::dock_aplicar, registro::interface_registro,
             janelas::painel_abrir,
             janelas::painel_fechar,
@@ -26,6 +28,9 @@ pub fn run() {
             janelas::sistema_alternar,
             janelas::captura_alternar,
             janelas::captura_fechar,
+            atalhos::atalhos_obter,
+            atalhos::atalhos_definir,
+            atalhos::atalhos_falhas,
         ])
         .setup(move |app| {
             for rotulo in JANELAS {
@@ -37,6 +42,7 @@ pub fn run() {
             dock::iniciar(&janela_dock, dock::Configuracao::default());
             janelas::iniciar(app.handle(), pasta.clone());
             tela_cheia::vigiar(app.handle().clone());
+            atalhos::iniciar(app.handle(), atalhos::padrao());
             Ok(())
         })
         .on_window_event(|janela, evento| {

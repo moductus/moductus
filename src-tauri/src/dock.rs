@@ -22,7 +22,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use windows::Win32::{
     Foundation::{HWND, POINT, RECT},
     UI::WindowsAndMessaging::{
-        GetCursorPos, GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_NOTOPMOST,
+        GetCursorPos, GetWindowLongPtrW, IsWindowVisible, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_NOTOPMOST,
         HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_NOACTIVATE,
         WS_EX_TOOLWINDOW,
     },
@@ -113,6 +113,10 @@ pub fn iniciar(janela: &WebviewWindow, config: Configuracao) {
     appbar::acompanhar(hwnd, config.lado, largura_janela(config.forma));
     *ESTADO.lock().unwrap() = Some(Estado { hwnd, app: janela.app_handle().clone(), config, revelado: false, tela_cheia: false });
     aplicar(config);
+}
+
+pub fn app() -> Option<AppHandle> {
+    ESTADO.lock().unwrap().as_ref().map(|e| e.app.clone())
 }
 
 pub fn configuracao() -> Configuracao {
@@ -246,6 +250,24 @@ pub fn tela_cheia(cheia: bool) {
                 let _ = ShowWindow(h, SW_SHOWNOACTIVATE);
             }
         }
+    }
+}
+
+/// Ctrl+Alt+D: esconde o dock e devolve a faixa, ou mostra e reserva de novo.
+pub fn alternar_visivel() {
+    let Some(hwnd) = ESTADO.lock().unwrap().as_ref().map(|e| e.hwnd) else { return };
+    let h = HWND(hwnd as _);
+    if unsafe { IsWindowVisible(h) }.as_bool() {
+        VIGIA_BORDA.store(false, Ordering::SeqCst);
+        appbar::soltar();
+        unsafe {
+            let _ = ShowWindow(h, SW_HIDE);
+        }
+    } else {
+        unsafe {
+            let _ = ShowWindow(h, SW_SHOWNOACTIVATE);
+        }
+        aplicar(configuracao());
     }
 }
 

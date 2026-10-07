@@ -71,6 +71,13 @@ fn msg_teste_modo() -> u32 {
     *M.get_or_init(|| unsafe { RegisterWindowMessageW(w!("MODUCTUS_TESTE_MODO")) })
 }
 
+/// Só nos builds de debug: o roteiro pede Ctrl+Alt+<wParam> para o Sistema.
+#[cfg(debug_assertions)]
+fn msg_teste_atalho() -> u32 {
+    static M: OnceLock<u32> = OnceLock::new();
+    *M.get_or_init(|| unsafe { RegisterWindowMessageW(w!("MODUCTUS_TESTE_ATALHO")) })
+}
+
 /// Só nos builds de debug: o roteiro troca o lado (wParam 0 = esquerda, 1 = direita).
 #[cfg(debug_assertions)]
 fn msg_teste_lado() -> u32 {
@@ -267,6 +274,13 @@ unsafe extern "system" fn subclasse(
         _ if msg == msg_teste_lado() => {
             let lado = if wparam.0 == 1 { Lado::Direita } else { Lado::Esquerda };
             crate::dock::trocar_lado(lado);
+            return LRESULT(0);
+        }
+        #[cfg(debug_assertions)]
+        _ if msg == msg_teste_atalho() => {
+            if let Some(tecla) = char::from_u32(wparam.0 as u32) {
+                crate::atalhos::teste_definir_sistema(tecla);
+            }
             return LRESULT(0);
         }
         // wParam: 0 fixo, 1 esconder, 2 inteligente; lParam: 0 colada, 1 flutuante.
