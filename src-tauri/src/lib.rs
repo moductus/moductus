@@ -1,5 +1,6 @@
 mod appbar;
 mod atalhos;
+mod controles;
 mod bandeja;
 mod dados;
 mod dock;
@@ -43,6 +44,10 @@ pub fn run() {
             midia::midia_alternar,
             midia::midia_proxima,
             midia::midia_anterior,
+            controles::mic_estado,
+            controles::mic_alternar,
+            controles::awake_estado,
+            controles::awake_definir,
         ])
         .setup(move |app| {
             for rotulo in JANELAS {
@@ -57,6 +62,7 @@ pub fn run() {
             atalhos::iniciar(app.handle(), atalhos::padrao());
             bandeja::iniciar(app.handle())?;
             midia::iniciar(app.handle().clone());
+            controles::iniciar(app.handle().clone());
             Ok(())
         })
         .on_window_event(|janela, evento| {
@@ -84,6 +90,7 @@ pub fn run() {
         .run(|_app, evento| {
             if let RunEvent::Exit = evento {
                 appbar::encerrar();
+                controles::encerrar();
             }
         });
 }

@@ -48,3 +48,31 @@ export function useMidia(): EstadoMidia | null {
   }, []);
   return midia;
 }
+
+/** Estado de um controle nativo: lido ao montar e atualizado pelo evento da casca. */
+function useEstadoNativo<T>(comandoEstado: string, evento: string, rotulo: (v: T) => string): T | null {
+  const [valor, setValor] = useState<T | null>(null);
+  useEffect(() => {
+    void invoke<T>(comandoEstado).then(setValor);
+    const parar = listen<T>(evento, (e) => {
+      setValor(e.payload);
+      registrar(`${evento} ${rotulo(e.payload)}`);
+    });
+    return () => {
+      void parar.then((f) => f());
+    };
+  }, [comandoEstado, evento, rotulo]);
+  return valor;
+}
+
+const rotuloMic = (mudo: boolean | null) => (mudo === null ? "sem microfone" : mudo ? "mudo" : "aberto");
+const rotuloAwake = (ligado: boolean) => (ligado ? "ligado" : "desligado");
+
+/** Microfone mudo (`true`), aberto (`false`) ou ausente (`null`). */
+export function useMic(): boolean | null {
+  return useEstadoNativo<boolean | null>("mic_estado", "mic", rotuloMic);
+}
+
+export function useAwake(): boolean {
+  return useEstadoNativo<boolean>("awake_estado", "awake", rotuloAwake) ?? false;
+}

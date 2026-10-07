@@ -17,14 +17,15 @@
     inicio     segunda execução foca a primeira; autostart liga e desliga
     midia      o dock acompanha uma sessão de mídia de teste (tocar, pausar por fora, fim) por evento
                (pede: cargo build --example sessao_midia)
+    controles  mudo do microfone feito fora chega ao dock; Awake liga pelo dock e é liberado ao sair
 
 .EXAMPLE
   pnpm tauri build --debug --no-bundle
   pwsh -File scripts\verificar.ps1 -Roteiro appbar
 #>
 param(
-  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia')]
-  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia'),
+  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia', 'controles')]
+  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia', 'controles'),
   [string]$Exe = (Join-Path $PSScriptRoot '..\src-tauri\target\debug\moductus.exe')
 )
 
@@ -352,6 +353,86 @@ function Roteiro-Midia {
   $verificacoes = Linhas-Novas $log $inicio '^\d+ mídia:'
   Write-Host "        $($verificacoes.Count) avisos da casca em ~15 s (só nas mudanças, sem consulta periódica)"
   Fechar-Dock $d
+}
+
+function Carregar-Controles {
+  if ('Audio' -as [type]) { return }
+  Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+  Add-Type @"
+using System; using System.Runtime.InteropServices;
+[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDeviceEnumerator { int NotImpl1(); int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice ep); }
+[Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDevice { int Activate(ref Guid iid, int ctx, IntPtr p, [MarshalAs(UnmanagedType.IUnknown)] out object o); }
+[Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioEndpointVolume {
+  int f1(); int f2(); int f3(); int f4(); int f5(); int f6(); int f7(); int f8(); int f9(); int f10(); int f11();
+  int SetMute([MarshalAs(UnmanagedType.Bool)] bool mute, ref Guid ctx);
+  int GetMute([MarshalAs(UnmanagedType.Bool)] out bool mute);
+}
+[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")] class MMDeviceEnumeratorCom { }
+public static class Audio {
+  static IAudioEndpointVolume Vol() {
+    var e = (IMMDeviceEnumerator)new MMDeviceEnumeratorCom(); IMMDevice d;
+    if (e.GetDefaultAudioEndpoint(1, 2, out d) != 0) return null;
+    var iid = typeof(IAudioEndpointVolume).GUID; object o; d.Activate(ref iid, 23, IntPtr.Zero, out o);
+    return (IAudioEndpointVolume)o;
+  }
+  public static bool Existe() { return Vol() != null; }
+  public static bool Mudo() { bool m; Vol().GetMute(out m); return m; }
+  public static void Definir(bool m) { var g = Guid.Empty; Vol().SetMute(m, ref g); }
+  [DllImport("powrprof.dll")] static extern uint CallNtPowerInformation(int level, IntPtr i, int il, out uint o, int ol);
+  public static uint Execucao() { uint e; CallNtPowerInformation(16, IntPtr.Zero, 0, out e, 4); return e; }
+}
+"@
+}
+
+function Botao-Do-Dock([IntPtr]$hDock, [string]$nome) {
+  $raiz = [Windows.Automation.AutomationElement]::FromHandle($hDock)
+  $cond = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::NameProperty, $nome)
+  for ($i = 0; $i -lt 20; $i++) {
+    $b = $raiz.FindFirst([Windows.Automation.TreeScope]::Descendants, $cond)
+    if ($b) { return $b }
+    Start-Sleep -Milliseconds 250
+  }
+}
+
+# Botão comum expõe Invoke; botão de alternância (aria-pressed) expõe Toggle.
+function Acionar($elemento) {
+  $p = $null
+  if ($elemento.TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern, [ref]$p)) { $p.Invoke() }
+  elseif ($elemento.TryGetCurrentPattern([Windows.Automation.TogglePattern]::Pattern, [ref]$p)) { $p.Toggle() }
+}
+
+function Roteiro-Controles {
+  Write-Host "`n== controles =="
+  Carregar-Controles
+  Get-Process moductus -ErrorAction SilentlyContinue | Stop-Process -Force
+  Start-Sleep 1
+  $log = Join-Path $env:APPDATA 'Moductus\moductus.log'
+  $d = Iniciar-Dock
+  Start-Sleep 1
+
+  if ([Audio]::Existe()) {
+    $original = [Audio]::Mudo()
+    $marca = (Get-Content $log).Count
+    [Audio]::Definir(-not $original); Start-Sleep 1
+    [Audio]::Definir($original); Start-Sleep 1
+    $esperado = if ($original) { @('aberto', 'mudo') } else { @('mudo', 'aberto') }
+    $ui = @(Linhas-Novas $log $marca 'interface: mic ' | ForEach-Object { ($_ -split 'interface: mic ')[1] })
+    Conferir 'mudo feito fora chega ao dock' (($ui -join ',') -eq ($esperado -join ',')) "interface recebeu: $($ui -join ', '); microfone voltou a mudo=$([Audio]::Mudo())"
+  } else {
+    Write-Host '        sem microfone de comunicação nesta máquina: o controle fica desativado'
+  }
+
+  $antes = [Audio]::Execucao()
+  $botao = Botao-Do-Dock $d.Hwnd 'Manter acordado'
+  Acionar $botao; Start-Sleep 1
+  $ligado = [Audio]::Execucao()
+  Conferir 'Awake liga pelo dock' (($ligado -band 0x3) -eq 0x3) ("SystemExecutionState 0x{0:X} -> 0x{1:X}" -f $antes, $ligado)
+  Fechar-Dock $d
+  $depois = [Audio]::Execucao()
+  Conferir 'Awake é liberado ao sair' (($depois -band 0x3) -eq ($antes -band 0x3)) ("SystemExecutionState depois de sair 0x{0:X}" -f $depois)
 }
 
 foreach ($r in $Roteiro) { & "Roteiro-$($r.Substring(0,1).ToUpper())$($r.Substring(1))" }
