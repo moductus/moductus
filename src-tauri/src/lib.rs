@@ -1,7 +1,9 @@
 mod appbar;
 mod atalhos;
+mod bandeja;
 mod dados;
 mod dock;
+mod inicio;
 mod janelas;
 mod registro;
 mod tela_cheia;
@@ -19,6 +21,9 @@ pub fn run() {
     appbar::iniciar(pasta.clone());
 
     tauri::Builder::default()
+        // A instância única vem antes de tudo: a segunda execução sai sem criar janelas.
+        .plugin(inicio::instancia_unica())
+        .plugin(inicio::autostart())
         .plugin(atalhos::plugin())
         .invoke_handler(tauri::generate_handler![dock::dock_configuracao, dock::dock_aplicar, registro::interface_registro,
             janelas::painel_abrir,
@@ -31,6 +36,8 @@ pub fn run() {
             atalhos::atalhos_obter,
             atalhos::atalhos_definir,
             atalhos::atalhos_falhas,
+            inicio::autostart_obter,
+            inicio::autostart_definir,
         ])
         .setup(move |app| {
             for rotulo in JANELAS {
@@ -43,6 +50,7 @@ pub fn run() {
             janelas::iniciar(app.handle(), pasta.clone());
             tela_cheia::vigiar(app.handle().clone());
             atalhos::iniciar(app.handle(), atalhos::padrao());
+            bandeja::iniciar(app.handle())?;
             Ok(())
         })
         .on_window_event(|janela, evento| {

@@ -14,14 +14,15 @@
     telacheia  inteligente some em tela cheia e volta; fixo perde o topo; evento chega à interface
     janelas    painel abre ao lado do dock em menos de 100 ms (5 aberturas) sem tirar o foco
     atalhos    Ctrl+Alt+N, D e Espaço; atalho de outro programa é recusado com motivo e o anterior vale
+    inicio     segunda execução foca a primeira; autostart liga e desliga
 
 .EXAMPLE
   pnpm tauri build --debug --no-bundle
   pwsh -File scripts\verificar.ps1 -Roteiro appbar
 #>
 param(
-  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas', 'atalhos')]
-  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas', 'atalhos'),
+  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio')]
+  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio'),
   [string]$Exe = (Join-Path $PSScriptRoot '..\src-tauri\target\debug\moductus.exe')
 )
 
@@ -291,6 +292,30 @@ function Roteiro-Atalhos {
   [W]::Teclar(0x4E); Start-Sleep 1
   Conferir 'o anterior continua valendo' ([W]::IsWindowVisible($hSis)) "Sistema visível com Ctrl+Alt+N: $([W]::IsWindowVisible($hSis))"
   [W]::Teclar(0x4E); Start-Sleep 0.5
+  Fechar-Dock $d
+}
+
+function Roteiro-Inicio {
+  Write-Host "`n== inicio =="
+  Get-Process moductus -ErrorAction SilentlyContinue | Stop-Process -Force
+  Start-Sleep 1
+  $d = Iniciar-Dock
+  $hSis = [W]::FindWindow([NullString]::Value, 'Moductus')
+
+  $segunda = Start-Process $Exe -PassThru
+  $segunda.WaitForExit(10000) | Out-Null; Start-Sleep 1
+  $processos = @(Get-Process moductus -ErrorAction SilentlyContinue).Count
+  $frente = [W]::GetForegroundWindow()
+  Conferir 'segunda execução foca a primeira' ($segunda.HasExited -and $processos -eq 1 -and [W]::IsWindowVisible($hSis) -and $frente -eq $hSis) "segunda saiu: $($segunda.HasExited), processos: $processos, primeiro plano: '$([W]::Titulo($frente))'"
+  [W]::PostMessage($hSis, 0x10, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null; Start-Sleep 0.5
+
+  $chave = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+  Start-Process $Exe -ArgumentList '--autostart', 'ligar' -Wait; Start-Sleep 1
+  $valor = (Get-ItemProperty $chave -ErrorAction SilentlyContinue).Moductus
+  Conferir 'autostart liga' ([bool]$valor) "Run\Moductus = $valor"
+  Start-Process $Exe -ArgumentList '--autostart', 'desligar' -Wait; Start-Sleep 1
+  $valor = (Get-ItemProperty $chave -ErrorAction SilentlyContinue).Moductus
+  Conferir 'autostart desliga' (-not $valor) "Run\Moductus = '$valor'"
   Fechar-Dock $d
 }
 
