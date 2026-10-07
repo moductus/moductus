@@ -1,6 +1,9 @@
 mod appbar;
 mod atalhos;
 mod controles;
+// O serviço chega aqui pelo canal do sidecar (F1-14); nenhuma janela tem comando para isso.
+#[allow(dead_code)]
+mod credenciais;
 mod bandeja;
 mod dados;
 mod dock;
