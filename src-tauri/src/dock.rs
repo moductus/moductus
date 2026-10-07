@@ -22,8 +22,9 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use windows::Win32::{
     Foundation::{HWND, POINT, RECT},
     UI::WindowsAndMessaging::{
-        GetCursorPos, GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE,
-        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+        GetCursorPos, GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_NOTOPMOST,
+        HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_NOACTIVATE,
+        WS_EX_TOOLWINDOW,
     },
 };
 
@@ -70,6 +71,7 @@ struct Estado {
     config: Configuracao,
     /// No modo esconder: o dock está aberto (largura cheia) ou recolhido na faixa.
     revelado: bool,
+    tela_cheia: bool,
 }
 
 static ESTADO: Mutex<Option<Estado>> = Mutex::new(None);
@@ -100,7 +102,7 @@ pub fn iniciar(janela: &WebviewWindow, config: Configuracao) {
     let hwnd = hwnd_de(janela);
     sem_ativar(hwnd);
     appbar::acompanhar(hwnd, config.lado, largura_janela(config.forma));
-    *ESTADO.lock().unwrap() = Some(Estado { hwnd, app: janela.app_handle().clone(), config, revelado: false });
+    *ESTADO.lock().unwrap() = Some(Estado { hwnd, app: janela.app_handle().clone(), config, revelado: false, tela_cheia: false });
     aplicar(config);
 }
 
@@ -210,6 +212,32 @@ fn vigiar_borda() {
             }
         }
     });
+}
+
+/// Em tela cheia: o inteligente e o esconder somem por completo; o fixo fica atrás do
+/// app em tela cheia (perde o "sempre no topo"), como a barra de tarefas faz.
+pub fn tela_cheia(cheia: bool) {
+    let (hwnd, modo) = {
+        let mut guarda = ESTADO.lock().unwrap();
+        let Some(estado) = guarda.as_mut() else { return };
+        estado.tela_cheia = cheia;
+        (estado.hwnd, estado.config.modo)
+    };
+    let h = HWND(hwnd as _);
+    unsafe {
+        match (modo, cheia) {
+            (Modo::Fixo, _) => {
+                let ordem = if cheia { HWND_NOTOPMOST } else { HWND_TOPMOST };
+                let _ = SetWindowPos(h, Some(ordem), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+            (_, true) => {
+                let _ = ShowWindow(h, SW_HIDE);
+            }
+            (_, false) => {
+                let _ = ShowWindow(h, SW_SHOWNOACTIVATE);
+            }
+        }
+    }
 }
 
 #[tauri::command]

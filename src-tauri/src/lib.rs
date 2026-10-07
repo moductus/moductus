@@ -2,6 +2,7 @@ mod appbar;
 mod dados;
 mod dock;
 mod registro;
+mod tela_cheia;
 
 use tauri::{Manager, RunEvent, WindowEvent};
 
@@ -16,7 +17,7 @@ pub fn run() {
     appbar::iniciar(pasta);
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![dock::dock_configuracao, dock::dock_aplicar])
+        .invoke_handler(tauri::generate_handler![dock::dock_configuracao, dock::dock_aplicar, registro::interface_registro])
         .setup(|app| {
             for rotulo in JANELAS {
                 if app.get_webview_window(rotulo).is_none() {
@@ -25,6 +26,7 @@ pub fn run() {
             }
             let janela_dock = app.get_webview_window("dock").expect("janela dock");
             dock::iniciar(&janela_dock, dock::Configuracao::default());
+            tela_cheia::vigiar(app.handle().clone());
             Ok(())
         })
         .on_window_event(|janela, evento| {

@@ -1,3 +1,10 @@
+import { useTelaCheia } from "../../nativo/eventos.ts";
+
 export function Dock() {
-  return <main aria-label="Dock">Dock</main>;
+  const telaCheia = useTelaCheia();
+  return (
+    <main aria-label="Dock" data-tela-cheia={telaCheia}>
+      Dock
+    </main>
+  );
 }

@@ -9,6 +9,12 @@ pub fn iniciar(pasta: &std::path::Path) {
     let _ = ARQUIVO.set(pasta.join("moductus.log"));
 }
 
+/// A interface registra o que recebeu (eventos, falhas) no mesmo arquivo.
+#[tauri::command]
+pub fn interface_registro(linha: String) {
+    info(&format!("interface: {linha}"));
+}
+
 pub fn info(linha: &str) {
     let segundos = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
     if cfg!(debug_assertions) {

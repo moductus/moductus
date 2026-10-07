@@ -11,14 +11,15 @@
     appbar     reserva, janela maximizada respeita, troca de lado sem reiniciar,
                queda seguida de nova execução não empilha, saída devolve a faixa
     modos      fixo, esconder e inteligente; colada e flutuante, alternando sem reiniciar
+    telacheia  inteligente some em tela cheia e volta; fixo perde o topo; evento chega à interface
 
 .EXAMPLE
   pnpm tauri build --debug --no-bundle
   pwsh -File scripts\verificar.ps1 -Roteiro appbar
 #>
 param(
-  [ValidateSet('appbar', 'modos')]
-  [string[]]$Roteiro = @('appbar', 'modos'),
+  [ValidateSet('appbar', 'modos', 'telacheia')]
+  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia'),
   [string]$Exe = (Join-Path $PSScriptRoot '..\src-tauri\target\debug\moductus.exe')
 )
 
@@ -35,6 +36,7 @@ public static class W {
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int c);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr h, int i);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string c, string t);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern uint RegisterWindowMessage(string s);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
@@ -170,6 +172,41 @@ function Roteiro-Modos {
 
   Fechar-Dock $d
   Conferir 'saída devolve a faixa' ((Texto ([W]::Trabalho())) -eq (Texto $antes)) "área $(Texto ([W]::Trabalho()))"
+}
+
+function Tela-Cheia {
+  $f = New-Object Windows.Forms.Form -Property @{ FormBorderStyle = 'None'; StartPosition = 'Manual'; Left = 0; Top = 0; TopMost = $true; BackColor = 'Black'; Text = 'tela cheia de teste' }
+  $f.Bounds = [Windows.Forms.Screen]::PrimaryScreen.Bounds
+  $f.Show(); Bombear 0.5; Clicar-Em $f.Handle; Bombear 2
+  $f
+}
+
+function Roteiro-Telacheia {
+  Write-Host "`n== telacheia =="
+  Get-Process moductus -ErrorAction SilentlyContinue | Stop-Process -Force
+  Start-Sleep 1
+  $log = Join-Path $env:APPDATA 'Moductus\moductus.log'
+  $d = Iniciar-Dock
+  $inicioLog = (Get-Content $log -ErrorAction SilentlyContinue).Count
+
+  Modo $d 2 0
+  $f = Tela-Cheia
+  $s = 0; [W]::SHQueryUserNotificationState([ref]$s) | Out-Null
+  Conferir 'inteligente some em tela cheia' (-not [W]::IsWindowVisible($d.Hwnd)) "estado de notificação $s, dock visível: $([W]::IsWindowVisible($d.Hwnd))"
+  $f.Close(); Bombear 2
+  Conferir 'inteligente volta ao sair' ([W]::IsWindowVisible($d.Hwnd)) "dock visível: $([W]::IsWindowVisible($d.Hwnd))"
+
+  Modo $d 0 0
+  $f = Tela-Cheia
+  $topo = ([W]::GetWindowLong($d.Hwnd, -20) -band 0x8) -ne 0
+  Conferir 'fixo fica atrás da tela cheia' ([W]::IsWindowVisible($d.Hwnd) -and -not $topo) "visível: $([W]::IsWindowVisible($d.Hwnd)), sempre no topo: $topo"
+  $f.Close(); Bombear 2
+  $topo = ([W]::GetWindowLong($d.Hwnd, -20) -band 0x8) -ne 0
+  Conferir 'fixo volta ao topo ao sair' $topo "sempre no topo: $topo"
+
+  $linhas = @(Get-Content $log | Select-Object -Skip $inicioLog | Where-Object { $_ -match 'interface: tela-cheia' })
+  Conferir 'evento chega à interface' ($linhas.Count -ge 4) "$($linhas.Count) eventos: $(($linhas | ForEach-Object { ($_ -split ' ', 2)[1] }) -join ' | ')"
+  Fechar-Dock $d
 }
 
 foreach ($r in $Roteiro) { & "Roteiro-$($r.Substring(0,1).ToUpper())$($r.Substring(1))" }
