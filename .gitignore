@@ -45,3 +45,6 @@ target/
 dist/
 gen/
 *.db
+
+## Store do pnpm (fica no projeto quando a raiz do drive não aceita escrita)
+.pnpm-store/
