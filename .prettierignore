@@ -4,3 +4,4 @@ src-tauri/
 pnpm-lock.yaml
 dist/
 *.md
+.pnpm-store/
