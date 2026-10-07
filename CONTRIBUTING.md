@@ -6,7 +6,7 @@ Obrigado pelo interesse. O Moductus está no meio de um pivô: de suíte de util
 
 **Proposta vai como issue primeiro**, usando o template [Proposta](.github/ISSUE_TEMPLATE/proposta.yml): área nova, agente novo, integração ou ferramenta. Leia antes os [princípios](docs/PRODUCT.md#2-princípios) e os [não-objetivos](docs/PRODUCT.md#não-objetivos) — eles existem para poupar o seu tempo.
 
-Enquanto a fase 1 não começa, o código no repositório é a suíte `v0.4.0` em .NET. Correções nela ainda são bem-vindas; funcionalidade nova vai para o produto novo.
+O código .NET da suíte saiu da árvore na fase 1; ele fica na tag [`v0.4.0`](https://github.com/moductus/moductus/tree/v0.4.0). Funcionalidade nova vai para o produto novo.
 
 ## Regras não negociáveis
 

@@ -9,7 +9,7 @@ Um sistema pessoal para Windows, open source: fica sempre à mão num dock later
 
 ---
 
-> **Status: pivô em desenho.** O Moductus está deixando de ser uma suíte de utilitários para virar um sistema pessoal com agentes. O desenho (fase 0) está em [docs/](docs/); o código ainda é a suíte `v0.4.0`, que continua disponível nas releases até a fase 1 substituí-la.
+> **Status: pivô em desenho.** O Moductus está deixando de ser uma suíte de utilitários para virar um sistema pessoal com agentes. O desenho (fase 0) está em [docs/](docs/); a fase 1 (a casca) está em construção. Quem quer a suíte de utilitários usa a tag [`v0.4.0`](https://github.com/moductus/moductus/tree/v0.4.0), que guarda o código .NET.
 
 ## O que é
 
@@ -75,7 +75,7 @@ Tauri 2 com uma casca fina em Rust para o que é nativo do Windows, interface em
 
 ## A suíte original (v0)
 
-A `v0.4.0` é a última versão da suíte de utilitários: doze módulos acionados por uma tecla líder, em .NET e WPF. Ela continua [nas releases](https://github.com/moductus/moductus/releases) e o desenho dela está em [docs/v0/](docs/v0/). Nenhum módulo é descartado no pivô; todos mudam de lugar, como mostra a [seção 7 do PRODUCT.md](docs/PRODUCT.md#7-o-que-vem-do-moductus-v0).
+A `v0.4.0` é a última versão da suíte de utilitários: doze módulos acionados por uma tecla líder, em .NET e WPF. O código dela saiu da árvore na fase 1 e fica preservado na tag [`v0.4.0`](https://github.com/moductus/moductus/tree/v0.4.0); os binários continuam [nas releases](https://github.com/moductus/moductus/releases) e o desenho está em [docs/v0/](docs/v0/). Nenhum módulo é descartado no pivô; todos mudam de lugar, como mostra a [seção 7 do PRODUCT.md](docs/PRODUCT.md#7-o-que-vem-do-moductus-v0).
 
 ## Licença
 
