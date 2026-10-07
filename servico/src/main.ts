@@ -1,5 +1,6 @@
-import { createServer } from "node:http";
 import { abrirBanco, pastaDeDados } from "./banco/conexao.ts";
+import { VERSAO_PROTOCOLO } from "@moductus/contrato";
+import { abrirServidorWs } from "./api/servidor.ts";
 import { CanalCasca } from "./casca/canal.ts";
 
 /**
@@ -11,17 +12,17 @@ const banco = abrirBanco(pastaDeDados());
 const canal = new CanalCasca(process.stdout);
 canal.ouvir(process.stdin);
 
-const servidor = createServer((_req, res) => {
-  res.statusCode = 426;
-  res.end();
-});
+const token = process.env.MODUCTUS_TOKEN;
+if (!token) {
+  console.error("MODUCTUS_TOKEN ausente: o serviço só sobe pela casca");
+  process.exit(1);
+}
 
-servidor.listen(0, "127.0.0.1", () => {
-  const endereco = servidor.address();
-  const porta = typeof endereco === "object" && endereco ? endereco.port : 0;
-  console.error(`servico pronto na porta ${porta}, pid ${process.pid}`);
-  canal.avisar({ tipo: "pronto", porta, pid: process.pid });
+const servidor = await abrirServidorWs(token, {
+  "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
 });
+console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
+canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });
 
 // A casca fechou o stdin: ela saiu, então o serviço sai junto.
 process.stdin.on("end", () => {

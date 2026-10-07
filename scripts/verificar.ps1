@@ -457,6 +457,8 @@ function Roteiro-Servico {
   Conferir 'matar o serviço faz a casca subir outro' ($depois.Count -eq 1 -and $depois[0].ProcessId -ne $antes[0].ProcessId) "node novo: $($depois.ProcessId -join ', ')"
   $ui = @(Linhas-Novas $log $marca 'interface: servico ' | ForEach-Object { ($_ -split 'interface: servico ')[1] })
   Conferir 'dock mostra o estado enquanto isso' (($ui -join ',') -match 'reiniciando.*iniciando.*pronto') "interface: $($ui -join ' -> ')"
+  $canal = @(Linhas-Novas $log $marca 'interface: canal ' | ForEach-Object { ($_ -split 'interface: canal ')[1] })
+  Conferir 'interface reconecta sozinha ao serviço novo' (($canal -join ',') -match 'desconectado.*conectado$') "canal: $($canal -join ' -> ')"
 
   $ultimo = $depois[0].ProcessId
   Fechar-Dock $d
