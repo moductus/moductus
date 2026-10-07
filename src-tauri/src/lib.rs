@@ -1,8 +1,7 @@
 mod appbar;
 mod atalhos;
 mod controles;
-// O serviço chega aqui pelo canal do sidecar (F1-14); nenhuma janela tem comando para isso.
-#[allow(dead_code)]
+// O serviço chega aqui pelo canal do sidecar; nenhuma janela tem comando para isso.
 mod credenciais;
 mod bandeja;
 mod dados;
@@ -11,6 +10,7 @@ mod inicio;
 mod janelas;
 mod midia;
 mod registro;
+mod servico;
 mod tela_cheia;
 
 use tauri::{Manager, RunEvent, WindowEvent};
@@ -51,6 +51,7 @@ pub fn run() {
             controles::mic_alternar,
             controles::awake_estado,
             controles::awake_definir,
+            servico::servico_estado,
         ])
         .setup(move |app| {
             for rotulo in JANELAS {
@@ -66,6 +67,7 @@ pub fn run() {
             bandeja::iniciar(app.handle())?;
             midia::iniciar(app.handle().clone());
             controles::iniciar(app.handle().clone());
+            servico::iniciar(app.handle().clone(), pasta.clone());
             Ok(())
         })
         .on_window_event(|janela, evento| {
@@ -94,6 +96,7 @@ pub fn run() {
             if let RunEvent::Exit = evento {
                 appbar::encerrar();
                 controles::encerrar();
+                servico::encerrar();
             }
         });
 }

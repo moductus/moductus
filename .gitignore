@@ -48,3 +48,6 @@ gen/
 
 ## Store do pnpm (fica no projeto quando a raiz do drive não aceita escrita)
 .pnpm-store/
+
+## Sidecar copiado no build (scripts/preparar-sidecar.mjs)
+src-tauri/binaries/

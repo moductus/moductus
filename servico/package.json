@@ -4,11 +4,16 @@
   "version": "0.5.0-alpha",
   "type": "module",
   "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/servico.mjs",
+    "dev": "node --experimental-strip-types src/main.ts",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
   },
   "dependencies": {
     "@moductus/contrato": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }

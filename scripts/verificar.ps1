@@ -18,14 +18,15 @@
     midia      o dock acompanha uma sessão de mídia de teste (tocar, pausar por fora, fim) por evento
                (pede: cargo build --example sessao_midia)
     controles  mudo do microfone feito fora chega ao dock; Awake liga pelo dock e é liberado ao sair
+    servico    matar o serviço faz a casca subir outro, e o dock mostra o estado; sair encerra o serviço
 
 .EXAMPLE
   pnpm tauri build --debug --no-bundle
   pwsh -File scripts\verificar.ps1 -Roteiro appbar
 #>
 param(
-  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia', 'controles')]
-  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia', 'controles'),
+  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia', 'controles', 'servico')]
+  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia', 'controles', 'servico'),
   [string]$Exe = (Join-Path $PSScriptRoot '..\src-tauri\target\debug\moductus.exe')
 )
 
@@ -433,6 +434,34 @@ function Roteiro-Controles {
   Fechar-Dock $d
   $depois = [Audio]::Execucao()
   Conferir 'Awake é liberado ao sair' (($depois -band 0x3) -eq ($antes -band 0x3)) ("SystemExecutionState depois de sair 0x{0:X}" -f $depois)
+}
+
+function Filhos-Node([int]$pai) {
+  @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $pai AND Name = 'node.exe'")
+}
+
+function Roteiro-Servico {
+  Write-Host "`n== servico =="
+  Get-Process moductus -ErrorAction SilentlyContinue | Stop-Process -Force
+  Start-Sleep 1
+  $log = Join-Path $env:APPDATA 'Moductus\moductus.log'
+  $d = Iniciar-Dock
+  Start-Sleep 2
+  $antes = Filhos-Node $d.Processo.Id
+  Conferir 'casca sobe o serviço' ($antes.Count -eq 1) "node filho: $($antes.ProcessId -join ', ')"
+
+  $marca = (Get-Content $log).Count
+  Stop-Process -Id $antes[0].ProcessId -Force
+  Start-Sleep 3
+  $depois = Filhos-Node $d.Processo.Id
+  Conferir 'matar o serviço faz a casca subir outro' ($depois.Count -eq 1 -and $depois[0].ProcessId -ne $antes[0].ProcessId) "node novo: $($depois.ProcessId -join ', ')"
+  $ui = @(Linhas-Novas $log $marca 'interface: servico ' | ForEach-Object { ($_ -split 'interface: servico ')[1] })
+  Conferir 'dock mostra o estado enquanto isso' (($ui -join ',') -match 'reiniciando.*iniciando.*pronto') "interface: $($ui -join ' -> ')"
+
+  $ultimo = $depois[0].ProcessId
+  Fechar-Dock $d
+  Start-Sleep 1
+  Conferir 'sair encerra o serviço' (-not (Get-Process -Id $ultimo -ErrorAction SilentlyContinue)) "node $ultimo ainda vivo: $([bool](Get-Process -Id $ultimo -ErrorAction SilentlyContinue))"
 }
 
 foreach ($r in $Roteiro) { & "Roteiro-$($r.Substring(0,1).ToUpper())$($r.Substring(1))" }

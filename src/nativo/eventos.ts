@@ -76,3 +76,25 @@ export function useMic(): boolean | null {
 export function useAwake(): boolean {
   return useEstadoNativo<boolean>("awake_estado", "awake", rotuloAwake) ?? false;
 }
+
+export type EstadoServico =
+  | { estado: "iniciando" }
+  | { estado: "pronto"; porta: number; token: string }
+  | { estado: "reiniciando"; tentativa: number; espera_ms: number }
+  | { estado: "parado" };
+
+/** Estado do serviço em Node, como a casca vê: o dock mostra enquanto ele reinicia. */
+export function useServico(): EstadoServico {
+  const [estado, setEstado] = useState<EstadoServico>({ estado: "iniciando" });
+  useEffect(() => {
+    void invoke<EstadoServico>("servico_estado").then(setEstado);
+    const parar = listen<EstadoServico>("servico", (e) => {
+      setEstado(e.payload);
+      registrar(`servico ${e.payload.estado}`);
+    });
+    return () => {
+      void parar.then((f) => f());
+    };
+  }, []);
+  return estado;
+}

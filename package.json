@@ -8,8 +8,8 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "dev": "pnpm --filter @moductus/servico build && vite",
+    "build": "pnpm --filter @moductus/servico build && node scripts/preparar-sidecar.mjs && tsc --noEmit -p tsconfig.json && vite build",
     "tauri": "tauri",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit -p tsconfig.json",
