@@ -70,6 +70,15 @@ fn definir(app: &AppHandle, estado: Estado) {
     let _ = app.emit("servico", estado);
 }
 
+/// Tira o prefixo `\\?\` dos caminhos que o Tauri devolve: com ele, o Node não resolve o
+/// script (falha com EISDIR em `lstat 'V:'`). Caminho UNC fica como está.
+pub fn sem_prefixo_verbatim(caminho: PathBuf) -> PathBuf {
+    match caminho.to_str().and_then(|s| s.strip_prefix(r"\\?\")) {
+        Some(resto) if !resto.starts_with("UNC") => PathBuf::from(resto),
+        _ => caminho,
+    }
+}
+
 /// Onde estão o node e o script: no pacote, ao lado do executável; no desenvolvimento,
 /// o node do PATH e o bundle em servico/dist.
 fn comando(app: &AppHandle) -> Command {
@@ -78,9 +87,16 @@ fn comando(app: &AppHandle) -> Command {
     let script_empacotado = app.path().resource_dir().ok().map(|p| p.join("servico").join("servico.mjs")).filter(|p| p.exists());
     let (node, script) = match (node_empacotado, script_empacotado) {
         (Some(n), Some(s)) => (n, s),
-        _ => (PathBuf::from("node"), PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../servico/dist/servico.mjs")),
+        _ => {
+            let raiz = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let raiz = raiz.parent().map(PathBuf::from).unwrap_or(raiz);
+            (PathBuf::from("node"), raiz.join("servico").join("dist").join("servico.mjs"))
+        }
     };
+    let (node, script) = (sem_prefixo_verbatim(node), sem_prefixo_verbatim(script));
+    let pasta_script = script.parent().map(PathBuf::from).unwrap_or_default();
     let mut c = Command::new(node);
+    c.current_dir(pasta_script);
     c.arg("--disable-warning=ExperimentalWarning").arg(script);
     {
         use std::os::windows::process::CommandExt;
@@ -235,6 +251,13 @@ mod testes {
         assert_eq!(espera(3), Duration::from_secs(2));
         assert_eq!(espera(7), Duration::from_secs(30));
         assert_eq!(espera(40), Duration::from_secs(30));
+    }
+
+    #[test]
+    fn tira_o_prefixo_verbatim_menos_de_unc() {
+        assert_eq!(sem_prefixo_verbatim(PathBuf::from(r"\\?\V:\m\s.mjs")), PathBuf::from(r"V:\m\s.mjs"));
+        assert_eq!(sem_prefixo_verbatim(PathBuf::from(r"V:\m\s.mjs")), PathBuf::from(r"V:\m\s.mjs"));
+        assert_eq!(sem_prefixo_verbatim(PathBuf::from(r"\\?\UNC\srv\x")), PathBuf::from(r"\\?\UNC\srv\x"));
     }
 
     #[test]
