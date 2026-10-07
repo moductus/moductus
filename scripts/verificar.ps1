@@ -10,14 +10,15 @@
   Roteiros:
     appbar     reserva, janela maximizada respeita, troca de lado sem reiniciar,
                queda seguida de nova execução não empilha, saída devolve a faixa
+    modos      fixo, esconder e inteligente; colada e flutuante, alternando sem reiniciar
 
 .EXAMPLE
   pnpm tauri build --debug --no-bundle
   pwsh -File scripts\verificar.ps1 -Roteiro appbar
 #>
 param(
-  [ValidateSet('appbar')]
-  [string[]]$Roteiro = @('appbar'),
+  [ValidateSet('appbar', 'modos')]
+  [string[]]$Roteiro = @('appbar', 'modos'),
   [string]$Exe = (Join-Path $PSScriptRoot '..\src-tauri\target\debug\moductus.exe')
 )
 
@@ -68,11 +69,15 @@ function Nova-Janela {
   $f.Show(); Bombear 1; Clicar-Em $f.Handle; Bombear 1
   $f
 }
+# Espera o dock se registrar: a área de trabalho muda quando a reserva entra.
 function Iniciar-Dock {
+  $area = Texto ([W]::Trabalho())
   $p = Start-Process $Exe -PassThru
   $h = [IntPtr]::Zero
-  for ($i = 0; $i -lt 50 -and $h -eq [IntPtr]::Zero; $i++) { Start-Sleep -Milliseconds 200; $h = [W]::FindWindow([NullString]::Value, 'Moductus dock') }
-  Start-Sleep 2
+  for ($i = 0; $i -lt 100 -and ($h -eq [IntPtr]::Zero -or (Texto ([W]::Trabalho())) -eq $area); $i++) {
+    Start-Sleep -Milliseconds 200; $h = [W]::FindWindow([NullString]::Value, 'Moductus dock')
+  }
+  Start-Sleep 1
   [pscustomobject]@{ Processo = $p; Hwnd = $h }
 }
 function Fechar-Dock($d) {
@@ -125,6 +130,46 @@ function Roteiro-Appbar {
   Conferir 'saída devolve a faixa' ((Texto $fim) -eq (Texto $antes)) "área $(Texto $fim), processo encerrado: $($d.Processo.HasExited)"
 
   $janela.Close()
+}
+
+function Modo($d, [int]$modo, [int]$forma) {
+  $msg = [W]::RegisterWindowMessage('MODUCTUS_TESTE_MODO')
+  [W]::PostMessage($d.Hwnd, $msg, [IntPtr]$modo, [IntPtr]$forma) | Out-Null
+  Start-Sleep -Milliseconds 800
+}
+
+function Roteiro-Modos {
+  Write-Host "`n== modos =="
+  Get-Process moductus -ErrorAction SilentlyContinue | Stop-Process -Force
+  Start-Sleep 1
+  $antes = [W]::Trabalho()
+  $d = Iniciar-Dock
+  $escala = ((Retangulo $d.Hwnd).R - (Retangulo $d.Hwnd).L) / 64
+
+  Modo $d 0 1
+  $r = Retangulo $d.Hwnd; $a = [W]::Trabalho()
+  Conferir 'fixo flutuante' (($r.R - $r.L) -eq [int](80 * $escala) -and $a.L -eq $antes.L + ($r.R - $r.L)) "dock $(Texto $r), área $(Texto $a)"
+
+  Modo $d 1 0
+  $r = Retangulo $d.Hwnd; $a = [W]::Trabalho()
+  Conferir 'esconder recolhe e solta a reserva' (($r.R - $r.L) -le [int](2 * $escala) -and (Texto $a) -eq (Texto $antes)) "dock $(Texto $r), área $(Texto $a)"
+  [W]::SetCursorPos(0, [int](($r.T + $r.B) / 2)) | Out-Null; Start-Sleep -Milliseconds 400
+  $r = Retangulo $d.Hwnd
+  Conferir 'esconder revela ao encostar' (($r.R - $r.L) -eq [int](64 * $escala)) "dock $(Texto $r)"
+  [W]::SetCursorPos(800, [int](($r.T + $r.B) / 2)) | Out-Null; Start-Sleep -Milliseconds 400
+  $r = Retangulo $d.Hwnd
+  Conferir 'esconder recolhe ao sair' (($r.R - $r.L) -le [int](2 * $escala)) "dock $(Texto $r)"
+
+  Modo $d 2 0
+  $r = Retangulo $d.Hwnd; $a = [W]::Trabalho()
+  Conferir 'inteligente reserva' (($r.R - $r.L) -eq [int](64 * $escala) -and $a.L -eq $antes.L + ($r.R - $r.L)) "dock $(Texto $r), área $(Texto $a)"
+
+  Modo $d 0 0
+  $r = Retangulo $d.Hwnd; $a = [W]::Trabalho()
+  Conferir 'volta ao fixo colado' ($a.L -eq $antes.L + ($r.R - $r.L)) "dock $(Texto $r), área $(Texto $a)"
+
+  Fechar-Dock $d
+  Conferir 'saída devolve a faixa' ((Texto ([W]::Trabalho())) -eq (Texto $antes)) "área $(Texto ([W]::Trabalho()))"
 }
 
 foreach ($r in $Roteiro) { & "Roteiro-$($r.Substring(0,1).ToUpper())$($r.Substring(1))" }

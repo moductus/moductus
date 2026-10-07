@@ -64,8 +64,14 @@ fn msg_barra_recriada() -> u32 {
     *M.get_or_init(|| unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) })
 }
 
-/// Só nos builds de debug: o roteiro `verificar.ps1` troca o lado sem reiniciar
-/// mandando esta mensagem (wParam 0 = esquerda, 1 = direita).
+/// Só nos builds de debug: o roteiro `verificar.ps1` troca modo e forma sem reiniciar.
+#[cfg(debug_assertions)]
+fn msg_teste_modo() -> u32 {
+    static M: OnceLock<u32> = OnceLock::new();
+    *M.get_or_init(|| unsafe { RegisterWindowMessageW(w!("MODUCTUS_TESTE_MODO")) })
+}
+
+/// Só nos builds de debug: o roteiro troca o lado (wParam 0 = esquerda, 1 = direita).
 #[cfg(debug_assertions)]
 fn msg_teste_lado() -> u32 {
     static M: OnceLock<u32> = OnceLock::new();
@@ -261,6 +267,15 @@ unsafe extern "system" fn subclasse(
         _ if msg == msg_teste_lado() => {
             let lado = if wparam.0 == 1 { Lado::Direita } else { Lado::Esquerda };
             crate::dock::trocar_lado(lado);
+            return LRESULT(0);
+        }
+        // wParam: 0 fixo, 1 esconder, 2 inteligente; lParam: 0 colada, 1 flutuante.
+        #[cfg(debug_assertions)]
+        _ if msg == msg_teste_modo() => {
+            use crate::dock::{Configuracao, Forma, Modo};
+            let modo = [Modo::Fixo, Modo::Esconder, Modo::Inteligente][wparam.0.min(2)];
+            let forma = if lparam.0 == 1 { Forma::Flutuante } else { Forma::Colada };
+            crate::dock::aplicar(Configuracao { modo, forma, ..crate::dock::configuracao() });
             return LRESULT(0);
         }
         _ => {}
