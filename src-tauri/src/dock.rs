@@ -90,6 +90,15 @@ pub fn sem_ativar(hwnd: isize) {
     }
 }
 
+/// Devolve a ativação a uma janela que estava sem ativar (painel com campo de texto).
+pub fn com_ativar(hwnd: isize) {
+    let h = HWND(hwnd as _);
+    unsafe {
+        let estilo = GetWindowLongPtrW(h, GWL_EXSTYLE);
+        SetWindowLongPtrW(h, GWL_EXSTYLE, estilo & !(WS_EX_NOACTIVATE.0 as isize));
+    }
+}
+
 /// Largura lógica da janela do dock para a forma escolhida.
 pub fn largura_janela(forma: Forma) -> f64 {
     match forma {

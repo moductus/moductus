@@ -12,14 +12,15 @@
                queda seguida de nova execução não empilha, saída devolve a faixa
     modos      fixo, esconder e inteligente; colada e flutuante, alternando sem reiniciar
     telacheia  inteligente some em tela cheia e volta; fixo perde o topo; evento chega à interface
+    janelas    painel abre ao lado do dock em menos de 100 ms (5 aberturas) sem tirar o foco
 
 .EXAMPLE
   pnpm tauri build --debug --no-bundle
   pwsh -File scripts\verificar.ps1 -Roteiro appbar
 #>
 param(
-  [ValidateSet('appbar', 'modos', 'telacheia')]
-  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia'),
+  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas')]
+  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas'),
   [string]$Exe = (Join-Path $PSScriptRoot '..\src-tauri\target\debug\moductus.exe')
 )
 
@@ -207,6 +208,37 @@ function Roteiro-Telacheia {
   $linhas = @(Get-Content $log | Select-Object -Skip $inicioLog | Where-Object { $_ -match 'interface: tela-cheia' })
   Conferir 'evento chega à interface' ($linhas.Count -ge 4) "$($linhas.Count) eventos: $(($linhas | ForEach-Object { ($_ -split ' ', 2)[1] }) -join ' | ')"
   Fechar-Dock $d
+}
+
+function Roteiro-Janelas {
+  Write-Host "`n== janelas =="
+  Get-Process moductus -ErrorAction SilentlyContinue | Stop-Process -Force
+  Start-Sleep 1
+  $log = Join-Path $env:APPDATA 'Moductus\moductus.log'
+  $janela = Nova-Janela
+  $d = Iniciar-Dock
+  $rd = Retangulo $d.Hwnd
+  $hPainel = [W]::FindWindow([NullString]::Value, 'Moductus painel')
+  $inicioLog = (Get-Content $log).Count
+  $foco = $true
+  for ($i = 0; $i -lt 5; $i++) {
+    Clicar-Em $janela.Handle; Bombear 0.5
+    [W]::SetCursorPos([int](($rd.L + $rd.R) / 2), $rd.T + 12) | Out-Null
+    [W]::mouse_event(2, 0, 0, 0, 0); [W]::mouse_event(4, 0, 0, 0, 0); Bombear 0.8
+    if ($i -eq 0) {
+      $rp = Retangulo $hPainel
+      Conferir 'painel ao lado do dock' ([W]::IsWindowVisible($hPainel) -and $rp.L -eq $rd.R) "dock $(Texto $rd), painel $(Texto $rp)"
+    }
+    $foco = $foco -and ([W]::GetForegroundWindow() -eq $janela.Handle)
+    [W]::mouse_event(2, 0, 0, 0, 0); [W]::mouse_event(4, 0, 0, 0, 0); Bombear 0.5
+  }
+  Conferir 'abrir o painel não tira o foco' $foco "primeiro plano: '$([W]::Titulo([W]::GetForegroundWindow()))'"
+  $tempos = @(Get-Content $log | Select-Object -Skip $inicioLog | Where-Object { $_ -match 'painel hoje aberto em' } | ForEach-Object { [double](($_ -replace '.*aberto em ([0-9.]+) ms.*', '$1')) })
+  $ordenados = $tempos | Sort-Object
+  $mediana = if ($ordenados.Count) { $ordenados[[int][math]::Floor($ordenados.Count / 2)] } else { -1 }
+  Conferir 'painel abre em menos de 100 ms' ($tempos.Count -ge 5 -and ($tempos | Measure-Object -Maximum).Maximum -lt 100) "aberturas (ms): $($tempos -join ', '); mediana $mediana"
+  Fechar-Dock $d
+  $janela.Close()
 }
 
 foreach ($r in $Roteiro) { & "Roteiro-$($r.Substring(0,1).ToUpper())$($r.Substring(1))" }
