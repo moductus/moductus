@@ -155,7 +155,7 @@ Um arquivo `moductus.db` em `%APPDATA%\Moductus` (ou ao lado do executável com 
 | `sessoes_ia`, `eventos_sessao` | Sessões externas e o que fizeram |
 | `config` | Preferências (substitui o `config.json` do v0) |
 
-Todo registro criado por agente guarda qual agente e qual execução, para o histórico e o desfazer.
+Todo registro criado por agente guarda qual agente e qual execução, para o histórico e o desfazer. O modelo completo, campo a campo, está em [DATA.md](DATA.md).
 
 ---
 

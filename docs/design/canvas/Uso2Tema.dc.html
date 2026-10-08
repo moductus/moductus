@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Moductus · primeiro uso · tema e dock</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&amp;family=Geist+Mono:wght@400;600&amp;family=Instrument+Sans:wght@400;600&amp;family=JetBrains+Mono:wght@400;600&amp;family=Onest:wght@400;600&amp;family=IBM+Plex+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit}a:hover{color:inherit}
+button{font:inherit;cursor:pointer}
+input,textarea{font:inherit}
+input::placeholder,textarea::placeholder{color:inherit;opacity:0.7}
+@keyframes corre{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; position: relative; overflow: hidden; background: {{t.paredeFundo}}; font-family: {{t.fonte}}; color: {{t.texto}}; font-size: 13px; line-height: 1.45">
+<sc-if value="{{t.vidro}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: -120px; top: 80px; width: 720px; height: 720px; border-radius: 360px; background: #2C3A5C"></div>
+<div style="position: absolute; left: 520px; top: -260px; width: 640px; height: 640px; border-radius: 320px; background: #3A2F52"></div>
+<div style="position: absolute; right: -160px; bottom: -220px; width: 760px; height: 760px; border-radius: 380px; background: #1F3B44"></div>
+</sc-if>
+<div style="position: absolute; left: 200px; top: 90px; width: 1040px; height: 720px; display: flex; background: {{t.janela}}; backdrop-filter: {{t.desfoque}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioJanela}}; overflow: hidden; box-shadow: {{t.sombra}}">
+<aside style="width: 248px; flex: none; background: {{t.lateral}}; border-right: 1px solid {{t.borda}}; padding: 28px 22px; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px">
+<div style="display: flex; align-items: center; gap: 10px"><div style="width: 22px; height: 22px; position: relative; font-size: 22px; color: {{t.destaque}}; flex: none"><div style="position: absolute; left: 0.24em; top: 0.04em; bottom: 0.04em; width: 0.15em; border-radius: 0.075em; background: currentColor"></div><div style="position: absolute; left: 0.5em; top: 0.08em; width: 0.32em; height: 0.32em; border-radius: 0.16em; background: currentColor"></div></div><span style="font-weight: 600; font-size: 15px; letter-spacing: -0.01em">Moductus</span></div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div style="{{s.rot}}; padding-bottom: 6px">Configuração</div>
+<sc-for list="{{passos}}" as="p" hint-placeholder-count="6">
+<div style="display: flex; align-items: center; gap: 10px; height: 34px">
+<span style="{{p.bola}}">{{p.marcaTexto}}</span>
+<span style="{{p.texto}}">{{p.nome}}</span>
+</div>
+</sc-for>
+<div style="{{s.rot}}; padding: 14px 0 6px">Depois</div>
+<div style="display: flex; align-items: center; gap: 10px; height: 34px"><span style="{{passoTutorial.bola}}">7</span><span style="{{passoTutorial.texto}}">Primeiros passos</span></div>
+</div>
+<div style="flex: 1"></div>
+<div style="{{s.rot}}">Leva uns 3 minutos. Tudo aqui muda depois em Configurações.</div>
+</aside>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+<div style="flex: 1; min-height: 0; padding: 40px 48px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px; overflow: hidden">
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="{{s.rot}}">Tema e dock</span><h1 style="{{s.h1}}">Como o Moductus fica na sua tela</h1><p style="margin: 0; color: {{t.texto2}}; max-width: 560px; text-wrap: pretty">A prévia muda na hora. Dá para trocar a qualquer momento em Configurações.</p></div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+<sc-for list="{{opTemas}}" as="o" hint-placeholder-count="4">
+<div style="{{o.cartao}}">
+<div style="{{o.previa}}">
+<div style="{{o.dock}}"><span style="{{o.dot}}"></span><span style="{{o.dot2}}"></span><span style="{{o.dot2}}"></span><span style="{{o.dot2}}"></span></div>
+<div style="{{o.painel}}"><div style="{{o.linha1}}"></div><div style="{{o.linha2}}"></div><div style="{{o.linha2}}"></div></div>
+</div>
+<div style="display: flex; align-items: center; gap: 8px"><span style="{{o.radio}}"></span><span style="font-weight: 600">{{o.nome}}</span></div>
+<span style="{{s.rot}}">{{o.desc}}</span>
+</div>
+</sc-for>
+</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 8px"><span style="{{s.rot}}">Lado do dock</span>
+<div style="display: inline-flex; gap: 2px; padding: 3px; border-radius: {{t.raioControle}}; background: {{t.chip}}; align-self: flex-start"><button style="{{segOn}}">Esquerda</button><button style="{{segOff}}">Direita</button></div></div>
+<div style="display: flex; flex-direction: column; gap: 8px"><span style="{{s.rot}}">Comportamento</span>
+<div style="display: inline-flex; gap: 2px; padding: 3px; border-radius: {{t.raioControle}}; background: {{t.chip}}; align-self: flex-start"><button style="{{segOn}}">Fixo</button><button style="{{segOff}}">Esconder</button><button style="{{segOff}}">Inteligente</button></div></div>
+<div style="display: flex; flex-direction: column; gap: 8px"><span style="{{s.rot}}">Forma</span>
+<div style="display: inline-flex; gap: 2px; padding: 3px; border-radius: {{t.raioControle}}; background: {{t.chip}}; align-self: flex-start"><button style="{{segOff}}">Colado</button><button style="{{segOn}}">Flutuante</button></div></div>
+</div>
+<p style="margin: 0; {{s.rot}}">Fixo reserva a faixa da tela, e as janelas maximizadas param antes dele. Em tela cheia, ele some sozinho.</p>
+
+</div>
+<div style="flex: none; height: 72px; padding: 0 48px; border-top: 1px solid {{t.borda}}; display: flex; align-items: center; gap: 10px">
+<span style="{{s.rot}}">Passo 2 de 6</span><div style="flex: 1"></div><button style="{{s.btnG}}">Pular configuração</button><button style="{{s.btn}}">Voltar</button><button style="{{s.btnPri}}">Continuar</button>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tema": {"editor": "enum", "options": ["Grafite", "Papel", "Vidro"], "default": "Papel"}, "$preview": {"width": 1440, "height": 900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var TEMA_PADRAO = 'Papel';
+    var NAV_ATIVO = '';
+    var self = this;
+
+    var TEMAS = {
+      Grafite: {
+        paredeFundo: '#191B1F', janelaFantasma: '#141619', linhaFantasma: '#1E2125', painel: '#131417', janela: '#111214', lateral: '#0D0E10', cartao: '#16181B', elevada: '#1A1C20', campo: '#0F1012', chip: 'rgba(255,255,255,0.06)', trilho: 'rgba(255,255,255,0.08)',
+        borda: 'rgba(255,255,255,0.07)', bordaForte: 'rgba(255,255,255,0.14)', ativo: 'rgba(255,255,255,0.08)',
+        texto: '#E8E9EB', texto2: '#B5B8BD', texto3: '#8C9097', apagado: '#6F737A',
+        destaque: '#E8E9EB', sobreDestaque: '#0D0E10', sucesso: '#7FB89E', aviso: '#E3B262', perigo: '#E5787A',
+        raioJanela: '10px', raioPainel: '12px', raioCartao: '10px', raioControle: '8px', raioBotao: '8px', raioCaixa: '4px',
+        fonte: "'Geist', 'Segoe UI', system-ui, sans-serif", mono: "'Geist Mono', Consolas, monospace",
+        desfoque: 'none', sombra: '0 24px 64px rgba(0,0,0,0.45)', sombraPainel: '0 24px 48px rgba(0,0,0,0.45)', vidro: false, claro: false, painelEsq: '76px'
+      },
+      Papel: {
+        paredeFundo: '#E3E1DC', janelaFantasma: '#F1F0EC', linhaFantasma: '#E6E4DF', painel: '#FFFFFF', janela: '#FFFFFF', lateral: '#F6F5F2', cartao: '#FFFFFF', elevada: '#F6F5F2', campo: '#FFFFFF', chip: '#EFEEEA', trilho: '#E6E4DF',
+        borda: 'rgba(20,20,19,0.08)', bordaForte: 'rgba(20,20,19,0.16)', ativo: '#EAE8E3',
+        texto: '#1A1A18', texto2: '#3E3D39', texto3: '#6B6A64', apagado: '#8A8983',
+        destaque: '#1A1A18', sobreDestaque: '#FBFAF8', sucesso: '#2F7A52', aviso: '#B5761A', perigo: '#B4443C',
+        raioJanela: '14px', raioPainel: '16px', raioCartao: '14px', raioControle: '10px', raioBotao: '17px', raioCaixa: '8px',
+        fonte: "'Instrument Sans', 'Segoe UI', system-ui, sans-serif", mono: "'JetBrains Mono', Consolas, monospace",
+        desfoque: 'none', sombra: '0 24px 64px rgba(40,36,28,0.16)', sombraPainel: '0 16px 40px rgba(40,36,28,0.12)', vidro: false, claro: true, painelEsq: '88px'
+      },
+      Vidro: {
+        paredeFundo: '#161B26', janelaFantasma: 'rgba(18,21,29,0.82)', linhaFantasma: '#222733', painel: 'rgba(22,25,34,0.66)', janela: 'rgba(18,21,29,0.62)', lateral: 'rgba(0,0,0,0.16)', cartao: 'rgba(255,255,255,0.05)', elevada: 'rgba(255,255,255,0.07)', campo: 'rgba(0,0,0,0.18)', chip: 'rgba(255,255,255,0.08)', trilho: 'rgba(255,255,255,0.10)',
+        borda: 'rgba(255,255,255,0.09)', bordaForte: 'rgba(255,255,255,0.18)', ativo: 'rgba(255,255,255,0.10)',
+        texto: '#EEF0F6', texto2: '#C4C9D4', texto3: '#9AA1B1', apagado: '#7C8394',
+        destaque: '#A3B5FF', sobreDestaque: '#10131C', sucesso: '#7CCBA2', aviso: '#E8B86A', perigo: '#F08A8A',
+        raioJanela: '16px', raioPainel: '18px', raioCartao: '14px', raioControle: '10px', raioBotao: '10px', raioCaixa: '5px',
+        fonte: "'Onest', 'Segoe UI', system-ui, sans-serif", mono: "'IBM Plex Mono', Consolas, monospace",
+        desfoque: 'blur(40px) saturate(140%)', sombra: '0 24px 64px rgba(0,0,0,0.35)', sombraPainel: 'none', vidro: true, claro: false, painelEsq: '88px'
+      }
+    };
+    var nome = (this.state && this.state.tema) || this.props.tema || TEMA_PADRAO;
+    if (!TEMAS[nome]) nome = 'Grafite';
+    var t = TEMAS[nome];
+    var ag = t.claro
+      ? { alba: '#9A6A1E', tula: '#2F7A52', faina: '#A34E2E', nuno: '#3F64A8' }
+      : { alba: '#D9A55A', tula: '#6FAE8C', faina: '#D2805E', nuno: '#7C9CD6' };
+    var btnBase = 'height: 32px; padding: 0 14px; border-radius: ' + t.raioBotao + '; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; flex: none; ';
+    var s = {
+      btn: btnBase + 'border: 1px solid ' + t.bordaForte + '; background: transparent; color: ' + t.texto + ';',
+      btnPri: btnBase + 'border: 0; background: ' + t.destaque + '; color: ' + t.sobreDestaque + '; font-weight: 600;',
+      btnG: btnBase + 'border: 0; background: transparent; color: ' + t.texto3 + '; padding: 0 8px;',
+      btnP: 'height: 26px; padding: 0 10px; border-radius: ' + t.raioBotao + '; font-size: 12px; border: 1px solid ' + t.bordaForte + '; background: transparent; color: ' + t.texto + '; white-space: nowrap; flex: none;',
+      btnPPri: 'height: 26px; padding: 0 10px; border-radius: ' + t.raioBotao + '; font-size: 12px; border: 0; background: ' + t.destaque + '; color: ' + t.sobreDestaque + '; font-weight: 600; white-space: nowrap; flex: none;',
+      cartao: 'background: ' + t.cartao + '; border: 1px solid ' + t.borda + '; border-radius: ' + t.raioCartao + '; padding: 14px; box-sizing: border-box;',
+      elevada: 'background: ' + t.elevada + '; border: 1px solid ' + t.bordaForte + '; border-radius: ' + t.raioCartao + '; padding: 14px; box-sizing: border-box;',
+      linha: 'border-bottom: 1px solid ' + t.borda + ';',
+      rot: 'font-size: 12px; color: ' + t.texto3,
+      meta: 'font-family: ' + t.mono + '; font-size: 11px; color: ' + t.texto3 + ';',
+      num: 'font-family: ' + t.mono + '; font-size: 12px; color: ' + t.texto2 + ';',
+      atalho: 'font-family: ' + t.mono + '; font-size: 11px; padding: 1px 5px; border-radius: 4px; background: ' + t.chip + '; color: ' + t.texto2 + ';',
+      codigo: 'font-family: ' + t.mono + '; font-size: 11px; padding: 1px 5px; border-radius: 4px; background: ' + t.chip + '; color: ' + t.texto + ';',
+      campo: 'height: 34px; padding: 0 10px; border-radius: ' + t.raioControle + '; border: 1px solid ' + t.bordaForte + '; background: ' + t.campo + '; color: ' + t.texto + '; display: flex; align-items: center; gap: 8px; box-sizing: border-box;',
+      trilho: 'height: 4px; border-radius: 2px; background: ' + t.trilho + '; overflow: hidden;',
+      h1: 'margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.02em;',
+      h2: 'margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em;',
+      h3: 'margin: 0; font-size: 14px; font-weight: 600;'
+    };
+    var barra = function (pct, cor, alt) { var h = alt || 4; return 'width: ' + pct + '%; height: ' + h + 'px; border-radius: ' + (h / 2) + 'px; background: ' + (cor || t.destaque) + ';'; };
+    var pill = function (cor) { return 'font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid ' + t.borda + '; color: ' + cor + '; white-space: nowrap;'; };
+    var ponto = function (cor) { return 'width: 8px; height: 8px; border-radius: 4px; flex: none; background: ' + cor + ';'; };
+    var caixa = function (feita) { return 'width: 16px; height: 16px; border-radius: ' + t.raioCaixa + '; box-sizing: border-box; flex: none; ' + (feita ? 'background: ' + t.apagado + '; border: 1px solid ' + t.apagado + ';' : 'border: 1.5px solid ' + t.apagado + ';'); };
+    var marcada = function () { var svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='" + t.sobreDestaque + "' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>"; return 'width: 16px; height: 16px; border-radius: ' + t.raioCaixa + '; box-sizing: border-box; flex: none; background: ' + t.destaque + ' url(data:image/svg+xml,' + encodeURIComponent(svg).replace(/'/g, '%27') + ') center / 12px no-repeat;'; };
+    var radio = function (on) { return 'width: 16px; height: 16px; border-radius: 8px; box-sizing: border-box; flex: none; ' + (on ? 'border: 5px solid ' + t.destaque + ';' : 'border: 1.5px solid ' + t.apagado + ';'); };
+    var chave = function (on) { return 'width: 32px; height: 18px; border-radius: 9px; flex: none; position: relative; box-sizing: border-box; ' + (on ? 'background: ' + t.destaque + ';' : 'background: ' + t.trilho + '; border: 1px solid ' + t.bordaForte + ';'); };
+    var chaveBola = function (on) { return 'position: absolute; top: ' + (on ? 3 : 2) + 'px; ' + (on ? 'right: 3px;' : 'left: 2px;') + ' width: 12px; height: 12px; border-radius: 6px; background: ' + (on ? t.sobreDestaque : t.apagado) + ';'; };
+    var segmento = function (on) { return 'height: 28px; padding: 0 12px; border: 0; border-radius: 6px; font-size: 12px; white-space: nowrap; ' + (on ? 'background: ' + (t.claro ? '#FFFFFF' : t.elevada) + '; color: ' + t.texto + '; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.12);' : 'background: transparent; color: ' + t.texto3 + ';'); };
+    var item = 'display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: ' + t.raioControle + '; text-decoration: none; font-size: 13px; ';
+    var nav = [
+      { id: 'inicio', nome: 'Início', d: 'M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z' },
+      { id: 'agentes', nome: 'Agentes', d: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
+      { id: 'sessoes', nome: 'Sessões de IA', d: 'M4 17l6-6-6-6M12 19h8', contagem: '3' },
+      { id: 'tarefas', nome: 'Tarefas', d: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11', contagem: '7' },
+      { id: 'foco', nome: 'Foco', d: 'M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z' },
+      { id: 'financas', nome: 'Finanças', d: 'M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4' },
+      { id: 'dev', nome: 'Dev', d: 'M6 9v12M18 15V9a3 3 0 0 0-3-3h-4M14 3l-3 3 3 3M9 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM21 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z', contagem: '2' },
+      { id: 'notas', nome: 'Notas', d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8' },
+      { id: 'arquivos', nome: 'Arquivos', d: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z' },
+      { id: 'memoria', nome: 'Memória', d: 'M12 3a9 9 0 1 0 9 9M12 7v5l3 3M21 3v6h-6' },
+      { id: 'ferramentas', nome: 'Ferramentas', d: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z' },
+      { id: 'config', nome: 'Configurações', d: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4 12h2M18 12h2M12 4v2M12 18v2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4' }
+    ].map(function (n) {
+      var on = n.id === NAV_ATIVO;
+      return Object.assign({}, n, { estilo: item + (on ? 'background: ' + t.ativo + '; color: ' + t.texto + '; font-weight: 600;' : 'background: transparent; color: ' + t.texto2 + ';'), temContagem: !!n.contagem });
+    });
+    var R = function (o) { return Object.assign({ t: t, s: s, nome: nome, nav: nav, ag: ag }, o || {}); };
+
+var PASSO = 2;
+    var nomesPassos = ['Boas-vindas', 'Tema e dock', 'Modelo', 'Conhecer o time', 'Conexões', 'Notificações'];
+    var passos = nomesPassos.map(function (n, i) {
+      var feito = i < PASSO - 1, atual = i === PASSO - 1;
+      return {
+        nome: n, marcaTexto: feito ? '✓' : String(i + 1),
+        bola: 'width: 22px; height: 22px; border-radius: 11px; flex: none; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; box-sizing: border-box; ' + (atual ? 'background: ' + t.destaque + '; color: ' + t.sobreDestaque + ';' : feito ? 'background: ' + t.chip + '; color: ' + t.texto2 + ';' : 'border: 1px solid ' + t.bordaForte + '; color: ' + t.texto3 + ';'),
+        texto: 'font-size: 13px; ' + (atual ? 'color: ' + t.texto + '; font-weight: 600;' : feito ? 'color: ' + t.texto2 + ';' : 'color: ' + t.texto3 + ';')
+      };
+    });
+    var passoTutorial = { bola: 'width: 22px; height: 22px; border-radius: 11px; flex: none; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; box-sizing: border-box; border: 1px dashed ' + t.bordaForte + '; color: ' + t.texto3 + ';', texto: 'font-size: 13px; color: ' + t.texto3 + ';' };
+
+    var amostras = [
+      { nome: 'Automático', desc: 'Grafite no escuro, Papel no claro', fundo: 'linear-gradient(135deg, #191B1F 50%, #E3E1DC 50%)', dock: '#0D0E10', painel: '#FFFFFF', tinta: '#1A1A18', sel: false, auto: true },
+      { nome: 'Grafite', desc: 'Escuro e denso', fundo: '#191B1F', dock: '#0D0E10', painel: '#131417', tinta: '#E8E9EB', sel: false },
+      { nome: 'Papel', desc: 'Claro, papel e tinta', fundo: '#E3E1DC', dock: '#FBFAF8', painel: '#FFFFFF', tinta: '#1A1A18', sel: true },
+      { nome: 'Vidro', desc: 'Translúcido, Windows 11', fundo: 'linear-gradient(135deg, #2C3A5C, #3A2F52 60%, #1F3B44)', dock: 'rgba(20,23,31,0.6)', painel: 'rgba(22,25,34,0.7)', tinta: '#A3B5FF', sel: false }
+    ];
+    var opTemas = amostras.map(function (a) {
+      return {
+        nome: a.nome, desc: a.desc, radio: radio(a.sel),
+        cartao: 'border-radius: ' + t.raioCartao + '; padding: 10px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; ' + (a.sel ? 'border: 2px solid ' + t.destaque + ';' : 'border: 1px solid ' + t.borda + ';'),
+        previa: 'height: 120px; border-radius: 8px; background: ' + a.fundo + '; position: relative; overflow: hidden;',
+        dock: 'position: absolute; left: 8px; top: 8px; bottom: 8px; width: 18px; border-radius: 6px; background: ' + a.dock + '; display: flex; flex-direction: column; align-items: center; gap: 5px; padding-top: 6px; box-sizing: border-box;',
+        dot: 'width: 8px; height: 8px; border-radius: 3px; background: ' + a.tinta + ';',
+        dot2: 'width: 8px; height: 8px; border-radius: 4px; background: ' + a.tinta + '; opacity: 0.35;',
+        painel: 'position: absolute; left: 32px; top: 8px; width: 64px; bottom: 30px; border-radius: 6px; background: ' + a.painel + '; padding: 8px; box-sizing: border-box; display: flex; flex-direction: column; gap: 5px;',
+        linha1: 'height: 5px; width: 70%; border-radius: 3px; background: ' + a.tinta + '; opacity: 0.8;',
+        linha2: 'height: 4px; width: 90%; border-radius: 2px; background: ' + a.tinta + '; opacity: 0.25;'
+      };
+    });
+    return R({ passos: passos, passoTutorial: passoTutorial, opTemas: opTemas, segOn: segmento(true), segOff: segmento(false) });
+  }
+}
+</script>
+</body>
+</html>

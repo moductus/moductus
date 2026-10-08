@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Moductus · painel Mídia e controles</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&amp;family=Geist+Mono:wght@400;600&amp;family=Instrument+Sans:wght@400;600&amp;family=JetBrains+Mono:wght@400;600&amp;family=Onest:wght@400;600&amp;family=IBM+Plex+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; position: relative; overflow: hidden; background: {{t.paredeFundo}}; font-family: {{t.fonte}}; color: {{t.texto}}; font-size: 13px; line-height: 1.45">
+
+<sc-if value="{{t.vidro}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: -120px; top: 80px; width: 720px; height: 720px; border-radius: 360px; background: #2C3A5C"></div>
+<div style="position: absolute; left: 260px; top: -200px; width: 560px; height: 560px; border-radius: 280px; background: #3A2F52"></div>
+<div style="position: absolute; right: -160px; bottom: -220px; width: 760px; height: 760px; border-radius: 380px; background: #1F3B44"></div>
+</sc-if>
+
+<div style="position: absolute; left: 520px; top: 56px; right: 56px; bottom: 56px; background: {{t.janelaFantasma}}; border: 1px solid {{t.borda}}; border-radius: 12px; display: flex; flex-direction: column; gap: 14px; padding: 18px 22px; box-sizing: border-box">
+<div style="width: 46%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+<div style="width: 64%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+<div style="width: 38%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+</div>
+
+<div style="position: absolute; left: 0; top: 0">
+<dc-import name="Dock" tema="{{nome}}" ativo="midia" hint-size="88px,900px"></dc-import>
+</div>
+
+<section aria-label="Painel Mídia e controles" style="position: absolute; left: {{t.painelEsq}}; bottom: 12px; width: 368px; background: {{t.painel}}; backdrop-filter: {{t.desfoque}}; border: 1px solid {{t.bordaForte}}; border-radius: {{t.raioPainel}}; box-shadow: {{t.sombraPainel}}; padding: 18px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px">
+
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: {{t.texto3}}"><span>Tocando agora</span><span>Navegador</span></div>
+<div style="display: flex; gap: 14px; align-items: center">
+<div style="width: 72px; height: 72px; border-radius: {{t.raioCartao}}; flex: none; background: {{t.capa}}; display: flex; align-items: center; justify-content: center; color: {{t.texto3}}">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"></path></svg>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<span style="font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">[Título da faixa]</span>
+<span style="color: {{t.texto2}}">[Artista]</span>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="height: 4px; border-radius: 2px; background: {{t.trilho}}"><div style="width: 43%; height: 4px; border-radius: 2px; background: {{t.destaque}}"></div></div>
+<div style="display: flex; justify-content: space-between; font-family: {{t.mono}}; font-size: 11px; color: {{t.texto3}}"><span>1:42</span><span>3:58</span></div>
+</div>
+<div style="display: flex; justify-content: center; align-items: center; gap: 14px">
+<button aria-label="Anterior" style="width: 40px; height: 40px; border: 0; border-radius: 20px; background: transparent; color: {{t.texto2}}; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h2v14H6zM20 5v14L9 12z"></path></svg></button>
+<button aria-label="Pausar" style="width: 48px; height: 48px; border: 0; border-radius: 24px; background: {{t.destaque}}; color: {{t.sobreDestaque}}; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"></path></svg></button>
+<button aria-label="Próxima" style="width: 40px; height: 40px; border: 0; border-radius: 20px; background: transparent; color: {{t.texto2}}; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 5h2v14h-2zM4 5v14l11-7z"></path></svg></button>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px solid {{t.borda}}; padding-top: 14px">
+<div style="font-size: 12px; color: {{t.texto3}}; padding-bottom: 4px">Controles</div>
+<div style="display: flex; align-items: center; gap: 10px; height: 40px">
+<span style="flex: 1">Microfone</span><span style="font-size: 12px; color: {{t.texto3}}">ligado</span>
+<span role="switch" aria-checked="true" aria-label="Microfone" style="{{chaveLigada}}"><span style="{{bolinhaLigada}}"></span></span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; height: 40px">
+<span style="flex: 1">Manter acordado</span><span style="font-size: 12px; color: {{t.texto3}}">desligado</span>
+<span role="switch" aria-checked="false" aria-label="Manter acordado" style="{{chaveDesligada}}"><span style="{{bolinhaDesligada}}"></span></span>
+</div>
+<div style="display: flex; gap: 6px; padding-bottom: 6px">
+<button style="height: 28px; padding: 0 10px; border-radius: {{t.raioBotao}}; border: 1px solid {{t.borda}}; background: transparent; color: {{t.texto2}}; font-size: 12px">30 min</button>
+<button style="height: 28px; padding: 0 10px; border-radius: {{t.raioBotao}}; border: 1px solid {{t.borda}}; background: transparent; color: {{t.texto2}}; font-size: 12px">1 h</button>
+<button style="height: 28px; padding: 0 10px; border-radius: {{t.raioBotao}}; border: 1px solid {{t.borda}}; background: transparent; color: {{t.texto2}}; font-size: 12px">Até eu desligar</button>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; height: 36px">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: {{t.texto3}}"><path d="M11 5L6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"></path></svg>
+<div style="flex: 1; height: 4px; border-radius: 2px; background: {{t.trilho}}; position: relative"><div style="width: 62%; height: 4px; border-radius: 2px; background: {{t.texto2}}"></div><span style="position: absolute; left: 62%; top: -5px; width: 14px; height: 14px; margin-left: -7px; border-radius: 7px; background: {{t.texto}}"></span></div>
+<span style="font-family: {{t.mono}}; font-size: 11px; color: {{t.texto3}}; width: 26px; text-align: right">62</span>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 2px; border-top: 1px solid {{t.borda}}; padding-top: 14px">
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: {{t.texto3}}; padding-bottom: 6px"><span>Apps abertos</span><span>7 janelas</span></div>
+<sc-for list="{{apps}}" as="p" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 10px; height: 36px">
+<span style="width: 24px; height: 24px; border-radius: 6px; flex: none; background: {{t.chip}}; color: {{t.texto3}}; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{p.ini}}</span>
+<span style="flex: 1">{{p.nome}}</span>
+<span style="font-family: {{t.mono}}; font-size: 11px; color: {{t.texto3}}">{{p.janelas}}</span>
+</div>
+</sc-for>
+</div>
+
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tema":{"editor":"enum","options":["Grafite","Papel","Vidro"],"default":"Grafite"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var TEMAS = {
+      Grafite: { paredeFundo: '#191B1F', janelaFantasma: '#141619', linhaFantasma: '#1E2125', painel: '#131417', chip: 'rgba(255,255,255,0.06)', trilho: 'rgba(255,255,255,0.10)', borda: 'rgba(255,255,255,0.07)', bordaForte: 'rgba(255,255,255,0.12)', texto: '#E8E9EB', texto2: '#B5B8BD', texto3: '#8C9097', destaque: '#E8E9EB', sobreDestaque: '#0D0E10', capa: '#2B2F35', raioPainel: '12px', raioCartao: '10px', raioBotao: '8px', fonte: "'Geist', 'Segoe UI', system-ui, sans-serif", mono: "'Geist Mono', Consolas, monospace", desfoque: 'none', sombraPainel: '0 24px 48px rgba(0,0,0,0.45)', vidro: false, painelEsq: '76px' },
+      Papel: { paredeFundo: '#E3E1DC', janelaFantasma: '#F1F0EC', linhaFantasma: '#E6E4DF', painel: '#FFFFFF', chip: '#EFEEEA', trilho: '#E6E4DF', borda: 'rgba(20,20,19,0.08)', bordaForte: 'rgba(20,20,19,0.14)', texto: '#1A1A18', texto2: '#3E3D39', texto3: '#6B6A64', destaque: '#1A1A18', sobreDestaque: '#FBFAF8', capa: '#D9D6CF', raioPainel: '16px', raioCartao: '12px', raioBotao: '14px', fonte: "'Instrument Sans', 'Segoe UI', system-ui, sans-serif", mono: "'JetBrains Mono', Consolas, monospace", desfoque: 'none', sombraPainel: '0 16px 40px rgba(40,36,28,0.12)', vidro: false, painelEsq: '88px' },
+      Vidro: { paredeFundo: '#161B26', janelaFantasma: 'rgba(18,21,29,0.82)', linhaFantasma: '#222733', painel: 'rgba(22,25,34,0.66)', chip: 'rgba(255,255,255,0.08)', trilho: 'rgba(255,255,255,0.12)', borda: 'rgba(255,255,255,0.09)', bordaForte: 'rgba(255,255,255,0.16)', texto: '#EEF0F6', texto2: '#C4C9D4', texto3: '#9AA1B1', destaque: '#A3B5FF', sobreDestaque: '#10131C', capa: '#4A5578', raioPainel: '18px', raioCartao: '12px', raioBotao: '10px', fonte: "'Onest', 'Segoe UI', system-ui, sans-serif", mono: "'IBM Plex Mono', Consolas, monospace", desfoque: 'blur(32px) saturate(140%)', sombraPainel: 'none', vidro: true, painelEsq: '88px' }
+    };
+    var nome = this.props.tema || 'Grafite';
+    var t = TEMAS[nome] || TEMAS.Grafite;
+    var chave = function (on) { return 'width: 36px; height: 20px; border-radius: 10px; box-sizing: border-box; position: relative; flex: none; ' + (on ? 'background: ' + t.destaque + ';' : 'background: ' + t.trilho + ';'); };
+    var bolinha = function (on) { return 'position: absolute; top: 3px; width: 14px; height: 14px; border-radius: 7px; ' + (on ? 'left: 19px; background: ' + t.sobreDestaque + ';' : 'left: 3px; background: ' + t.texto3 + ';'); };
+    var apps = [
+      { ini: 'Co', nome: 'Editor de código', janelas: '2' },
+      { ini: 'Na', nome: 'Navegador', janelas: '3' },
+      { ini: 'Te', nome: 'Terminal', janelas: '1' },
+      { ini: 'No', nome: 'Notas', janelas: '1' }
+    ];
+    return { t: t, nome: nome, apps: apps, chaveLigada: chave(true), bolinhaLigada: bolinha(true), chaveDesligada: chave(false), bolinhaDesligada: bolinha(false) };
+  }
+}
+</script>
+</body>
+</html>

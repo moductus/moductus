@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Moductus · captura rápida</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&amp;family=Geist+Mono:wght@400;600&amp;family=Instrument+Sans:wght@400;600&amp;family=JetBrains+Mono:wght@400;600&amp;family=Onest:wght@400;600&amp;family=IBM+Plex+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;cursor:pointer}
+@keyframes pisca{0%,49%{opacity:1}50%,100%{opacity:0}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; position: relative; overflow: hidden; background: {{t.paredeFundo}}; font-family: {{t.fonte}}; color: {{t.texto}}; font-size: 13px; line-height: 1.45">
+
+<sc-if value="{{t.vidro}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: -120px; top: 80px; width: 720px; height: 720px; border-radius: 360px; background: #2C3A5C"></div>
+<div style="position: absolute; left: 520px; top: -260px; width: 640px; height: 640px; border-radius: 320px; background: #3A2F52"></div>
+<div style="position: absolute; right: -160px; bottom: -220px; width: 760px; height: 760px; border-radius: 380px; background: #1F3B44"></div>
+</sc-if>
+
+<div style="position: absolute; left: 140px; top: 56px; right: 56px; bottom: 56px; background: {{t.janelaFantasma}}; border: 1px solid {{t.borda}}; border-radius: 12px; display: flex; flex-direction: column; gap: 14px; padding: 18px 22px; box-sizing: border-box">
+<div style="width: 46%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+<div style="width: 64%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+<div style="width: 38%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+</div>
+
+<div style="position: absolute; left: 0; top: 0">
+<dc-import name="Dock" tema="{{nome}}" ativo="hoje" hint-size="88px,900px"></dc-import>
+</div>
+
+<div style="position: absolute; inset: 0; background: {{t.veu}}"></div>
+
+<section aria-label="Captura rápida" style="position: absolute; left: 400px; top: 190px; width: 640px; background: {{t.painel}}; backdrop-filter: {{t.desfoque}}; border: 1px solid {{t.bordaForte}}; border-radius: {{t.raioPainel}}; box-shadow: {{t.sombraPainel}}; box-sizing: border-box; display: flex; flex-direction: column">
+
+<div style="display: flex; align-items: center; gap: 12px; padding: 18px 20px; border-bottom: 1px solid {{t.borda}}">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: {{t.texto3}}"><path d="M12 5v14M5 12h14"></path></svg>
+<label for="captura" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Captura rápida</label>
+<div style="flex: 1; display: flex; align-items: center; font-size: 18px">
+<span id="captura">45 de mercado no débito</span><span style="width: 2px; height: 22px; margin-left: 2px; background: {{t.destaque}}; animation: pisca 1s steps(1) infinite"></span>
+</div>
+<span style="font-family: {{t.mono}}; font-size: 11px; padding: 2px 6px; border-radius: 4px; background: {{t.chip}}; color: {{t.texto3}}">Ctrl Alt Espaço</span>
+</div>
+
+<div style="padding: 16px 20px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: {{t.texto3}}">
+<span>Finanças entendeu como</span>
+<span style="font-size: 11px; padding: 1px 8px; border-radius: 10px; background: {{t.chip}}; color: {{t.texto}}; font-weight: 600">Gasto</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{campos}}" as="c" hint-placeholder-count="4">
+<div style="background: {{t.elevada}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioControle}}; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 11px; color: {{t.texto3}}">{{c.rotulo}}</span>
+<span style="{{c.estiloValor}}">{{c.valor}}</span>
+</div>
+</sc-for>
+</div>
+<div style="font-size: 12px; color: {{t.texto3}}">Outubro fica em R$ 1.285 de R$ 1.980 · Mercado chega a 93% do orçamento</div>
+</div>
+
+<div style="display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid {{t.borda}}">
+<span style="font-size: 12px; color: {{t.texto3}}; margin-right: 4px">Na verdade é</span>
+<sc-for list="{{alternativas}}" as="o" hint-placeholder-count="3">
+<button style="height: 30px; padding: 0 10px; border-radius: {{t.raioBotao}}; border: 1px solid {{t.borda}}; background: transparent; color: {{t.texto2}}; font-size: 12px; display: flex; align-items: center; gap: 6px">{{o.nome}}<span style="font-family: {{t.mono}}; font-size: 10px; padding: 0 4px; border-radius: 3px; background: {{t.chip}}; color: {{t.texto3}}">{{o.tecla}}</span></button>
+</sc-for>
+<span style="flex: 1"></span>
+<button style="height: 34px; padding: 0 16px; border-radius: {{t.raioBotao}}; border: 0; background: {{t.destaque}}; color: {{t.sobreDestaque}}; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px">Lançar<span style="font-family: {{t.mono}}; font-size: 10px; opacity: 0.75">Enter</span></button>
+</div>
+
+</section>
+
+<div style="position: absolute; left: 400px; top: 520px; width: 640px; display: flex; justify-content: center; gap: 18px; font-size: 12px; color: {{t.dicaCor}}">
+<span>Esc fecha</span><span>·</span><span>Tab edita um campo</span><span>·</span><span>dá para desfazer por 10 s depois de lançar</span>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tema":{"editor":"enum","options":["Grafite","Papel","Vidro"],"default":"Grafite"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var TEMAS = {
+      Grafite: { paredeFundo: '#191B1F', janelaFantasma: '#141619', linhaFantasma: '#1E2125', veu: 'rgba(0,0,0,0.45)', painel: '#131417', elevada: '#1A1C20', chip: 'rgba(255,255,255,0.06)', borda: 'rgba(255,255,255,0.07)', bordaForte: 'rgba(255,255,255,0.12)', texto: '#E8E9EB', texto2: '#B5B8BD', texto3: '#8C9097', destaque: '#E8E9EB', sobreDestaque: '#0D0E10', aviso: '#E3B262', dicaCor: '#B5B8BD', raioPainel: '12px', raioControle: '8px', raioBotao: '8px', fonte: "'Geist', 'Segoe UI', system-ui, sans-serif", mono: "'Geist Mono', Consolas, monospace", desfoque: 'none', sombraPainel: '0 32px 80px rgba(0,0,0,0.55)', vidro: false },
+      Papel: { paredeFundo: '#E3E1DC', janelaFantasma: '#F1F0EC', linhaFantasma: '#E6E4DF', veu: 'rgba(40,36,28,0.18)', painel: '#FFFFFF', elevada: '#F6F5F2', chip: '#EFEEEA', borda: 'rgba(20,20,19,0.08)', bordaForte: 'rgba(20,20,19,0.14)', texto: '#1A1A18', texto2: '#3E3D39', texto3: '#6B6A64', destaque: '#1A1A18', sobreDestaque: '#FBFAF8', aviso: '#9A6212', dicaCor: '#3E3D39', raioPainel: '16px', raioControle: '10px', raioBotao: '17px', fonte: "'Instrument Sans', 'Segoe UI', system-ui, sans-serif", mono: "'JetBrains Mono', Consolas, monospace", desfoque: 'none', sombraPainel: '0 32px 80px rgba(40,36,28,0.22)', vidro: false },
+      Vidro: { paredeFundo: '#161B26', janelaFantasma: 'rgba(18,21,29,0.82)', linhaFantasma: '#222733', veu: 'rgba(5,7,12,0.35)', painel: 'rgba(22,25,34,0.70)', elevada: 'rgba(255,255,255,0.06)', chip: 'rgba(255,255,255,0.08)', borda: 'rgba(255,255,255,0.09)', bordaForte: 'rgba(255,255,255,0.16)', texto: '#EEF0F6', texto2: '#C4C9D4', texto3: '#9AA1B1', destaque: '#A3B5FF', sobreDestaque: '#10131C', aviso: '#E8B86A', dicaCor: '#C4C9D4', raioPainel: '18px', raioControle: '10px', raioBotao: '10px', fonte: "'Onest', 'Segoe UI', system-ui, sans-serif", mono: "'IBM Plex Mono', Consolas, monospace", desfoque: 'blur(40px) saturate(140%)', sombraPainel: '0 32px 80px rgba(0,0,0,0.35)', vidro: true }
+    };
+    var nome = this.props.tema || 'Grafite';
+    var t = TEMAS[nome] || TEMAS.Grafite;
+    var valor = 'font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+    var campos = [
+      { rotulo: 'Valor', valor: 'R$ 45,00', estiloValor: valor + ' font-family: ' + t.mono + ';' },
+      { rotulo: 'Categoria', valor: 'Mercado', estiloValor: valor },
+      { rotulo: 'Conta', valor: 'Débito', estiloValor: valor },
+      { rotulo: 'Data', valor: 'Hoje', estiloValor: valor }
+    ];
+    var alternativas = [
+      { nome: 'Tarefa', tecla: '1' },
+      { nome: 'Nota', tecla: '2' },
+      { nome: 'Memória', tecla: '3' }
+    ];
+    return { t: t, nome: nome, campos: campos, alternativas: alternativas };
+  }
+}
+</script>
+</body>
+</html>

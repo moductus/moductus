@@ -109,5 +109,82 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 |---|---|---|---|
 | Dock + painel Hoje | ✓ | ✓ | ✓ |
 | Sistema · Início | ✓ (troca de tema no próprio desenho) | ✓ | ✓ |
+| Painel Agentes: time e sessões de IA, com aprovação | ✓ (tweak de tema) | ✓ | ✓ |
+| Painel Mídia, controles e apps abertos | ✓ (tweak de tema) | ✓ | ✓ |
+| Captura rápida | ✓ (tweak de tema) | ✓ | ✓ |
+| Componente Dock, reutilizado pelos painéis | ✓ | ✓ | ✓ |
+| Marca: quatro opções, com a **C · Borda e ponto** escolhida e aplicada em todos os desenhos | ✓ | ✓ | ✓ |
+| Agentes: personagens, expressões e criar agente | ✓ (tweak de tema) | ✓ | ✓ |
+| Componente Personagem (agente, expressão, corpo ou cabeça) | ✓ | ✓ | ✓ |
+| Primeiro uso: boas-vindas, tema e dock, modelo, conhecer o time, conexões | ✓ (tweak de tema) | ✓ | ✓ |
+| Tutorial "Primeiros passos" no Início, com cartão de aprovação de treino | ✓ (tweak de tema) | ✓ | ✓ |
+| Briefing da manhã e fechamento do dia | ✓ (tweak de tema) | ✓ | ✓ |
+| Painéis do dock: Foco, Finanças, Dev, Arquivos | ✓ (tweak de tema) | ✓ | ✓ |
+| Estados do agente: sem modelo, erro, teto de gasto, vazio, conexão caída, pausado | ✓ (tweak de tema) | ✓ | ✓ |
+| Conversa com o time | ✓ (tweak de tema) | ✓ | ✓ |
+| Importar extrato: mapear colunas e revisar antes de lançar | ✓ (tweak de tema) | ✓ | ✓ |
+| Prévia da Faina antes de organizar | ✓ (tweak de tema) | ✓ | ✓ |
+| Sistema: Tarefas, Finanças, Notas, Sessões de IA, Dev, Memória, página do agente | ✓ (tweak de tema) | ✓ | ✓ |
+| Configurações: notificações e levar para outro PC | ✓ (tweak de tema) | ✓ | ✓ |
 
-**A desenhar:** painéis das demais áreas no dock (Foco, Finanças, Dev, Agentes, Mídia, Apps abertos), as outras áreas do Sistema, captura rápida, cartão de aprovação em todos os estados, estados do agente, configurações de tema e dock, e o logo definitivo (o atual é provisório).
+O cartão de aprovação traz três ações: **Negar**, **Sempre neste projeto** e **Permitir**. A do meio vira uma regra de permissão do Claude Code para aquele projeto, registrada pelo hook.
+
+Padrões que saíram dessas telas e valem para o resto:
+
+- **Aprovação:** cartão elevado com o que vai acontecer, o tamanho e se dá para desfazer; botão primário é verbo com objeto ("Organizar 142 arquivos"), o secundário recusa sem culpa ("Não mover", "Agora não").
+- **Fala do agente:** cabeça do personagem (20 a 30 px) + nome na cor de identidade + até duas frases; ação logo abaixo, nunca num modal.
+- **Origem:** todo item criado por agente diz quem e de onde ("Tula leu o extrato", "você, pela captura").
+- **Status nunca só por cor:** ponto + texto ("esperando você", "CI falhou").
+- **Seleção:** caixa marcada no destaque com ✓; tarefa feita fica apagada e riscada.
+- **Configurações:** sub-navegação própria à esquerda; cada seção numa página.
+
+**A desenhar:** Foco e Ferramentas no Sistema, instruções e ferramentas na página do agente, criar agente (fase 7), demais seções de Configurações (Geral, Modelos, Conexões, Atalhos, Privacidade) e o instalador.
+
+**Ícones da marca:** em [design/marca/](design/marca/): `moductus.ico` (16 a 256 px, Grafite), `app-*.png` (32 a 512), ícones da bandeja claro e escuro (16 e 32) e `marca.svg` em `currentColor`.
+
+---
+
+## 6. Agentes
+
+Cada agente é um **personagem**: corpo, rosto e um traço próprio. Formas simples e cores chapadas, sem contorno, para ler bem de 16 px a corpo inteiro. O tom do agente é a única cor de identidade; o resto da interface continua nos tokens do tema. Componente de referência: `design/canvas/Personagem.dc.html`.
+
+| Agente | Silhueta | Traço | Corpo | Sombra (braços) | Acessório |
+|---|---|---|---|---|---|
+| **Alba** | Ovo | Três raios de sol | `#E2B26A` | `#C9974D` | `#A9762A` |
+| **Tula** | Pera | Coque e óculos redondos | `#86BC9C` | `#6CA283` | `#3F7F5C` |
+| **Faina** | Bloco arredondado | Bandana com nó | `#DE9070` | `#C67757` | `#A24F37` |
+| **Nuno** | Cápsula alta | Fones de ouvido | `#8FAADE` | `#7590C6` | `#46639F` |
+
+- **Rosto:** olhos e boca em `#1C1D20`, bochechas em branco a 22%. As cores do personagem não mudam com o tema: ele é o mesmo em Grafite, Papel e Vidro.
+- **Expressões = estados:**
+
+| Estado | Expressão | Moldura (cabeça em lista) |
+|---|---|---|
+| `ocioso` | Descansando: olhos normais, sorriso leve | Nenhuma |
+| `trabalhando` | Focado: olhos baixos, boca reta, sobrancelhas concentradas | Anel em `sucesso` |
+| `esperando você` | Atento: olhos grandes, sobrancelhas erguidas, boca em "o" | Anel em `aviso` |
+| `erro` | Preocupado: sobrancelhas caídas, boca para baixo | Anel tracejado em `perigo` |
+| `desligado` | Dormindo: olhos fechados e "z" | Nenhuma, a 55% |
+
+- **Tamanhos:** cabeça a 16, 24 e 32 px (listas e dock) e 36 px (painéis); corpo inteiro a 168 px nos cartões e na página do agente.
+- **Movimento:** respiração de 4,2 s e piscar a cada 5,5 s. Tudo para com `prefers-reduced-motion`. Nada de pulos, confetes ou balões de fala.
+- **Agentes do usuário:** montados de peças fechadas (4 silhuetas, 8 traços, 8 tons), para o time continuar coerente.
+
+---
+
+## 7. Marca
+
+**Borda e ponto:** uma linha vertical com um ponto ao lado, no alto. A linha é o dock na lateral da tela; o ponto é um agente presente, pronto para trabalhar.
+
+Geometria num quadrado de lado `L`:
+
+| Elemento | Posição | Tamanho | Raio |
+|---|---|---|---|
+| Linha | `x = 0,24 L`, de `y = 0,04 L` a `y = 0,96 L` | largura `0,15 L` | metade da largura |
+| Ponto | `x = 0,50 L`, `y = 0,08 L` | diâmetro `0,32 L` | círculo |
+
+- **Cor:** uma só, sempre. `destaque` do tema na interface (claro no Grafite, tinta no Papel, lavanda no Vidro); preto ou branco puro fora do app.
+- **Tamanhos testados:** 104, 48, 32 e 16 px, em fundo claro e escuro. A 16 px a linha tem 2,4 px e o ponto 5 px, e continua legível na bandeja.
+- **Área de respiro:** `0,25 L` em volta, sem texto nem borda encostando.
+- **Com o nome:** marca à esquerda, "Moductus" em peso 600 com espaçamento de −0,02 em, altura do texto em 90% da marca.
+- **Não fazer:** contorno, sombra, gradiente, rotação, trocar a ordem dos elementos ou colocar o ponto embaixo.

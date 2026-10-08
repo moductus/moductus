@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Moductus · componente Dock</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&amp;family=Geist+Mono:wght@400;600&amp;family=Instrument+Sans:wght@400;600&amp;family=JetBrains+Mono:wght@400;600&amp;family=Onest:wght@400;600&amp;family=IBM+Plex+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 88px; height: 900px; position: relative; font-family: {{t.fonte}}; color: {{t.texto}}; font-size: 13px">
+<nav aria-label="Dock" style="{{estiloDock}}">
+<button aria-label="Abrir o Sistema" style="width: 44px; height: 44px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; margin-bottom: 6px">
+<div style="width: 26px; height: 26px; position: relative; font-size: 26px; color: {{t.destaque}}"><div style="position: absolute; left: 0.24em; top: 0.04em; bottom: 0.04em; width: 0.15em; border-radius: 0.075em; background: currentColor"></div><div style="position: absolute; left: 0.5em; top: 0.08em; width: 0.32em; height: 0.32em; border-radius: 0.16em; background: currentColor"></div></div>
+</button>
+<sc-for list="{{areas}}" as="a" hint-placeholder-count="7">
+<button aria-label="{{a.nome}}" style="{{a.estilo}}">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{a.d}}"></path></svg>
+<sc-if value="{{a.temBadge}}" hint-placeholder-val="{{ false }}">
+<span style="position: absolute; top: 4px; right: 3px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: {{t.destaque}}; color: {{t.sobreDestaque}}; font-size: 11px; font-weight: 600; line-height: 16px; text-align: center">{{a.badge}}</span>
+</sc-if>
+<sc-if value="{{a.temTempo}}" hint-placeholder-val="{{ false }}">
+<span style="position: absolute; bottom: 2px; left: 0; right: 0; text-align: center; font-family: {{t.mono}}; font-size: 11px; color: {{t.texto}}">{{a.tempo}}</span>
+</sc-if>
+</button>
+</sc-for>
+<div style="width: 24px; height: 1px; background: {{t.bordaForte}}; margin: 8px 0"></div>
+<div style="{{estiloGrupoAgentes}}">
+<sc-for list="{{sessoes}}" as="s" hint-placeholder-count="4">
+<button aria-label="{{s.rotulo}}" style="width: 44px; height: 42px; border: 0; background: transparent; position: relative; display: flex; align-items: center; justify-content: center">
+<dc-import name="Personagem" agente="{{s.id}}" estado="{{s.expr}}" modo="cabeca" tamanho="{{ 32 }}" hint-size="32px,32px"></dc-import>
+<span style="{{s.ponto}}"></span>
+</button>
+</sc-for>
+</div>
+<div style="width: 24px; height: 1px; background: {{t.bordaForte}}; margin: 8px 0"></div>
+<sc-for list="{{apps}}" as="p" hint-placeholder-count="4">
+<button aria-label="{{p.nome}}" style="width: 44px; height: 40px; border: 0; background: transparent; display: flex; align-items: center; justify-content: center">
+<span style="width: 28px; height: 28px; border-radius: 8px; background: {{t.chip}}; color: {{t.texto3}}; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">{{p.ini}}</span>
+</button>
+</sc-for>
+<div style="flex: 1"></div>
+<button aria-label="Mídia: pausar" style="{{estiloMidia}}">
+<span style="width: 30px; height: 30px; border-radius: 7px; background: {{t.capa}}; display: flex; align-items: center; justify-content: center; color: {{t.texto}}">
+<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z"></path></svg>
+</span>
+</button>
+<button aria-label="Microfone" style="width: 44px; height: 40px; border: 0; background: transparent; color: {{t.texto3}}; display: flex; align-items: center; justify-content: center">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v3"></path></svg>
+</button>
+<button aria-label="Manter acordado" style="width: 44px; height: 40px; border: 0; background: transparent; color: {{t.texto3}}; display: flex; align-items: center; justify-content: center">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"></path></svg>
+</button>
+<div style="font-family: {{t.mono}}; font-size: 12px; color: {{t.texto3}}; margin-top: 6px">14:32</div>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tema":{"editor":"enum","options":["Grafite","Papel","Vidro"],"default":"Grafite"},"ativo":{"editor":"enum","options":["hoje","tarefas","foco","financas","dev","notas","arquivos","agentes","midia"],"default":"hoje"},"$preview":{"width":88,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var TEMAS = {
+      Grafite: { dock: '#0D0E10', chip: 'rgba(255,255,255,0.06)', borda: 'rgba(255,255,255,0.07)', bordaForte: 'rgba(255,255,255,0.10)', ativo: 'rgba(255,255,255,0.08)', texto: '#E8E9EB', texto2: '#C9CBCF', texto3: '#8C9097', apagado: '#5A5E65', destaque: '#E8E9EB', sobreDestaque: '#0D0E10', sucesso: '#7FB89E', aviso: '#E3B262', capa: '#2B2F35', fonte: "'Geist', 'Segoe UI', system-ui, sans-serif", mono: "'Geist Mono', Consolas, monospace", colado: true, sombra: 'none', desfoque: 'none', raio: '0', marcaCheia: false },
+      Papel: { dock: '#FBFAF8', chip: '#EFEEEA', borda: 'rgba(20,20,19,0.07)', bordaForte: 'rgba(20,20,19,0.10)', ativo: '#EAE8E3', texto: '#1A1A18', texto2: '#3E3D39', texto3: '#6B6A64', apagado: '#B4B2AA', destaque: '#1A1A18', sobreDestaque: '#FBFAF8', sucesso: '#2F7A52', aviso: '#B5761A', capa: '#D9D6CF', fonte: "'Instrument Sans', 'Segoe UI', system-ui, sans-serif", mono: "'JetBrains Mono', Consolas, monospace", colado: false, sombra: '0 8px 24px rgba(40,36,28,0.08)', desfoque: 'none', raio: '18px', marcaCheia: true },
+      Vidro: { dock: 'rgba(20,23,31,0.55)', chip: 'rgba(255,255,255,0.08)', borda: 'rgba(255,255,255,0.10)', bordaForte: 'rgba(255,255,255,0.10)', ativo: 'rgba(255,255,255,0.12)', texto: '#EEF0F6', texto2: '#D6DAE4', texto3: '#AEB4C2', apagado: '#6B7285', destaque: '#A3B5FF', sobreDestaque: '#10131C', sucesso: '#7CCBA2', aviso: '#E8B86A', capa: '#4A5578', fonte: "'Onest', 'Segoe UI', system-ui, sans-serif", mono: "'IBM Plex Mono', Consolas, monospace", colado: false, sombra: 'none', desfoque: 'blur(28px) saturate(140%)', raio: '20px', marcaCheia: true }
+    };
+    var t = TEMAS[this.props.tema] || TEMAS.Grafite;
+    var ativo = this.props.ativo || 'hoje';
+
+    var estiloDock = 'position: absolute; width: 64px; display: flex; flex-direction: column; align-items: center; padding: 14px 0; box-sizing: border-box; gap: 6px; background: ' + t.dock + '; backdrop-filter: ' + t.desfoque + '; box-shadow: ' + t.sombra + '; ' +
+      (t.colado ? 'left: 0; top: 0; bottom: 0; border-right: 1px solid ' + t.borda + ';' : 'left: 12px; top: 12px; bottom: 12px; border: 1px solid ' + t.borda + '; border-radius: ' + t.raio + ';');
+    var estiloMarca = 'width: 26px; height: 26px; border-radius: 8px; box-sizing: border-box; display: flex; padding: 4px; ' + (t.marcaCheia ? 'background: ' + t.destaque + ';' : 'border: 1.5px solid ' + t.destaque + '; padding: 3px;');
+    var estiloMarcaBarra = 'width: 5px; border-radius: 2px; background: ' + (t.marcaCheia ? t.sobreDestaque : t.destaque) + ';';
+
+    var base = 'width: 44px; height: 44px; border: 0; border-radius: 10px; position: relative; display: flex; align-items: center; justify-content: center; ';
+    var areas = [
+      { id: 'hoje', nome: 'Hoje', d: 'M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z' },
+      { id: 'tarefas', nome: 'Tarefas', d: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11', badge: '4' },
+      { id: 'foco', nome: 'Foco', d: 'M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z', tempo: '18' },
+      { id: 'financas', nome: 'Finanças', d: 'M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4' },
+      { id: 'dev', nome: 'Dev', d: 'M6 9v12M18 15V9a3 3 0 0 0-3-3h-4M14 3l-3 3 3 3M9 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM21 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z', badge: '2' },
+      { id: 'notas', nome: 'Notas', d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8' },
+      { id: 'arquivos', nome: 'Arquivos', d: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z' }
+    ].map(function (a) {
+      var on = a.id === ativo;
+      return Object.assign({}, a, {
+        estilo: base + (on ? 'background: ' + t.ativo + '; color: ' + t.texto + ';' : 'background: transparent; color: ' + t.texto3 + ';'),
+        temBadge: !!a.badge, temTempo: !!a.tempo
+      });
+    });
+    var ponto = function (cor) { return 'position: absolute; right: 6px; bottom: 6px; width: 8px; height: 8px; border-radius: 4px; border: 2px solid ' + (t.colado ? t.dock : '#1B1F2B') + '; background: ' + cor + ';'; };
+    if (!t.vidro && !t.colado) { ponto = function (cor) { return 'position: absolute; right: 6px; bottom: 6px; width: 8px; height: 8px; border-radius: 4px; border: 2px solid ' + t.dock + '; background: ' + cor + ';'; }; }
+    var sessoes = [
+      { id: 'alba', expr: 'descansando', rotulo: 'Alba: ocioso', ponto: 'display: none;' },
+      { id: 'tula', expr: 'focado', rotulo: 'Tula: trabalhando', ponto: ponto(t.sucesso) },
+      { id: 'faina', expr: 'atento', rotulo: 'Faina: esperando você', ponto: ponto(t.aviso) },
+      { id: 'nuno', expr: 'atento', rotulo: 'Nuno: 1 sessão esperando você', ponto: ponto(t.aviso) }
+    ];
+    var apps = [
+      { ini: 'Co', nome: 'Editor de código' },
+      { ini: 'Na', nome: 'Navegador' },
+      { ini: 'Te', nome: 'Terminal' },
+      { ini: 'No', nome: 'Notas' }
+    ];
+    var estiloGrupoAgentes = 'display: flex; flex-direction: column; align-items: center; border-radius: 12px; padding: 2px 0; ' + (ativo === 'agentes' ? 'background: ' + t.ativo + ';' : '');
+    var estiloMidia = 'width: 44px; height: 44px; border: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; ' + (ativo === 'midia' ? 'background: ' + t.ativo + ';' : 'background: transparent;');
+    return { t: t, estiloDock: estiloDock, estiloMarca: estiloMarca, estiloMarcaBarra: estiloMarcaBarra, areas: areas, sessoes: sessoes, apps: apps, estiloGrupoAgentes: estiloGrupoAgentes, estiloMidia: estiloMidia };
+  }
+}
+</script>
+</body>
+</html>

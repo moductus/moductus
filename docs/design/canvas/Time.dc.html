@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Moductus · o time de agentes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&amp;family=Geist+Mono:wght@400;600&amp;family=Instrument+Sans:wght@400;600&amp;family=JetBrains+Mono:wght@400;600&amp;family=Onest:wght@400;600&amp;family=IBM+Plex+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button,input{font:inherit}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1000px; box-sizing: border-box; padding: 40px 48px; background: {{t.fundo}}; font-family: {{t.fonte}}; color: {{t.texto}}; font-size: 13px; line-height: 1.45; display: flex; flex-direction: column; gap: 22px">
+
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px">
+<sc-for list="{{agentes}}" as="a" hint-placeholder-count="4">
+<article style="background: {{t.cartao}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioCartao}}; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+<div style="{{a.palco}}">
+<dc-import name="Personagem" agente="{{a.id}}" estado="descansando" modo="corpo" tamanho="{{ 168 }}" hint-size="140px,168px"></dc-import>
+</div>
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px">
+<h2 style="margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em">{{a.nome}}</h2>
+<span style="font-family: {{t.mono}}; font-size: 11px; color: {{t.texto3}}">{{a.mencao}}</span>
+</div>
+<span style="color: {{t.texto2}}; margin-top: -8px">{{a.funcao}}</span>
+<div style="display: flex; flex-direction: column; gap: 6px; border-top: 1px solid {{t.borda}}; padding-top: 12px">
+<sc-for list="{{a.cuida}}" as="c" hint-placeholder-count="3">
+<div style="display: flex; gap: 8px; color: {{t.texto2}}"><span style="{{a.marcador}}"></span><span>{{c}}</span></div>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid {{t.borda}}; padding-top: 12px">
+<span style="font-size: 12px; color: {{t.texto3}}">A expressão mostra o estado</span>
+<div style="display: flex; justify-content: space-between">
+<sc-for list="{{estados}}" as="e" hint-placeholder-count="5">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 4px; width: 52px">
+<div style="{{e.moldura}}"><dc-import name="Personagem" agente="{{a.id}}" estado="{{e.id}}" modo="cabeca" tamanho="{{ 40 }}" hint-size="40px,40px"></dc-import></div>
+<span style="font-size: 10.5px; color: {{t.texto3}}; text-align: center; line-height: 1.2">{{e.rotulo}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</article>
+</sc-for>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px; flex: 1; min-height: 0">
+
+<section aria-label="Tamanhos" style="background: {{t.cartao}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioCartao}}; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px">
+<span style="font-size: 12px; color: {{t.texto3}}">No dock e nas listas, só a cabeça</span>
+<sc-for list="{{agentes}}" as="a" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 16px">
+<dc-import name="Personagem" agente="{{a.id}}" estado="descansando" modo="cabeca" tamanho="{{ 32 }}" hint-size="32px,32px"></dc-import>
+<dc-import name="Personagem" agente="{{a.id}}" estado="descansando" modo="cabeca" tamanho="{{ 24 }}" hint-size="24px,24px"></dc-import>
+<dc-import name="Personagem" agente="{{a.id}}" estado="descansando" modo="cabeca" tamanho="{{ 16 }}" hint-size="16px,16px"></dc-import>
+<span style="color: {{t.texto2}}">{{a.nome}}</span>
+</div>
+</sc-for>
+</section>
+
+<section aria-label="Criar agente" style="background: {{t.cartao}}; border: 1px dashed {{t.bordaForte}}; border-radius: {{t.raioCartao}}; padding: 20px 24px; display: grid; grid-template-columns: 200px repeat(2, minmax(0, 1fr)); gap: 26px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 12px; color: {{t.texto3}}">Fase 7</span>
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">Criar um agente</h2>
+<p style="margin: 0; color: {{t.texto2}}; text-wrap: pretty">Do zero ou duplicando um de fábrica. O personagem sai de peças prontas, para o time continuar coerente.</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px">
+<label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; color: {{t.texto3}}">Nome</span><input value="Bento" style="height: 36px; padding: 0 12px; border-radius: {{t.raioControle}}; border: 1px solid {{t.bordaForte}}; background: {{t.campo}}; color: {{t.texto}}"></label>
+<label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; color: {{t.texto3}}">Função</span><input value="Me ajuda a estudar para a certificação" style="height: 36px; padding: 0 12px; border-radius: {{t.raioControle}}; border: 1px solid {{t.bordaForte}}; background: {{t.campo}}; color: {{t.texto}}"></label>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; color: {{t.texto3}}">Ferramentas</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><sc-for list="{{ferramentas}}" as="f" hint-placeholder-count="6"><span style="{{f.estilo}}">{{f.nome}}</span></sc-for></div>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; color: {{t.texto3}}">Silhueta</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><sc-for list="{{silhuetas}}" as="s" hint-placeholder-count="4"><span style="{{s.estilo}}">{{s.nome}}</span></sc-for></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; color: {{t.texto3}}">Traço</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px"><sc-for list="{{tracos}}" as="s" hint-placeholder-count="6"><span style="{{s.estilo}}">{{s.nome}}</span></sc-for></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; color: {{t.texto3}}">Tom</span>
+<div style="display: flex; gap: 8px"><sc-for list="{{tons}}" as="o" hint-placeholder-count="8"><span style="{{o.estilo}}"></span></sc-for></div>
+</div>
+</div>
+</section>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tema":{"editor":"enum","options":["Grafite","Papel","Vidro"],"default":"Grafite"},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var TEMAS = {
+      Grafite: { fundo: '#111214', cartao: '#16181B', palco: '#1C1E22', campo: '#0F1012', borda: 'rgba(255,255,255,0.07)', bordaForte: 'rgba(255,255,255,0.14)', chip: 'rgba(255,255,255,0.06)', texto: '#E8E9EB', texto2: '#B5B8BD', texto3: '#8C9097', sucesso: '#7FB89E', aviso: '#E3B262', perigo: '#E5787A', raioCartao: '12px', raioControle: '8px', fonte: "'Geist', 'Segoe UI', system-ui, sans-serif", mono: "'Geist Mono', Consolas, monospace" },
+      Papel: { fundo: '#F1F0EC', cartao: '#FFFFFF', palco: '#F6F5F2', campo: '#FFFFFF', borda: 'rgba(20,20,19,0.08)', bordaForte: 'rgba(20,20,19,0.16)', chip: '#EFEEEA', texto: '#1A1A18', texto2: '#3E3D39', texto3: '#6B6A64', sucesso: '#2F7A52', aviso: '#B5761A', perigo: '#B4443C', raioCartao: '16px', raioControle: '10px', fonte: "'Instrument Sans', 'Segoe UI', system-ui, sans-serif", mono: "'JetBrains Mono', Consolas, monospace" },
+      Vidro: { fundo: '#161B26', cartao: 'rgba(255,255,255,0.05)', palco: 'rgba(255,255,255,0.04)', campo: 'rgba(0,0,0,0.18)', borda: 'rgba(255,255,255,0.09)', bordaForte: 'rgba(255,255,255,0.18)', chip: 'rgba(255,255,255,0.08)', texto: '#EEF0F6', texto2: '#C4C9D4', texto3: '#9AA1B1', sucesso: '#7CCBA2', aviso: '#E8B86A', perigo: '#F08A8A', raioCartao: '16px', raioControle: '10px', fonte: "'Onest', 'Segoe UI', system-ui, sans-serif", mono: "'IBM Plex Mono', Consolas, monospace" }
+    };
+    var t = TEMAS[this.props.tema] || TEMAS.Grafite;
+    var palco = 'height: 188px; border-radius: 12px; background: ' + t.palco + '; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px; box-sizing: border-box;';
+    var agentes = [
+      { id: 'alba', nome: 'Alba', mencao: '@alba', funcao: 'Cuida do seu dia', cor: '#E2B26A', cuida: ['Agenda, compromissos e lembretes', 'Tarefas com data, hora e prioridade', 'Briefing da manhã e fechamento do dia'] },
+      { id: 'tula', nome: 'Tula', mencao: '@tula', funcao: 'Cuida do seu dinheiro', cor: '#86BC9C', cuida: ['Gastos, extratos e orçamento', 'Dívidas e a melhor ordem para quitar', 'Planos e metas de economia'] },
+      { id: 'faina', nome: 'Faina', mencao: '@faina', funcao: 'Faz o serviço pesado', cor: '#DE9070', cuida: ['Organiza Downloads e pastas', 'Limpa duplicados e temporários', 'Cria documentos e planilhas'] },
+      { id: 'nuno', nome: 'Nuno', mencao: '@nuno', funcao: 'Fica de olho nas suas IAs e no seu código', cor: '#8FAADE', cuida: ['Sessões do Claude Code, Codex e OpenCode', 'Contexto, gasto e limites de cada sessão', 'PRs, reviews, issues e CI'] }
+    ].map(function (a) { return Object.assign({}, a, { palco: palco, marcador: 'width: 6px; height: 6px; border-radius: 3px; margin-top: 7px; flex: none; background: ' + a.cor + ';' }); });
+    var moldura = function (cor, tipo) { return 'width: 44px; height: 44px; border-radius: 22px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 2px ' + (tipo || 'solid') + ' ' + cor + ';'; };
+    var estados = [
+      { id: 'descansando', rotulo: 'ocioso', moldura: moldura('transparent') },
+      { id: 'focado', rotulo: 'traba­lhando', moldura: moldura(t.sucesso) },
+      { id: 'atento', rotulo: 'esperando você', moldura: moldura(t.aviso) },
+      { id: 'preocupado', rotulo: 'erro', moldura: moldura(t.perigo, 'dashed') },
+      { id: 'dormindo', rotulo: 'dormindo', moldura: moldura('transparent') + ' opacity: 0.55;' }
+    ];
+    var chip = function (on) { return 'font-size: 12px; padding: 3px 10px; border-radius: 12px; ' + (on ? 'background: ' + t.chip + '; color: ' + t.texto + '; border: 1px solid ' + t.bordaForte + ';' : 'color: ' + t.texto3 + '; border: 1px solid ' + t.borda + ';'); };
+    var lista = function (nomes, sel) { return nomes.map(function (n, i) { return { nome: n, estilo: chip(i === sel) }; }); };
+    var tons = ['#E2B26A', '#86BC9C', '#DE9070', '#8FAADE', '#B79CE0', '#D59AB4', '#86C3C6', '#B8B19F'].map(function (c, i) {
+      return { estilo: 'width: 22px; height: 22px; border-radius: 11px; background: ' + c + '; ' + (i === 4 ? 'box-shadow: 0 0 0 2px ' + t.fundo + ', 0 0 0 4px ' + c + ';' : '') };
+    });
+    return {
+      t: t, agentes: agentes, estados: estados, tons: tons,
+      silhuetas: lista(['Ovo', 'Pera', 'Bloco', 'Cápsula'], 3),
+      tracos: lista(['Raios', 'Coque', 'Óculos', 'Bandana', 'Fones', 'Boné', 'Cachecol', 'Nenhum'], 2),
+      ferramentas: lista(['notas', 'tarefas', 'lembretes', 'arquivos.ler', 'memoria', 'github'], -1).map(function (f, i) { return i < 5 ? { nome: f.nome, estilo: chip(true) } : f; })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Moductus · componente Personagem</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+@keyframes respira{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.018)}}
+@keyframes pisca{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(0.1)}}
+.mx-corpo{transform-origin:50px 108px;animation:respira 4.2s ease-in-out infinite}
+.mx-olho{transform-box:fill-box;transform-origin:center;animation:pisca 5.5s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.mx-corpo,.mx-olho{animation:none}}
+</style>
+</helmet>
+<div style="{{raiz}}">
+<svg width="100%" height="100%" viewBox="{{caixa}}" role="img" aria-label="{{rotulo}}">
+<g class="mx-corpo">
+<ellipse cx="40" cy="108" rx="9" ry="5" fill="{{p.acessorio}}"></ellipse>
+<ellipse cx="60" cy="108" rx="9" ry="5" fill="{{p.acessorio}}"></ellipse>
+<ellipse cx="{{p.bracoE}}" cy="78" rx="6" ry="10" fill="{{p.corpoEscuro}}"></ellipse>
+<ellipse cx="{{p.bracoD}}" cy="78" rx="6" ry="10" fill="{{p.corpoEscuro}}"></ellipse>
+
+<sc-if value="{{p.alba}}" hint-placeholder-val="{{ true }}">
+<ellipse cx="50" cy="66" rx="30" ry="40" fill="{{p.corpo}}"></ellipse>
+<path d="M50 20V11M36 24l-5-7M64 24l5-7" stroke="{{p.acessorio}}" stroke-width="4" stroke-linecap="round" fill="none"></path>
+</sc-if>
+<sc-if value="{{p.tula}}" hint-placeholder-val="{{ false }}">
+<circle cx="50" cy="28" r="9" fill="{{p.acessorio}}"></circle>
+<path d="M50 30C70 30 80 52 80 78C80 96 68 104 50 104C32 104 20 96 20 78C20 52 30 30 50 30Z" fill="{{p.corpo}}"></path>
+</sc-if>
+<sc-if value="{{p.faina}}" hint-placeholder-val="{{ false }}">
+<rect x="22" y="32" width="56" height="72" rx="20" fill="{{p.corpo}}"></rect>
+<rect x="24" y="40" width="52" height="9" fill="{{p.acessorio}}"></rect>
+<path d="M76 43l10-6-2 9zM76 46l9 6-8 2z" fill="{{p.acessorio}}"></path>
+</sc-if>
+<sc-if value="{{p.nuno}}" hint-placeholder-val="{{ false }}">
+<rect x="28" y="22" width="44" height="84" rx="22" fill="{{p.corpo}}"></rect>
+<path d="M25 56A25 25 0 0 1 75 56" stroke="{{p.acessorio}}" stroke-width="4" fill="none" stroke-linecap="round"></path>
+<rect x="20" y="49" width="9" height="17" rx="4" fill="{{p.acessorio}}"></rect>
+<rect x="71" y="49" width="9" height="17" rx="4" fill="{{p.acessorio}}"></rect>
+</sc-if>
+
+<g transform="{{rosto}}">
+<ellipse cx="37" cy="67" rx="3.4" ry="2.2" fill="#FFFFFF" fill-opacity="0.22"></ellipse>
+<ellipse cx="63" cy="67" rx="3.4" ry="2.2" fill="#FFFFFF" fill-opacity="0.22"></ellipse>
+
+<sc-if value="{{e.abertos}}" hint-placeholder-val="{{ true }}">
+<ellipse class="mx-olho" cx="42" cy="{{e.olhoY}}" rx="{{e.olhoRx}}" ry="{{e.olhoRy}}" fill="{{p.traco}}"></ellipse>
+<ellipse class="mx-olho" cx="58" cy="{{e.olhoY}}" rx="{{e.olhoRx}}" ry="{{e.olhoRy}}" fill="{{p.traco}}"></ellipse>
+</sc-if>
+<sc-if value="{{e.fechados}}" hint-placeholder-val="{{ false }}">
+<path d="M38.5 58Q42 61.5 45.5 58M54.5 58Q58 61.5 61.5 58" stroke="{{p.traco}}" stroke-width="2.4" stroke-linecap="round" fill="none"></path>
+</sc-if>
+<sc-if value="{{e.temSobrancelha}}" hint-placeholder-val="{{ false }}">
+<path d="{{e.sobrancelha}}" stroke="{{p.traco}}" stroke-width="2.2" stroke-linecap="round" fill="none"></path>
+</sc-if>
+<sc-if value="{{p.tula}}" hint-placeholder-val="{{ false }}">
+<circle cx="42" cy="58" r="7.5" stroke="{{p.traco}}" stroke-width="1.8" fill="none"></circle>
+<circle cx="58" cy="58" r="7.5" stroke="{{p.traco}}" stroke-width="1.8" fill="none"></circle>
+<path d="M49.5 58h1" stroke="{{p.traco}}" stroke-width="1.8"></path>
+</sc-if>
+<sc-if value="{{e.bocaTraco}}" hint-placeholder-val="{{ true }}">
+<path d="{{e.boca}}" stroke="{{p.traco}}" stroke-width="2.4" stroke-linecap="round" fill="none"></path>
+</sc-if>
+<sc-if value="{{e.bocaO}}" hint-placeholder-val="{{ false }}">
+<ellipse cx="50" cy="71.5" rx="2.6" ry="3.2" fill="{{p.traco}}"></ellipse>
+</sc-if>
+</g>
+</g>
+<sc-if value="{{e.zz}}" hint-placeholder-val="{{ false }}">
+<path d="M76 20h7l-7 8h7M86 10h5l-5 6h5" stroke="{{p.corpoEscuro}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+</sc-if>
+</svg>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"agente":{"editor":"enum","options":["alba","tula","faina","nuno"],"default":"alba"},"estado":{"editor":"enum","options":["descansando","focado","atento","preocupado","dormindo"],"default":"descansando"},"modo":{"editor":"enum","options":["corpo","cabeca"],"default":"corpo"},"tamanho":{"editor":"int","min":16,"max":400,"default":240},"$preview":{"width":200,"height":240}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var P = {
+      alba: { corpo: '#E2B26A', corpoEscuro: '#C9974D', acessorio: '#A9762A', bracoE: 21, bracoD: 79, dy: 2, nome: 'Alba' },
+      tula: { corpo: '#86BC9C', corpoEscuro: '#6CA283', acessorio: '#3F7F5C', bracoE: 20, bracoD: 80, dy: 2, nome: 'Tula' },
+      faina: { corpo: '#DE9070', corpoEscuro: '#C67757', acessorio: '#A24F37', bracoE: 21, bracoD: 79, dy: 6, nome: 'Faina' },
+      nuno: { corpo: '#8FAADE', corpoEscuro: '#7590C6', acessorio: '#46639F', bracoE: 27, bracoD: 73, dy: -2, nome: 'Nuno' }
+    };
+    var id = P[this.props.agente] ? this.props.agente : 'alba';
+    var p = Object.assign({ traco: '#1C1D20', alba: id === 'alba', tula: id === 'tula', faina: id === 'faina', nuno: id === 'nuno' }, P[id]);
+    var E = {
+      descansando: { abertos: true, olhoY: 58, olhoRx: 3.2, olhoRy: 4, bocaTraco: true, boca: 'M45 70Q50 74.5 55 70' },
+      focado: { abertos: true, olhoY: 59.5, olhoRx: 3.4, olhoRy: 2.3, bocaTraco: true, boca: 'M46 71.5H54', temSobrancelha: true, sobrancelha: 'M38 52.5l7 1M55 53.5l7-1' },
+      atento: { abertos: true, olhoY: 58, olhoRx: 3.8, olhoRy: 4.9, bocaO: true, temSobrancelha: true, sobrancelha: 'M38 48.5l7-1.5M55 47l7 1.5' },
+      preocupado: { abertos: true, olhoY: 58.5, olhoRx: 3.2, olhoRy: 3.8, bocaTraco: true, boca: 'M45 73Q50 68.5 55 73', temSobrancelha: true, sobrancelha: 'M38 50l7 2.5M55 52.5l7-2.5' },
+      dormindo: { fechados: true, bocaTraco: true, boca: 'M47.5 71.5H52.5', zz: true }
+    };
+    var est = E[this.props.estado] ? this.props.estado : 'descansando';
+    var e = Object.assign({ abertos: false, fechados: false, bocaTraco: false, bocaO: false, temSobrancelha: false, sobrancelha: '', boca: '', zz: false, olhoY: 58, olhoRx: 3, olhoRy: 4 }, E[est]);
+    var modo = this.props.modo === 'cabeca' ? 'cabeca' : 'corpo';
+    var tam = this.props.tamanho || 240;
+    var raiz = modo === 'cabeca'
+      ? 'width: ' + tam + 'px; height: ' + tam + 'px; display: block;'
+      : 'width: ' + Math.round(tam * 100 / 120) + 'px; height: ' + tam + 'px; display: block;';
+    var topo = id === 'nuno' ? 16 : (id === 'tula' ? 18 : 14);
+    var caixa = modo === 'cabeca' ? '16 ' + topo + ' 68 68' : '0 0 100 120';
+    return { p: p, e: e, raiz: raiz, caixa: caixa, rosto: 'translate(0,' + p.dy + ')', rotulo: p.nome + ', ' + est };
+  }
+}
+</script>
+</body>
+</html>

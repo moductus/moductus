@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Moductus · painel Agentes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&amp;family=Geist+Mono:wght@400;600&amp;family=Instrument+Sans:wght@400;600&amp;family=JetBrains+Mono:wght@400;600&amp;family=Onest:wght@400;600&amp;family=IBM+Plex+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit}
+button{font:inherit;cursor:pointer}
+@keyframes corre{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; position: relative; overflow: hidden; background: {{t.paredeFundo}}; font-family: {{t.fonte}}; color: {{t.texto}}; font-size: 13px; line-height: 1.45">
+
+<sc-if value="{{t.vidro}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: -120px; top: 80px; width: 720px; height: 720px; border-radius: 360px; background: #2C3A5C"></div>
+<div style="position: absolute; left: 260px; top: -200px; width: 560px; height: 560px; border-radius: 280px; background: #3A2F52"></div>
+<div style="position: absolute; right: -160px; bottom: -220px; width: 760px; height: 760px; border-radius: 380px; background: #1F3B44"></div>
+</sc-if>
+
+<div style="position: absolute; left: 520px; top: 56px; right: 56px; bottom: 56px; background: {{t.janelaFantasma}}; border: 1px solid {{t.borda}}; border-radius: 12px; display: flex; flex-direction: column; gap: 14px; padding: 18px 22px; box-sizing: border-box">
+<div style="width: 46%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+<div style="width: 64%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+<div style="width: 38%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+</div>
+
+<div style="position: absolute; left: 0; top: 0">
+<dc-import name="Dock" tema="{{nome}}" ativo="agentes" hint-size="88px,900px"></dc-import>
+</div>
+
+<section aria-label="Painel Agentes" style="position: absolute; left: {{t.painelEsq}}; top: 12px; width: 400px; background: {{t.painel}}; backdrop-filter: {{t.desfoque}}; border: 1px solid {{t.bordaForte}}; border-radius: {{t.raioPainel}}; box-shadow: {{t.sombraPainel}}; padding: 18px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px">
+
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h1 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Agentes</h1>
+<span style="color: {{t.texto3}}; font-size: 12px">1 trabalhando · 2 esperando você</span>
+</div>
+<a href="#" style="display: flex; align-items: center; gap: 6px; text-decoration: none; color: {{t.texto3}}; font-size: 12px">Abrir no sistema <span style="font-family: {{t.mono}}; font-size: 11px; padding: 2px 5px; border-radius: 4px; background: {{t.chip}}; color: {{t.texto2}}">Ctrl Alt N</span></a>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="font-size: 12px; color: {{t.texto3}}; padding-bottom: 6px">Seu time</div>
+<sc-for list="{{time}}" as="a" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid {{t.borda}}">
+<span style="flex: none; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center"><dc-import name="Personagem" agente="{{a.id}}" estado="{{a.expr}}" modo="cabeca" tamanho="{{ 36 }}" hint-size="36px,36px"></dc-import></span>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<div style="display: flex; align-items: center; gap: 8px"><span style="font-weight: 600">{{a.nome}}</span><span style="{{a.estiloEstado}}">{{a.estado}}</span></div>
+<span style="color: {{t.texto2}}; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{a.acao}}</span>
+<sc-if value="{{a.trabalhando}}" hint-placeholder-val="{{ false }}">
+<div style="height: 2px; border-radius: 1px; background: {{t.trilho}}; overflow: hidden; margin-top: 4px"><div style="width: 40%; height: 2px; background: {{t.destaque}}; animation: corre 1.4s ease-in-out infinite"></div></div>
+</sc-if>
+</div>
+</div>
+</sc-for>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: {{t.texto3}}"><span>Sessões de IA</span><span>3 projetos</span></div>
+
+<div style="border: 1px solid {{t.borda}}; border-radius: {{t.raioCartao}}; padding: 12px; display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 4px; background: {{t.sucesso}}"></span><span style="font-weight: 600">moductus</span><span style="color: {{t.texto3}}; font-size: 12px">Claude Code</span><span style="margin-left: auto; font-family: {{t.mono}}; font-size: 11px; color: {{t.texto3}}">12 min</span></div>
+<div style="color: {{t.texto2}}; font-size: 12px">Editando <code style="font-family: {{t.mono}}; font-size: 11px; padding: 1px 5px; border-radius: 4px; background: {{t.chip}}">src-tauri/src/appbar.rs</code></div>
+</div>
+
+<div style="border: 1px solid {{t.bordaForte}}; background: {{t.elevada}}; border-radius: {{t.raioCartao}}; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 4px; background: {{t.aviso}}"></span><span style="font-weight: 600">api-pedidos</span><span style="color: {{t.texto3}}; font-size: 12px">Claude Code</span><span style="margin-left: auto; font-size: 12px; color: {{t.aviso}}">esperando você</span></div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: {{t.texto2}}">Quer rodar <code style="font-family: {{t.mono}}; font-size: 12px; padding: 2px 6px; border-radius: 4px; background: {{t.chip}}; color: {{t.texto}}">npm test -- --watch=false</code></div>
+<div style="display: flex; gap: 8px; justify-content: flex-end">
+<button style="height: 32px; padding: 0 14px; border-radius: {{t.raioBotao}}; border: 1px solid {{t.bordaForte}}; background: transparent; color: {{t.texto}}; font-size: 12px">Negar</button>
+<button style="height: 32px; padding: 0 14px; border-radius: {{t.raioBotao}}; border: 1px solid {{t.bordaForte}}; background: transparent; color: {{t.texto}}; font-size: 12px">Sempre neste projeto</button>
+<button style="height: 32px; padding: 0 14px; border-radius: {{t.raioBotao}}; border: 0; background: {{t.destaque}}; color: {{t.sobreDestaque}}; font-size: 12px; font-weight: 600">Permitir</button>
+</div>
+</div>
+
+<div style="border: 1px solid {{t.borda}}; border-radius: {{t.raioCartao}}; padding: 12px; display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 4px; background: {{t.apagado}}"></span><span style="font-weight: 600">site</span><span style="color: {{t.texto3}}; font-size: 12px">Codex</span><span style="margin-left: auto; font-family: {{t.mono}}; font-size: 11px; color: {{t.texto3}}">há 8 min</span></div>
+<div style="color: {{t.texto2}}; font-size: 12px">Terminou o turno: 4 arquivos alterados</div>
+</div>
+</div>
+
+<div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: {{t.texto3}}; border-top: 1px solid {{t.borda}}; padding-top: 12px">
+<span>Modelo dos agentes: Claude Code, sua assinatura</span>
+<a href="#" style="text-decoration: none; color: {{t.texto}}">Trocar</a>
+</div>
+
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tema":{"editor":"enum","options":["Grafite","Papel","Vidro"],"default":"Grafite"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var TEMAS = {
+      Grafite: { paredeFundo: '#191B1F', janelaFantasma: '#141619', linhaFantasma: '#1E2125', painel: '#131417', elevada: '#1A1C20', chip: 'rgba(255,255,255,0.06)', trilho: 'rgba(255,255,255,0.08)', borda: 'rgba(255,255,255,0.07)', bordaForte: 'rgba(255,255,255,0.12)', texto: '#E8E9EB', texto2: '#B5B8BD', texto3: '#8C9097', apagado: '#5A5E65', destaque: '#E8E9EB', sobreDestaque: '#0D0E10', sucesso: '#7FB89E', aviso: '#E3B262', raioPainel: '12px', raioCartao: '10px', raioBotao: '8px', fonte: "'Geist', 'Segoe UI', system-ui, sans-serif", mono: "'Geist Mono', Consolas, monospace", desfoque: 'none', sombraPainel: '0 24px 48px rgba(0,0,0,0.45)', vidro: false, painelEsq: '76px' },
+      Papel: { paredeFundo: '#E3E1DC', janelaFantasma: '#F1F0EC', linhaFantasma: '#E6E4DF', painel: '#FFFFFF', elevada: '#F6F5F2', chip: '#EFEEEA', trilho: '#E6E4DF', borda: 'rgba(20,20,19,0.08)', bordaForte: 'rgba(20,20,19,0.14)', texto: '#1A1A18', texto2: '#3E3D39', texto3: '#6B6A64', apagado: '#B4B2AA', destaque: '#1A1A18', sobreDestaque: '#FBFAF8', sucesso: '#2F7A52', aviso: '#B5761A', raioPainel: '16px', raioCartao: '12px', raioBotao: '17px', fonte: "'Instrument Sans', 'Segoe UI', system-ui, sans-serif", mono: "'JetBrains Mono', Consolas, monospace", desfoque: 'none', sombraPainel: '0 16px 40px rgba(40,36,28,0.12)', vidro: false, painelEsq: '88px' },
+      Vidro: { paredeFundo: '#161B26', janelaFantasma: 'rgba(18,21,29,0.82)', linhaFantasma: '#222733', painel: 'rgba(22,25,34,0.66)', elevada: 'rgba(255,255,255,0.07)', chip: 'rgba(255,255,255,0.08)', trilho: 'rgba(255,255,255,0.10)', borda: 'rgba(255,255,255,0.09)', bordaForte: 'rgba(255,255,255,0.16)', texto: '#EEF0F6', texto2: '#C4C9D4', texto3: '#9AA1B1', apagado: '#6B7285', destaque: '#A3B5FF', sobreDestaque: '#10131C', sucesso: '#7CCBA2', aviso: '#E8B86A', raioPainel: '18px', raioCartao: '12px', raioBotao: '10px', fonte: "'Onest', 'Segoe UI', system-ui, sans-serif", mono: "'IBM Plex Mono', Consolas, monospace", desfoque: 'blur(32px) saturate(140%)', sombraPainel: 'none', vidro: true, painelEsq: '88px' }
+    };
+    var nome = this.props.tema || 'Grafite';
+    var t = TEMAS[nome] || TEMAS.Grafite;
+    var pill = function (cor) { return 'font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid ' + t.borda + '; color: ' + cor + ';'; };
+    var claro = nome === 'Papel';
+    var alfa = function (hex, a) { var n = parseInt(hex.slice(1), 16); return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')'; };
+    var avatar = function (tom) { return 'width: 30px; height: 30px; border-radius: 9px; flex: none; display: flex; align-items: center; justify-content: center; color: ' + tom + '; background: ' + alfa(tom, claro ? 0.16 : 0.14) + ';'; };
+    var time = [
+      { id: 'alba', expr: 'descansando', nome: 'Alba', estado: 'ocioso', cor: t.texto3, tom: claro ? '#9A6A1E' : '#D9A55A', d: 'M3 18h18M7 18a5 5 0 0 1 10 0M12 8v2M5.6 10.6l1.4 1.4M18.4 10.6L17 12', acao: 'Briefing da manhã enviado às 8h30 · lembrete às 15h' },
+      { id: 'tula', expr: 'focado', nome: 'Tula', estado: 'trabalhando', cor: t.sucesso, tom: claro ? '#2F7A52' : '#6FAE8C', d: 'M6 19h12M6 14.5h12M9 10h6', acao: 'Lendo o extrato de setembro (OFX, 84 lançamentos)', trabalhando: true },
+      { id: 'faina', expr: 'atento', nome: 'Faina', estado: 'esperando você', cor: t.aviso, tom: claro ? '#A34E2E' : '#D2805E', d: 'M4 14l4.5-4.5L13 14l-4.5 4.5zM11 9l4.5-4.5L20 9l-4.5 4.5z', acao: 'Prévia pronta: organizar 142 arquivos em Downloads' },
+      { id: 'nuno', expr: 'atento', nome: 'Nuno', estado: 'aviso', cor: t.aviso, tom: claro ? '#3F64A8' : '#7C9CD6', d: 'M12 13.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM8 8a5.7 5.7 0 0 0 0 8M16 8a5.7 5.7 0 0 1 0 8M5 5a9.9 9.9 0 0 0 0 14M19 5a9.9 9.9 0 0 1 0 14', acao: 'api-pedidos usou 84% do contexto · 2 PRs esperam review' }
+    ].map(function (a) { return Object.assign({}, a, { estiloEstado: pill(a.cor), trabalhando: !!a.trabalhando, avatar: avatar(a.tom) }); });
+    return { t: t, nome: nome, time: time };
+  }
+}
+</script>
+</body>
+</html>
