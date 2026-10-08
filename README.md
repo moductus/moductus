@@ -9,7 +9,70 @@ Um sistema pessoal para Windows, open source: fica sempre à mão num dock later
 
 ---
 
-> **Status: pivô em desenho.** O Moductus está deixando de ser uma suíte de utilitários para virar um sistema pessoal com agentes. O desenho (fase 0) está em [docs/](docs/); a fase 1 (a casca) está em construção. Quem quer a suíte de utilitários usa a tag [`v0.4.0`](https://github.com/moductus/moductus/tree/v0.4.0), que guarda o código .NET.
+> **Status: alfa da casca (`v0.5.0-alpha`).** O Moductus está deixando de ser uma suíte de utilitários para virar um sistema pessoal com agentes. A fase 1 entregou a casca: o dock que reserva espaço na lateral, os painéis, o Sistema com as 12 áreas navegáveis, a captura rápida, mídia, microfone, manter acordado, os três temas, atalhos, autostart e as configurações. Os agentes e os dados das áreas chegam a partir da fase 2. Quem quer a suíte de utilitários usa a tag [`v0.4.0`](https://github.com/moductus/moductus/tree/v0.4.0), que guarda o código .NET.
+
+## Instalar
+
+Windows 10 ou 11, 64 bits. Baixe da [página de releases](https://github.com/moductus/moductus/releases) um dos dois:
+
+- **Instalador** (`moductus-v0.5.0-alpha-win-x64-setup.exe`): instalador NSIS; dados e configurações ficam em `%APPDATA%\Moductus`.
+- **Portable** (`moductus-v0.5.0-alpha-win-x64-portable.zip`): extraia numa pasta e rode `moductus.exe`. O `portable.txt` ao lado do exe faz o Moductus guardar tudo naquela pasta; apague-o para usar `%APPDATA%\Moductus`. No modo portable o autostart fica desligado.
+
+Os dois arquivos levam attestation do GitHub Actions, que liga o binário ao commit que o gerou. Atualização automática ainda não existe: baixe a versão nova pela mesma página.
+
+O dock aparece na borda esquerda e reserva o espaço dele, como a barra de tarefas. **Sair do Moductus**, no ícone da bandeja, encerra o Moductus e devolve o espaço. Atalhos de fábrica: `Ctrl+Alt+N` abre o Sistema, `Ctrl+Alt+D` alterna o dock entre visível, com o teclado e escondido, `Ctrl+Alt+Espaço` abre a captura.
+
+## Rodar em desenvolvimento
+
+Pré-requisitos: [Node 24](https://nodejs.org/) ou mais novo, [pnpm 10](https://pnpm.io/installation) (a versão exata está em `packageManager` no `package.json`), [Rust estável](https://rustup.rs/) com o alvo MSVC e o [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) (já vem no Windows 11). Os pré-requisitos do Tauri no Windows estão em [tauri.app](https://tauri.app/start/prerequisites/).
+
+```powershell
+git clone https://github.com/moductus/moductus.git
+cd moductus
+pnpm install
+node scripts/preparar-sidecar.mjs
+pnpm tauri dev
+```
+
+O `preparar-sidecar.mjs` copia o seu `node.exe` para `src-tauri/binaries/` (fora do Git, ~80 MB): o Tauri exige o binário do sidecar para compilar, mesmo em desenvolvimento. Basta rodar uma vez, ou de novo ao trocar de versão do Node. O `pnpm tauri dev` gera o serviço, sobe o Vite em `http://localhost:1420` e abre o app; em desenvolvimento a casca roda o serviço com o `node` do PATH.
+
+Build de release, sem e com instalador:
+
+```powershell
+pnpm tauri build --no-bundle
+pnpm tauri build
+```
+
+O primeiro deixa `src-tauri/target/release/moductus.exe`; o segundo, o instalador em `src-tauri/target/release/bundle/nsis/`. O zip portable sai de `pwsh -File scripts/empacotar-portable.ps1 -Versao v0.5.0-alpha -Destino artefatos`, depois do `pnpm tauri build`.
+
+### Testes
+
+Os mesmos passos do CI, da raiz:
+
+```powershell
+pnpm format:check
+pnpm -r lint
+pnpm -r typecheck
+pnpm -r test
+pnpm build
+pnpm --filter @moductus/servico fumaca
+cd src-tauri
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
+
+Os comandos e as regras para contribuir estão no [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Roteiros na tela real
+
+O que depende do Windows de verdade (reserva de espaço, foco, tela cheia, atalhos globais, UI Automation) é conferido por roteiros em PowerShell contra o app compilado. **Eles mexem no mouse e no teclado, abrem janelas de teste e cobrem a tela por alguns segundos: não use o PC enquanto rodam.**
+
+```powershell
+pnpm tauri build --debug --no-bundle
+pwsh -File scripts/verificar.ps1 -Roteiro appbar
+```
+
+Os roteiros são `appbar`, `modos`, `telacheia`, `janelas`, `atalhos`, `inicio`, `midia`, `controles`, `servico`, `teclado` e `acessibilidade`; sem `-Roteiro`, roda todos. O `scripts/medir.ps1` mede memória, tempo até o dock e abertura do painel no build de release, sem mexer no mouse (mas abre e fecha o app algumas vezes); os números estão no [ARCHITECTURE.md](docs/ARCHITECTURE.md#medições-da-fase-1).
 
 ## O que é
 
