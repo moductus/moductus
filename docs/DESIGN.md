@@ -113,13 +113,13 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 | Painel Mídia, controles e apps abertos | ✓ (tweak de tema) | ✓ | ✓ |
 | Captura rápida | ✓ (tweak de tema) | ✓ | ✓ |
 | Componente Dock, reutilizado pelos painéis | ✓ | ✓ | ✓ |
-| Marca: quatro opções (Trilho, Coluna, Borda e ponto, M modular) | — | — | — |
+| Marca: quatro opções, com a **C · Borda e ponto** escolhida e aplicada em todos os desenhos | ✓ | ✓ | ✓ |
 | Agentes: personagens, expressões e criar agente | ✓ (tweak de tema) | ✓ | ✓ |
 | Componente Personagem (agente, expressão, corpo ou cabeça) | ✓ | ✓ | ✓ |
 
 O cartão de aprovação traz três ações: **Negar**, **Sempre neste projeto** e **Permitir**. A do meio vira uma regra de permissão do Claude Code para aquele projeto, registrada pelo hook.
 
-**A desenhar:** painéis de Foco, Finanças e Dev no dock, as demais áreas do Sistema, estados do agente (vazio, erro, sem modelo), configurações de tema e dock, e a marca escolhida (a atual é provisória).
+**A desenhar:** painéis de Foco, Finanças e Dev no dock, as demais áreas do Sistema, estados do agente (vazio, erro, sem modelo), configurações de tema e dock, e a aplicação da marca no ícone do executável e no instalador.
 
 ---
 
@@ -148,3 +148,22 @@ Cada agente é um **personagem**: corpo, rosto e um traço próprio. Formas simp
 - **Tamanhos:** cabeça a 16, 24 e 32 px (listas e dock) e 36 px (painéis); corpo inteiro a 168 px nos cartões e na página do agente.
 - **Movimento:** respiração de 4,2 s e piscar a cada 5,5 s. Tudo para com `prefers-reduced-motion`. Nada de pulos, confetes ou balões de fala.
 - **Agentes do usuário:** montados de peças fechadas (4 silhuetas, 8 traços, 8 tons), para o time continuar coerente.
+
+---
+
+## 7. Marca
+
+**Borda e ponto:** uma linha vertical com um ponto ao lado, no alto. A linha é o dock na lateral da tela; o ponto é um agente presente, pronto para trabalhar.
+
+Geometria num quadrado de lado `L`:
+
+| Elemento | Posição | Tamanho | Raio |
+|---|---|---|---|
+| Linha | `x = 0,24 L`, de `y = 0,04 L` a `y = 0,96 L` | largura `0,15 L` | metade da largura |
+| Ponto | `x = 0,50 L`, `y = 0,08 L` | diâmetro `0,32 L` | círculo |
+
+- **Cor:** uma só, sempre. `destaque` do tema na interface (claro no Grafite, tinta no Papel, lavanda no Vidro); preto ou branco puro fora do app.
+- **Tamanhos testados:** 104, 48, 32 e 16 px, em fundo claro e escuro. A 16 px a linha tem 2,4 px e o ponto 5 px, e continua legível na bandeja.
+- **Área de respiro:** `0,25 L` em volta, sem texto nem borda encostando.
+- **Com o nome:** marca à esquerda, "Moductus" em peso 600 com espaçamento de −0,02 em, altura do texto em 90% da marca.
+- **Não fazer:** contorno, sombra, gradiente, rotação, trocar a ordem dos elementos ou colocar o ponto embaixo.

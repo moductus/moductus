@@ -16,8 +16,8 @@ body{margin:0}
 </helmet>
 <div style="width: 1440px; height: 900px; box-sizing: border-box; padding: 56px; background: #E9E7E2; font-family: 'Geist', 'Segoe UI', system-ui, sans-serif; color: #1A1A18; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px">
 <sc-for list="{{opcoes}}" as="c" hint-placeholder-count="4">
-<div style="background: #FFFFFF; border: 1px solid rgba(20,20,19,0.08); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
-<div style="display: flex; align-items: baseline; justify-content: space-between"><span style="font-size: 18px; font-weight: 600; letter-spacing: -0.01em">{{c.nome}}</span><span style="font-size: 13px; color: #6B6A64">{{c.letra}}</span></div>
+<div style="{{c.cartao}}">
+<div style="display: flex; align-items: baseline; justify-content: space-between"><span style="font-size: 18px; font-weight: 600; letter-spacing: -0.01em">{{c.nome}}</span><span style="{{c.selo}}">{{c.letraTexto}}</span></div>
 <sc-for list="{{c.fundos}}" as="f" hint-placeholder-count="2">
 <div style="{{f.estilo}}">
 <div style="font-size: 104px; line-height: 0; display: flex; justify-content: center; padding: 18px 0 6px">
@@ -66,7 +66,7 @@ class Component extends DCLogic {
       { nome: 'Coluna', letra: 'B', b: true },
       { nome: 'Borda e ponto', letra: 'C', c: true },
       { nome: 'M modular', letra: 'D', d: true }
-    ].map(function (o) { return Object.assign({ a: false, b: false, c: false, d: false }, o, { fundos: fundos }); });
+    ].map(function (o) { var esc = !!o.c; return Object.assign({ a: false, b: false, c: false, d: false }, o, { fundos: fundos, letraTexto: esc ? o.letra + ' · escolhida' : o.letra, selo: esc ? 'font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: #1A1A18; color: #FBFAF8;' : 'font-size: 13px; color: #6B6A64;', cartao: 'background: #FFFFFF; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 16px; ' + (esc ? 'border: 2px solid #1A1A18;' : 'border: 1px solid rgba(20,20,19,0.08); opacity: 0.6;') }); });
     var tamanhos = [
       { rotulo: '48', estilo: 'font-size: 48px; line-height: 0;' },
       { rotulo: '32', estilo: 'font-size: 32px; line-height: 0;' },

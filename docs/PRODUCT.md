@@ -252,6 +252,7 @@ Criar, duplicar, exportar e importar agentes, com nome, função, visual, modelo
 | 17 | Agentes criados pelo usuário na fase 7, com ação externa sempre aprovada | O valor do agente próprio não pode abrir uma porta que os de fábrica não abrem |
 | 18 | Agentes como personagens, com corpo e rosto | Tira a sensação de máquina; a expressão comunica o estado de relance. Substitui o glifo geométrico do primeiro desenho |
 | 19 | Agentes sempre vivos, com vigias sem modelo e modelo sob demanda | Lembrete e PR não podem esperar o usuário abrir o app, e ficar vivo não pode custar token o dia inteiro |
+| 20 | Marca "Borda e ponto": a linha do dock e o ponto de um agente presente | Conta o produto em dois elementos e continua legível a 16 px na bandeja. Especificação em [DESIGN.md](DESIGN.md#7-marca) |
 
 As 21 decisões do v0 estão em [v0/PRODUCT.md](v0/PRODUCT.md#10-decisões-registradas), como registro histórico.
 
