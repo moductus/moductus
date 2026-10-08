@@ -10,12 +10,12 @@
 
 Um agente é **configuração**, não código. Todos rodam no mesmo runtime, dentro do serviço, e todos têm as mesmas três coisas que o usuário vê: **nome**, **função** e **visual**.
 
-| Campo | O que é | Exemplo (Vigia) |
+| Campo | O que é | Exemplo (Nuno) |
 |---|---|---|
-| `id`, `nome`, `apelido` | Identidade e como chamar no chat | `vigia`, "Vigia", `@vigia` |
+| `id`, `nome`, `apelido` | Identidade e como chamar no chat | `nuno`, "Nuno", `@nuno` |
 | `funcao` | Uma frase do que ele faz, mostrada no dock e no Sistema | "Fica de olho nas suas sessões de IA e no seu código" |
 | `instrucoes` | Quem é, do que cuida, como responde, o que nunca faz | Texto livre, editável |
-| `visual` | Glifo e tom (veja "Visual dos agentes") | glifo `radar`, tom `ardosia` |
+| `visual` | Personagem: silhueta, traço e tom (veja "Visual dos agentes") | cápsula, fones, ardósia |
 | `ferramentas` | Subconjunto do catálogo | `sessoes.*`, `github.*`, `tarefas.criar` |
 | `provedor` | Modelo que ele usa, com reserva opcional | `claude-cli`; reserva `openai-compativel` |
 | `gatilhos` | Quando trabalha sozinho | `intervalo: 15min`, `evento: sessao.contexto_alto` |
@@ -24,7 +24,7 @@ Um agente é **configuração**, não código. Todos rodam no mesmo runtime, den
 ### De fábrica e criados por você
 
 - **De fábrica:** os quatro agentes da seção 2 vêm prontos. Dá para renomear, trocar o visual, ajustar instruções, ferramentas e modelo, ou desligar. Não dá para apagar: "restaurar padrão" volta ao original.
-- **Criados por você (fase 7):** um agente novo é preenchido a partir do zero ou duplicando um de fábrica. O Sistema guia pelos campos acima. O visual sai da mesma biblioteca de glifos e tons, e as ferramentas vêm do mesmo catálogo. Ferramenta `externo` continua sempre com aprovação, então nenhum agente criado consegue agir fora do Moductus sem o seu sim.
+- **Criados por você (fase 7):** um agente novo é preenchido a partir do zero ou duplicando um de fábrica. O Sistema guia pelos campos acima. O personagem é montado das mesmas peças (silhuetas, traços e tons), e as ferramentas vêm do mesmo catálogo. Ferramenta `externo` continua sempre com aprovação, então nenhum agente criado consegue agir fora do Moductus sem o seu sim.
 - **Compartilhar:** um agente se exporta e importa como arquivo `.json`, só com configuração, sem dados nem chaves.
 
 A **memória é compartilhada**, não um agente: qualquer agente guarda e consulta fatos nos escopos que tem, e a área Memória mostra e edita tudo.
@@ -33,11 +33,10 @@ A **memória é compartilhada**, não um agente: qualquer agente guarda e consul
 
 ## 2. Os agentes de fábrica
 
-| | Alba | Lastro | Faina | Vigia |
+| | Alba | Tula | Faina | Nuno |
 |---|---|---|---|---|
 | **Função** | Cuida do seu dia | Cuida do seu dinheiro | Faz o serviço pesado | Fica de olho nas suas IAs e no seu código |
-| **Nome** | Aurora: começa o dia com você | O que sustenta: reserva e equilíbrio | Trabalho árduo, lida | Quem vigia |
-| **Glifo** | Sol nascendo sobre a linha | Barras empilhadas | Blocos se encaixando | Radar |
+| **Personagem** | Ovo com raios de sol | Pera de coque e óculos | Bloco de bandana | Cápsula de fones |
 | **Tom** | Âmbar | Musgo | Terracota | Ardósia |
 
 ### Alba — o dia a dia
@@ -48,7 +47,7 @@ A **memória é compartilhada**, não um agente: qualquer agente guarda e consul
 - **Agenda:** local no início; Google Agenda e Outlook entram como conexões, com o efeito `externo` para criar ou mudar evento fora do Moductus.
 - **É o agente padrão:** mensagem sem destinatário claro vai para a Alba.
 
-### Lastro — finanças
+### Tula — finanças
 - **Cuida de:** gastos, dívidas, planos e orçamento.
 - **Faz:**
   - **Gastos:** lança por texto ("45 de mercado no débito"), por print ou comprovante (OCR local, depois o modelo estrutura) e por extrato OFX ou CSV; categoriza; acompanha orçamento por categoria e recorrências.
@@ -71,7 +70,7 @@ A **memória é compartilhada**, não um agente: qualquer agente guarda e consul
 - **Gatilhos:** Downloads passou de um limite, arquivo caiu em Arquivos, limpeza semanal agendada.
 - **Ferramentas:** `arquivos.*`, `documentos.*`, `ocr.ler`, `comando.executar` (`externo`), `memoria.*`.
 
-### Vigia — dev e sessões de IA
+### Nuno — dev e sessões de IA
 - **Cuida de:** as sessões de agentes de código e o seu trabalho no GitHub.
 - **Faz:**
   - **Sessões:** acompanha Claude Code, Codex, OpenCode, Gemini CLI e Antigravity por projeto (trabalhando, esperando você, terminou, erro, parada) e leva os pedidos de permissão ao dock.
@@ -85,20 +84,28 @@ A **memória é compartilhada**, não um agente: qualquer agente guarda e consul
 
 ### Roteamento
 
-1. Menção explícita (`@lastro`) escolhe o agente.
-2. Sem menção, regras simples por palavra e contexto: valor em reais vai para Lastro, link de PR ou nome de sessão vai para Vigia, arquivo ou pasta vai para Faina.
+1. Menção explícita (`@tula`) escolhe o agente.
+2. Sem menção, regras simples por palavra e contexto: valor em reais vai para a Tula, link de PR ou nome de sessão vai para o Nuno, arquivo ou pasta vai para Faina.
 3. Sem regra, um classificador barato (o modelo da Alba, prompt curto) decide; a Alba é o padrão.
 
 ---
 
 ### Visual dos agentes
 
-O agente tem rosto, mas sóbrio: **um glifo geométrico dentro de um quadrado arredondado**, no tom do agente. Sem mascote, sem expressão facial, sem animação decorativa.
+Cada agente é um **personagem**: corpo, rosto e um traço próprio, para que o time pareça gente trabalhando com você e não uma máquina. O desenho continua sóbrio, com formas simples, cores chapadas no tom do agente, sem contorno e sem detalhe que não leia pequeno.
 
-- **Glifo:** traço único, mesma espessura dos ícones do app, legível a 16 px. É ele que diferencia um agente do outro, mais do que a cor.
-- **Tom:** cor de identidade em baixa saturação, usada só no fundo do quadrado (10–18% de opacidade) e no glifo. Cada tema tem a variante escura e a clara, em [DESIGN.md](DESIGN.md#6-agentes).
-- **Estado:** mostrado por um anel e pela legenda, nunca só pela cor. `ocioso` sem anel; `trabalhando` com anel girando devagar; `esperando você` com anel cheio no tom de aviso; `aviso` com ponto; `erro` com anel tracejado no tom de perigo; `desligado` com o quadrado esmaecido.
-- **Agentes criados por você** escolhem glifo e tom da mesma biblioteca.
+| Agente | Silhueta | Traço próprio |
+|---|---|---|
+| **Alba** | Ovo, levemente inclinado | Três raios de sol sobre a cabeça |
+| **Tula** | Pera, base larga e estável | Coque no alto e óculos redondos |
+| **Faina** | Bloco arredondado, robusto | Bandana com nó de lado |
+| **Nuno** | Cápsula alta | Fones de ouvido |
+
+- **Rosto:** dois olhos e uma boca, e só. A **expressão é o estado**: descansando, focado (olhos baixos, trabalhando), atento (olhos grandes, sobrancelhas erguidas, esperando você), preocupado (erro) e dormindo (olhos fechados, desligado). A legenda de texto acompanha sempre, para nunca depender só do desenho.
+- **Tamanhos:** só a cabeça no dock e em listas (16 a 32 px); meio corpo nos painéis; corpo inteiro na página do agente no Sistema.
+- **Movimento:** respiração lenta em repouso e um piscar de vez em quando; tudo para quando o Windows pede menos animação. Nada de pulos, confetes ou falas em balão.
+- **Agentes criados por você** montam o personagem a partir de uma biblioteca fechada de silhuetas, traços e tons, para o time continuar coerente.
+- Valores de cor e medidas em [DESIGN.md](DESIGN.md#6-agentes).
 
 ---
 
@@ -182,7 +189,7 @@ Cartões pendentes ficam no banco: fechar o app não perde o pedido, e o cartão
 
 ### Escopo
 
-Cada agente só recebe as ferramentas da sua lista. O contexto enviado ao modelo é montado pelas ferramentas que ele chama, não por um despejo do banco: a Vigia nunca vê seus lançamentos.
+Cada agente só recebe as ferramentas da sua lista. O contexto enviado ao modelo é montado pelas ferramentas que ele chama, não por um despejo do banco: o Nuno nunca vê seus lançamentos.
 
 ---
 
@@ -230,6 +237,26 @@ O Claude Code não expõe uso nem limites por hook ou por arquivo local. Sessõe
 ---
 
 ## 6. Execução em segundo plano
+
+### Sempre vivos
+
+Os agentes ficam **sempre prontos**: o serviço sobe no login, independe das janelas (fechar o Sistema ou esconder o dock não para nada) e só encerra quando você sai do Moductus ou desliga o PC.
+
+"Vivo" não quer dizer um modelo pensando o tempo todo. Cada agente tem **vigias**, código comum que roda o tempo inteiro sem gastar token, e o modelo só é acordado quando um vigia acha algo que pede julgamento:
+
+| Agente | Vigias sempre ligados | Quando acorda o modelo |
+|---|---|---|
+| **Alba** | Relógio de lembretes e compromissos, virada do dia | Montar briefing e fechamento; entender uma captura |
+| **Tula** | Pasta de extratos, vencimento de parcelas e recorrências, limite de categoria | Ler e categorizar extrato; explicar um estouro |
+| **Faina** | Tamanho de Downloads, caixa de entrada de Arquivos, agenda de limpeza | Montar o plano e a prévia de organização |
+| **Nuno** | Endpoint dos hooks das sessões de IA (tempo real), uso de contexto, GitHub a cada 15 min com cache por ETag | Resumir PR, priorizar o que precisa de você |
+
+- **Lembrete não depende de modelo:** dispara no horário mesmo sem rede, sem provedor ou com limite estourado.
+- **PC suspenso ou desligado:** ao voltar (evento de retomada do Windows), cada vigia recupera o que perdeu: lembretes vencidos aparecem como atrasados, o GitHub é consultado na hora, e o briefing sai se a manhã ainda não passou.
+- **Pausar:** pela bandeja dá para pausar todos os agentes ou um só (reunião, apresentação); os vigias continuam anotando e entregam tudo ao retomar.
+- **Custo de ficar vivo:** vigias contam no orçamento de memória do serviço e não fazem consulta de rede mais frequente que o intervalo configurado.
+
+### Agendador e execuções
 
 - O **agendador** dispara gatilhos por horário (`08:30`), por intervalo (`15min`) e por evento interno (`arquivo.chegou`, `sessao.pediu_aprovacao`, `orcamento.estourou`).
 - Cada disparo vira uma **execução** registrada: agente, gatilho, provedor, ferramentas chamadas, tokens, duração, resultado. O histórico do agente no Sistema lê essa tabela.

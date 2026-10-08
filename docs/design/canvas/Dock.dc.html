@@ -33,9 +33,9 @@ button{font:inherit;cursor:pointer}
 </sc-for>
 <div style="width: 24px; height: 1px; background: {{t.bordaForte}}; margin: 8px 0"></div>
 <div style="{{estiloGrupoAgentes}}">
-<sc-for list="{{sessoes}}" as="s" hint-placeholder-count="3">
-<button aria-label="{{s.rotulo}}" style="width: 44px; height: 40px; border: 0; background: transparent; position: relative; display: flex; align-items: center; justify-content: center">
-<span style="width: 30px; height: 30px; border-radius: 15px; background: {{t.chip}}; border: 1px solid {{t.borda}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: {{t.texto2}}">{{s.ini}}</span>
+<sc-for list="{{sessoes}}" as="s" hint-placeholder-count="4">
+<button aria-label="{{s.rotulo}}" style="width: 44px; height: 42px; border: 0; background: transparent; position: relative; display: flex; align-items: center; justify-content: center">
+<dc-import name="Personagem" agente="{{s.id}}" estado="{{s.expr}}" modo="cabeca" tamanho="{{ 32 }}" hint-size="32px,32px"></dc-import>
 <span style="{{s.ponto}}"></span>
 </button>
 </sc-for>
@@ -97,9 +97,10 @@ class Component extends DCLogic {
     var ponto = function (cor) { return 'position: absolute; right: 6px; bottom: 6px; width: 8px; height: 8px; border-radius: 4px; border: 2px solid ' + (t.colado ? t.dock : '#1B1F2B') + '; background: ' + cor + ';'; };
     if (!t.vidro && !t.colado) { ponto = function (cor) { return 'position: absolute; right: 6px; bottom: 6px; width: 8px; height: 8px; border-radius: 4px; border: 2px solid ' + t.dock + '; background: ' + cor + ';'; }; }
     var sessoes = [
-      { ini: 'C', rotulo: 'Claude Code em moductus: trabalhando', ponto: ponto(t.sucesso) },
-      { ini: 'C', rotulo: 'Claude Code em api-pedidos: esperando você', ponto: ponto(t.aviso) },
-      { ini: 'X', rotulo: 'Codex em site: terminou', ponto: ponto(t.apagado) }
+      { id: 'alba', expr: 'descansando', rotulo: 'Alba: ocioso', ponto: 'display: none;' },
+      { id: 'tula', expr: 'focado', rotulo: 'Tula: trabalhando', ponto: ponto(t.sucesso) },
+      { id: 'faina', expr: 'atento', rotulo: 'Faina: esperando você', ponto: ponto(t.aviso) },
+      { id: 'nuno', expr: 'atento', rotulo: 'Nuno: 1 sessão esperando você', ponto: ponto(t.aviso) }
     ];
     var apps = [
       { ini: 'Co', nome: 'Editor de código' },

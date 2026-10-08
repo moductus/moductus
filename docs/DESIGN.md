@@ -114,7 +114,8 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 | Captura rápida | ✓ (tweak de tema) | ✓ | ✓ |
 | Componente Dock, reutilizado pelos painéis | ✓ | ✓ | ✓ |
 | Marca: quatro opções (Trilho, Coluna, Borda e ponto, M modular) | — | — | — |
-| Agentes: identidade, estados e criar agente | ✓ (tweak de tema) | ✓ | ✓ |
+| Agentes: personagens, expressões e criar agente | ✓ (tweak de tema) | ✓ | ✓ |
+| Componente Personagem (agente, expressão, corpo ou cabeça) | ✓ | ✓ | ✓ |
 
 O cartão de aprovação traz três ações: **Negar**, **Sempre neste projeto** e **Permitir**. A do meio vira uma regra de permissão do Claude Code para aquele projeto, registrada pelo hook.
 
@@ -124,16 +125,26 @@ O cartão de aprovação traz três ações: **Negar**, **Sempre neste projeto**
 
 ## 6. Agentes
 
-Cada agente é um **glifo geométrico dentro de um quadrado arredondado**. O glifo usa o traço dos ícones (1,6 px a 20 px) e precisa ler a 16 px; o tom é a única cor de identidade e aparece só no fundo do quadrado e no glifo. O resto da interface continua nos tokens do tema.
+Cada agente é um **personagem**: corpo, rosto e um traço próprio. Formas simples e cores chapadas, sem contorno, para ler bem de 16 px a corpo inteiro. O tom do agente é a única cor de identidade; o resto da interface continua nos tokens do tema. Componente de referência: `design/canvas/Personagem.dc.html`.
 
-| Agente | Glifo | Tom no escuro (Grafite, Vidro) | Tom no claro (Papel) |
-|---|---|---|---|
-| **Alba** | Meio sol nascendo sobre uma linha | `#D9A55A` | `#9A6A1E` |
-| **Lastro** | Três barras empilhadas, a de cima mais curta | `#6FAE8C` | `#2F7A52` |
-| **Faina** | Dois blocos se encaixando em ângulo | `#D2805E` | `#A34E2E` |
-| **Vigia** | Ponto central com dois arcos de radar | `#7C9CD6` | `#3F64A8` |
+| Agente | Silhueta | Traço | Corpo | Sombra (braços) | Acessório |
+|---|---|---|---|---|---|
+| **Alba** | Ovo | Três raios de sol | `#E2B26A` | `#C9974D` | `#A9762A` |
+| **Tula** | Pera | Coque e óculos redondos | `#86BC9C` | `#6CA283` | `#3F7F5C` |
+| **Faina** | Bloco arredondado | Bandana com nó | `#DE9070` | `#C67757` | `#A24F37` |
+| **Nuno** | Cápsula alta | Fones de ouvido | `#8FAADE` | `#7590C6` | `#46639F` |
 
-- **Quadrado:** raio de 30% do lado; fundo no tom a 14% de opacidade no escuro e 16% no claro.
-- **Tamanhos:** 16 (lista densa), 24 (dock), 32 (painel), 56 (cabeçalho do agente no Sistema).
-- **Estados:** anel de 2 px a 2 px de distância do quadrado. `trabalhando`: arco de 90° girando em 1,6 s, parado quando o Windows pede menos animação. `esperando você`: anel cheio em `aviso`. `erro`: anel tracejado em `perigo`. `desligado`: quadrado e glifo a 40%. A legenda de texto acompanha sempre.
-- **Agentes do usuário:** escolhem glifo e tom de uma biblioteca fechada (12 glifos, 8 tons), para que nenhum agente novo quebre a sobriedade do conjunto.
+- **Rosto:** olhos e boca em `#1C1D20`, bochechas em branco a 22%. As cores do personagem não mudam com o tema: ele é o mesmo em Grafite, Papel e Vidro.
+- **Expressões = estados:**
+
+| Estado | Expressão | Moldura (cabeça em lista) |
+|---|---|---|
+| `ocioso` | Descansando: olhos normais, sorriso leve | Nenhuma |
+| `trabalhando` | Focado: olhos baixos, boca reta, sobrancelhas concentradas | Anel em `sucesso` |
+| `esperando você` | Atento: olhos grandes, sobrancelhas erguidas, boca em "o" | Anel em `aviso` |
+| `erro` | Preocupado: sobrancelhas caídas, boca para baixo | Anel tracejado em `perigo` |
+| `desligado` | Dormindo: olhos fechados e "z" | Nenhuma, a 55% |
+
+- **Tamanhos:** cabeça a 16, 24 e 32 px (listas e dock) e 36 px (painéis); corpo inteiro a 168 px nos cartões e na página do agente.
+- **Movimento:** respiração de 4,2 s e piscar a cada 5,5 s. Tudo para com `prefers-reduced-motion`. Nada de pulos, confetes ou balões de fala.
+- **Agentes do usuário:** montados de peças fechadas (4 silhuetas, 8 traços, 8 tons), para o time continuar coerente.

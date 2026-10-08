@@ -114,7 +114,7 @@ Janela normal com barra lateral de navegação.
 | Área | O que faz |
 |---|---|
 | **Início** | O dia numa tela: blocos configuráveis de tarefas, foco, finanças, PRs e o briefing do agente de demandas |
-| **Agentes** | Conversa com o time, com menção direta (`@alba`, `@lastro`, `@faina`, `@vigia`); histórico de cada agente e o que cada um fez sozinho |
+| **Agentes** | Conversa com o time, com menção direta (`@alba`, `@tula`, `@faina`, `@nuno`); histórico de cada agente e o que cada um fez sozinho |
 | **Sessões de IA** | Todas as sessões de agentes de código (Claude Code, Codex, Antigravity): projeto, estado, última ação, pedidos pendentes, consumo e limites |
 | **Tarefas** | Listas, datas, prioridade, recorrência; entrada em linguagem natural ("ligar pro banco amanhã 15h") |
 | **Foco** | Pomodoro com etapas, sessão ligada a uma tarefa, histórico e relatório |
@@ -137,11 +137,13 @@ O Moductus vem com quatro agentes de fábrica, e cada um tem **nome, função e 
 | Agente | Função | Cuida de | Trabalha sozinho quando |
 |---|---|---|---|
 | **Alba** | Cuida do seu dia | Agenda, tarefas, lembretes, rotina e foco; briefing da manhã e fechamento do dia | No horário do briefing e do fechamento; lembrete ou compromisso chegando |
-| **Lastro** | Cuida do seu dinheiro | Gastos, dívidas, planos de economia e orçamento | Extrato na caixa de entrada; categoria perto do limite; parcela vencendo |
+| **Tula** | Cuida do seu dinheiro | Gastos, dívidas, planos de economia e orçamento | Extrato na caixa de entrada; categoria perto do limite; parcela vencendo |
 | **Faina** | Faz o serviço pesado | Organizar, limpar e criar arquivos e documentos no PC, sempre com prévia e desfazer | Downloads acumulando; arquivo na caixa de entrada; limpeza agendada |
-| **Vigia** | Fica de olho nas suas IAs e no seu código | Sessões do Claude Code, Codex, OpenCode e afins; contexto, gasto e limites; PRs e issues | Sessão pedindo aprovação ou com contexto alto; limite perto; GitHub a cada 15 min |
+| **Nuno** | Fica de olho nas suas IAs e no seu código | Sessões do Claude Code, Codex, OpenCode e afins; contexto, gasto e limites; PRs e issues | Sessão pedindo aprovação ou com contexto alto; limite perto; GitHub a cada 15 min |
 
-**Visual:** cada agente é um glifo geométrico num quadrado arredondado, no seu tom (âmbar, musgo, terracota, ardósia), com o estado mostrado por um anel. Sóbrio de propósito: sem mascote e sem animação decorativa.
+**Visual:** cada agente é um personagem, com corpo, rosto e um traço próprio (os raios de sol da Alba, o coque e os óculos da Tula, a bandana da Faina, os fones do Nuno), no seu tom: âmbar, musgo, terracota e ardósia. A expressão do rosto mostra o estado. É para o time parecer gente trabalhando com você, não uma máquina.
+
+**Sempre vivos:** os agentes rodam em segundo plano desde o login, mesmo com todas as janelas fechadas, vigiando lembretes, sessões de IA, PRs e arquivos sem gastar token; o modelo só é chamado quando há algo para pensar. Detalhe em [AGENTS.md](AGENTS.md#sempre-vivos).
 
 **Agentes seus (fase 7):** dá para criar um agente do zero ou duplicando um de fábrica, escolhendo nome, função, visual, modelo, ferramentas e gatilhos. Os de fábrica podem ser renomeados, ajustados ou desligados, e voltam ao padrão quando você quiser.
 
@@ -192,7 +194,7 @@ Todos configuráveis, com detecção de conflito.
 - **Local:** banco SQLite e arquivos em `%APPDATA%\Moductus`, ou ao lado do executável no modo portable.
 - **Chaves e tokens:** só no Gerenciador de Credenciais do Windows, nunca no banco nem em texto.
 - **Rede:** sai apenas para o provedor de IA configurado e para as conexões ligadas (GitHub, por exemplo). A tela de cada conexão diz o que é enviado.
-- **O que vai para o modelo:** cada agente envia só o contexto das próprias ferramentas. o Lastro não manda lançamentos para a Vigia, e vice-versa.
+- **O que vai para o modelo:** cada agente envia só o contexto das próprias ferramentas. a Tula não manda lançamentos para o Nuno, e vice-versa.
 - **Modo privacidade:** esconde valores e textos sensíveis no dock e no Sistema, para compartilhar a tela.
 - **Sem telemetria.** Continua valendo do v0.
 - **Backup:** exportar e importar o banco inteiro, por arquivo.
@@ -208,13 +210,13 @@ Este documento, [ARCHITECTURE.md](ARCHITECTURE.md), [AGENTS.md](AGENTS.md) e [DE
 Projeto Tauri, dock lateral com os três modos e detecção de tela cheia, Sistema com navegação vazia, banco e migrações, configurações, atalhos, bandeja, autostart. Mídia e os controles diretos (Mic, Awake) já entram aqui: são simples e tornam o dock útil desde o primeiro dia.
 
 ### Fase 2 — Os agentes começam a trabalhar
-Camada de provedores (um adaptador CLI e um de API para começar), serviço de agentes em segundo plano, ferramentas, cartão de aprovação. A **Vigia** e as **Sessões de IA** primeiro: é o ganho mais rápido e não depende de nenhuma área nova.
+Camada de provedores (um adaptador CLI e um de API para começar), serviço de agentes em segundo plano, ferramentas, cartão de aprovação. O **Nuno** e as **Sessões de IA** primeiro: é o ganho mais rápido e não depende de nenhuma área nova.
 
 ### Fase 3 — O dia
 Agenda, Tarefas, lembretes, Foco, Notas, captura rápida, Início e a **Alba** com briefing e fechamento.
 
 ### Fase 4 — O dinheiro
-Finanças completa (gastos, dívidas e planos) e o **Lastro**, com importação de extrato e OCR de comprovante.
+Finanças completa (gastos, dívidas e planos) e a **Tula**, com importação de extrato e OCR de comprovante.
 
 ### Fase 5 — Memória, arquivos e a Faina
 Memória com busca, Arquivos como caixa de entrada, a **Faina** organizando, limpando e criando com prévia e desfazer, e o servidor MCP do Moductus aberto para fora — o Claude Code no seu terminal passa a enxergar suas tarefas e notas.
@@ -245,9 +247,11 @@ Criar, duplicar, exportar e importar agentes, com nome, função, visual, modelo
 | 12 | Nenhum código, texto ou personagem do Niko | A licença dele proíbe obras derivadas; referência é só de produto |
 | 13 | Três temas de fábrica — Grafite, Papel e Vidro — sobre a mesma estrutura | Gostos diferentes de sobriedade sem três produtos: o tema troca cor, material, raio e fonte, nunca layout ou comportamento. Detalhe em [DESIGN.md](DESIGN.md) |
 | 14 | Visual criado do zero, sem herança do v0 | O visual do v0 não representava o produto novo |
-| 15 | Quatro agentes de fábrica — Alba, Lastro, Faina e Vigia —, cada um com nome, função e visual | Personalidade suficiente para reconhecer de relance, sóbria o bastante para não virar mascote. Os nomes não reutilizam os do Niko |
+| 15 | Quatro agentes de fábrica — Alba, Tula, Faina e Nuno —, cada um com nome, função e visual | Nomes de gente, sem descrever a função: personalidade suficiente para reconhecer de relance, sóbria o bastante para não virar mascote. Nenhum reutiliza os do Niko |
 | 16 | Memória compartilhada em vez de um agente de memória | Todo agente precisa lembrar; um intermediário só adicionaria latência e mais uma chamada de modelo |
 | 17 | Agentes criados pelo usuário na fase 7, com ação externa sempre aprovada | O valor do agente próprio não pode abrir uma porta que os de fábrica não abrem |
+| 18 | Agentes como personagens, com corpo e rosto | Tira a sensação de máquina; a expressão comunica o estado de relance. Substitui o glifo geométrico do primeiro desenho |
+| 19 | Agentes sempre vivos, com vigias sem modelo e modelo sob demanda | Lembrete e PR não podem esperar o usuário abrir o app, e ficar vivo não pode custar token o dia inteiro |
 
 As 21 decisões do v0 estão em [v0/PRODUCT.md](v0/PRODUCT.md#10-decisões-registradas), como registro histórico.
 

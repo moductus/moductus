@@ -11,7 +11,8 @@
     "Captura.dc.html": { "h": 900, "title": "Captura rápida", "w": 1440, "x": 3040, "y": 2720 },
     "Marca.dc.html": { "h": 900, "title": "Marca · quatro opções", "w": 1440, "x": 0, "y": 4120 },
     "Dock.dc.html": { "h": 900, "title": "Componente · Dock", "w": 88, "x": 1520, "y": 4120 },
-    "Time.dc.html": { "h": 900, "title": "Agentes · Alba, Lastro, Faina e Vigia", "w": 1440, "x": 0, "y": 5520 }
+    "Time.dc.html": { "h": 1000, "title": "Agentes · Alba, Tula, Faina e Nuno", "w": 1440, "x": 0, "y": 5520 },
+    "Personagem.dc.html": { "h": 240, "title": "Componente · Personagem", "w": 200, "x": 1688, "y": 4120 }
   },
   "createdOnFiles": { "at": "2026-10-06T15:00:00Z", "v": 1 },
   "designSystems": [],
@@ -23,7 +24,7 @@
     "titulo4": { "kind": "title1", "maxW": 4480, "text": "Marca e componentes", "x": 0, "y": 3820 },
     "titulo5": { "kind": "title1", "maxW": 4480, "text": "O time de agentes", "x": 0, "y": 5220 }
   },
-  "order": ["Main.dc.html", "Papel.dc.html", "Vidro.dc.html", "Sistema.dc.html", "Agentes.dc.html", "Midia.dc.html", "Captura.dc.html", "Marca.dc.html", "Dock.dc.html", "Time.dc.html"],
+  "order": ["Main.dc.html", "Papel.dc.html", "Vidro.dc.html", "Sistema.dc.html", "Agentes.dc.html", "Midia.dc.html", "Captura.dc.html", "Marca.dc.html", "Dock.dc.html", "Personagem.dc.html", "Time.dc.html"],
   "pages": [],
   "title": "Moductus — identidade visual"
 }
