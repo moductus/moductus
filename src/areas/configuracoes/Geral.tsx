@@ -1,3 +1,4 @@
+import { ReverTutorial } from "../inicio/PrimeirosPassos.tsx";
 import { EstadoVazio } from "../Pagina.tsx";
 import { Secao } from "./Secao.tsx";
 
@@ -11,6 +12,7 @@ export function SecaoGeral() {
         texto="Ligar a inicialização junto com o Windows e ver se esta cópia roda como portable."
         quando="Fase 1"
       />
+      <ReverTutorial />
     </Secao>
   );
 }

@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { MIGRACOES } from "../migracoes/index.ts";
 import { abrirBanco, pastaDeDados, portable } from "./conexao.ts";
 
 test("usa a pasta que a casca entrega (portable ou %APPDATA%)", () => {
@@ -15,7 +16,7 @@ test("abre o arquivo na pasta e aplica as migrações", () => {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-banco-"));
   const db = abrirBanco(pasta);
   expect(existsSync(join(pasta, "moductus.db"))).toBe(true);
-  expect(db.prepare("PRAGMA user_version").get()).toEqual({ user_version: 1 });
+  expect(db.prepare("PRAGMA user_version").get()).toEqual({ user_version: MIGRACOES.length });
   db.close();
   rmSync(pasta, { recursive: true, force: true });
 });

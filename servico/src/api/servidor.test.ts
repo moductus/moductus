@@ -1,16 +1,28 @@
-import { CONFIG_PADRAO } from "@moductus/contrato";
+import { CONFIG_PADRAO, MISSOES_TUTORIAL, PASSOS_PRIMEIRO_USO } from "@moductus/contrato";
 import { ClienteServico } from "@moductus/contrato/cliente";
 import { afterEach, describe, expect, test } from "vitest";
 import { abrirServidorWs, type ServidorWs } from "./servidor.ts";
 
 const TOKEN = "a".repeat(64);
 const estadoConfig = { config: CONFIG_PADRAO, portable: false, falhasAtalhos: {} };
+const pendentes = <T extends string>(ids: readonly T[]) =>
+  Object.fromEntries(ids.map((id) => [id, "pendente" as const])) as Record<T, "pendente">;
+const estadoPrimeiroUso = {
+  concluido: false,
+  concluidoEm: null,
+  passos: pendentes(PASSOS_PRIMEIRO_USO),
+  tutorial: "pendente" as const,
+  missoes: pendentes(MISSOES_TUTORIAL),
+};
 const atendentes = {
   "sistema.ping": () => ({ protocolo: 1, pid: process.pid }),
   "config.obter": () => estadoConfig,
   "config.definir": () => estadoConfig,
   "config.exportar": ({ caminho }: { caminho: string }) => ({ caminho, bytes: 0, chaves: [] }),
   "config.importar": () => estadoConfig,
+  "primeiroUso.obter": () => estadoPrimeiroUso,
+  "primeiroUso.concluir": () => estadoPrimeiroUso,
+  "primeiroUso.marcar": () => estadoPrimeiroUso,
 };
 
 const abertos: ServidorWs[] = [];

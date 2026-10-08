@@ -153,6 +153,24 @@
   /* Fechar no padrão do Windows 11: vermelho do sistema, igual nos três temas */
   --fundo-fechar: #c42b1c;
   --texto-fechar: #ffffff;
+
+  /* Primeiro uso (Uso1Boas…Uso5Conexoes.dc.html) e Primeiros passos (Tutorial.dc.html) */
+  --largura-lateral-uso: 248px;
+  --altura-rodape-uso: 72px;
+  --espaco-uso-vertical: 40px;
+  --espaco-uso-lateral: 48px;
+  --largura-texto-uso: 560px;
+  --altura-passo-uso: 34px;
+  --tamanho-marca-passo: 22px;
+  --altura-previa-tema: 120px;
+  --largura-previa-dock: 18px;
+  --tamanho-ponto-previa: 6px;
+  --altura-linha-previa: 6px;
+  --altura-boas-vindas: 150px;
+  --largura-cartao-treino: 380px;
+  --largura-progresso-tutorial: 120px;
+  /* Segunda volta de borda da opção marcada (a cor vem junto, do tema): 2 sem mudar o tamanho */
+  --sombra-opcao-marcada: inset 0 0 0 1px;
 }
 
 @media (prefers-reduced-motion: reduce) {

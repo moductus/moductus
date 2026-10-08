@@ -1,5 +1,6 @@
+import type { EstadoPrimeiroUso } from "@moductus/contrato";
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Agentes } from "../../areas/agentes/Agentes.tsx";
 import { AREA_INICIAL, areaDoAtalho, escreverDestino, lerDestino, type Destino } from "../../areas/areas.ts";
 import { Arquivos } from "../../areas/arquivos/Arquivos.tsx";
@@ -9,6 +10,7 @@ import { Ferramentas } from "../../areas/ferramentas/Ferramentas.tsx";
 import { Financas } from "../../areas/financas/Financas.tsx";
 import { Foco } from "../../areas/foco/Foco.tsx";
 import { Inicio } from "../../areas/inicio/Inicio.tsx";
+import { PrimeirosPassos } from "../../areas/inicio/PrimeirosPassos.tsx";
 import { Memoria } from "../../areas/memoria/Memoria.tsx";
 import { Notas } from "../../areas/notas/Notas.tsx";
 import { Sessoes } from "../../areas/sessoes/Sessoes.tsx";
@@ -16,6 +18,8 @@ import { Tarefas } from "../../areas/tarefas/Tarefas.tsx";
 import { registrar } from "../../nativo/eventos.ts";
 import { BarraLateral } from "./BarraLateral.tsx";
 import { BarraTitulo } from "./BarraTitulo.tsx";
+import { AcoesSistemaContexto, useAcoesSistema, usePrimeiroUso } from "./primeiro-uso/estado.ts";
+import { PrimeiroUso } from "./primeiro-uso/PrimeiroUso.tsx";
 import "./Sistema.css";
 
 /** Evento que o dock (ou a casca) manda para abrir uma área: "dev", "configuracoes/modelos". */
@@ -49,14 +53,20 @@ function numeroDoAtalho(e: KeyboardEvent): number | null {
 export function Sistema() {
   const [destino, setDestino] = useState<Destino>(lembrar);
   const busca = useRef<HTMLInputElement>(null);
+  const [primeiroUso, setPrimeiroUso] = usePrimeiroUso();
+  // Banco novo: a configuração inicial ocupa a janela até ser concluída ou pulada.
+  const configurando = primeiroUso !== null && !primeiroUso.concluido;
 
   const ir = useCallback((novo: Destino) => {
     setDestino(novo);
     guardar(novo);
   }, []);
 
+  const acoes = useMemo(() => ({ ir, aoMudarPrimeiroUso: setPrimeiroUso }), [ir, setPrimeiroUso]);
+
   // Atalhos locais da janela: Ctrl+1…9 trocam de área, Ctrl+K foca a busca.
   useEffect(() => {
+    if (configurando) return;
     const aoTeclar = (e: KeyboardEvent) => {
       const numero = numeroDoAtalho(e);
       const area = numero === null ? null : areaDoAtalho(numero);
@@ -73,7 +83,7 @@ export function Sistema() {
     };
     window.addEventListener("keydown", aoTeclar);
     return () => window.removeEventListener("keydown", aoTeclar);
-  }, [ir]);
+  }, [ir, configurando]);
 
   // O dock pede uma área pelo evento; destino que não existe é ignorado e fica no log.
   useEffect(() => {
@@ -88,22 +98,48 @@ export function Sistema() {
   }, [ir]);
 
   return (
-    <div className="sistema">
-      <BarraTitulo />
-      <div className="sistema-corpo">
-        <BarraLateral ativa={destino.area} aoEscolher={(area) => ir({ area })} refBusca={busca} />
-        <main className="sistema-conteudo" key={destino.area} data-area={destino.area}>
-          <ConteudoArea destino={destino} ir={ir} />
-        </main>
+    <AcoesSistemaContexto.Provider value={acoes}>
+      <div className="sistema">
+        <BarraTitulo />
+        {configurando ? (
+          <PrimeiroUso
+            aoConcluir={(estado, depois) => {
+              setPrimeiroUso(estado);
+              ir(depois);
+            }}
+          />
+        ) : (
+          <div className="sistema-corpo">
+            <BarraLateral ativa={destino.area} aoEscolher={(area) => ir({ area })} refBusca={busca} />
+            <main className="sistema-conteudo" key={destino.area} data-area={destino.area}>
+              <ConteudoArea destino={destino} ir={ir} primeiroUso={primeiroUso} />
+            </main>
+          </div>
+        )}
       </div>
-    </div>
+    </AcoesSistemaContexto.Provider>
   );
 }
 
-function ConteudoArea({ destino, ir }: { destino: Destino; ir: (d: Destino) => void }) {
+interface PropsConteudoArea {
+  destino: Destino;
+  ir: (d: Destino) => void;
+  primeiroUso: EstadoPrimeiroUso | null;
+}
+
+function ConteudoArea({ destino, ir, primeiroUso }: PropsConteudoArea) {
+  const { aoMudarPrimeiroUso } = useAcoesSistema();
   switch (destino.area) {
     case "inicio":
-      return <Inicio />;
+      return (
+        <Inicio
+          antes={
+            primeiroUso?.concluido && primeiroUso.tutorial === "pendente" ? (
+              <PrimeirosPassos estado={primeiroUso} aoMudar={aoMudarPrimeiroUso} />
+            ) : null
+          }
+        />
+      );
     case "agentes":
       return <Agentes />;
     case "sessoes":

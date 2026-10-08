@@ -6,6 +6,7 @@ import { CanalCasca } from "./casca/canal.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
+import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
 import pacote from "../package.json" with { type: "json" };
 
 /**
@@ -43,6 +44,9 @@ const config = new ServicoConfig(
   (estado: EstadoConfig) => servidor?.emitir("config.mudou", estado),
   portable(),
 );
+const primeiroUso = new ServicoPrimeiroUso(new RepositorioPrimeiroUso(banco), (estado) =>
+  servidor?.emitir("primeiroUso.mudou", estado),
+);
 const outroPc = new ServicoOutroPc(config, {
   versaoApp: pacote.version,
   versaoEsquema: MIGRACOES.length,
@@ -55,6 +59,9 @@ servidor = await abrirServidorWs(token, {
   "config.definir": (mudanca) => config.definir(mudanca),
   "config.exportar": (pedido) => outroPc.exportar(pedido),
   "config.importar": (pedido) => outroPc.importar(pedido),
+  "primeiroUso.obter": () => primeiroUso.obter(),
+  "primeiroUso.concluir": (pedido) => primeiroUso.concluir(pedido),
+  "primeiroUso.marcar": (pedido) => primeiroUso.marcar(pedido),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
 canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });
