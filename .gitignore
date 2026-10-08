@@ -54,3 +54,6 @@ src-tauri/binaries/
 
 ## Artefatos de release (scripts/empacotar-portable.ps1)
 artefatos/
+
+## Worktrees dos agentes do Claude Code
+.claude/worktrees/
