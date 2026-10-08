@@ -125,6 +125,20 @@
   --icone-26: 26px;
   --icone-32: 32px;
   --icone-48: 48px;
+
+  /* Sistema (Sistema.dc.html): barra de título, botões de janela, navegação e página */
+  --altura-barra-titulo: 40px;
+  --largura-botao-janela: 40px;
+  --altura-botao-janela: 30px;
+  --altura-item-nav: 32px;
+  --largura-subnav: 220px;
+  --largura-texto-vazio: 420px;
+  --espaco-pagina: 28px;
+  --espaco-cabecalho: 22px;
+  --tracado-titulo: -0.02em;
+  /* Fechar no padrão do Windows 11: vermelho do sistema, igual nos três temas */
+  --fundo-fechar: #c42b1c;
+  --texto-fechar: #ffffff;
 }
 
 @media (prefers-reduced-motion: reduce) {

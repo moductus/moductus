@@ -8,6 +8,8 @@ export const TAMANHO_PERSONAGEM = {
   lista: 24,
   dock: 32,
   painel: 36,
+  /** Corpo inteiro nos estados vazios (Estados.dc.html). */
+  vazio: 96,
   cartao: 168,
 } as const;
 

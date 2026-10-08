@@ -52,6 +52,8 @@ const DESENHOS = {
   proxima: <path d="M16 5h2v14h-2zM4 5v14l11-7z" fill="currentColor" stroke="none" />,
   minimizar: <path d="M4 12h16" />,
   maximizar: <path d="M5 5h14v14H5z" />,
+  // Dois quadros sobrepostos, como o Windows mostra com a janela maximizada.
+  restaurar: <path d="M8 8h11v11H8zM5 16V5h11" />,
   fechar: <path d="M6 6l12 12M18 6L6 18" />,
 } satisfies Record<string, ReactElement>;
 

@@ -193,8 +193,8 @@ describe("Atalho", () => {
 });
 
 describe("Ícone", () => {
-  it("tem os 24 desenhos com 25 nomes (hoje e início são a casa)", () => {
-    expect(NOMES_ICONES).toHaveLength(25);
+  it("tem os 24 desenhos e o restaurar da janela, com 26 nomes (hoje e início são a casa)", () => {
+    expect(NOMES_ICONES).toHaveLength(26);
     montar(
       <>
         <Icone nome="hoje" />

@@ -1,0 +1,31 @@
+.config {
+  display: flex;
+  flex: 1;
+  gap: var(--esp-32);
+  min-height: 0;
+}
+
+.config-navegacao {
+  flex: none;
+  width: var(--largura-subnav);
+}
+
+.config-conteudo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.config-secao {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-16);
+}
+
+.config-secao-titulo {
+  margin: 0;
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+}
