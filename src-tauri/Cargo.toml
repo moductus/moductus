@@ -41,6 +41,7 @@ windows = { version = "0.62", features = [
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
+tauri-plugin-dialog = "2"
 windows-core = "0.62"
 
 # Só para examples/sessao_midia.rs, a sessão de mídia do roteiro.

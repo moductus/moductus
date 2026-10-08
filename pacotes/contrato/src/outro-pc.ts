@@ -50,3 +50,20 @@ export type ModoImportar = z.infer<typeof ModoImportar>;
 
 export const PedidoImportar = z.object({ caminho: caminhoArquivo, modo: ModoImportar });
 export type PedidoImportar = z.infer<typeof PedidoImportar>;
+
+/** Uma chave que a importação troca: o valor de agora e o que vem do arquivo. */
+export const MudancaImportar = z.object({
+  chave: z.string(),
+  atual: z.unknown(),
+  novo: z.unknown(),
+});
+export type MudancaImportar = z.infer<typeof MudancaImportar>;
+
+/** O que a importação faria, sem gravar nada: a interface mostra e pede confirmação. */
+export const PreviaImportar = z.object({
+  pc_origem: z.string(),
+  criado_em: z.iso.datetime(),
+  versao_app: z.string(),
+  mudancas: z.array(MudancaImportar),
+});
+export type PreviaImportar = z.infer<typeof PreviaImportar>;

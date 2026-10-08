@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { CONFIG_PADRAO, type Config, type EstadoConfig } from "@moductus/contrato";
 import { afterEach, describe, expect, test } from "vitest";
 import { abrirBanco } from "../banco/conexao.ts";
-import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config.ts";
+import { AUTOSTART_NO_PORTABLE, RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config.ts";
 
 const pastas: string[] = [];
 const bancos: { close(): void; isOpen: boolean }[] = [];
@@ -13,12 +13,16 @@ afterEach(() => {
   for (const p of pastas.splice(0)) rmSync(p, { recursive: true, force: true });
 });
 
-function montar(nativo: AplicadorNativo, pasta = mkdtempSync(join(tmpdir(), "moductus-config-"))) {
+function montar(
+  nativo: AplicadorNativo,
+  pasta = mkdtempSync(join(tmpdir(), "moductus-config-")),
+  portable = false,
+) {
   pastas.push(pasta);
   const db = abrirBanco(pasta);
   bancos.push(db);
   const eventos: EstadoConfig[] = [];
-  const servico = new ServicoConfig(new RepositorioConfig(db), nativo, (e) => eventos.push(e), false);
+  const servico = new ServicoConfig(new RepositorioConfig(db), nativo, (e) => eventos.push(e), portable);
   return { servico, eventos, db, pasta };
 }
 
@@ -75,5 +79,31 @@ describe("configuração", () => {
   test("entrada fora do contrato é recusada", async () => {
     const { servico } = montar(aceita());
     await expect(servico.definir({ tema: "neon" } as never)).rejects.toThrow();
+  });
+
+  test("cada opção do Sistema sobrevive a reabrir o banco", async () => {
+    const primeiro = montar(aceita());
+    const escolhida: Config = {
+      tema: "papel",
+      dock: { lado: "direita", modo: "inteligente", forma: "flutuante" },
+      atalhos: { sistema: "Ctrl+Shift+M", dock: "Ctrl+Alt+J", captura: "Ctrl+Alt+K" },
+      autostart: true,
+    };
+    // Uma chave por vez, como a interface manda.
+    for (const [chave, valor] of Object.entries(escolhida))
+      await primeiro.servico.definir({ [chave]: valor });
+    primeiro.db.close();
+    const depois = montar(aceita(), primeiro.pasta);
+    expect(depois.servico.obter().config).toEqual(escolhida);
+  });
+
+  test("portable: autostart não liga, o resto continua editável", async () => {
+    const aplicados: Aplicacao[] = [];
+    const { servico } = montar(aceita(aplicados), undefined, true);
+    await expect(servico.definir({ autostart: true })).rejects.toThrow(AUTOSTART_NO_PORTABLE);
+    expect(servico.obter()).toMatchObject({ portable: true, config: { autostart: false } });
+    expect(aplicados).toEqual([]);
+    await servico.definir({ tema: "vidro", autostart: false });
+    expect(servico.obter().config.tema).toBe("vidro");
   });
 });

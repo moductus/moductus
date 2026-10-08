@@ -9,6 +9,7 @@ import {
   VERSAO_FORMATO,
   type EstadoConfig,
   type MudancaConfig,
+  type PreviaImportar,
   type ResultadoExportar,
 } from "@moductus/contrato";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
@@ -75,12 +76,33 @@ export class ServicoOutroPc {
     return { caminho, bytes: zip.byteLength, chaves };
   }
 
+  /** O que a importação trocaria, chave a chave, sem gravar nem pedir nada à casca. */
+  async previa(entrada: PedidoImportar): Promise<PreviaImportar> {
+    const { manifesto, mudanca } = await this.lerMudanca(PedidoImportar.parse(entrada));
+    const atual = this.config.obter().config;
+    const mudancas = Object.entries(mudanca)
+      .filter(([chave, novo]) => JSON.stringify(atual[chave as keyof Config]) !== JSON.stringify(novo))
+      .map(([chave, novo]) => ({ chave, atual: atual[chave as keyof Config], novo }));
+    return {
+      pc_origem: manifesto.pc_origem,
+      criado_em: manifesto.criado_em,
+      versao_app: manifesto.versao_app,
+      mudancas,
+    };
+  }
+
   async importar(entrada: PedidoImportar): Promise<EstadoConfig> {
-    const { caminho, modo } = PedidoImportar.parse(entrada);
-    const chaves = lerConfigDoArquivo(await lerZip(caminho));
+    const { mudanca } = await this.lerMudanca(PedidoImportar.parse(entrada));
+    return this.config.definir(mudanca);
+  }
+
+  private async lerMudanca({ caminho, modo }: PedidoImportar) {
+    const { manifesto, chaves } = lerConfigDoArquivo(await lerZip(caminho));
+    // Cópia portable não liga o início com o Windows: essa chave do arquivo fica de fora.
+    if (this.config.obter().portable) delete chaves.autostart;
     // Substituir: o que o arquivo não traz volta ao padrão. Juntar: só o que ele traz.
     const mudanca: MudancaConfig = modo === "substituir" ? { ...CONFIG_PADRAO, ...chaves } : chaves;
-    return this.config.definir(mudanca);
+    return { manifesto, mudanca };
   }
 }
 
@@ -144,7 +166,10 @@ function conferirManifesto(json: unknown): Manifesto {
  * inteiro, antes de qualquer gravação. Chave que este Moductus não conhece (de uma versão
  * mais nova, mesmo formato) é ignorada.
  */
-function lerConfigDoArquivo(arquivos: Record<string, Uint8Array>): MudancaConfig {
+function lerConfigDoArquivo(arquivos: Record<string, Uint8Array>): {
+  manifesto: Manifesto;
+  chaves: MudancaConfig;
+} {
   const manifesto = conferirManifesto(lerJson(arquivos, MANIFESTO));
   if (!manifesto.conteudo.includes("config")) {
     throw new ArquivoRecusado("Este arquivo não traz configurações.");
@@ -162,5 +187,5 @@ function lerConfigDoArquivo(arquivos: Record<string, Uint8Array>): MudancaConfig
     }
     chaves[chave] = campo.data;
   }
-  return chaves as MudancaConfig;
+  return { manifesto, chaves: chaves as MudancaConfig };
 }

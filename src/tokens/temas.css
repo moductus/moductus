@@ -150,6 +150,9 @@
   --espaco-pagina: 28px;
   --espaco-cabecalho: 22px;
   --tracado-titulo: -0.02em;
+  /* Configurações: campo que grava atalho e coluna do nome na prévia da importação */
+  --largura-campo-atalho: 132px;
+  --largura-rotulo-mudanca: 148px;
   /* Fechar no padrão do Windows 11: vermelho do sistema, igual nos três temas */
   --fundo-fechar: #c42b1c;
   --texto-fechar: #ffffff;
