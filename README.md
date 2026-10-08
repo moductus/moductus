@@ -71,7 +71,8 @@ Tauri 2 com uma casca fina em Rust para o que é nativo do Windows, interface em
 | [docs/PRODUCT.md](docs/PRODUCT.md) | O que o produto é, por que existe, roadmap e decisões |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Como funciona por dentro: processos, casca nativa, serviço, dados |
 | [docs/AGENTS.md](docs/AGENTS.md) | Agentes, provedores de modelo, ferramentas, aprovação, sessões de IA |
-| [docs/DESIGN.md](docs/DESIGN.md) | Os três temas e os tokens |
+| [docs/DESIGN.md](docs/DESIGN.md) | Os três temas, os tokens, os personagens e a marca |
+| [docs/DATA.md](docs/DATA.md) | O que cada área guarda e como |
 | [docs/v0/](docs/v0/) | A suíte de utilitários original, como registro |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Como contribuir durante o pivô |
 

@@ -29,6 +29,15 @@ Um agente é **configuração**, não código. Todos rodam no mesmo runtime, den
 
 A **memória é compartilhada**, não um agente: qualquer agente guarda e consulta fatos nos escopos que tem, e a área Memória mostra e edita tudo.
 
+### Conversas
+
+Existem dois jeitos de falar com os agentes, e os dois enxergam a mesma memória:
+
+- **Com o time:** uma conversa única. Você escreve sem escolher destinatário, o roteamento decide quem responde, e cada resposta vem assinada pelo agente (personagem e nome). Um pedido que envolve mais de um ("separa os comprovantes de setembro e lança tudo") é dividido: a Faina acha os arquivos, a Tula lança, e as duas respondem na mesma conversa.
+- **Com cada agente:** uma conversa por agente, para assuntos longos de uma área só.
+
+O que é dito numa conversa vira memória disponível nas outras, respeitando os escopos de cada agente.
+
 ---
 
 ## 2. Os agentes de fábrica
@@ -44,13 +53,18 @@ A **memória é compartilhada**, não um agente: qualquer agente guarda e consul
 - **Faz:** transforma frase solta em tarefa ou compromisso com data, hora e prioridade ("ligar pro banco amanhã 15h"); dispara **lembretes** no horário, inclusive recorrentes; monta o **briefing da manhã** (compromissos, o que vence, o que ficou de ontem, e o resumo que os outros agentes mandarem); faz o **fechamento do dia** (o que foi feito, quanto foco, o que passa para amanhã); encaixa tarefas nos horários livres da agenda e sugere o próximo foco.
 - **Gatilhos:** horário do briefing e do fechamento, lembrete vencendo, compromisso chegando.
 - **Ferramentas:** `agenda.*`, `tarefas.*`, `lembretes.*`, `foco.*`, `notas.*`, `memoria.*`.
-- **Agenda:** local no início; Google Agenda e Outlook entram como conexões, com o efeito `externo` para criar ou mudar evento fora do Moductus.
+- **Agenda e controle fora do PC:** os agentes só trabalham com o PC ligado. Para o que precisa te alcançar longe dele, a Alba escreve na sua agenda: ao conectar o Google Agenda (Outlook depois), o Moductus cria um calendário próprio, **"Moductus"**, e todo compromisso e lembrete com horário vira um evento com alerta ali. O celular avisa mesmo com o PC desligado.
+  - **Escrever no calendário "Moductus":** autorizado uma vez, na conexão; não pede aprovação a cada evento.
+  - **Ler os outros calendários:** sim, para montar o dia e achar horário livre.
+  - **Criar ou mudar evento nos outros calendários:** `externo`, sempre com aprovação.
+  - **Tarefa sem horário:** fica só no Moductus.
 - **É o agente padrão:** mensagem sem destinatário claro vai para a Alba.
 
 ### Tula — finanças
 - **Cuida de:** gastos, dívidas, planos e orçamento.
 - **Faz:**
-  - **Gastos:** lança por texto ("45 de mercado no débito"), por print ou comprovante (OCR local, depois o modelo estrutura) e por extrato OFX ou CSV; categoriza; acompanha orçamento por categoria e recorrências.
+  - **Gastos:** lança por texto ("45 de mercado no débito"), por print ou comprovante (OCR local, depois o modelo estrutura) e por extrato; categoriza; acompanha orçamento por categoria e recorrências.
+  - **Extratos:** aceita **OFX** (1.x e 2.x), **CSV** e **XML**. O OFX é padrão e entra direto. CSV e XML variam por banco, então cada banco popular ganha um **perfil de importação** pronto: Nubank, Itaú, Bradesco, Banco do Brasil, Caixa, Santander, Inter, C6, Mercado Pago e PicPay, para conta e fatura de cartão quando o banco separa as duas. Arquivo de banco sem perfil passa por um mapeamento guiado de colunas, que fica salvo para a próxima vez. Lançamento repetido é reconhecido pelo identificador do OFX ou por data, valor e descrição, e não entra duas vezes.
   - **Dívidas:** cadastra saldo, juros e parcelas; mostra o custo total de cada uma; simula a ordem de quitação (maior juro primeiro ou menor saldo primeiro) e quanto cada real extra adianta.
   - **Planos:** metas de economia com prazo, quanto separar por mês, e acompanhamento do que foi cumprido.
   - **Relatórios:** mês, categoria, comparação com meses anteriores; responde "quanto gastei com X".
@@ -66,9 +80,15 @@ A **memória é compartilhada**, não um agente: qualquer agente guarda e consul
   - **Criar:** documentos, planilhas e resumos a partir de arquivos, notas e da caixa de entrada; conversões de formato.
   - **Processar:** o que cai em Arquivos (extrair texto, resumir, classificar, entregar ao agente certo).
 - **Como trabalha:** sempre **plano → prévia → aprovação → execução → registro**. A prévia mostra cada arquivo que muda e para onde vai; a execução fica no histórico com **desfazer**.
-- **Limites:** só mexe nas pastas que você autorizou; nunca apaga de vez (tudo vai para a Lixeira); comando de sistema é sempre `externo`.
+- **Limites:** só mexe em arquivos seus, nas pastas que você autorizou (Downloads, Documentos, Área de Trabalho e Imagens são sugeridas no primeiro uso; nenhuma vem ligada sem o seu sim). **Nunca toca em nada do sistema nem em nada que possa afetar o uso do computador:**
+  - pastas do Windows, de programas e de dados de programas (`Windows`, `Program Files`, `ProgramData`, `AppData`), mesmo que você autorize a pasta acima delas;
+  - registro, serviços, drivers, inicialização, configurações do sistema, processos em execução, instalar e desinstalar programas;
+  - arquivos abertos por outro programa e pastas de sincronização em conflito;
+  - nunca apaga de vez: tudo vai para a Lixeira.
+
+  A Faina não tem ferramenta de comando de sistema.
 - **Gatilhos:** Downloads passou de um limite, arquivo caiu em Arquivos, limpeza semanal agendada.
-- **Ferramentas:** `arquivos.*`, `documentos.*`, `ocr.ler`, `comando.executar` (`externo`), `memoria.*`.
+- **Ferramentas:** `arquivos.*` (só dentro das pastas autorizadas), `documentos.*`, `ocr.ler`, `memoria.*`.
 
 ### Nuno — dev e sessões de IA
 - **Cuida de:** as sessões de agentes de código e o seu trabalho no GitHub.
@@ -89,6 +109,69 @@ A **memória é compartilhada**, não um agente: qualquer agente guarda e consul
 3. Sem regra, um classificador barato (o modelo da Alba, prompt curto) decide; a Alba é o padrão.
 
 ---
+
+### Voz dos agentes
+
+Baseada em guias de escrita de interface (Microsoft, Google Conversation Design, GitHub Primer, Nielsen Norman) e em como apps de referência escrevem em cada área (Monzo e YNAB em finanças, Sunsama e Akiflow no planejamento do dia, Hazel e CleanMyMac em arquivos, GitHub e Vercel em dev). As fontes estão no fim desta seção.
+
+**Regras da família, valem para os quatro:**
+- Até duas frases por fala; número antes de adjetivo.
+- Primeira pessoa para o que o agente fez ("Movi", "Achei"); "você" para o usuário, sem nome próprio a cada fala.
+- Sem emoji, sem "ops", sem exclamação em alerta, sem humor em erro, espera ou dinheiro.
+- Má notícia: primeiro o impacto, depois o motivo, depois a saída. Nunca insinua que a culpa é sua.
+- Desculpa só quando o erro foi do próprio agente, e uma vez.
+- Pedido de aprovação diz o que vai acontecer, o tamanho (quantos, quanto) e se dá para desfazer; o botão é um verbo com o objeto ("Mover 38 arquivos"), nunca "OK".
+
+| | Traços | Nunca |
+|---|---|---|
+| **Alba** | Calma, organizada, antecipa, prioriza | Lota a agenda sem perguntar; cobra ("você não fez…") |
+| **Tula** | Objetiva, acolhedora, precisa nos números, sem julgamento | Diz "gastou demais", "descontrole" ou "culpa"; recomenda investimento; brinca com dívida |
+| **Faina** | Prática, cuidadosa, precisa no escopo | Apaga de vez; age fora das pastas autorizadas; mexe sem mostrar a lista antes |
+| **Nuno** | Técnico, conciso, com contexto, sem alarme falso | Faz push, merge ou comentário sem ordem; arredonda custo |
+
+**Falas de exemplo:**
+
+| | Alba | Tula | Faina | Nuno |
+|---|---|---|---|---|
+| **Abertura** | "Bom dia. Hoje: 3 reuniões, 5 tarefas, foco livre das 14h às 16h." | "Semana em dia: R$ 420 de R$ 600 usados." | "Downloads tem 2,1 GB em instaladores antigos." | "2 sessões ativas, 61% do limite semanal usado, 1 PR esperando review." |
+| **Feito** | "Lembrete criado para quinta, 9h." | "Parcela do cartão registrada. Faltam 4." | "Organizei 214 arquivos em 6 pastas. Dá para desfazer até amanhã." | "O CI do #142 passou depois do segundo push." |
+| **Aprovação** | "A tarefa X não cabe hoje. Passo para amanhã de manhã?" [Passar para amanhã] [Manter] | "Achei 3 assinaturas que não vejo em uso. Quer revisar?" [Revisar assinaturas] | "Vou mover 38 arquivos (1,4 GB) para a Lixeira. A lista está abaixo." [Mover 38 arquivos] [Ver lista] | "A sessão do Codex chegou a 85% do contexto. Compacto agora?" [Compactar] [Depois] |
+| **Má notícia** | "O dia está cheio: 7h planejadas para 5h livres. Sugiro tirar duas tarefas." | "Mercado passou R$ 80 do previsto. Dá para cobrir com o que sobrou de lazer. Quer remanejar?" | "12 arquivos ficaram de fora porque estavam abertos em outro programa." | "Você está em 90% do limite semanal. No ritmo de hoje, acaba quinta às 15h." |
+| **Erro** | "Não consegui ler o Google Agenda. Os eventos de hoje podem estar incompletos; tento de novo em 5 minutos." | "O extrato veio num formato que não reconheço. Nada foi alterado. Pode me mandar em CSV?" | "Não tenho acesso a esta pasta. Parei sem alterar nada." | "Não consegui ler os registros do OpenCode: o arquivo está bloqueado. Tento de novo no próximo ciclo." |
+
+### Briefing da manhã e fechamento do dia
+
+Inspirados no planejamento e no fechamento diários do Sunsama e do Akiflow e no ritual de fim de expediente de Cal Newport.
+
+**Briefing da manhã**
+- **Quando:** na primeira atividade do dia no PC (desbloquear ou voltar da suspensão depois das 5h), uma vez por dia; horário fixo como alternativa para quem deixa o PC ligado.
+- **Onde:** o painel Hoje se abre a partir do dock. Notificação do Windows só se ele ficar fechado por 10 minutos.
+- **Tamanho:** até 6 linhas mais as ações; leitura de menos de 30 segundos. Agente sem novidade não aparece.
+- **Ordem:**
+  1. **Alba, o dia:** reuniões e a próxima delas, blocos livres, as 3 prioridades; avisa se o dia está cheio.
+  2. **Ontem:** "4 ficaram abertas" [Trazer para hoje] [Revisar].
+  3. **Tula:** a semana contra o previsto e o que vence em até 3 dias, numa linha.
+  4. **Nuno:** uso do limite, PRs esperando você, CI quebrado, numa linha.
+  5. **Faina:** só aprovações pendentes.
+  6. Ações: [Começar o dia] [Ajustar plano].
+
+**Fechamento do dia**
+- **Quando:** no horário de parar (padrão 18h, ajustável no briefing), com adiar 30 minutos. Se o PC suspender antes, o fechamento aparece na manhã seguinte como "Ontem", no topo do briefing.
+- **Duração:** cerca de 2 minutos.
+- **Ordem:**
+  1. **Alba:** o que foi feito; o que ficou aberto, com [Amanhã] [Outra data] [Descartar].
+  2. **Alba:** amanhã numa linha (primeiro compromisso e prioridade).
+  3. **Tula:** gasto do dia e "lançar algo que faltou?".
+  4. **Nuno:** sessões ainda abertas, PRs e CI a observar, uso do limite.
+  5. **Faina:** o que fez no dia e o que ainda dá para desfazer.
+  6. [Encerrar o dia]: responde "Dia encerrado." e silencia os agentes até a manhã, exceto aprovações e lembretes.
+
+**Se você ignorar**
+- Nada se acumula: briefing e fechamento fecham sozinhos e reaparecem resumidos na próxima vez.
+- Pendência não replanejada vai para hoje e é marcada no briefing seguinte.
+- Depois de 3 dias ignorados seguidos, a Alba pergunta uma vez: "Deixo o briefing mais curto ou desligo?". Desligado, os avisos de prazo, limite e orçamento continuam.
+
+**Fontes:** [Microsoft Style Guide](https://learn.microsoft.com/en-us/style-guide/brand-voice-above-all-simple-human) · [Microsoft, escrita no Windows](https://learn.microsoft.com/windows/uwp/design/style/writing-style) · [Google, persona](https://developers.google.com/assistant/conversation-design/create-a-persona) · [Google, erros](https://developers.google.com/assistant/conversation-design/errors) · [NN/g, dimensões de tom](https://www.nngroup.com/articles/tone-of-voice-dimensions/) · [GitHub Primer, conteúdo](https://primer.style/foundations/content) · [Monzo, tom de voz](https://monzo.com/tone-of-voice/) · [YNAB](https://www.ynab.com/blog/3-steps-to-reset-your-budget-after-a-period-of-heavy-spending) · [Hazel, prévia de regra](https://www.noodlesoft.com/manual/hazel/work-with-folders-rules/create-edit-rules/preview-a-rule) · [Vercel, gasto](https://vercel.com/docs/spend-management) · [Sunsama](https://www.sunsama.com/features/daily-planning-and-shutdown) · [Akiflow, rituais](https://akiflow.featurebase.app/en/help/articles/0805246-rituals) · [Cal Newport, ritual de fechamento](https://calnewport.com/drastically-reduce-stress-with-a-work-shutdown-ritual/)
 
 ### Visual dos agentes
 
@@ -151,7 +234,8 @@ As chaves ficam no Gerenciador de Credenciais; o serviço pede à casca na hora 
 ### Primeiro uso e falha de provedor
 
 - **Primeiro uso:** a configuração inicial pede para conectar pelo menos um modelo, CLI ou API, e já o atribui aos quatro agentes. Dá para trocar por agente depois.
-- **Provedor fora do ar ou sem limite de uso:** a execução fica marcada, o agente mostra o erro no dock e tenta de novo no próximo gatilho. Os dados e as telas continuam acessíveis, e o que você fizer à mão nesse meio-tempo os agentes enxergam quando voltarem.
+- **Provedor fora do ar ou limite de uso estourado:** o agente **dorme**: o personagem fecha os olhos, o dock mostra quando ele volta (o fim da janela de uso, quando a ferramenta informa) e nenhuma nova chamada ao modelo é feita até lá. Os vigias continuam: lembrete dispara, evento de sessão chega, e tudo o que precisar de modelo fica enfileirado para quando ele acordar. Os dados e as telas continuam acessíveis.
+- **Teto de gasto (opcional):** dá para definir um teto diário por agente ou para o time; ao atingir, o agente dorme do mesmo jeito até o dia seguinte. Sem teto por padrão.
 - **Provedor reserva (opcional):** cada agente pode ter um segundo provedor, usado quando o principal falha.
 
 ---

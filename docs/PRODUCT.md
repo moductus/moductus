@@ -43,6 +43,8 @@ O Moductus v0 resolvia "preciso de um utilitário agora". O Moductus novo resolv
 
 Para quem passa o dia no PC, trabalha com código e quer um único lugar para o dia: o que fazer, quanto foco já teve, quanto gastou no mês, quais PRs esperam review e o que os agentes de IA estão fazendo em cada projeto.
 
+**No começo, é para o autor e colegas.** Sem marketing nem tráfego pago, o público é pequeno e próximo. Isso define as prioridades: app em **português do Brasil**, distribuição pelas releases do GitHub, documentação para quem já é dev, e nada de recurso de crescimento (convite, compartilhamento social, planos). O código continua aberto (MIT).
+
 ### Contra quem
 
 - **Niko** ([vitorcgo/Niko](https://github.com/vitorcgo/Niko)) — a referência mais próxima: sistema de vida para Windows, com agentes por área e provedor à escolha. É proprietário (licença proíbe obras derivadas), então serve de referência de produto, nunca de código. O Moductus se diferencia por ser **open source**, por tratar **agentes de código externos** (Claude Code, Codex, Antigravity) como cidadãos de primeira classe, e por usar **agentes CLI com a assinatura que você já paga**.
@@ -124,7 +126,32 @@ Janela normal com barra lateral de navegação.
 | **Arquivos** | Caixa de entrada: solte um arquivo e o agente resume, classifica, extrai texto (OCR) ou lança em finanças |
 | **Memória** | Fatos, decisões, pessoas e referências que os agentes guardaram ou você pediu para guardar; busca e edição |
 | **Ferramentas** | Os utilitários herdados do v0 (seção 7) |
-| **Configurações** | Provedores de IA por agente, conexões, dock, atalhos, tema (Grafite, Papel, Vidro ou automático pelo Windows), privacidade, backup |
+| **Configurações** | Provedores de IA por agente, conexões, dock, atalhos, tema (Grafite, Papel, Vidro ou automático pelo Windows), notificações, privacidade, exportar e importar |
+
+### Primeiro uso
+
+Duas etapas, as duas com "pular" e "fazer depois":
+
+1. **Configuração** (uma vez, logo ao instalar):
+   1. Boas-vindas, com a opção **"Já uso em outro PC"**, que importa o arquivo exportado e pula o que ele já traz.
+   2. Tema e lado do dock, com prévia ao vivo.
+   3. **Conectar um modelo:** escolher entre os CLIs detectados no PC (Claude Code, Codex, Gemini, OpenCode) ou uma API, com um teste de verdade antes de seguir.
+   4. **Conhecer o time:** os quatro personagens se apresentam, cada um em uma frase.
+   5. **Conexões por agente, todas opcionais:** Google Agenda para a Alba, pastas autorizadas para a Faina, hooks das sessões de IA e GitHub para o Nuno, primeiro extrato para a Tula.
+   6. Notificações (seção abaixo) e início com o Windows.
+2. **Tutorial** (depois da configuração, no próprio app, sem vídeo):
+   - um tour curto pelo dock, um painel, o Sistema e a captura rápida (`Ctrl+Alt+Espaço`);
+   - uma lista **"Primeiros passos"** no Início, com uma missão por agente ("peça um lembrete à Alba", "mande um extrato para a Tula", "peça à Faina para olhar seus Downloads", "abra uma sessão do Claude Code e veja o Nuno acompanhar"), incluindo um cartão de aprovação de treino;
+   - some quando completa e volta pelo menu de ajuda.
+
+### Notificações
+
+Você decide, por agente e por tipo:
+
+- **Níveis:** *tudo*, *só o que precisa de mim* (padrão: pedidos de aprovação, lembretes, erros) ou *nada*.
+- **Onde:** aviso do Windows, só o ponto no dock, ou os dois.
+- **Silêncio:** horários sem aviso, e silêncio automático em tela cheia e apresentação.
+- Com *nada*, o agente continua trabalhando e registrando; você vê tudo no histórico e no dock quando quiser.
 
 `Ctrl+K` dentro do Sistema abre uma busca global por qualquer item e comando. É a herança da Palette, agora como coadjuvante.
 
@@ -148,6 +175,18 @@ O Moductus vem com quatro agentes de fábrica, e cada um tem **nome, função e 
 **Agentes seus (fase 7):** dá para criar um agente do zero ou duplicando um de fábrica, escolhendo nome, função, visual, modelo, ferramentas e gatilhos. Os de fábrica podem ser renomeados, ajustados ou desligados, e voltam ao padrão quando você quiser.
 
 **Memória** não é um agente: é compartilhada, todos guardam e consultam nela, e a área Memória mostra e edita tudo.
+
+### Conversas
+
+Duas formas, a mesma memória: **com o time**, uma conversa única em que o roteamento escolhe quem responde e cada resposta vem assinada pelo agente; e **com cada agente**, uma conversa por agente para assuntos longos. O que você diz numa vale nas outras.
+
+### Fora do PC
+
+O Moductus é o seu assistente **no PC**: quando você sai dele, os agentes param junto. O que precisa te alcançar longe da máquina vai para a sua agenda: com o Google Agenda conectado, compromissos e lembretes com horário viram eventos num calendário "Moductus", e o celular avisa. Não existe servidor, app de celular nem mensagem por WhatsApp.
+
+### Quando o modelo acaba
+
+Limite de uso estourado, provedor fora do ar ou teto de gasto atingido: o agente **dorme** até poder voltar, e o dock mostra quando. Os vigias continuam (lembrete dispara), e o que precisar do modelo fica na fila para quando ele acordar.
 
 ---
 
@@ -194,10 +233,16 @@ Todos configuráveis, com detecção de conflito.
 - **Local:** banco SQLite e arquivos em `%APPDATA%\Moductus`, ou ao lado do executável no modo portable.
 - **Chaves e tokens:** só no Gerenciador de Credenciais do Windows, nunca no banco nem em texto.
 - **Rede:** sai apenas para o provedor de IA configurado e para as conexões ligadas (GitHub, por exemplo). A tela de cada conexão diz o que é enviado.
-- **O que vai para o modelo:** cada agente envia só o contexto das próprias ferramentas. a Tula não manda lançamentos para o Nuno, e vice-versa.
+- **O que vai para o modelo:** cada agente envia só o contexto das próprias ferramentas. A Tula não manda lançamentos para o Nuno, e vice-versa.
 - **Modo privacidade:** esconde valores e textos sensíveis no dock e no Sistema, para compartilhar a tela.
 - **Sem telemetria.** Continua valendo do v0.
-- **Backup:** exportar e importar o banco inteiro, por arquivo.
+- **Levar para outro PC:** os dados ficam em cada máquina. Para levar o Moductus de um PC para outro, você **exporta um arquivo** num e **importa** no outro:
+  - **Só configurações** (padrão): tema, dock, atalhos, agentes (nomes, instruções, ferramentas, gatilhos, modelos escolhidos), regras de aprovação, perfis de importação de banco, conexões sem as credenciais.
+  - **Configurações e dados:** tudo acima, mais tarefas, notas, memória, finanças e histórico. Sai protegido por uma senha que você escolhe.
+  - **Nunca vai no arquivo:** chaves, tokens e senhas. No PC novo, o Moductus lista as conexões que precisam ser refeitas.
+  - Importar num PC que já tem dados pergunta se **substitui** ou **junta**; juntar não duplica o que já existe.
+  - Cada PC decide o que importa: dá para levar as configurações para o PC do trabalho sem levar as finanças.
+- **Backup:** o mesmo arquivo, com configurações e dados, serve de backup.
 
 ---
 
@@ -207,13 +252,13 @@ Todos configuráveis, com detecção de conflito.
 Este documento, [ARCHITECTURE.md](ARCHITECTURE.md), [AGENTS.md](AGENTS.md) e [DESIGN.md](DESIGN.md). Identidade visual nova, com três temas.
 
 ### Fase 1 — A casca
-Projeto Tauri, dock lateral com os três modos e detecção de tela cheia, Sistema com navegação vazia, banco e migrações, configurações, atalhos, bandeja, autostart. Mídia e os controles diretos (Mic, Awake) já entram aqui: são simples e tornam o dock útil desde o primeiro dia.
+Projeto Tauri, dock lateral com os três modos e detecção de tela cheia, Sistema com navegação vazia, banco e migrações, configurações, atalhos, bandeja, autostart. Mídia e os controles diretos (Mic, Awake) já entram aqui: são simples e tornam o dock útil desde o primeiro dia. Entram também a configuração do primeiro uso e exportar e importar configurações.
 
 ### Fase 2 — Os agentes começam a trabalhar
 Camada de provedores (um adaptador CLI e um de API para começar), serviço de agentes em segundo plano, ferramentas, cartão de aprovação. O **Nuno** e as **Sessões de IA** primeiro: é o ganho mais rápido e não depende de nenhuma área nova.
 
 ### Fase 3 — O dia
-Agenda, Tarefas, lembretes, Foco, Notas, captura rápida, Início e a **Alba** com briefing e fechamento.
+Agenda (local e Google Agenda, com o calendário "Moductus"), Tarefas, lembretes, Foco, Notas, captura rápida, Início, o tutorial com as missões e a **Alba** com briefing e fechamento.
 
 ### Fase 4 — O dinheiro
 Finanças completa (gastos, dívidas e planos) e a **Tula**, com importação de extrato e OCR de comprovante.
@@ -253,6 +298,18 @@ Criar, duplicar, exportar e importar agentes, com nome, função, visual, modelo
 | 18 | Agentes como personagens, com corpo e rosto | Tira a sensação de máquina; a expressão comunica o estado de relance. Substitui o glifo geométrico do primeiro desenho |
 | 19 | Agentes sempre vivos, com vigias sem modelo e modelo sob demanda | Lembrete e PR não podem esperar o usuário abrir o app, e ficar vivo não pode custar token o dia inteiro |
 | 20 | Marca "Borda e ponto": a linha do dock e o ponto de um agente presente | Conta o produto em dois elementos e continua legível a 16 px na bandeja. Especificação em [DESIGN.md](DESIGN.md#7-marca) |
+| 21 | Levar para outro PC por arquivo exportado (só configurações ou configurações e dados), sem sincronização | Mantém tudo local e sem servidor; cada PC escolhe o que importa. Credenciais nunca saem da máquina |
+| 22 | Agentes só trabalham com o PC ligado; o que precisa sair do PC vai para um calendário "Moductus" no Google Agenda | O produto é um assistente no PC. A agenda do usuário já é o canal que chega ao celular |
+| 23 | Conversa com o time e conversa com cada agente, sobre a mesma memória | Pedido que cruza áreas tem um lugar só; assunto longo tem o seu |
+| 24 | Onboarding de configuração seguido de tutorial com missões por agente | O valor depende de conexões que o usuário precisa fazer; o tutorial ensina usando o próprio app |
+| 25 | Notificações configuráveis por agente e tipo, inclusive desligadas | Interrupção é decisão do usuário |
+| 26 | Extratos em OFX, CSV e XML, com perfis de importação dos bancos mais populares | OFX é padrão; CSV e XML variam por banco e precisam de perfil |
+| 27 | A Faina nunca toca no sistema nem em nada que afete o uso do PC, e não tem comando de sistema | Um agente que organiza arquivos não pode quebrar a máquina |
+| 28 | Público inicial: o autor e colegas; app só em pt-BR | Sem tráfego pago, o público é pequeno e próximo; esforço vai para o produto |
+| 29 | Sem limite de gasto: o agente dorme até o modelo voltar, com teto diário opcional | Não perder trabalho nem gastar escondido |
+| 30 | Voz da família (curta, números primeiro, sem emoji nem humor em alerta) e traços próprios por agente | Baseado em guias de escrita de interface e em apps de referência de cada área; ver [AGENTS.md](AGENTS.md#voz-dos-agentes) |
+| 31 | Briefing na primeira atividade do dia, até 6 linhas; fechamento no horário de parar, cerca de 2 minutos; nada se acumula se for ignorado | Ritual curto o bastante para virar hábito; ver [AGENTS.md](AGENTS.md#briefing-da-manhã-e-fechamento-do-dia) |
+| 32 | Modelo de dados com ULID, dinheiro em centavos, origem em toda linha e separação entre configuração e dado | Permite juntar dados de outro PC, desfazer o que o agente fez e exportar só configurações; ver [DATA.md](DATA.md) |
 
 As 21 decisões do v0 estão em [v0/PRODUCT.md](v0/PRODUCT.md#10-decisões-registradas), como registro histórico.
 
@@ -274,4 +331,5 @@ As 21 decisões do v0 estão em [v0/PRODUCT.md](v0/PRODUCT.md#10-decisões-regis
 - [ARCHITECTURE.md](ARCHITECTURE.md) — como o app funciona por dentro
 - [AGENTS.md](AGENTS.md) — agentes, provedores, ferramentas e sessões de IA
 - [DESIGN.md](DESIGN.md) — os três temas e os tokens
+- [DATA.md](DATA.md) — o que cada área guarda e como
 - [v0/](v0/) — o Moductus suíte de utilitários, como registro
