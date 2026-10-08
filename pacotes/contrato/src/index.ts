@@ -4,3 +4,4 @@ export const VERSAO_PROTOCOLO = 1;
 export * from "./canal.ts";
 export * from "./config.ts";
 export * from "./metodos.ts";
+export * from "./outro-pc.ts";
