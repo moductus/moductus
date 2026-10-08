@@ -4,6 +4,7 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { combinacaoDoTeclado } from "../../componentes/CampoAtalho.tsx";
+import { auditar } from "../../teste/acessibilidade.ts";
 import { SecaoAtalhos } from "./Atalhos.tsx";
 import { SecaoGeral } from "./Geral.tsx";
 import { SecaoModelos } from "./Modelos.tsx";
@@ -308,6 +309,24 @@ describe("Levar para outro PC", () => {
     expect(falso.pedidos.some((p) => p.metodo === "config.importar")).toBe(false);
   });
 
+  it("Esc fecha a prévia sem importar e devolve o foco a quem a abriu", async () => {
+    servicoQueAceita();
+    const aceitar = falso.responder;
+    falso.responder = (metodo, dados) =>
+      metodo === "config.previaImportar"
+        ? Promise.resolve(previa([{ chave: "tema", atual: "automatico", novo: "papel" }]))
+        : aceitar(metodo, dados);
+    dialogo.escolherArquivo.mockResolvedValue(CAMINHO);
+    await montar(<SecaoOutroPc />);
+    await clicar(botao("Escolher arquivo"));
+    expect(auditar(recipiente)).toEqual([]);
+    await teclar(opcao("O que fazer com este PC", "Juntar"), { key: "Escape" });
+    expect(todos(".config-mudanca")).toEqual([]);
+    expect(por('[aria-label="Arquivo escolhido"]')).toBeNull();
+    expect(document.activeElement).toBe(botao("Escolher arquivo"));
+    expect(falso.pedidos.some((p) => p.metodo === "config.importar")).toBe(false);
+  });
+
   it("arquivo recusado pelo serviço vira mensagem, sem prévia", async () => {
     servicoQueAceita();
     const aceitar = falso.responder;
@@ -327,5 +346,29 @@ describe("Modelos", () => {
   it("continua no estado vazio, apontando para a fase 2", async () => {
     await montar(<SecaoModelos />);
     expect(por(".estado-vazio .selo").textContent).toBe("Fase 2");
+  });
+});
+
+describe("acessibilidade das seções conectadas", () => {
+  it.each([
+    ["Geral", SecaoGeral],
+    ["Tema e dock", SecaoTemaDock],
+    ["Atalhos", SecaoAtalhos],
+    ["Levar para outro PC", SecaoOutroPc],
+  ] as const)("%s: todo controle com nome e estados ARIA válidos", async (_, Secao) => {
+    servicoQueAceita();
+    await montar(<Secao />);
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("o atalho gravando avisa o leitor de tela e o Esc cancela", async () => {
+    servicoQueAceita();
+    await montar(<SecaoAtalhos />);
+    const campo = por(".campo-atalho");
+    await clicar(campo);
+    expect(campo.getAttribute("aria-label")).toMatch(/pressione a nova combinação, Esc cancela$/);
+    await teclar(campo, { key: "Escape", code: "Escape" });
+    expect(campo.getAttribute("aria-label")).toMatch(/Enter para trocar$/);
+    expect(definicoes()).toEqual([]);
   });
 });

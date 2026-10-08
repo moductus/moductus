@@ -9,6 +9,7 @@ import {
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { auditar, marcos } from "../../../teste/acessibilidade.ts";
 import { Sistema } from "../Sistema.tsx";
 
 // A casca não existe no teste: eventos, janela e comandos falsos.
@@ -336,5 +337,29 @@ describe("Primeiros passos", () => {
     ]);
     expect(por("main")!.dataset.area).toBe("inicio");
     expect(por(".primeiros-passos")).toBeTruthy();
+  });
+});
+
+describe("acessibilidade do primeiro uso", () => {
+  it("os cinco passos: lateral e main com nome, rádios e botões com nome", async () => {
+    await montar();
+    const seguir = ["Começar", "Continuar", "Depois", "Continuar"];
+    for (const [i, nome] of TITULOS.entries()) {
+      expect(marcos(recipiente), nome).toEqual([
+        "banner",
+        "complementary: Configuração inicial",
+        `main: ${nome}`,
+      ]);
+      expect(auditar(recipiente), nome).toEqual([]);
+      if (i < seguir.length) await clicar(botao(seguir[i]!));
+    }
+  });
+
+  it("depois de pular, os Primeiros passos no Início também passam", async () => {
+    await montar();
+    await clicar(botao("Pular configuração"));
+    expect(por(".primeiros-passos")).toBeTruthy();
+    expect(auditar(recipiente)).toEqual([]);
+    expect(marcos(recipiente)).toEqual(["banner", "navigation: Áreas", "main"]);
   });
 });

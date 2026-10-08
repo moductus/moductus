@@ -52,7 +52,7 @@
 }
 
 .interruptor[data-estado="foco"] {
-  outline: var(--espessura-foco) solid var(--destaque);
+  outline: var(--espessura-foco) solid var(--cor-foco);
   outline-offset: var(--recuo-foco);
 }
 

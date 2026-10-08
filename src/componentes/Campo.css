@@ -31,8 +31,8 @@
 
 .campo-caixa:focus-within,
 .campo[data-estado="foco"] .campo-caixa {
-  border-color: var(--destaque);
-  outline: var(--espessura-borda) solid var(--destaque);
+  border-color: var(--cor-foco);
+  outline: var(--espessura-borda) solid var(--cor-foco);
 }
 
 .campo-caixa[data-desativado] {
@@ -57,7 +57,7 @@
 }
 
 .campo-entrada::placeholder {
-  color: var(--texto-apagado);
+  color: var(--texto-3);
 }
 
 .campo-dica {

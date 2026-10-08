@@ -64,6 +64,8 @@
   --espessura-icone: 1.6px;
   --espessura-foco: 2px;
   --recuo-foco: 2px;
+  /* Anel por dentro do botão, onde o vizinho colado ou a borda da janela cortaria o de fora */
+  --recuo-foco-interno: -2px;
 
   /* Animação: entrada até 140 ms, saída até 90 ms (zero quando o Windows pede menos) */
   --dur-entrada: 140ms;
@@ -176,6 +178,8 @@
   --sombra-opcao-marcada: inset 0 0 0 1px;
 }
 
+/* Menos animação no Windows: pela mídia do WebView ou pelo "Efeitos de animação" que a casca
+   lê (SPI_GETCLIENTAREAANIMATION) e marca em data-movimento. */
 @media (prefers-reduced-motion: reduce) {
   :root {
     --dur-entrada: 0ms;
@@ -183,6 +187,13 @@
     --dur-respirar: 0ms;
     --dur-piscar: 0ms;
   }
+}
+
+:root[data-movimento="reduzido"] {
+  --dur-entrada: 0ms;
+  --dur-saida: 0ms;
+  --dur-respirar: 0ms;
+  --dur-piscar: 0ms;
 }
 
 /* ---------- Grafite: escuro, sólido, dock colado ---------- */
@@ -207,6 +218,8 @@
   --texto-apagado: #6f737a;
   --destaque: #e8e9eb;
   --sobre-destaque: #0d0e10;
+  /* Anel de foco: o destaque, com 3:1 ou mais sobre todo fundo do tema (contraste.test.ts) */
+  --cor-foco: var(--destaque);
   --sucesso: #7fb89e;
   --aviso: #e3b262;
   --perigo: #e5787a;
@@ -251,12 +264,15 @@
   --borda-forte: rgba(20, 20, 19, 0.16);
   --texto: #1a1a18;
   --texto-2: #3e3d39;
-  --texto-3: #6b6a64;
+  /* Um tom abaixo do #6B6A64 do canvas: o atalho do item ativo (fundo-ativo) pede 4,5:1 */
+  --texto-3: #686761;
   --texto-apagado: #8a8983;
   --destaque: #1a1a18;
   --sobre-destaque: #fbfaf8;
+  --cor-foco: var(--destaque);
   --sucesso: #2f7a52;
-  --aviso: #b5761a;
+  /* Escurecido do #B5761A do canvas: o selo "aviso" é texto de 11 e precisa de 4,5:1 */
+  --aviso: #96600f;
   --perigo: #b4443c;
   --capa: #d9d6cf;
 
@@ -304,6 +320,7 @@
   --texto-apagado: #7c8394;
   --destaque: #a3b5ff;
   --sobre-destaque: #10131c;
+  --cor-foco: var(--destaque);
   --sucesso: #7ccba2;
   --aviso: #e8b86a;
   --perigo: #f08a8a;

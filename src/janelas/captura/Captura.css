@@ -1,0 +1,27 @@
+/* Captura rápida: a janela de 640 × 72 é só o campo, com respiro para o anel de foco caber. */
+.captura {
+  display: flex;
+  align-items: center;
+  height: 100vh;
+  padding: 0 var(--esp-16);
+}
+
+.captura-campo {
+  flex: 1;
+  min-width: 0;
+  height: var(--altura-campo);
+  padding: 0 var(--esp-10);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-campo);
+  color: var(--texto);
+  font-size: var(--tipo-13);
+}
+
+.captura-campo::placeholder {
+  color: var(--texto-3);
+}
+
+.captura-campo:focus-visible {
+  border-color: var(--cor-foco);
+}
