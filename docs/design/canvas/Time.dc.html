@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Moductus · os agentes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&amp;family=Geist+Mono:wght@400;600&amp;family=Instrument+Sans:wght@400;600&amp;family=JetBrains+Mono:wght@400;600&amp;family=Onest:wght@400;600&amp;family=IBM+Plex+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+button,input{font:inherit}
+@keyframes gira{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; padding: 48px; background: {{t.fundo}}; font-family: {{t.fonte}}; color: {{t.texto}}; font-size: 13px; line-height: 1.45; display: flex; flex-direction: column; gap: 24px">
+
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px">
+<sc-for list="{{agentes}}" as="a" hint-placeholder-count="4">
+<article style="background: {{t.cartao}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioCartao}}; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; align-items: center; gap: 14px">
+<div style="{{a.avatar56}}"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{a.d}}"></path></svg></div>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h2 style="margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em">{{a.nome}}</h2>
+<span style="color: {{t.texto2}}">{{a.funcao}}</span>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; border-top: 1px solid {{t.borda}}; padding-top: 14px">
+<sc-for list="{{a.cuida}}" as="c" hint-placeholder-count="3">
+<div style="display: flex; gap: 8px; color: {{t.texto2}}"><span style="{{a.marcador}}"></span><span>{{c}}</span></div>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px solid {{t.borda}}; padding-top: 14px">
+<span style="font-size: 12px; color: {{t.texto3}}">Estados</span>
+<div style="display: flex; gap: 14px; flex-wrap: wrap">
+<sc-for list="{{a.estados}}" as="e" hint-placeholder-count="5">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 46px">
+<div style="{{e.anel}}"><div style="{{e.quadro}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{a.d}}"></path></svg></div><sc-if value="{{e.giro}}" hint-placeholder-val="{{ false }}"><span style="{{e.arco}}"></span></sc-if></div>
+<span style="font-size: 10.5px; color: {{t.texto3}}; text-align: center; line-height: 1.2">{{e.rotulo}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; border-top: 1px solid {{t.borda}}; padding-top: 14px">
+<span style="font-size: 12px; color: {{t.texto3}}; flex: 1">No dock e nas listas</span>
+<div style="{{a.avatar24}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{a.d}}"></path></svg></div>
+<div style="{{a.avatar16}}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{a.d}}"></path></svg></div>
+<span style="font-family: {{t.mono}}; font-size: 11px; color: {{t.texto3}}">{{a.mencao}}</span>
+</div>
+</article>
+</sc-for>
+</div>
+
+<section aria-label="Criar agente" style="flex: 1; min-height: 0; background: {{t.cartao}}; border: 1px dashed {{t.bordaForte}}; border-radius: {{t.raioCartao}}; padding: 20px 24px; display: grid; grid-template-columns: 220px repeat(3, minmax(0, 1fr)); gap: 28px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<span style="font-size: 12px; color: {{t.texto3}}">Fase 7</span>
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">Criar um agente</h2>
+<p style="margin: 0; color: {{t.texto2}}; text-wrap: pretty">Do zero ou duplicando um de fábrica. Ação fora do Moductus continua sempre com a sua aprovação.</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px">
+<label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; color: {{t.texto3}}">Nome</span><input value="Tutor" style="height: 36px; padding: 0 12px; border-radius: {{t.raioControle}}; border: 1px solid {{t.bordaForte}}; background: {{t.campo}}; color: {{t.texto}}"></label>
+<label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; color: {{t.texto3}}">Função</span><input value="Me ajuda a estudar para a certificação" style="height: 36px; padding: 0 12px; border-radius: {{t.raioControle}}; border: 1px solid {{t.bordaForte}}; background: {{t.campo}}; color: {{t.texto}}"></label>
+<label style="display: flex; flex-direction: column; gap: 6px"><span style="font-size: 12px; color: {{t.texto3}}">Modelo</span><input value="Claude Code · sua assinatura" style="height: 36px; padding: 0 12px; border-radius: {{t.raioControle}}; border: 1px solid {{t.bordaForte}}; background: {{t.campo}}; color: {{t.texto}}"></label>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 12px; color: {{t.texto3}}">Visual</span>
+<div style="display: grid; grid-template-columns: repeat(6, 36px); gap: 8px">
+<sc-for list="{{glifos}}" as="g" hint-placeholder-count="12">
+<div style="{{g.estilo}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{g.d}}"></path></svg></div>
+</sc-for>
+</div>
+<div style="display: flex; gap: 8px; padding-top: 4px">
+<sc-for list="{{tons}}" as="o" hint-placeholder-count="8">
+<span style="{{o.estilo}}"></span>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<span style="font-size: 12px; color: {{t.texto3}}">Ferramentas</span>
+<div style="display: flex; flex-wrap: wrap; gap: 6px">
+<sc-for list="{{ferramentas}}" as="f" hint-placeholder-count="6">
+<span style="{{f.estilo}}">{{f.nome}}</span>
+</sc-for>
+</div>
+<span style="font-size: 12px; color: {{t.texto3}}; padding-top: 6px">Gatilho</span>
+<span style="color: {{t.texto2}}">Todo dia às 20h, revisão de 15 min</span>
+</div>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tema":{"editor":"enum","options":["Grafite","Papel","Vidro"],"default":"Grafite"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var TEMAS = {
+      Grafite: { fundo: '#111214', cartao: '#16181B', campo: '#0F1012', borda: 'rgba(255,255,255,0.07)', bordaForte: 'rgba(255,255,255,0.14)', chip: 'rgba(255,255,255,0.06)', texto: '#E8E9EB', texto2: '#B5B8BD', texto3: '#8C9097', aviso: '#E3B262', perigo: '#E5787A', raioCartao: '12px', raioControle: '8px', fonte: "'Geist', 'Segoe UI', system-ui, sans-serif", mono: "'Geist Mono', Consolas, monospace", claro: false },
+      Papel: { fundo: '#F1F0EC', cartao: '#FFFFFF', campo: '#FFFFFF', borda: 'rgba(20,20,19,0.08)', bordaForte: 'rgba(20,20,19,0.16)', chip: '#EFEEEA', texto: '#1A1A18', texto2: '#3E3D39', texto3: '#6B6A64', aviso: '#B5761A', perigo: '#B4443C', raioCartao: '16px', raioControle: '10px', fonte: "'Instrument Sans', 'Segoe UI', system-ui, sans-serif", mono: "'JetBrains Mono', Consolas, monospace", claro: true },
+      Vidro: { fundo: '#161B26', cartao: 'rgba(255,255,255,0.05)', campo: 'rgba(0,0,0,0.18)', borda: 'rgba(255,255,255,0.09)', bordaForte: 'rgba(255,255,255,0.18)', chip: 'rgba(255,255,255,0.08)', texto: '#EEF0F6', texto2: '#C4C9D4', texto3: '#9AA1B1', aviso: '#E8B86A', perigo: '#F08A8A', raioCartao: '16px', raioControle: '10px', fonte: "'Onest', 'Segoe UI', system-ui, sans-serif", mono: "'IBM Plex Mono', Consolas, monospace", claro: false }
+    };
+    var t = TEMAS[this.props.tema] || TEMAS.Grafite;
+    var tom = function (escuro, claro) { return t.claro ? claro : escuro; };
+    var alfa = function (hex, a) { var n = parseInt(hex.slice(1), 16); return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')'; };
+    var quadro = function (cor, lado) { return 'width: ' + lado + 'px; height: ' + lado + 'px; border-radius: ' + Math.round(lado * 0.3) + 'px; flex: none; display: flex; align-items: center; justify-content: center; color: ' + cor + '; background: ' + alfa(cor, t.claro ? 0.16 : 0.14) + ';'; };
+    var GLIFOS = {
+      alba: 'M3 18h18M7 18a5 5 0 0 1 10 0M12 8v2M5.6 10.6l1.4 1.4M18.4 10.6L17 12',
+      lastro: 'M6 19h12M6 14.5h12M9 10h6',
+      faina: 'M4 14l4.5-4.5L13 14l-4.5 4.5zM11 9l4.5-4.5L20 9l-4.5 4.5z',
+      vigia: 'M12 13.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM8 8a5.7 5.7 0 0 0 0 8M16 8a5.7 5.7 0 0 1 0 8M5 5a9.9 9.9 0 0 0 0 14M19 5a9.9 9.9 0 0 1 0 14'
+    };
+    var base = [
+      { nome: 'Alba', mencao: '@alba', funcao: 'Cuida do seu dia', g: 'alba', cor: tom('#D9A55A', '#9A6A1E'), cuida: ['Agenda, compromissos e lembretes', 'Tarefas com data, hora e prioridade', 'Briefing da manhã e fechamento do dia'] },
+      { nome: 'Lastro', mencao: '@lastro', funcao: 'Cuida do seu dinheiro', g: 'lastro', cor: tom('#6FAE8C', '#2F7A52'), cuida: ['Gastos, extratos e orçamento', 'Dívidas e a melhor ordem para quitar', 'Planos e metas de economia'] },
+      { nome: 'Faina', mencao: '@faina', funcao: 'Faz o serviço pesado', g: 'faina', cor: tom('#D2805E', '#A34E2E'), cuida: ['Organiza Downloads e pastas', 'Limpa duplicados e temporários', 'Cria documentos e planilhas'] },
+      { nome: 'Vigia', mencao: '@vigia', funcao: 'Fica de olho nas suas IAs e no seu código', g: 'vigia', cor: tom('#7C9CD6', '#3F64A8'), cuida: ['Sessões do Claude Code, Codex e OpenCode', 'Contexto, gasto e limites de cada sessão', 'PRs, reviews, issues e CI'] }
+    ];
+    var anelBase = 'position: relative; width: 40px; height: 40px; border-radius: 13px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; ';
+    var agentes = base.map(function (a) {
+      var q = quadro(a.cor, 32);
+      var estados = [
+        { rotulo: 'ocioso', anel: anelBase + 'border: 2px solid transparent;', quadro: q },
+        { rotulo: 'traba­lhando', anel: anelBase + 'border: 2px solid ' + alfa(a.cor, 0.25) + ';', quadro: q, giro: true, arco: 'position: absolute; inset: -2px; border-radius: 13px; border: 2px solid transparent; border-top-color: ' + a.cor + '; animation: gira 1.6s linear infinite;' },
+        { rotulo: 'esperando você', anel: anelBase + 'border: 2px solid ' + t.aviso + ';', quadro: q },
+        { rotulo: 'erro', anel: anelBase + 'border: 2px dashed ' + t.perigo + ';', quadro: q },
+        { rotulo: 'desligado', anel: anelBase + 'border: 2px solid transparent; opacity: 0.4;', quadro: q }
+      ].map(function (e) { return Object.assign({ giro: false, arco: '' }, e); });
+      return Object.assign({}, a, {
+        d: GLIFOS[a.g],
+        avatar56: quadro(a.cor, 56),
+        avatar24: quadro(a.cor, 24),
+        avatar16: quadro(a.cor, 16),
+        marcador: 'width: 6px; height: 6px; border-radius: 3px; margin-top: 7px; flex: none; background: ' + a.cor + ';',
+        estados: estados
+      });
+    });
+    var extras = ['M4 6h16M4 12h16M4 18h10', 'M12 3l2.6 5.6 6 .6-4.5 4 1.3 6-5.4-3.2-5.4 3.2 1.3-6-4.5-4 6-.6z', 'M4 19.5V5a1 1 0 0 1 1-1h14v16H5.5a1.5 1.5 0 0 1 0-3H19', 'M12 3v18M3 12h18', 'M5 12a7 7 0 1 0 14 0 7 7 0 0 0-14 0zM12 8v4l3 2', 'M4 7l8-4 8 4-8 4zM4 12l8 4 8-4M4 17l8 4 8-4', 'M12 21s-7-4.5-7-11a7 7 0 0 1 14 0c0 6.5-7 11-7 11z', 'M7 4h10l3 5-8 11L4 9z'];
+    var corEscolhida = tom('#B79CE0', '#6A4FA0');
+    var glifos = [GLIFOS.alba, GLIFOS.lastro, GLIFOS.faina, GLIFOS.vigia].concat(extras).map(function (d, i) {
+      var sel = i === 6;
+      return { d: d, estilo: 'width: 36px; height: 36px; border-radius: 10px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; ' + (sel ? 'color: ' + corEscolhida + '; background: ' + alfa(corEscolhida, 0.16) + '; border: 2px solid ' + corEscolhida + ';' : 'color: ' + t.texto3 + '; border: 1px solid ' + t.borda + ';') };
+    });
+    var tons = [tom('#D9A55A', '#9A6A1E'), tom('#6FAE8C', '#2F7A52'), tom('#D2805E', '#A34E2E'), tom('#7C9CD6', '#3F64A8'), corEscolhida, tom('#C98BA6', '#8E3F62'), tom('#7DB8BC', '#2E7076'), tom('#A6A08F', '#5F5B4E')].map(function (c, i) {
+      return { estilo: 'width: 22px; height: 22px; border-radius: 11px; box-sizing: border-box; background: ' + c + '; ' + (i === 4 ? 'box-shadow: 0 0 0 2px ' + t.cartao + ', 0 0 0 4px ' + c + ';' : '') };
+    });
+    var chip = function (on) { return 'font-size: 12px; padding: 3px 10px; border-radius: 12px; ' + (on ? 'background: ' + t.chip + '; color: ' + t.texto + '; border: 1px solid ' + t.bordaForte + ';' : 'color: ' + t.texto3 + '; border: 1px solid ' + t.borda + ';'); };
+    var ferramentas = [['notas', true], ['tarefas', true], ['lembretes', true], ['arquivos.ler', true], ['memoria', true], ['financas', false], ['github', false], ['comando', false]].map(function (f) { return { nome: f[0], estilo: chip(f[1]) }; });
+    return { t: t, agentes: agentes, glifos: glifos, tons: tons, ferramentas: ferramentas };
+  }
+}
+</script>
+</body>
+</html>

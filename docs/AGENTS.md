@@ -8,54 +8,97 @@
 
 ## 1. O que é um agente
 
-Um agente é **configuração**, não código. Todos rodam no mesmo runtime, dentro do serviço.
+Um agente é **configuração**, não código. Todos rodam no mesmo runtime, dentro do serviço, e todos têm as mesmas três coisas que o usuário vê: **nome**, **função** e **visual**.
 
-| Campo | Exemplo (agente Dev) |
-|---|---|
-| `id`, `nome`, `apelido` | `dev`, "Dev", `@dev` |
-| `instrucoes` | Quem é, do que cuida, como responde, o que nunca faz |
-| `ferramentas` | Subconjunto do catálogo: `github.prs_para_revisar`, `github.issues_atribuidas`, `sessoes.listar`, `tarefas.criar`… |
-| `provedor` | `claude-cli` com modelo padrão, ou `openai-compativel` apontando para um endpoint |
-| `gatilhos` | `intervalo: 15min`, `evento: sessao.pediu_aprovacao` |
-| `memoria` | Quais escopos de memória pode ler e escrever |
+| Campo | O que é | Exemplo (Vigia) |
+|---|---|---|
+| `id`, `nome`, `apelido` | Identidade e como chamar no chat | `vigia`, "Vigia", `@vigia` |
+| `funcao` | Uma frase do que ele faz, mostrada no dock e no Sistema | "Fica de olho nas suas sessões de IA e no seu código" |
+| `instrucoes` | Quem é, do que cuida, como responde, o que nunca faz | Texto livre, editável |
+| `visual` | Glifo e tom (veja "Visual dos agentes") | glifo `radar`, tom `ardosia` |
+| `ferramentas` | Subconjunto do catálogo | `sessoes.*`, `github.*`, `tarefas.criar` |
+| `provedor` | Modelo que ele usa, com reserva opcional | `claude-cli`; reserva `openai-compativel` |
+| `gatilhos` | Quando trabalha sozinho | `intervalo: 15min`, `evento: sessao.contexto_alto` |
+| `memoria` | Escopos de memória que lê e escreve | `dev`, `geral` |
 
-Os quatro agentes iniciais vêm de fábrica e podem ser editados. Criar um agente novo é preencher esses campos no Sistema.
+### De fábrica e criados por você
+
+- **De fábrica:** os quatro agentes da seção 2 vêm prontos. Dá para renomear, trocar o visual, ajustar instruções, ferramentas e modelo, ou desligar. Não dá para apagar: "restaurar padrão" volta ao original.
+- **Criados por você (fase 7):** um agente novo é preenchido a partir do zero ou duplicando um de fábrica. O Sistema guia pelos campos acima. O visual sai da mesma biblioteca de glifos e tons, e as ferramentas vêm do mesmo catálogo. Ferramenta `externo` continua sempre com aprovação, então nenhum agente criado consegue agir fora do Moductus sem o seu sim.
+- **Compartilhar:** um agente se exporta e importa como arquivo `.json`, só com configuração, sem dados nem chaves.
+
+A **memória é compartilhada**, não um agente: qualquer agente guarda e consulta fatos nos escopos que tem, e a área Memória mostra e edita tudo.
 
 ---
 
-## 2. Os agentes iniciais
+## 2. Os agentes de fábrica
 
-### Demandas
-- **Cuida de:** tarefas, agenda, foco, notas.
-- **Faz:** transforma frase solta em tarefa com data e prioridade; monta o **briefing da manhã** (o que vence hoje, o que ficou de ontem, PRs e contas do dia, vindos dos outros agentes); faz o **fechamento do dia** (o que foi feito, quanto foco, o que passa para amanhã); sugere o que fazer no próximo foco.
-- **Gatilhos:** horário do briefing e do fechamento, tarefa vencendo.
-- **Ferramentas:** `tarefas.*`, `foco.*`, `notas.*`, `memoria.buscar`, leitura de resumo dos outros agentes.
+| | Alba | Lastro | Faina | Vigia |
+|---|---|---|---|---|
+| **Função** | Cuida do seu dia | Cuida do seu dinheiro | Faz o serviço pesado | Fica de olho nas suas IAs e no seu código |
+| **Nome** | Aurora: começa o dia com você | O que sustenta: reserva e equilíbrio | Trabalho árduo, lida | Quem vigia |
+| **Glifo** | Sol nascendo sobre a linha | Barras empilhadas | Blocos se encaixando | Radar |
+| **Tom** | Âmbar | Musgo | Terracota | Ardósia |
 
-### Finanças
-- **Cuida de:** contas, lançamentos, categorias, orçamento, recorrências.
-- **Faz:** lança gasto por texto ("45 de mercado no débito"), por print ou comprovante (OCR local, depois o modelo estrutura), por extrato OFX ou CSV caído na caixa de entrada; categoriza; avisa quando uma categoria passa do orçamento ou uma recorrência está para vencer; responde "quanto gastei com X".
-- **Gatilhos:** arquivo de extrato em Arquivos, orçamento estourado, recorrência próxima.
-- **Ferramentas:** `financas.*`, `arquivos.ler_texto`, `memoria.buscar` (escopo finanças).
-- **Nunca:** paga, transfere ou acessa banco. Só registra.
+### Alba — o dia a dia
+- **Cuida de:** agenda, tarefas, lembretes, rotina e foco.
+- **Faz:** transforma frase solta em tarefa ou compromisso com data, hora e prioridade ("ligar pro banco amanhã 15h"); dispara **lembretes** no horário, inclusive recorrentes; monta o **briefing da manhã** (compromissos, o que vence, o que ficou de ontem, e o resumo que os outros agentes mandarem); faz o **fechamento do dia** (o que foi feito, quanto foco, o que passa para amanhã); encaixa tarefas nos horários livres da agenda e sugere o próximo foco.
+- **Gatilhos:** horário do briefing e do fechamento, lembrete vencendo, compromisso chegando.
+- **Ferramentas:** `agenda.*`, `tarefas.*`, `lembretes.*`, `foco.*`, `notas.*`, `memoria.*`.
+- **Agenda:** local no início; Google Agenda e Outlook entram como conexões, com o efeito `externo` para criar ou mudar evento fora do Moductus.
+- **É o agente padrão:** mensagem sem destinatário claro vai para a Alba.
 
-### Dev
-- **Cuida de:** GitHub e as sessões de agentes de código.
-- **Faz:** lista PRs esperando seu review, PRs seus com review ainda não atendido, issues e demandas atribuídas a você, CI quebrado; resume um PR; avisa quando uma sessão de IA pede aprovação ou termina; cria tarefa a partir de um review.
-- **Gatilhos:** intervalo (padrão 15 min), eventos de sessão.
-- **Ferramentas:** `github.*` (via `gh`, com a sua autenticação), `sessoes.*`, `tarefas.criar`.
-- **Efeito externo** (comentar, aprovar PR, marcar thread): sempre por cartão de aprovação.
+### Lastro — finanças
+- **Cuida de:** gastos, dívidas, planos e orçamento.
+- **Faz:**
+  - **Gastos:** lança por texto ("45 de mercado no débito"), por print ou comprovante (OCR local, depois o modelo estrutura) e por extrato OFX ou CSV; categoriza; acompanha orçamento por categoria e recorrências.
+  - **Dívidas:** cadastra saldo, juros e parcelas; mostra o custo total de cada uma; simula a ordem de quitação (maior juro primeiro ou menor saldo primeiro) e quanto cada real extra adianta.
+  - **Planos:** metas de economia com prazo, quanto separar por mês, e acompanhamento do que foi cumprido.
+  - **Relatórios:** mês, categoria, comparação com meses anteriores; responde "quanto gastei com X".
+- **Gatilhos:** extrato em Arquivos, categoria perto do limite, parcela ou recorrência vencendo, fim do mês.
+- **Ferramentas:** `financas.*`, `dividas.*`, `planos.*`, `arquivos.ler_texto`, `memoria.*` (escopo finanças).
+- **Nunca:** paga, transfere, acessa banco ou recomenda investimento. Organiza e calcula; a decisão é sua.
 
-### Memória
-- **Cuida de:** o que precisa ser lembrado entre conversas e entre agentes.
-- **Faz:** guarda fatos com origem e data ("o vencimento do cartão é dia 10"); responde aos outros agentes quando pedem contexto; consolida memórias duplicadas; você pode editar e apagar tudo pela área Memória.
-- **Ferramentas:** `memoria.*`, `notas.buscar`, `arquivos.buscar`.
-- **Busca:** FTS5 primeiro. Busca por similaridade (embeddings) fica para depois, e só com provedor que ofereça embeddings ou modelo local.
+### Faina — o serviço pesado
+- **Cuida de:** arquivos e tarefas trabalhosas no PC.
+- **Faz:**
+  - **Organizar:** separa Downloads por tipo e data, renomeia em lote, move para as pastas certas, junta o que está espalhado.
+  - **Limpar:** acha temporários, duplicados e arquivos grandes esquecidos, e manda para a Lixeira.
+  - **Criar:** documentos, planilhas e resumos a partir de arquivos, notas e da caixa de entrada; conversões de formato.
+  - **Processar:** o que cai em Arquivos (extrair texto, resumir, classificar, entregar ao agente certo).
+- **Como trabalha:** sempre **plano → prévia → aprovação → execução → registro**. A prévia mostra cada arquivo que muda e para onde vai; a execução fica no histórico com **desfazer**.
+- **Limites:** só mexe nas pastas que você autorizou; nunca apaga de vez (tudo vai para a Lixeira); comando de sistema é sempre `externo`.
+- **Gatilhos:** Downloads passou de um limite, arquivo caiu em Arquivos, limpeza semanal agendada.
+- **Ferramentas:** `arquivos.*`, `documentos.*`, `ocr.ler`, `comando.executar` (`externo`), `memoria.*`.
+
+### Vigia — dev e sessões de IA
+- **Cuida de:** as sessões de agentes de código e o seu trabalho no GitHub.
+- **Faz:**
+  - **Sessões:** acompanha Claude Code, Codex, OpenCode, Gemini CLI e Antigravity por projeto (trabalhando, esperando você, terminou, erro, parada) e leva os pedidos de permissão ao dock.
+  - **Lembrete de contexto:** avisa quando uma sessão passa de 80% da janela de contexto e sugere compactar ou encerrar. O contexto é calculado pelo uso de tokens que a própria ferramenta registra (no Claude Code, o transcript da sessão) **(validar por ferramenta)**.
+  - **Gasto:** tokens e custo estimado por sessão, por projeto e por dia, sempre marcados como estimativa quando não vêm da ferramenta.
+  - **Limites:** janela de uso e limite semanal onde a ferramenta expõe; sem fonte, mostra só a estimativa local e diz isso.
+  - **GitHub:** PRs esperando seu review, PRs seus com review a atender, issues e demandas atribuídas a você, CI quebrado; resume PR e cria tarefa a partir de review.
+- **Gatilhos:** eventos de sessão, contexto alto, limite perto, intervalo de 15 min para o GitHub.
+- **Ferramentas:** `sessoes.*`, `uso.*`, `github.*` (via `gh`, com a sua autenticação), `tarefas.criar`.
+- **Efeito externo** (comentar, aprovar PR, responder pedido de permissão em nome de regra): sempre por cartão de aprovação ou regra que você criou.
 
 ### Roteamento
 
-1. Menção explícita (`@financas`) escolhe o agente.
-2. Sem menção, regras simples por palavra e contexto (valor em reais vai para Finanças, link de PR vai para Dev).
-3. Sem regra, um classificador barato (o modelo do agente Demandas, prompt curto) decide; Demandas é o padrão.
+1. Menção explícita (`@lastro`) escolhe o agente.
+2. Sem menção, regras simples por palavra e contexto: valor em reais vai para Lastro, link de PR ou nome de sessão vai para Vigia, arquivo ou pasta vai para Faina.
+3. Sem regra, um classificador barato (o modelo da Alba, prompt curto) decide; a Alba é o padrão.
+
+---
+
+### Visual dos agentes
+
+O agente tem rosto, mas sóbrio: **um glifo geométrico dentro de um quadrado arredondado**, no tom do agente. Sem mascote, sem expressão facial, sem animação decorativa.
+
+- **Glifo:** traço único, mesma espessura dos ícones do app, legível a 16 px. É ele que diferencia um agente do outro, mais do que a cor.
+- **Tom:** cor de identidade em baixa saturação, usada só no fundo do quadrado (10–18% de opacidade) e no glifo. Cada tema tem a variante escura e a clara, em [DESIGN.md](DESIGN.md#6-agentes).
+- **Estado:** mostrado por um anel e pela legenda, nunca só pela cor. `ocioso` sem anel; `trabalhando` com anel girando devagar; `esperando você` com anel cheio no tom de aviso; `aviso` com ponto; `erro` com anel tracejado no tom de perigo; `desligado` com o quadrado esmaecido.
+- **Agentes criados por você** escolhem glifo e tom da mesma biblioteca.
 
 ---
 
@@ -139,7 +182,7 @@ Cartões pendentes ficam no banco: fechar o app não perde o pedido, e o cartão
 
 ### Escopo
 
-Cada agente só recebe as ferramentas da sua lista. O contexto enviado ao modelo é montado pelas ferramentas que ele chama, não por um despejo do banco: o agente Dev nunca vê seus lançamentos.
+Cada agente só recebe as ferramentas da sua lista. O contexto enviado ao modelo é montado pelas ferramentas que ele chama, não por um despejo do banco: a Vigia nunca vê seus lançamentos.
 
 ---
 
@@ -156,6 +199,7 @@ O serviço abre um endpoint HTTP local (`127.0.0.1`, porta fixa configurável, t
 | **Claude Code** | Hooks do tipo `http` no `settings.json` do usuário, apontando direto para o endpoint, com o token no cabeçalho `Authorization` lido de variável de ambiente (`allowedEnvVars`): `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PermissionRequest`, `Notification`, `Stop`, `SessionEnd`. Nenhum script intermediário | Projeto (`cwd`), sessão, ferramenta e comando em uso, pedido de permissão, fim de turno, ociosidade (`Notification` com `idle_prompt`) |
 | **Aprovar pelo dock** | O hook `PermissionRequest` segura a resposta HTTP até você decidir no dock e devolve `decision.behavior` `allow` ou `deny`, com mensagem | Aprovar ou negar sem voltar ao terminal. Validado (seção 5.1) |
 | **Codex** | `notify` na configuração do Codex chama o comando do Moductus ao fim de cada turno **(validar se há eventos mais finos)** | Projeto, fim de turno, última mensagem |
+| **OpenCode** | Sistema de plugins e eventos do OpenCode **(validar)** | Projeto, estado da sessão, ferramenta em uso |
 | **Outros** | Varredura de processos (`claude`, `codex`, `gemini`) com diretório de trabalho | Só "está rodando neste projeto" |
 
 ### Estados mostrados

@@ -38,14 +38,16 @@ Entre os dois, a **captura rápida** transforma uma frase solta em tarefa, gasto
 
 ## Os agentes
 
-| Agente | Cuida de |
-|---|---|
-| **Demandas** | Tarefas, agenda e foco; briefing da manhã e fechamento do dia |
-| **Finanças** | Lançamentos por texto, print ou extrato; orçamento e recorrências |
-| **Dev** | GitHub e as sessões de agentes de código |
-| **Memória** | Guarda e recupera contexto para os outros agentes |
+| Agente | Função | Cuida de |
+|---|---|---|
+| **Alba** | Cuida do seu dia | Agenda, tarefas, lembretes e rotina; briefing da manhã e fechamento do dia |
+| **Lastro** | Cuida do seu dinheiro | Gastos, dívidas, planos de economia e orçamento |
+| **Faina** | Faz o serviço pesado | Organizar, limpar e criar arquivos e documentos no PC, com prévia e desfazer |
+| **Vigia** | Fica de olho nas suas IAs e no seu código | Sessões do Claude Code, Codex, OpenCode e afins, com contexto, gasto e limites; PRs e issues |
 
-Cada agente escolhe o próprio modelo: um agente CLI com a assinatura que você já tem (Claude Code, Codex, Gemini) ou uma API (Anthropic, OpenAI ou qualquer endpoint compatível, inclusive modelo local).
+Os quatro vêm de fábrica; no futuro, você cria os seus.
+
+Cada agente escolhe o próprio modelo: um agente CLI com a assinatura que você já tem (Claude Code, Codex, Gemini, OpenCode) ou uma API (Anthropic, OpenAI ou qualquer endpoint compatível, inclusive modelo local).
 
 ## Princípios
 

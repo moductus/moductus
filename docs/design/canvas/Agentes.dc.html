@@ -40,7 +40,7 @@ button{font:inherit;cursor:pointer}
 <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
 <div style="display: flex; flex-direction: column; gap: 2px">
 <h1 style="margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em">Agentes</h1>
-<span style="color: {{t.texto3}}; font-size: 12px">2 trabalhando · 1 esperando você</span>
+<span style="color: {{t.texto3}}; font-size: 12px">1 trabalhando · 2 esperando você</span>
 </div>
 <a href="#" style="display: flex; align-items: center; gap: 6px; text-decoration: none; color: {{t.texto3}}; font-size: 12px">Abrir no sistema <span style="font-family: {{t.mono}}; font-size: 11px; padding: 2px 5px; border-radius: 4px; background: {{t.chip}}; color: {{t.texto2}}">Ctrl Alt N</span></a>
 </div>
@@ -49,7 +49,7 @@ button{font:inherit;cursor:pointer}
 <div style="font-size: 12px; color: {{t.texto3}}; padding-bottom: 6px">Seu time</div>
 <sc-for list="{{time}}" as="a" hint-placeholder-count="4">
 <div style="display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid {{t.borda}}">
-<span style="width: 30px; height: 30px; border-radius: 15px; flex: none; background: {{t.chip}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600">{{a.ini}}</span>
+<span style="{{a.avatar}}"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{a.d}}"></path></svg></span>
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
 <div style="display: flex; align-items: center; gap: 8px"><span style="font-weight: 600">{{a.nome}}</span><span style="{{a.estiloEstado}}">{{a.estado}}</span></div>
 <span style="color: {{t.texto2}}; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{a.acao}}</span>
@@ -104,12 +104,15 @@ class Component extends DCLogic {
     var nome = this.props.tema || 'Grafite';
     var t = TEMAS[nome] || TEMAS.Grafite;
     var pill = function (cor) { return 'font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid ' + t.borda + '; color: ' + cor + ';'; };
+    var claro = nome === 'Papel';
+    var alfa = function (hex, a) { var n = parseInt(hex.slice(1), 16); return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')'; };
+    var avatar = function (tom) { return 'width: 30px; height: 30px; border-radius: 9px; flex: none; display: flex; align-items: center; justify-content: center; color: ' + tom + '; background: ' + alfa(tom, claro ? 0.16 : 0.14) + ';'; };
     var time = [
-      { ini: 'De', nome: 'Demandas', estado: 'ocioso', cor: t.texto3, acao: 'Briefing da manhã enviado às 8h30' },
-      { ini: 'Fi', nome: 'Finanças', estado: 'trabalhando', cor: t.sucesso, acao: 'Lendo o extrato de setembro (OFX, 84 lançamentos)', trabalhando: true },
-      { ini: 'Dv', nome: 'Dev', estado: 'aviso', cor: t.aviso, acao: '2 PRs esperam seu review desde ontem' },
-      { ini: 'Me', nome: 'Memória', estado: 'ocioso', cor: t.texto3, acao: 'Guardou 3 fatos hoje' }
-    ].map(function (a) { return Object.assign({}, a, { estiloEstado: pill(a.cor), trabalhando: !!a.trabalhando }); });
+      { nome: 'Alba', estado: 'ocioso', cor: t.texto3, tom: claro ? '#9A6A1E' : '#D9A55A', d: 'M3 18h18M7 18a5 5 0 0 1 10 0M12 8v2M5.6 10.6l1.4 1.4M18.4 10.6L17 12', acao: 'Briefing da manhã enviado às 8h30 · lembrete às 15h' },
+      { nome: 'Lastro', estado: 'trabalhando', cor: t.sucesso, tom: claro ? '#2F7A52' : '#6FAE8C', d: 'M6 19h12M6 14.5h12M9 10h6', acao: 'Lendo o extrato de setembro (OFX, 84 lançamentos)', trabalhando: true },
+      { nome: 'Faina', estado: 'esperando você', cor: t.aviso, tom: claro ? '#A34E2E' : '#D2805E', d: 'M4 14l4.5-4.5L13 14l-4.5 4.5zM11 9l4.5-4.5L20 9l-4.5 4.5z', acao: 'Prévia pronta: organizar 142 arquivos em Downloads' },
+      { nome: 'Vigia', estado: 'aviso', cor: t.aviso, tom: claro ? '#3F64A8' : '#7C9CD6', d: 'M12 13.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM8 8a5.7 5.7 0 0 0 0 8M16 8a5.7 5.7 0 0 1 0 8M5 5a9.9 9.9 0 0 0 0 14M19 5a9.9 9.9 0 0 1 0 14', acao: 'api-pedidos usou 84% do contexto · 2 PRs esperam review' }
+    ].map(function (a) { return Object.assign({}, a, { estiloEstado: pill(a.cor), trabalhando: !!a.trabalhando, avatar: avatar(a.tom) }); });
     return { t: t, nome: nome, time: time };
   }
 }

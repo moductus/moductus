@@ -80,9 +80,9 @@ input::placeholder{color:inherit;opacity:0.7}
 </div>
 
 <div style="background: {{t.elevada}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioCartao}}; padding: 16px 18px; display: flex; gap: 14px; align-items: flex-start">
-<div style="width: 28px; height: 28px; border-radius: 14px; flex: none; background: {{t.chip}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600">D</div>
+<div style="width: 28px; height: 28px; border-radius: 14px; flex: none; background: {{t.chip}}; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; color: {{t.alba}}">A</div>
 <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
-<div style="font-size: 12px; color: {{t.texto3}}">Demandas · briefing da manhã</div>
+<div style="font-size: 12px; color: {{t.texto3}}">Alba · briefing da manhã</div>
 <p style="margin: 0; color: {{t.texto2}}; text-wrap: pretty">Dois PRs esperam seu review desde ontem e a fatura do cartão vence quinta. O próximo foco cabe no PR do relatório mensal; a ligação para o contador fica para depois das 15h.</p>
 </div>
 </div>
@@ -160,7 +160,7 @@ class Component extends DCLogic {
         borda: 'rgba(255,255,255,0.07)', bordaForte: 'rgba(255,255,255,0.14)', ativo: 'rgba(255,255,255,0.08)',
         texto: '#E8E9EB', texto2: '#B5B8BD', texto3: '#8C9097', apagado: '#6F737A',
         destaque: '#E8E9EB', sobreDestaque: '#0D0E10', sucesso: '#7FB89E', aviso: '#E3B262', perigo: '#E5787A',
-        raioJanela: '10px', raioCartao: '10px', raioControle: '8px', raioBotao: '8px', raioCaixa: '4px',
+        alba: '#D9A55A', raioJanela: '10px', raioCartao: '10px', raioControle: '8px', raioBotao: '8px', raioCaixa: '4px',
         fonte: "'Geist', 'Segoe UI', system-ui, sans-serif", mono: "'Geist Mono', Consolas, monospace",
         desfoque: 'none', sombra: '0 24px 64px rgba(0,0,0,0.45)', vidro: false
       },
@@ -169,7 +169,7 @@ class Component extends DCLogic {
         borda: 'rgba(20,20,19,0.08)', bordaForte: 'rgba(20,20,19,0.16)', ativo: '#EAE8E3',
         texto: '#1A1A18', texto2: '#3E3D39', texto3: '#6B6A64', apagado: '#8A8983',
         destaque: '#1A1A18', sobreDestaque: '#FBFAF8', sucesso: '#2F7A52', aviso: '#B5761A', perigo: '#B4443C',
-        raioJanela: '14px', raioCartao: '14px', raioControle: '10px', raioBotao: '17px', raioCaixa: '8px',
+        alba: '#9A6A1E', raioJanela: '14px', raioCartao: '14px', raioControle: '10px', raioBotao: '17px', raioCaixa: '8px',
         fonte: "'Instrument Sans', 'Segoe UI', system-ui, sans-serif", mono: "'JetBrains Mono', Consolas, monospace",
         desfoque: 'none', sombra: '0 24px 64px rgba(40,36,28,0.16)', vidro: false
       },
@@ -178,7 +178,7 @@ class Component extends DCLogic {
         borda: 'rgba(255,255,255,0.09)', bordaForte: 'rgba(255,255,255,0.18)', ativo: 'rgba(255,255,255,0.10)',
         texto: '#EEF0F6', texto2: '#C4C9D4', texto3: '#9AA1B1', apagado: '#7C8394',
         destaque: '#A3B5FF', sobreDestaque: '#10131C', sucesso: '#7CCBA2', aviso: '#E8B86A', perigo: '#F08A8A',
-        raioJanela: '16px', raioCartao: '14px', raioControle: '10px', raioBotao: '10px', raioCaixa: '5px',
+        alba: '#D9A55A', raioJanela: '16px', raioCartao: '14px', raioControle: '10px', raioBotao: '10px', raioCaixa: '5px',
         fonte: "'Onest', 'Segoe UI', system-ui, sans-serif", mono: "'IBM Plex Mono', Consolas, monospace",
         desfoque: 'blur(40px) saturate(140%)', sombra: '0 24px 64px rgba(0,0,0,0.35)', vidro: true
       }

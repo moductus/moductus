@@ -114,7 +114,26 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 | Captura rápida | ✓ (tweak de tema) | ✓ | ✓ |
 | Componente Dock, reutilizado pelos painéis | ✓ | ✓ | ✓ |
 | Marca: quatro opções (Trilho, Coluna, Borda e ponto, M modular) | — | — | — |
+| Agentes: identidade, estados e criar agente | ✓ (tweak de tema) | ✓ | ✓ |
 
 O cartão de aprovação traz três ações: **Negar**, **Sempre neste projeto** e **Permitir**. A do meio vira uma regra de permissão do Claude Code para aquele projeto, registrada pelo hook.
 
 **A desenhar:** painéis de Foco, Finanças e Dev no dock, as demais áreas do Sistema, estados do agente (vazio, erro, sem modelo), configurações de tema e dock, e a marca escolhida (a atual é provisória).
+
+---
+
+## 6. Agentes
+
+Cada agente é um **glifo geométrico dentro de um quadrado arredondado**. O glifo usa o traço dos ícones (1,6 px a 20 px) e precisa ler a 16 px; o tom é a única cor de identidade e aparece só no fundo do quadrado e no glifo. O resto da interface continua nos tokens do tema.
+
+| Agente | Glifo | Tom no escuro (Grafite, Vidro) | Tom no claro (Papel) |
+|---|---|---|---|
+| **Alba** | Meio sol nascendo sobre uma linha | `#D9A55A` | `#9A6A1E` |
+| **Lastro** | Três barras empilhadas, a de cima mais curta | `#6FAE8C` | `#2F7A52` |
+| **Faina** | Dois blocos se encaixando em ângulo | `#D2805E` | `#A34E2E` |
+| **Vigia** | Ponto central com dois arcos de radar | `#7C9CD6` | `#3F64A8` |
+
+- **Quadrado:** raio de 30% do lado; fundo no tom a 14% de opacidade no escuro e 16% no claro.
+- **Tamanhos:** 16 (lista densa), 24 (dock), 32 (painel), 56 (cabeçalho do agente no Sistema).
+- **Estados:** anel de 2 px a 2 px de distância do quadrado. `trabalhando`: arco de 90° girando em 1,6 s, parado quando o Windows pede menos animação. `esperando você`: anel cheio em `aviso`. `erro`: anel tracejado em `perigo`. `desligado`: quadrado e glifo a 40%. A legenda de texto acompanha sempre.
+- **Agentes do usuário:** escolhem glifo e tom de uma biblioteca fechada (12 glifos, 8 tons), para que nenhum agente novo quebre a sobriedade do conjunto.

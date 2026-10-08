@@ -13,6 +13,7 @@ Fontes dos desenhos do canvas [Moductus — identidade visual](https://claude.ai
 | `canvas/Captura.dc.html` | Captura rápida transformando uma frase num gasto |
 | `canvas/Marca.dc.html` | Quatro opções de marca em fundo escuro e claro, de 104 a 16 px |
 | `canvas/Dock.dc.html` | Componente do dock, com tema e item ativo, usado pelos painéis |
+| `canvas/Time.dc.html` | Os quatro agentes (Alba, Lastro, Faina, Vigia) com glifo, tom e estados, e o esboço de criar um agente |
 | `canvas/canvas.json` | Disposição dos quadros no canvas |
 
 Os arquivos `.dc.html` usam o formato do Claude Design e dependem do runtime do canvas (`support.js`), então não abrem sozinhos no navegador. Para ver e editar, use o link do canvas; para mudar o desenho, edite lá e atualize estas cópias.

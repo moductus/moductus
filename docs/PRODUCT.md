@@ -114,7 +114,7 @@ Janela normal com barra lateral de navegação.
 | Área | O que faz |
 |---|---|
 | **Início** | O dia numa tela: blocos configuráveis de tarefas, foco, finanças, PRs e o briefing do agente de demandas |
-| **Agentes** | Conversa com o time, com menção direta (`@dev`, `@financas`); histórico de cada agente e o que cada um fez sozinho |
+| **Agentes** | Conversa com o time, com menção direta (`@alba`, `@lastro`, `@faina`, `@vigia`); histórico de cada agente e o que cada um fez sozinho |
 | **Sessões de IA** | Todas as sessões de agentes de código (Claude Code, Codex, Antigravity): projeto, estado, última ação, pedidos pendentes, consumo e limites |
 | **Tarefas** | Listas, datas, prioridade, recorrência; entrada em linguagem natural ("ligar pro banco amanhã 15h") |
 | **Foco** | Pomodoro com etapas, sessão ligada a uma tarefa, histórico e relatório |
@@ -132,16 +132,20 @@ Janela normal com barra lateral de navegação.
 
 ## 6. Os agentes
 
-O time inicial tem quatro agentes. Cada um é uma configuração — instruções, ferramentas permitidas, gatilhos e modelo —, não um código separado. O desenho técnico está em [AGENTS.md](AGENTS.md).
+O Moductus vem com quatro agentes de fábrica, e cada um tem **nome, função e visual**. Por dentro, cada agente é uma configuração (instruções, ferramentas, gatilhos e modelo), não um código separado. O desenho técnico está em [AGENTS.md](AGENTS.md).
 
-| Agente | Cuida de | Trabalha sozinho quando |
-|---|---|---|
-| **Demandas** | Tarefas, agenda, foco; captura em linguagem natural, priorização, briefing da manhã e fechamento do dia | No horário do briefing e do fechamento; quando uma tarefa vence |
-| **Finanças** | Lançamentos por texto, print ou extrato; categorização; orçamento; recorrências | Quando um extrato cai na caixa de entrada; quando uma categoria passa do orçamento |
-| **Dev** | PRs, reviews, issues e demandas no seu nome; CI; as sessões de agentes de código | Periodicamente, consultando o GitHub; quando uma sessão de IA pede aprovação |
-| **Memória** | Guarda e recupera o que os outros agentes e você precisam lembrar | Sempre que outro agente pede contexto; quando você diz "guarda isso" |
+| Agente | Função | Cuida de | Trabalha sozinho quando |
+|---|---|---|---|
+| **Alba** | Cuida do seu dia | Agenda, tarefas, lembretes, rotina e foco; briefing da manhã e fechamento do dia | No horário do briefing e do fechamento; lembrete ou compromisso chegando |
+| **Lastro** | Cuida do seu dinheiro | Gastos, dívidas, planos de economia e orçamento | Extrato na caixa de entrada; categoria perto do limite; parcela vencendo |
+| **Faina** | Faz o serviço pesado | Organizar, limpar e criar arquivos e documentos no PC, sempre com prévia e desfazer | Downloads acumulando; arquivo na caixa de entrada; limpeza agendada |
+| **Vigia** | Fica de olho nas suas IAs e no seu código | Sessões do Claude Code, Codex, OpenCode e afins; contexto, gasto e limites; PRs e issues | Sessão pedindo aprovação ou com contexto alto; limite perto; GitHub a cada 15 min |
 
-Agentes novos são configurações novas. A interface do Sistema permite criar um agente com instruções próprias e um subconjunto das ferramentas.
+**Visual:** cada agente é um glifo geométrico num quadrado arredondado, no seu tom (âmbar, musgo, terracota, ardósia), com o estado mostrado por um anel. Sóbrio de propósito: sem mascote e sem animação decorativa.
+
+**Agentes seus (fase 7):** dá para criar um agente do zero ou duplicando um de fábrica, escolhendo nome, função, visual, modelo, ferramentas e gatilhos. Os de fábrica podem ser renomeados, ajustados ou desligados, e voltam ao padrão quando você quiser.
+
+**Memória** não é um agente: é compartilhada, todos guardam e consultam nela, e a área Memória mostra e edita tudo.
 
 ---
 
@@ -188,7 +192,7 @@ Todos configuráveis, com detecção de conflito.
 - **Local:** banco SQLite e arquivos em `%APPDATA%\Moductus`, ou ao lado do executável no modo portable.
 - **Chaves e tokens:** só no Gerenciador de Credenciais do Windows, nunca no banco nem em texto.
 - **Rede:** sai apenas para o provedor de IA configurado e para as conexões ligadas (GitHub, por exemplo). A tela de cada conexão diz o que é enviado.
-- **O que vai para o modelo:** cada agente envia só o contexto das próprias ferramentas. Finanças não manda lançamentos para o agente Dev, e vice-versa.
+- **O que vai para o modelo:** cada agente envia só o contexto das próprias ferramentas. o Lastro não manda lançamentos para a Vigia, e vice-versa.
 - **Modo privacidade:** esconde valores e textos sensíveis no dock e no Sistema, para compartilhar a tela.
 - **Sem telemetria.** Continua valendo do v0.
 - **Backup:** exportar e importar o banco inteiro, por arquivo.
@@ -204,19 +208,22 @@ Este documento, [ARCHITECTURE.md](ARCHITECTURE.md), [AGENTS.md](AGENTS.md) e [DE
 Projeto Tauri, dock lateral com os três modos e detecção de tela cheia, Sistema com navegação vazia, banco e migrações, configurações, atalhos, bandeja, autostart. Mídia e os controles diretos (Mic, Awake) já entram aqui: são simples e tornam o dock útil desde o primeiro dia.
 
 ### Fase 2 — Os agentes começam a trabalhar
-Camada de provedores (um adaptador CLI e um de API para começar), serviço de agentes em segundo plano, ferramentas, cartão de aprovação. **Agente Dev** e **Sessões de IA** primeiro: é o ganho mais rápido e não depende de nenhuma área nova.
+Camada de provedores (um adaptador CLI e um de API para começar), serviço de agentes em segundo plano, ferramentas, cartão de aprovação. A **Vigia** e as **Sessões de IA** primeiro: é o ganho mais rápido e não depende de nenhuma área nova.
 
 ### Fase 3 — O dia
-Tarefas, Foco, Notas, captura rápida, Início e o **agente Demandas** com briefing e fechamento.
+Agenda, Tarefas, lembretes, Foco, Notas, captura rápida, Início e a **Alba** com briefing e fechamento.
 
 ### Fase 4 — O dinheiro
-Finanças completa e o **agente Finanças**, com importação de extrato e OCR de comprovante.
+Finanças completa (gastos, dívidas e planos) e o **Lastro**, com importação de extrato e OCR de comprovante.
 
-### Fase 5 — Memória e arquivos
-Memória com busca, Arquivos como caixa de entrada, e o servidor MCP do Moductus aberto para fora — o Claude Code no seu terminal passa a enxergar suas tarefas e notas.
+### Fase 5 — Memória, arquivos e a Faina
+Memória com busca, Arquivos como caixa de entrada, a **Faina** organizando, limpando e criando com prévia e desfazer, e o servidor MCP do Moductus aberto para fora — o Claude Code no seu terminal passa a enxergar suas tarefas e notas.
 
 ### Fase 6 — Apps abertos
-A seção que substitui a barra de tarefas: agrupamento por programa, prévia ao vivo, ocultar a barra do Windows. Fica por último porque é o maior escopo e o que mais briga com o comportamento do Windows.
+A seção que substitui a barra de tarefas: agrupamento por programa, prévia ao vivo, ocultar a barra do Windows. Fica para o fim porque é o maior escopo e o que mais briga com o comportamento do Windows.
+
+### Fase 7 — Agentes seus
+Criar, duplicar, exportar e importar agentes, com nome, função, visual, modelo, ferramentas e gatilhos próprios.
 
 ---
 
@@ -238,6 +245,9 @@ A seção que substitui a barra de tarefas: agrupamento por programa, prévia ao
 | 12 | Nenhum código, texto ou personagem do Niko | A licença dele proíbe obras derivadas; referência é só de produto |
 | 13 | Três temas de fábrica — Grafite, Papel e Vidro — sobre a mesma estrutura | Gostos diferentes de sobriedade sem três produtos: o tema troca cor, material, raio e fonte, nunca layout ou comportamento. Detalhe em [DESIGN.md](DESIGN.md) |
 | 14 | Visual criado do zero, sem herança do v0 | O visual do v0 não representava o produto novo |
+| 15 | Quatro agentes de fábrica — Alba, Lastro, Faina e Vigia —, cada um com nome, função e visual | Personalidade suficiente para reconhecer de relance, sóbria o bastante para não virar mascote. Os nomes não reutilizam os do Niko |
+| 16 | Memória compartilhada em vez de um agente de memória | Todo agente precisa lembrar; um intermediário só adicionaria latência e mais uma chamada de modelo |
+| 17 | Agentes criados pelo usuário na fase 7, com ação externa sempre aprovada | O valor do agente próprio não pode abrir uma porta que os de fábrica não abrem |
 
 As 21 decisões do v0 estão em [v0/PRODUCT.md](v0/PRODUCT.md#10-decisões-registradas), como registro histórico.
 
