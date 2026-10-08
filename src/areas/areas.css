@@ -1,0 +1,75 @@
+/* Página de área do Sistema (Sistema.dc.html): cabeçalho com data e título de 26, conteúdo abaixo. */
+.pagina {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espaco-cabecalho);
+  min-height: 100%;
+}
+
+.pagina-cabecalho {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--esp-16);
+}
+
+.pagina-titulos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  min-width: 0;
+}
+
+.pagina-data {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.pagina-titulo {
+  margin: 0;
+  font-size: var(--tipo-26);
+  font-weight: var(--peso-forte);
+  letter-spacing: var(--tracado-titulo);
+}
+
+/* Estado vazio: centrado no espaço que sobra, curto, com o selo da fase. */
+.estado-vazio {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--esp-10);
+  padding: var(--esp-32) var(--esp-16);
+  text-align: center;
+}
+
+.estado-vazio-time {
+  display: flex;
+  gap: var(--esp-8);
+}
+
+.estado-vazio-icone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--icone-48);
+  height: var(--icone-48);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-elevado);
+  color: var(--texto-3);
+}
+
+.estado-vazio-titulo {
+  margin: var(--esp-6) 0 0;
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+}
+
+.estado-vazio-texto {
+  max-width: var(--largura-texto-vazio);
+  margin: 0;
+  color: var(--texto-2);
+  text-wrap: pretty;
+}

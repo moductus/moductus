@@ -1,0 +1,176 @@
+/* Sistema (Sistema.dc.html): barra de título de 40, lateral de 232 e a página da área. */
+.sistema {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ---------- Barra de título ---------- */
+.barra-titulo {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--altura-barra-titulo);
+  padding: 0 var(--esp-8) 0 var(--esp-16);
+  border-bottom: var(--espessura-borda) solid var(--borda);
+  user-select: none;
+}
+
+.barra-titulo-marca {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+  /* O clique atravessa a marca e cai na faixa, que é quem arrasta. */
+  pointer-events: none;
+}
+
+.barra-titulo-marca .marca {
+  color: var(--destaque);
+}
+
+.barra-titulo-botoes {
+  display: flex;
+  gap: var(--esp-2);
+  color: var(--texto-3);
+}
+
+.botao-janela {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--largura-botao-janela);
+  height: var(--altura-botao-janela);
+  padding: 0;
+  border: 0;
+  border-radius: var(--raio-caixa);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-entrada) ease-out,
+    color var(--dur-entrada) ease-out;
+}
+
+.botao-janela:hover {
+  background: var(--fundo-ativo);
+  color: var(--texto);
+}
+
+.botao-janela--fechar:hover {
+  background: var(--fundo-fechar);
+  color: var(--texto-fechar);
+}
+
+/* ---------- Corpo ---------- */
+.sistema-corpo {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.barra-lateral {
+  flex: none;
+  width: var(--largura-lateral-sistema);
+  padding: var(--esp-14) var(--esp-10);
+  border-right: var(--espessura-borda) solid var(--borda);
+  background: var(--fundo-lateral);
+  overflow-y: auto;
+}
+
+.sistema-conteudo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--espaco-pagina) var(--esp-32);
+  overflow-y: auto;
+}
+
+/* ---------- Busca ---------- */
+.busca {
+  margin-bottom: var(--esp-10);
+}
+
+.busca-caixa {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  height: var(--altura-campo);
+  padding: 0 var(--esp-10);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-campo);
+  color: var(--texto-3);
+  transition: border-color var(--dur-entrada) ease-out;
+}
+
+.busca-caixa:focus-within {
+  border-color: var(--destaque);
+}
+
+.busca-entrada {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--texto);
+}
+
+.busca-entrada::placeholder {
+  color: var(--texto-3);
+}
+
+/* O anel de foco já está na caixa. */
+.busca-entrada:focus-visible {
+  outline: 0;
+}
+
+.busca-entrada::-webkit-search-cancel-button {
+  display: none;
+}
+
+.busca-atalho {
+  padding: var(--esp-1) var(--esp-5);
+  border-radius: var(--raio-atalho);
+  background: var(--fundo-chip);
+  font-size: var(--tipo-11);
+  white-space: nowrap;
+}
+
+.busca-aviso {
+  margin: var(--esp-6) var(--esp-4) 0;
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+/* ---------- Tema, ao pé da lateral ---------- */
+.barra-lateral-tema {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+  margin-top: auto;
+  padding-top: var(--esp-16);
+}
+
+.barra-lateral-tema-rotulo {
+  padding: 0 var(--esp-6);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.barra-lateral-tema .seletor {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-self: stretch;
+}
+
+.barra-lateral-tema .seletor-opcao {
+  padding: 0;
+}
