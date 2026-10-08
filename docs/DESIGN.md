@@ -109,5 +109,12 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 |---|---|---|---|
 | Dock + painel Hoje | ✓ | ✓ | ✓ |
 | Sistema · Início | ✓ (troca de tema no próprio desenho) | ✓ | ✓ |
+| Painel Agentes: time e sessões de IA, com aprovação | ✓ (tweak de tema) | ✓ | ✓ |
+| Painel Mídia, controles e apps abertos | ✓ (tweak de tema) | ✓ | ✓ |
+| Captura rápida | ✓ (tweak de tema) | ✓ | ✓ |
+| Componente Dock, reutilizado pelos painéis | ✓ | ✓ | ✓ |
+| Marca: quatro opções (Trilho, Coluna, Borda e ponto, M modular) | — | — | — |
 
-**A desenhar:** painéis das demais áreas no dock (Foco, Finanças, Dev, Agentes, Mídia, Apps abertos), as outras áreas do Sistema, captura rápida, cartão de aprovação em todos os estados, estados do agente, configurações de tema e dock, e o logo definitivo (o atual é provisório).
+O cartão de aprovação traz três ações: **Negar**, **Sempre neste projeto** e **Permitir**. A do meio vira uma regra de permissão do Claude Code para aquele projeto, registrada pelo hook.
+
+**A desenhar:** painéis de Foco, Finanças e Dev no dock, as demais áreas do Sistema, estados do agente (vazio, erro, sem modelo), configurações de tema e dock, e a marca escolhida (a atual é provisória).

@@ -5,16 +5,23 @@
     "Main.dc.html": { "h": 900, "title": "A · Grafite", "w": 1440, "x": 0, "y": 0 },
     "Papel.dc.html": { "h": 900, "title": "B · Papel", "w": 1440, "x": 1520, "y": 0 },
     "Vidro.dc.html": { "h": 900, "title": "C · Vidro", "w": 1440, "x": 3040, "y": 0 },
-    "Sistema.dc.html": { "h": 900, "title": "Sistema · Início (troca de tema)", "w": 1440, "x": 0, "y": 1320, "is_interactive": true }
+    "Sistema.dc.html": { "h": 900, "title": "Sistema · Início (troca de tema)", "w": 1440, "x": 0, "y": 1320, "is_interactive": true },
+    "Agentes.dc.html": { "h": 900, "title": "Painel · Agentes e sessões de IA", "w": 1440, "x": 0, "y": 2720 },
+    "Midia.dc.html": { "h": 900, "title": "Painel · Mídia, controles e apps abertos", "w": 1440, "x": 1520, "y": 2720 },
+    "Captura.dc.html": { "h": 900, "title": "Captura rápida", "w": 1440, "x": 3040, "y": 2720 },
+    "Marca.dc.html": { "h": 900, "title": "Marca · quatro opções", "w": 1440, "x": 0, "y": 4120 },
+    "Dock.dc.html": { "h": 900, "title": "Componente · Dock", "w": 88, "x": 1520, "y": 4120 }
   },
   "createdOnFiles": { "at": "2026-10-06T15:00:00Z", "v": 1 },
   "designSystems": [],
   "launch": { "view": "canvas" },
   "notes": {
     "titulo": { "kind": "title1", "maxW": 4480, "text": "Dock e painel Hoje — três temas", "w": 240, "x": 0, "y": -300 },
-    "titulo2": { "kind": "title1", "maxW": 4480, "text": "Sistema — a janela completa", "x": 0, "y": 1020 }
+    "titulo2": { "kind": "title1", "maxW": 4480, "text": "Sistema — a janela completa", "x": 0, "y": 1020 },
+    "titulo3": { "kind": "title1", "maxW": 4480, "text": "Painéis do dock e captura", "x": 0, "y": 2420 },
+    "titulo4": { "kind": "title1", "maxW": 4480, "text": "Marca e componentes", "x": 0, "y": 3820 }
   },
-  "order": ["Main.dc.html", "Papel.dc.html", "Vidro.dc.html", "Sistema.dc.html"],
+  "order": ["Main.dc.html", "Papel.dc.html", "Vidro.dc.html", "Sistema.dc.html", "Agentes.dc.html", "Midia.dc.html", "Captura.dc.html", "Marca.dc.html", "Dock.dc.html"],
   "pages": [],
   "title": "Moductus — identidade visual"
 }
