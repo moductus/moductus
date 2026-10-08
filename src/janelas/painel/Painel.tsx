@@ -11,7 +11,7 @@ import "./Painel.css";
 
 /** Abre o Sistema na seção de modelos e fecha o painel: o convite do time leva para lá. */
 function abrirConfiguracoes() {
-  void invoke("sistema_abrir", { area: "configuracoes" });
+  void invoke("sistema_abrir", { area: "configuracoes/modelos" });
   void invoke("painel_fechar");
 }
 

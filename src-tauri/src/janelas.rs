@@ -172,15 +172,27 @@ pub fn area_sistema(area: &str) -> &'static str {
     AREAS_SISTEMA.iter().find(|a| **a == area).copied().unwrap_or("inicio")
 }
 
+/// Destino "area" ou "area/secao": a área é validada; a seção segue para o Sistema decidir
+/// (o convite do time leva direto a Configurações › Modelos).
+pub fn destino_sistema(destino: &str) -> String {
+    match destino.split_once('/') {
+        Some((area, secao)) if area_sistema(area) == area && !secao.is_empty() => {
+            format!("{area}/{secao}")
+        }
+        Some((area, _)) => area_sistema(area).to_string(),
+        None => area_sistema(destino).to_string(),
+    }
+}
+
 /// Mostra e foca o Sistema já numa área (o convite do time leva às Configurações).
 #[tauri::command]
 pub fn sistema_abrir(app: AppHandle, area: String) {
     let Some(sistema) = janela(&app, "sistema") else { return };
-    let area = area_sistema(&area);
+    let area = destino_sistema(&area);
     let _ = sistema.unminimize();
     let _ = sistema.show();
     let _ = sistema.set_focus();
-    let _ = sistema.emit_to("sistema", "sistema:ir", area);
+    let _ = sistema.emit_to("sistema", "sistema:ir", &area);
     crate::registro::info(&format!("sistema aberto em {area}"));
 }
 
@@ -237,6 +249,9 @@ mod testes {
         assert_eq!(area_sistema("ferramentas"), "ferramentas");
         assert_eq!(area_sistema("hoje"), "inicio");
         assert_eq!(area_sistema(""), "inicio");
+        assert_eq!(destino_sistema("configuracoes/modelos"), "configuracoes/modelos");
+        assert_eq!(destino_sistema("hoje/x"), "inicio");
+        assert_eq!(destino_sistema("agentes/"), "agentes");
     }
 
     #[test]

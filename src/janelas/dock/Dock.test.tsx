@@ -268,7 +268,7 @@ describe("Painel", () => {
       (b) => b.textContent === "Abrir Configurações",
     )!;
     act(() => botao.click());
-    expect(chamadas).toContainEqual({ comando: "sistema_abrir", args: { area: "configuracoes" } });
+    expect(chamadas).toContainEqual({ comando: "sistema_abrir", args: { area: "configuracoes/modelos" } });
     expect(chamadas.map((c) => c.comando)).toContain("painel_fechar");
   });
 
