@@ -51,3 +51,6 @@ gen/
 
 ## Sidecar copiado no build (scripts/preparar-sidecar.mjs)
 src-tauri/binaries/
+
+## Artefatos de release (scripts/empacotar-portable.ps1)
+pacotes/
