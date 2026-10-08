@@ -1,7 +1,9 @@
 /*
  * Tokens do Moductus: o único lugar com valor visual literal (regra em scripts/lint-visual.mjs).
  * Valores de docs/DESIGN.md §3 e §6. Componentes leem só as variáveis; o tema é o atributo
- * data-tema na raiz, trocado por src/tokens/tema.ts sem recarregar a janela.
+ * data-tema na raiz, trocado por src/tokens/tema.ts sem recarregar a janela. Os temas valem
+ * também por escopo: qualquer contêiner com data-tema próprio (o catálogo mostra os três lado
+ * a lado) redefine as variáveis só para os descendentes.
  */
 
 /* ---------- Comum aos três temas ---------- */
@@ -69,6 +71,52 @@
   --rosto-traco: #1c1d20;
   --rosto-bochecha: rgba(255, 255, 255, 0.22);
   --opacidade-dormindo: 0.55;
+
+  /* Espaços finos dos controles (chip, selo, segmento) */
+  --esp-1: 1px;
+  --esp-2: 2px;
+  --esp-3: 3px;
+  --esp-5: 5px;
+  --esp-7: 7px;
+
+  /* Componentes base (DESIGN.md §6, quadros de componentes) */
+  --altura-botao: 32px;
+  --altura-botao-pequeno: 26px;
+  --altura-campo: 34px;
+  --altura-item: 34px;
+  --altura-segmento: 28px;
+  --altura-progresso: 4px;
+  --tamanho-caixa: 16px;
+  --tamanho-visto: 10px;
+  --espessura-caixa: 1.5px;
+  --espessura-visto: 3px;
+  --largura-interruptor: 32px;
+  --altura-interruptor: 18px;
+  --tamanho-pino: 12px;
+  --deslocamento-pino: 14px;
+  --raio-atalho: 4px;
+  --raio-segmento: 6px;
+  --raio-selo: 10px;
+  --raio-contagem: 8px;
+  --raio-progresso: 2px;
+  --raio-interruptor: 9px;
+  --raio-pino: 6px;
+  --sombra-segmento: 0 1px 2px rgba(0, 0, 0, 0.12);
+  --opacidade-hover: 0.92;
+  --opacidade-pressionado: 0.84;
+  --opacidade-desativado: 0.45;
+
+  /* Ícones: caixa 24 com traço 1,6 (a busca usa 1,8); tamanhos de uso */
+  --espessura-icone-busca: 1.8px;
+  --icone-12: 12px;
+  --icone-14: 14px;
+  --icone-16: 16px;
+  --icone-18: 18px;
+  --icone-20: 20px;
+  --icone-24: 24px;
+  --icone-26: 26px;
+  --icone-32: 32px;
+  --icone-48: 48px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -80,7 +128,7 @@
 
 /* ---------- Grafite: escuro, sólido, dock colado ---------- */
 :root,
-:root[data-tema="grafite"] {
+[data-tema="grafite"] {
   color-scheme: dark;
 
   --fundo-dock: #0d0e10;
@@ -128,7 +176,7 @@
 }
 
 /* ---------- Papel: claro, sólido, dock flutuante ---------- */
-:root[data-tema="papel"] {
+[data-tema="papel"] {
   color-scheme: light;
 
   --fundo-dock: #fbfaf8;
@@ -176,7 +224,7 @@
 }
 
 /* ---------- Vidro: escuro, Acrylic nativo do Windows 11, dock flutuante ---------- */
-:root[data-tema="vidro"] {
+[data-tema="vidro"] {
   color-scheme: dark;
 
   --fundo-solido-vidro: #1b1f2b;
@@ -227,7 +275,7 @@
 
 /* Sem Acrylic (Windows 10, transparência desligada, economia de bateria, falha ou ainda
    sem resposta da casca): o Vidro vira sólido e mantém texto e destaque. */
-:root[data-tema="vidro"]:not([data-material="acrylic"]) {
+[data-tema="vidro"]:not([data-material="acrylic"]) {
   --fundo-dock: var(--fundo-solido-vidro);
   --fundo-janela: var(--fundo-solido-vidro);
   --desfoque: none;

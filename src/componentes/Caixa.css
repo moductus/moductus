@@ -1,0 +1,58 @@
+/* Caixa de seleção: o raio vem do tema (círculo no Papel). */
+.caixa {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--esp-8);
+  border-radius: var(--raio-caixa);
+  font-size: var(--tipo-13);
+  color: var(--texto);
+  cursor: pointer;
+  user-select: none;
+}
+
+.caixa-quadro {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--tamanho-caixa);
+  height: var(--tamanho-caixa);
+  border: var(--espessura-caixa) solid var(--texto-apagado);
+  border-radius: var(--raio-caixa);
+  color: var(--sobre-destaque);
+  transition:
+    background-color var(--dur-entrada) ease-out,
+    border-color var(--dur-entrada) ease-out;
+}
+
+.caixa-visto {
+  width: var(--tamanho-visto);
+  height: var(--tamanho-visto);
+  stroke-width: var(--espessura-visto);
+  opacity: 0;
+  transition: opacity var(--dur-entrada) ease-out;
+}
+
+.caixa:hover:not([aria-disabled]) .caixa-quadro,
+.caixa[data-estado="hover"] .caixa-quadro {
+  border-color: var(--texto-3);
+}
+
+.caixa[aria-checked="true"] .caixa-quadro {
+  border-color: var(--destaque);
+  background: var(--destaque);
+}
+
+.caixa[aria-checked="true"] .caixa-visto {
+  opacity: 1;
+}
+
+.caixa[data-estado="foco"] {
+  outline: var(--espessura-foco) solid var(--destaque);
+  outline-offset: var(--recuo-foco);
+}
+
+.caixa[aria-disabled] {
+  opacity: var(--opacidade-desativado);
+  cursor: default;
+}

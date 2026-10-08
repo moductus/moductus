@@ -1,0 +1,39 @@
+/* O traço vem do token: em SVG, px é unidade do viewBox, então o 1,6 escala com o tamanho. */
+.icone {
+  flex: none;
+  stroke-width: var(--espessura-icone);
+}
+
+.icone-busca {
+  stroke-width: var(--espessura-icone-busca);
+}
+
+.icone-12 {
+  width: var(--icone-12);
+  height: var(--icone-12);
+}
+
+.icone-14 {
+  width: var(--icone-14);
+  height: var(--icone-14);
+}
+
+.icone-16 {
+  width: var(--icone-16);
+  height: var(--icone-16);
+}
+
+.icone-18 {
+  width: var(--icone-18);
+  height: var(--icone-18);
+}
+
+.icone-20 {
+  width: var(--icone-20);
+  height: var(--icone-20);
+}
+
+.icone-24 {
+  width: var(--icone-24);
+  height: var(--icone-24);
+}

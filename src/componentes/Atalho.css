@@ -1,0 +1,18 @@
+.atalho {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--esp-4);
+  padding: var(--esp-1) var(--esp-5);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-atalho);
+  background: var(--fundo-chip);
+  color: var(--texto-2);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  line-height: var(--altura-linha);
+  white-space: nowrap;
+}
+
+.atalho-tecla {
+  font: inherit;
+}

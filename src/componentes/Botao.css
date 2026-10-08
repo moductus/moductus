@@ -1,0 +1,97 @@
+/*
+ * Botões: primário (destaque cheio), secundário (contorno forte) e fantasma (só texto).
+ * O raio vem do tema (pílula no Papel). [data-estado] força o estado no catálogo, que não
+ * consegue mostrar hover e foco parados.
+ */
+.botao {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--esp-6);
+  flex: none;
+  height: var(--altura-botao);
+  padding: 0 var(--esp-14);
+  border: var(--espessura-borda) solid transparent;
+  border-radius: var(--raio-botao);
+  background: transparent;
+  font-family: var(--fonte-interface);
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-normal);
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-entrada) ease-out,
+    color var(--dur-entrada) ease-out,
+    opacity var(--dur-entrada) ease-out;
+}
+
+.botao--pequeno {
+  height: var(--altura-botao-pequeno);
+  padding: 0 var(--esp-10);
+}
+
+.botao--so-icone {
+  aspect-ratio: 1;
+  padding: 0;
+}
+
+.botao--primario {
+  background: var(--destaque);
+  color: var(--sobre-destaque);
+  font-weight: var(--peso-forte);
+}
+
+.botao--primario:hover:not(:disabled),
+.botao--primario[data-estado="hover"] {
+  opacity: var(--opacidade-hover);
+}
+
+.botao--primario:active:not(:disabled),
+.botao--primario[data-estado="ativo"] {
+  opacity: var(--opacidade-pressionado);
+}
+
+.botao--secundario {
+  border-color: var(--borda-forte);
+  color: var(--texto);
+}
+
+.botao--secundario:hover:not(:disabled),
+.botao--secundario[data-estado="hover"] {
+  background: var(--fundo-chip);
+}
+
+.botao--secundario:active:not(:disabled),
+.botao--secundario[data-estado="ativo"] {
+  background: var(--fundo-ativo);
+}
+
+.botao--fantasma {
+  padding: 0 var(--esp-8);
+  color: var(--texto-3);
+}
+
+.botao--fantasma:hover:not(:disabled),
+.botao--fantasma[data-estado="hover"] {
+  color: var(--texto);
+}
+
+.botao--fantasma:active:not(:disabled),
+.botao--fantasma[data-estado="ativo"] {
+  color: var(--texto);
+  background: var(--fundo-ativo);
+}
+
+.botao--so-icone.botao--fantasma {
+  padding: 0;
+}
+
+.botao[data-estado="foco"] {
+  outline: var(--espessura-foco) solid var(--destaque);
+  outline-offset: var(--recuo-foco);
+}
+
+.botao:disabled {
+  opacity: var(--opacidade-desativado);
+  cursor: default;
+}

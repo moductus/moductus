@@ -1,0 +1,97 @@
+/* Página do catálogo: rola inteira; cada coluna é uma janela do seu tema. */
+html:has(.catalogo),
+html:has(.catalogo) body {
+  height: auto;
+  min-height: 100%;
+}
+
+.catalogo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--largura-painel), 1fr));
+  gap: var(--esp-16);
+  padding: var(--esp-16);
+}
+
+.catalogo-tema {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-24);
+  min-width: 0;
+  padding: var(--esp-20);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-janela);
+  background: var(--fundo-janela);
+  color: var(--texto);
+  font-family: var(--fonte-interface);
+  font-size: var(--tipo-13);
+  box-shadow: var(--sombra-janela);
+}
+
+.catalogo-tema-titulo {
+  margin: 0;
+  font-size: var(--tipo-22);
+  font-weight: var(--peso-forte);
+}
+
+.catalogo-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-12);
+}
+
+.catalogo-grupo-titulo {
+  margin: 0;
+  font-size: var(--tipo-11);
+  font-weight: var(--peso-forte);
+  text-transform: uppercase;
+  color: var(--texto-3);
+}
+
+.catalogo-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.catalogo-rotulo {
+  flex-basis: 100%;
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.catalogo-coluna-campos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-12);
+}
+
+.catalogo-grade {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--esp-12);
+  justify-items: start;
+}
+
+.catalogo-apagado {
+  color: var(--texto-3);
+}
+
+.catalogo-icones {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--largura-dock), 1fr));
+  gap: var(--esp-8);
+}
+
+.catalogo-icone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--esp-4);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.catalogo-icone > .icone {
+  color: var(--texto);
+}

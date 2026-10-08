@@ -1,0 +1,30 @@
+.progresso {
+  width: 100%;
+  height: var(--altura-progresso);
+  overflow: hidden;
+  border-radius: var(--raio-progresso);
+  background: var(--fundo-trilho);
+}
+
+.progresso-barra {
+  height: 100%;
+  border-radius: var(--raio-progresso);
+  background: var(--cor-progresso);
+  transition: width var(--dur-entrada) ease-out;
+}
+
+.progresso--destaque {
+  --cor-progresso: var(--destaque);
+}
+
+.progresso--sucesso {
+  --cor-progresso: var(--sucesso);
+}
+
+.progresso--aviso {
+  --cor-progresso: var(--aviso);
+}
+
+.progresso--perigo {
+  --cor-progresso: var(--perigo);
+}

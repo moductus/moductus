@@ -8,10 +8,9 @@ import "./tokens/temas.css";
 import "./tokens/base.css";
 import { aplicarTema, useTema } from "./tokens/tema.ts";
 
-const janela = janelaDoRotulo(getCurrentWindow().label) ?? "sistema";
-document.documentElement.dataset.janela = janela;
 // Antes do primeiro quadro: a janela já nasce com o tema do Windows, sem piscar.
 aplicarTema("automatico");
+const raiz = createRoot(document.getElementById("raiz")!);
 
 /** Toda janela segue o tema da configuração; os componentes só leem os tokens. */
 function ComTema({ janela }: { janela: Janela }) {
@@ -19,8 +18,22 @@ function ComTema({ janela }: { janela: Janela }) {
   return <Aplicacao janela={janela} />;
 }
 
-createRoot(document.getElementById("raiz")!).render(
-  <StrictMode>
-    <ComTema janela={janela} />
-  </StrictMode>,
-);
+// Catálogo de componentes só em desenvolvimento (`?catalogo`, no navegador ou na janela do
+// Sistema): o import dinâmico atrás de DEV some do bundle de produção.
+if (import.meta.env.DEV && new URLSearchParams(location.search).has("catalogo")) {
+  void import("./catalogo/Catalogo.tsx").then(({ Catalogo }) =>
+    raiz.render(
+      <StrictMode>
+        <Catalogo />
+      </StrictMode>,
+    ),
+  );
+} else {
+  const janela = janelaDoRotulo(getCurrentWindow().label) ?? "sistema";
+  document.documentElement.dataset.janela = janela;
+  raiz.render(
+    <StrictMode>
+      <ComTema janela={janela} />
+    </StrictMode>,
+  );
+}
