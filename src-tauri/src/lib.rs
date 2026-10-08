@@ -38,6 +38,8 @@ pub fn run() {
             janelas::painel_pronto,
             janelas::painel_foco,
             janelas::sistema_alternar,
+            janelas::sistema_abrir,
+            dock::dock_soltar_foco,
             janelas::captura_alternar,
             janelas::captura_fechar,
             atalhos::atalhos_obter,

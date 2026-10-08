@@ -101,3 +101,28 @@ export function useServico({ silencioso = false }: { silencioso?: boolean } = {}
   }, [silencioso]);
   return estado;
 }
+
+export interface ConfiguracaoDock {
+  lado: "esquerda" | "direita";
+  modo: "fixo" | "esconder" | "inteligente";
+  forma: "colada" | "flutuante";
+}
+
+const DOCK_PADRAO: ConfiguracaoDock = { lado: "esquerda", modo: "fixo", forma: "colada" };
+
+/** Lado, modo e forma do dock: lidos ao montar e trocados ao vivo pela casca. */
+export function useConfiguracaoDock(): ConfiguracaoDock {
+  const [config, setConfig] = useState<ConfiguracaoDock>(DOCK_PADRAO);
+  useEffect(() => {
+    void invoke<ConfiguracaoDock>("dock_configuracao")
+      .then((c) => {
+        if (c) setConfig(c);
+      })
+      .catch(() => undefined);
+    const parar = listen<ConfiguracaoDock>("dock:configuracao", (e) => setConfig(e.payload));
+    return () => {
+      void parar.then((f) => f());
+    };
+  }, []);
+  return config;
+}

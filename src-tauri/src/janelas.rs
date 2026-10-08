@@ -90,6 +90,8 @@ pub fn painel_fechar(app: AppHandle) {
         dock::sem_ativar(dock::hwnd_de(&painel));
     }
     *PAINEL.lock().unwrap() = None;
+    // O dock tira a marca da área aberta.
+    let _ = app.emit("painel:fechado", ());
 }
 
 /// A interface do painel avisa que desenhou a área: fecha a medição de abertura.
@@ -161,6 +163,27 @@ pub fn sistema_alternar(app: AppHandle) {
     }
 }
 
+/// As 12 áreas do Sistema, na ordem da barra lateral (DESIGN, Sistema.dc.html).
+pub const AREAS_SISTEMA: [&str; 12] =
+    ["inicio", "agentes", "sessoes", "tarefas", "foco", "financas", "dev", "notas", "arquivos", "memoria", "ferramentas", "configuracoes"];
+
+/// Área pedida, se for uma das 12; um nome desconhecido cai no Início.
+pub fn area_sistema(area: &str) -> &'static str {
+    AREAS_SISTEMA.iter().find(|a| **a == area).copied().unwrap_or("inicio")
+}
+
+/// Mostra e foca o Sistema já numa área (o convite do time leva às Configurações).
+#[tauri::command]
+pub fn sistema_abrir(app: AppHandle, area: String) {
+    let Some(sistema) = janela(&app, "sistema") else { return };
+    let area = area_sistema(&area);
+    let _ = sistema.unminimize();
+    let _ = sistema.show();
+    let _ = sistema.set_focus();
+    let _ = sistema.emit_to("sistema", "sistema:ir", area);
+    crate::registro::info(&format!("sistema aberto em {area}"));
+}
+
 // ---------- captura ----------
 
 /// Centraliza a captura no monitor principal, um pouco acima do meio.
@@ -206,6 +229,14 @@ mod testes {
         let dock_d = RECT { left: 2496, top: 48, right: 2560, bottom: 1440 };
         let d = retangulo_painel(dock_d, appbar::Lado::Direita, 372);
         assert_eq!((d.left, d.right), (2124, 2496));
+    }
+
+    #[test]
+    fn sistema_abre_so_nas_doze_areas() {
+        assert_eq!(area_sistema("configuracoes"), "configuracoes");
+        assert_eq!(area_sistema("ferramentas"), "ferramentas");
+        assert_eq!(area_sistema("hoje"), "inicio");
+        assert_eq!(area_sistema(""), "inicio");
     }
 
     #[test]

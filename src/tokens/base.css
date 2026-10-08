@@ -21,8 +21,10 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* O dock desenha o próprio fundo (colado ou flutuante); a janela em volta fica transparente. */
-:root[data-janela="dock"] body {
+/* O dock (colado ou flutuante) e o painel desenham o próprio fundo; a janela em volta fica
+   transparente. */
+:root[data-janela="dock"] body,
+:root[data-janela="painel"] body {
   background: transparent;
 }
 

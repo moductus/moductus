@@ -1,0 +1,180 @@
+/*
+ * Dock (Dock.dc.html, Main.dc.html, Papel.dc.html, Vidro.dc.html): coluna de 64 px. Colado
+ * ocupa a janela inteira com a borda do lado de dentro; flutuante fica a 8 px das bordas da
+ * janela de 80 px, com borda em volta, raio e sombra do tema.
+ */
+.dock {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--esp-6);
+  padding: var(--esp-14) 0;
+  overflow: hidden;
+  background: var(--fundo-dock);
+  color: var(--texto-3);
+  user-select: none;
+}
+
+.dock[data-forma="colada"][data-lado="esquerda"] {
+  border-right: var(--espessura-borda) solid var(--borda);
+}
+
+.dock[data-forma="colada"][data-lado="direita"] {
+  border-left: var(--espessura-borda) solid var(--borda);
+}
+
+.dock[data-forma="flutuante"] {
+  inset: var(--margem-dock-flutuante);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-dock);
+  box-shadow: var(--sombra-dock);
+}
+
+.dock button {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.dock button:disabled {
+  cursor: default;
+  opacity: var(--opacidade-desativado);
+}
+
+/* ---------- marca: abre ou esconde o Sistema ---------- */
+.dock .dock-marca {
+  width: var(--tamanho-botao-dock);
+  height: var(--tamanho-botao-dock);
+  margin-bottom: var(--esp-6);
+  border-radius: var(--raio-botao-dock);
+  color: var(--destaque);
+}
+
+/* ---------- áreas e controles ---------- */
+.dock-botao {
+  width: var(--tamanho-botao-dock);
+  height: var(--tamanho-botao-dock);
+  border-radius: var(--raio-botao-dock);
+  transition:
+    background-color var(--dur-entrada) ease-out,
+    color var(--dur-entrada) ease-out;
+}
+
+.dock-botao:hover:not(:disabled),
+.dock-agente:hover {
+  background: var(--fundo-ativo);
+  color: var(--texto);
+}
+
+.dock-botao[data-ativo],
+.dock-controle[aria-pressed="true"] {
+  background: var(--fundo-ativo);
+  color: var(--texto);
+}
+
+.dock-botao .contagem {
+  position: absolute;
+  top: var(--esp-4);
+  right: var(--esp-3);
+}
+
+.dock-controle {
+  height: var(--altura-controle-dock);
+}
+
+/* ---------- divisor e o time ---------- */
+.dock-divisor {
+  flex: none;
+  width: var(--largura-divisor-dock);
+  height: var(--espessura-borda);
+  margin: var(--esp-8) 0;
+  background: var(--borda-forte);
+}
+
+.dock-agentes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--esp-2) 0;
+  border-radius: var(--raio-grupo-dock);
+}
+
+.dock-agentes[data-ativo] {
+  background: var(--fundo-ativo);
+}
+
+.dock-agente {
+  width: var(--tamanho-botao-dock);
+  height: var(--altura-agente-dock);
+  border-radius: var(--raio-botao-dock);
+}
+
+.dock-espaco {
+  flex: 1;
+}
+
+/* ---------- mídia: capa de 30 com tocar ou pausar no meio ---------- */
+.dock-capa {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tamanho-capa);
+  height: var(--tamanho-capa);
+  overflow: hidden;
+  border-radius: var(--raio-capa);
+  background: var(--capa);
+  color: var(--texto);
+}
+
+.dock-capa-imagem {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dock-capa .icone {
+  position: relative;
+}
+
+/* Com a arte do álbum por baixo, o ícone ganha um fundo para não sumir. */
+.dock-capa-imagem + .icone {
+  padding: var(--esp-2);
+  border-radius: var(--raio-atalho);
+  background: var(--capa);
+  box-sizing: content-box;
+}
+
+/* ---------- relógio e estado do serviço ---------- */
+.dock-relogio {
+  margin-top: var(--esp-6);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-3);
+}
+
+.dock-estado {
+  display: flex;
+  justify-content: center;
+  margin: 0;
+  min-height: var(--tamanho-ponto-estado);
+}
+
+.dock-estado-ponto {
+  width: var(--tamanho-ponto-estado);
+  height: var(--tamanho-ponto-estado);
+  border-radius: 50%;
+  background: var(--aviso);
+}

@@ -19,14 +19,16 @@
                (pede: cargo build --example sessao_midia)
     controles  mudo do microfone feito fora chega ao dock; Awake liga pelo dock e é liberado ao sair
     servico    matar o serviço faz a casca subir outro, e o dock mostra o estado; sair encerra o serviço
+    teclado    rótulos de todos os botões do dock (UI Automation); Ctrl+Alt+D cicla mostrar, focar
+               e esconder; setas, Home, End e Esc dentro do dock
 
 .EXAMPLE
   pnpm tauri build --debug --no-bundle
   pwsh -File scripts\verificar.ps1 -Roteiro appbar
 #>
 param(
-  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia', 'controles', 'servico')]
-  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia', 'controles', 'servico'),
+  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia', 'controles', 'servico', 'teclado')]
+  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia', 'controles', 'servico', 'teclado'),
   [string]$Exe = (Join-Path $PSScriptRoot '..\src-tauri\target\debug\moductus.exe')
 )
 
@@ -234,10 +236,14 @@ function Roteiro-Janelas {
   $rd = Retangulo $d.Hwnd
   $hPainel = [W]::FindWindow([NullString]::Value, 'Moductus painel')
   $inicioLog = (Get-Content $log).Count
+  # A área Hoje é o segundo botão, depois da marca: 14 de respiro + marca de 44 + 6 de margem
+  # + 6 de espaço, e o meio do botão de 44. Em pixels físicos, pela escala do dock (64 lógicos).
+  $escala = ($rd.R - $rd.L) / 64
+  $yHoje = $rd.T + [int]((14 + 44 + 6 + 6 + 44 / 2) * $escala)
   $foco = $true
   for ($i = 0; $i -lt 5; $i++) {
     Clicar-Em $janela.Handle; Bombear 0.5
-    [W]::SetCursorPos([int](($rd.L + $rd.R) / 2), $rd.T + 12) | Out-Null
+    [W]::SetCursorPos([int](($rd.L + $rd.R) / 2), $yHoje) | Out-Null
     [W]::mouse_event(2, 0, 0, 0, 0); [W]::mouse_event(4, 0, 0, 0, 0); Bombear 0.8
     if ($i -eq 0) {
       $rp = Retangulo $hPainel
@@ -270,12 +276,15 @@ function Roteiro-Atalhos {
   [W]::Teclar(0x4E); Start-Sleep 1
   Conferir 'Ctrl+Alt+N de novo esconde' (-not [W]::IsWindowVisible($hSis)) "Sistema visível: $([W]::IsWindowVisible($hSis))"
 
+  # Ctrl+Alt+D cicla: com o dock na tela, o primeiro dá o foco a ele; o segundo esconde.
+  [W]::Teclar(0x44); Start-Sleep 1
+  Conferir 'Ctrl+Alt+D dá o foco ao dock' ([W]::GetForegroundWindow() -eq $d.Hwnd) "primeiro plano: '$([W]::Titulo([W]::GetForegroundWindow()))'"
   [W]::Teclar(0x44); Start-Sleep 1
   $a = [W]::Trabalho()
-  Conferir 'Ctrl+Alt+D esconde o dock e devolve a faixa' (-not [W]::IsWindowVisible($d.Hwnd) -and (Texto $a) -eq (Texto $antes)) "dock visível: $([W]::IsWindowVisible($d.Hwnd)), área $(Texto $a)"
+  Conferir 'Ctrl+Alt+D de novo esconde o dock e devolve a faixa' (-not [W]::IsWindowVisible($d.Hwnd) -and (Texto $a) -eq (Texto $antes)) "dock visível: $([W]::IsWindowVisible($d.Hwnd)), área $(Texto $a)"
   [W]::Teclar(0x44); Start-Sleep 1
   $a = [W]::Trabalho()
-  Conferir 'Ctrl+Alt+D de novo mostra e reserva' ([W]::IsWindowVisible($d.Hwnd) -and (Texto $a) -ne (Texto $antes)) "área $(Texto $a)"
+  Conferir 'Ctrl+Alt+D pela terceira vez mostra e reserva' ([W]::IsWindowVisible($d.Hwnd) -and (Texto $a) -ne (Texto $antes)) "área $(Texto $a)"
 
   $ocupado = @(Get-Content $log | Where-Object { $_ -match 'Ctrl\+Alt\+Space .* não registrado' }).Count -gt 0
   if ($ocupado) {
@@ -434,6 +443,58 @@ function Roteiro-Controles {
   Fechar-Dock $d
   $depois = [Audio]::Execucao()
   Conferir 'Awake é liberado ao sair' (($depois -band 0x3) -eq ($antes -band 0x3)) ("SystemExecutionState depois de sair 0x{0:X}" -f $depois)
+}
+
+function Tecla([byte]$vk) {
+  [W]::keybd_event($vk, 0, 0, [IntPtr]::Zero); [W]::keybd_event($vk, 0, 2, [IntPtr]::Zero)
+}
+function Nome-Focado {
+  try { [Windows.Automation.AutomationElement]::FocusedElement.Current.Name } catch { '' }
+}
+
+function Roteiro-Teclado {
+  Write-Host "`n== teclado =="
+  Carregar-Controles
+  Get-Process moductus -ErrorAction SilentlyContinue | Stop-Process -Force
+  Start-Sleep 1
+  $janela = Nova-Janela
+  $antes = [W]::Trabalho()
+  $d = Iniciar-Dock
+  Start-Sleep 1
+
+  # Todo botão do dock tem nome acessível, na ordem do canvas (mídia só com sessão tocando).
+  $raiz = [Windows.Automation.AutomationElement]::FromHandle($d.Hwnd)
+  $cond = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty, [Windows.Automation.ControlType]::Button)
+  $nomes = @($raiz.FindAll([Windows.Automation.TreeScope]::Descendants, $cond) | ForEach-Object { $_.Current.Name })
+  $convite = 'dormindo. Conectar um modelo'
+  $esperado = @('Abrir o Sistema', 'Hoje', 'Tarefas', 'Foco', 'Finanças', 'Dev', 'Notas', 'Arquivos',
+    "Alba, $convite", "Tula, $convite", "Faina, $convite", "Nuno, $convite", 'Microfone mudo', 'Manter acordado')
+  $semMidia = @($nomes | Where-Object { $_ -notmatch '^(Tocar|Pausar) ' })
+  Conferir 'botões com rótulo, na ordem' ((($semMidia -join '|') -eq ($esperado -join '|')) -and -not ($nomes -contains '')) "$($nomes.Count) botões: $($nomes -join ', ')"
+
+  Clicar-Em $janela.Handle; Bombear 0.5
+  [W]::Teclar(0x44); Bombear 1
+  Conferir 'Ctrl+Alt+D com o dock na tela dá o foco a ele' ([W]::GetForegroundWindow() -eq $d.Hwnd) "primeiro plano: '$([W]::Titulo([W]::GetForegroundWindow()))'"
+  Conferir 'o foco começa na primeira área' ((Nome-Focado) -eq 'Hoje') "focado: '$(Nome-Focado)'"
+  Tecla 0x28; Bombear 0.3
+  Conferir 'seta para baixo anda' ((Nome-Focado) -eq 'Tarefas') "focado: '$(Nome-Focado)'"
+  Tecla 0x23; Bombear 0.3
+  Conferir 'End vai ao último' ((Nome-Focado) -eq 'Manter acordado') "focado: '$(Nome-Focado)'"
+  Tecla 0x24; Bombear 0.3
+  Conferir 'Home vai à marca' ((Nome-Focado) -eq 'Abrir o Sistema') "focado: '$(Nome-Focado)'"
+  Tecla 0x1B; Bombear 1
+  Conferir 'Esc devolve o foco à janela anterior' ([W]::GetForegroundWindow() -eq $janela.Handle) "primeiro plano: '$([W]::Titulo([W]::GetForegroundWindow()))'"
+  $estilo = [W]::GetWindowLong($d.Hwnd, -20)
+  Conferir 'Esc devolve o sem ativar' (($estilo -band 0x08000000) -ne 0) ("estilo estendido 0x{0:X}" -f $estilo)
+
+  [W]::Teclar(0x44); Bombear 1
+  [W]::Teclar(0x44); Bombear 1
+  $a = [W]::Trabalho()
+  Conferir 'com o foco, Ctrl+Alt+D esconde e devolve a faixa' (-not [W]::IsWindowVisible($d.Hwnd) -and (Texto $a) -eq (Texto $antes)) "dock visível: $([W]::IsWindowVisible($d.Hwnd)), área $(Texto $a)"
+  [W]::Teclar(0x44); Bombear 1
+  Conferir 'escondido, Ctrl+Alt+D mostra sem tirar o foco' ([W]::IsWindowVisible($d.Hwnd) -and [W]::GetForegroundWindow() -ne $d.Hwnd) "primeiro plano: '$([W]::Titulo([W]::GetForegroundWindow()))'"
+  Fechar-Dock $d
+  $janela.Close()
 }
 
 function Filhos-Node([int]$pai) {

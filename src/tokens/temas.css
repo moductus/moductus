@@ -45,6 +45,20 @@
   --tamanho-botao-dock: 44px;
   --tamanho-badge: 16px;
 
+  /* Dock (Dock.dc.html): botões de 44, agentes a 42 de altura, controles a 40, capa de 30 */
+  --altura-agente-dock: 42px;
+  --altura-controle-dock: 40px;
+  --raio-botao-dock: 10px;
+  --raio-grupo-dock: 12px;
+  --tamanho-capa: 30px;
+  --raio-capa: 7px;
+  --largura-divisor-dock: 24px;
+  /* A janela flutuante tem 80 px (src-tauri/src/dock.rs): 8 de margem em volta dos 64 */
+  --margem-dock-flutuante: 8px;
+  --tamanho-ponto-estado: 6px;
+  /* O painel desenha o cartão afastado do dock, como no Main.dc.html */
+  --margem-painel: 12px;
+
   /* Traços: elevação por borda de 1 px, ícones de 1,6 px, foco de 2 px */
   --espessura-borda: 1px;
   --espessura-icone: 1.6px;
