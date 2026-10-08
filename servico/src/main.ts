@@ -1,8 +1,12 @@
+import { hostname } from "node:os";
 import { VERSAO_PROTOCOLO, type EstadoConfig } from "@moductus/contrato";
 import { abrirServidorWs, type ServidorWs } from "./api/servidor.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { CanalCasca } from "./casca/canal.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
+import { MIGRACOES } from "./migracoes/index.ts";
+import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
+import pacote from "../package.json" with { type: "json" };
 
 /**
  * moductus-servico: sobe pela casca como sidecar. Recebe a pasta de dados e o token
@@ -39,11 +43,18 @@ const config = new ServicoConfig(
   (estado: EstadoConfig) => servidor?.emitir("config.mudou", estado),
   portable(),
 );
+const outroPc = new ServicoOutroPc(config, {
+  versaoApp: pacote.version,
+  versaoEsquema: MIGRACOES.length,
+  pcOrigem: hostname(),
+});
 
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
   "config.obter": () => config.obter(),
   "config.definir": (mudanca) => config.definir(mudanca),
+  "config.exportar": (pedido) => outroPc.exportar(pedido),
+  "config.importar": (pedido) => outroPc.importar(pedido),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
 canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });

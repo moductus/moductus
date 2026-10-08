@@ -9,6 +9,8 @@ const atendentes = {
   "sistema.ping": () => ({ protocolo: 1, pid: process.pid }),
   "config.obter": () => estadoConfig,
   "config.definir": () => estadoConfig,
+  "config.exportar": ({ caminho }: { caminho: string }) => ({ caminho, bytes: 0, chaves: [] }),
+  "config.importar": () => estadoConfig,
 };
 
 const abertos: ServidorWs[] = [];

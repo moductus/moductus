@@ -1,12 +1,15 @@
 import { z } from "zod";
 import { metodo } from "./canal.ts";
 import { EstadoConfig, MudancaConfig } from "./config.ts";
+import { PedidoExportar, PedidoImportar, ResultadoExportar } from "./outro-pc.ts";
 
 /** Todos os métodos que o serviço atende, com entrada e saída. */
 export const METODOS = {
   "sistema.ping": metodo(z.undefined(), z.object({ protocolo: z.number().int(), pid: z.number().int() })),
   "config.obter": metodo(z.undefined(), EstadoConfig),
   "config.definir": metodo(MudancaConfig, EstadoConfig),
+  "config.exportar": metodo(PedidoExportar, ResultadoExportar),
+  "config.importar": metodo(PedidoImportar, EstadoConfig),
 } as const;
 
 export type Metodos = typeof METODOS;
