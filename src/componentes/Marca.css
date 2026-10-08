@@ -1,0 +1,23 @@
+.marca {
+  flex: none;
+}
+
+.marca-16 {
+  width: var(--icone-16);
+  height: var(--icone-16);
+}
+
+.marca-26 {
+  width: var(--icone-26);
+  height: var(--icone-26);
+}
+
+.marca-32 {
+  width: var(--icone-32);
+  height: var(--icone-32);
+}
+
+.marca-48 {
+  width: var(--icone-48);
+  height: var(--icone-48);
+}

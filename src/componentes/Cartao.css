@@ -1,0 +1,14 @@
+.cartao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+  padding: var(--esp-14);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-cartao);
+}
+
+.cartao--elevado {
+  border-color: var(--borda-forte);
+  background: var(--fundo-elevado);
+}

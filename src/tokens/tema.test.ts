@@ -94,6 +94,23 @@ describe("tema", () => {
     expect(document.documentElement.dataset.tema).toBe("vidro");
   });
 
+  it("os temas valem por escopo: um contêiner com data-tema próprio não muda a raiz", () => {
+    windowsComModo(true);
+    aplicarTema("grafite");
+    const colunas = (["papel", "vidro"] as const).map((tema) => {
+      const div = document.createElement("div");
+      div.dataset.tema = tema;
+      document.body.appendChild(div);
+      return div;
+    });
+    const fundo = (el: Element) =>
+      getComputedStyle(el).getPropertyValue("--fundo-janela").trim().toLowerCase();
+
+    expect(colunas.map(fundo)).toEqual(["#ffffff", "#1b1f2b"]);
+    expect(variavel("--fundo-janela")).toBe("#131417");
+    colunas.forEach((c) => c.remove());
+  });
+
   it("Vidro com Acrylic usa o fundo translúcido; sem Acrylic, o sólido #1B1F2B", async () => {
     windowsComModo(true);
     aplicarTema("vidro");

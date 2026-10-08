@@ -1,0 +1,44 @@
+/* Selo: contorno e texto na cor do status; o texto carrega o significado. */
+.selo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--esp-4);
+  padding: var(--esp-1) var(--esp-7);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-selo);
+  font-size: var(--tipo-11);
+  line-height: var(--altura-linha);
+  color: var(--texto-2);
+  white-space: nowrap;
+}
+
+.selo--sucesso {
+  border-color: var(--sucesso);
+  color: var(--sucesso);
+}
+
+.selo--aviso {
+  border-color: var(--aviso);
+  color: var(--aviso);
+}
+
+.selo--perigo {
+  border-color: var(--perigo);
+  color: var(--perigo);
+}
+
+.contagem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--tamanho-badge);
+  height: var(--tamanho-badge);
+  padding: 0 var(--esp-4);
+  border-radius: var(--raio-contagem);
+  background: var(--destaque);
+  color: var(--sobre-destaque);
+  font-size: var(--tipo-11);
+  font-weight: var(--peso-forte);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}

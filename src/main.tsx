@@ -8,17 +8,20 @@ import "./tokens/temas.css";
 import "./tokens/base.css";
 import { aplicarTema, useTema } from "./tokens/tema.ts";
 
+// Antes do primeiro quadro: a janela já nasce com o tema do Windows, sem piscar.
+aplicarTema("automatico");
+const raiz = createRoot(document.getElementById("raiz")!);
+const parametros = new URLSearchParams(window.location.search);
+
 /** Toda janela segue o tema da configuração; os componentes só leem os tokens. */
 function ComTema({ janela }: { janela: Janela }) {
   useTema();
   return <Aplicacao janela={janela} />;
 }
 
-const raiz = createRoot(document.getElementById("raiz")!);
-
-// Revisão de design no navegador (`pnpm exec vite`, depois /?personagens): fora da casca,
-// sem janela nativa nem serviço, e carregada à parte para não pesar nas janelas.
-if (new URLSearchParams(window.location.search).has("personagens")) {
+if (parametros.has("personagens")) {
+  // Revisão de design no navegador (`pnpm exec vite`, depois /?personagens): fora da casca,
+  // sem janela nativa nem serviço, e carregada à parte para não pesar nas janelas.
   void import("./componentes/personagem/Galeria.tsx").then(({ Galeria }) =>
     raiz.render(
       <StrictMode>
@@ -26,12 +29,19 @@ if (new URLSearchParams(window.location.search).has("personagens")) {
       </StrictMode>,
     ),
   );
+} else if (import.meta.env.DEV && parametros.has("catalogo")) {
+  // Catálogo de componentes só em desenvolvimento (`?catalogo`, no navegador ou na janela do
+  // Sistema): o import dinâmico atrás de DEV some do bundle de produção.
+  void import("./catalogo/Catalogo.tsx").then(({ Catalogo }) =>
+    raiz.render(
+      <StrictMode>
+        <Catalogo />
+      </StrictMode>,
+    ),
+  );
 } else {
   const janela = janelaDoRotulo(getCurrentWindow().label) ?? "sistema";
   document.documentElement.dataset.janela = janela;
-  // Antes do primeiro quadro: a janela já nasce com o tema do Windows, sem piscar.
-  aplicarTema("automatico");
-
   raiz.render(
     <StrictMode>
       <ComTema janela={janela} />

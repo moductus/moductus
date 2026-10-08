@@ -1,0 +1,62 @@
+.interruptor {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--esp-10);
+  border-radius: var(--raio-interruptor);
+  font-size: var(--tipo-13);
+  color: var(--texto);
+  cursor: pointer;
+  user-select: none;
+}
+
+/* A borda fica sempre (transparente quando ligado) para o pino não pular de lugar. */
+.interruptor-trilho {
+  position: relative;
+  flex: none;
+  width: var(--largura-interruptor);
+  height: var(--altura-interruptor);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-interruptor);
+  background: var(--fundo-trilho);
+  transition:
+    background-color var(--dur-entrada) ease-out,
+    border-color var(--dur-entrada) ease-out;
+}
+
+.interruptor-pino {
+  position: absolute;
+  top: var(--esp-2);
+  left: var(--esp-2);
+  width: var(--tamanho-pino);
+  height: var(--tamanho-pino);
+  border-radius: var(--raio-pino);
+  background: var(--texto-apagado);
+  transition:
+    transform var(--dur-entrada) ease-out,
+    background-color var(--dur-entrada) ease-out;
+}
+
+.interruptor:hover:not([aria-disabled]) .interruptor-trilho,
+.interruptor[data-estado="hover"] .interruptor-trilho {
+  border-color: var(--texto-apagado);
+}
+
+.interruptor[aria-checked="true"] .interruptor-trilho {
+  border-color: transparent;
+  background: var(--destaque);
+}
+
+.interruptor[aria-checked="true"] .interruptor-pino {
+  transform: translateX(var(--deslocamento-pino));
+  background: var(--sobre-destaque);
+}
+
+.interruptor[data-estado="foco"] {
+  outline: var(--espessura-foco) solid var(--destaque);
+  outline-offset: var(--recuo-foco);
+}
+
+.interruptor[aria-disabled] {
+  opacity: var(--opacidade-desativado);
+  cursor: default;
+}

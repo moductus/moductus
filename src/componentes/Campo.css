@@ -1,0 +1,66 @@
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+  min-width: 0;
+}
+
+.campo-rotulo {
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+/* A caixa desenha borda e foco; o input dentro dela é transparente. */
+.campo-caixa {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  height: var(--altura-campo);
+  padding: 0 var(--esp-10);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-campo);
+  color: var(--texto-3);
+  transition: border-color var(--dur-entrada) ease-out;
+}
+
+.campo-caixa:hover:not([data-desativado]),
+.campo[data-estado="hover"] .campo-caixa {
+  border-color: var(--texto-apagado);
+}
+
+.campo-caixa:focus-within,
+.campo[data-estado="foco"] .campo-caixa {
+  border-color: var(--destaque);
+  outline: var(--espessura-borda) solid var(--destaque);
+}
+
+.campo-caixa[data-desativado] {
+  opacity: var(--opacidade-desativado);
+}
+
+.campo-entrada {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: var(--tipo-13);
+  color: var(--texto);
+}
+
+/* O anel de foco já está na caixa. */
+.campo-entrada:focus-visible {
+  outline: 0;
+}
+
+.campo-entrada::placeholder {
+  color: var(--texto-apagado);
+}
+
+.campo-dica {
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
