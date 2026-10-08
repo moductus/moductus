@@ -17,7 +17,7 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, Webview
 use windows::Win32::{
     Foundation::{HWND, RECT},
     UI::WindowsAndMessaging::{
-        GetWindowRect, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE, SW_SHOWNOACTIVATE,
+        GetWindowRect, IsWindowVisible, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE, SW_HIDE, SW_SHOWNOACTIVATE,
     },
 };
 
@@ -63,7 +63,7 @@ pub fn retangulo_painel(dock: RECT, lado: appbar::Lado, largura: i32) -> RECT {
 pub fn painel_abrir(app: AppHandle, area: String) {
     let (Some(painel), Some(janela_dock)) = (janela(&app, "painel"), janela(&app, "dock")) else { return };
     let aberta = PAINEL.lock().unwrap().as_ref().map(|(a, _)| a.clone());
-    if aberta.as_deref() == Some(area.as_str()) && painel.is_visible().unwrap_or(false) {
+    if aberta.as_deref() == Some(area.as_str()) && unsafe { IsWindowVisible(hwnd(&painel)) }.as_bool() {
         painel_fechar(app);
         return;
     }
@@ -86,7 +86,11 @@ pub fn painel_abrir(app: AppHandle, area: String) {
 #[tauri::command]
 pub fn painel_fechar(app: AppHandle) {
     if let Some(painel) = janela(&app, "painel") {
-        let _ = painel.hide();
+        // Esconde pelo mesmo caminho que mostrou (ShowWindow): o hide() do Tauri não vê a
+        // janela como visível e não faz nada.
+        unsafe {
+            let _ = ShowWindow(hwnd(&painel), SW_HIDE);
+        }
         dock::sem_ativar(dock::hwnd_de(&painel));
     }
     *PAINEL.lock().unwrap() = None;

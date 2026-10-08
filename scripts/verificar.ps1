@@ -257,6 +257,18 @@ function Roteiro-Janelas {
   $ordenados = $tempos | Sort-Object
   $mediana = if ($ordenados.Count) { $ordenados[[int][math]::Floor($ordenados.Count / 2)] } else { -1 }
   Conferir 'painel abre em menos de 100 ms' ($tempos.Count -ge 5 -and ($tempos | Measure-Object -Maximum).Maximum -lt 100) "aberturas (ms): $($tempos -join ', '); mediana $mediana"
+  # A mesma área de novo fecha; depois reabre e fecha pelo X do cabeçalho (40 px lógicos da
+  # borda direita, 45 do topo). O painel é mostrado por ShowWindow: fechar tem que esconder.
+  [W]::SetCursorPos([int](($rd.L + $rd.R) / 2), $yHoje) | Out-Null
+  [W]::mouse_event(2, 0, 0, 0, 0); [W]::mouse_event(4, 0, 0, 0, 0); Bombear 0.8
+  $aberto = [W]::IsWindowVisible($hPainel)
+  [W]::mouse_event(2, 0, 0, 0, 0); [W]::mouse_event(4, 0, 0, 0, 0); Bombear 0.8
+  Conferir 'a mesma área de novo fecha o painel' ($aberto -and -not [W]::IsWindowVisible($hPainel)) "aberto: $aberto, depois: $([W]::IsWindowVisible($hPainel))"
+  [W]::mouse_event(2, 0, 0, 0, 0); [W]::mouse_event(4, 0, 0, 0, 0); Bombear 0.8
+  $rp = Retangulo $hPainel
+  [W]::SetCursorPos([int]($rp.R - 40 * $escala), [int]($rp.T + 45 * $escala)) | Out-Null
+  [W]::mouse_event(2, 0, 0, 0, 0); [W]::mouse_event(4, 0, 0, 0, 0); Bombear 0.8
+  Conferir 'o X fecha o painel' (-not [W]::IsWindowVisible($hPainel)) "painel visível: $([W]::IsWindowVisible($hPainel))"
   Fechar-Dock $d
   $janela.Close()
 }
@@ -465,7 +477,12 @@ function Roteiro-Teclado {
   # Todo botão do dock tem nome acessível, na ordem do canvas (mídia só com sessão tocando).
   $raiz = [Windows.Automation.AutomationElement]::FromHandle($d.Hwnd)
   $cond = New-Object Windows.Automation.PropertyCondition([Windows.Automation.AutomationElement]::ControlTypeProperty, [Windows.Automation.ControlType]::Button)
-  $nomes = @($raiz.FindAll([Windows.Automation.TreeScope]::Descendants, $cond) | ForEach-Object { $_.Current.Name })
+  # O WebView2 só monta a árvore de acessibilidade depois da primeira consulta: tenta por até 5 s.
+  for ($t = 0; $t -lt 10; $t++) {
+    $nomes = @($raiz.FindAll([Windows.Automation.TreeScope]::Descendants, $cond) | ForEach-Object { $_.Current.Name })
+    if ($nomes.Count) { break }
+    Start-Sleep -Milliseconds 500
+  }
   $convite = 'dormindo. Conectar um modelo'
   $esperado = @('Abrir o Sistema', 'Hoje', 'Tarefas', 'Foco', 'Finanças', 'Dev', 'Notas', 'Arquivos',
     "Alba, $convite", "Tula, $convite", "Faina, $convite", "Nuno, $convite", 'Microfone mudo', 'Manter acordado')
