@@ -55,6 +55,8 @@ const DESENHOS = {
   // Dois quadros sobrepostos, como o Windows mostra com a janela maximizada.
   restaurar: <path d="M8 8h11v11H8zM5 16V5h11" />,
   fechar: <path d="M6 6l12 12M18 6L6 18" />,
+  // Escudo do aviso "Tudo fica neste PC" (Uso1Boas.dc.html).
+  escudo: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
 } satisfies Record<string, ReactElement>;
 
 export type NomeIcone = keyof typeof DESENHOS;

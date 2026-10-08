@@ -1,0 +1,181 @@
+/* Primeiros passos (Tutorial.dc.html): bloco elevado no alto do Início, missões e cartão de treino. */
+.primeiros-passos {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--esp-14);
+  padding: var(--esp-18) var(--esp-20);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-elevado);
+}
+
+.primeiros-passos-topo {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-14);
+}
+
+.primeiros-passos-titulos {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-4);
+  min-width: 0;
+}
+
+.primeiros-passos-titulo {
+  margin: 0;
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+}
+
+.primeiros-passos-rotulo {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.primeiros-passos-contagem {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-13);
+}
+
+.primeiros-passos-barra {
+  flex: none;
+  width: var(--largura-progresso-tutorial);
+}
+
+.primeiros-passos-erro {
+  margin: 0;
+  color: var(--perigo);
+}
+
+.primeiros-passos-grade {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--largura-cartao-treino);
+  gap: var(--esp-18);
+}
+
+.primeiros-passos-missoes {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.missao {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  padding: var(--esp-8) 0;
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.missao:last-child {
+  border-bottom: 0;
+}
+
+.missao-caixa {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--tamanho-caixa);
+  height: var(--tamanho-caixa);
+  border: var(--espessura-caixa) solid var(--borda-forte);
+  border-radius: var(--raio-caixa);
+  font-size: var(--tipo-11);
+  color: var(--sobre-destaque);
+}
+
+.missao[data-feita="true"] .missao-caixa {
+  border-color: var(--destaque);
+  background: var(--destaque);
+}
+
+.missao-textos {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-1);
+  min-width: 0;
+}
+
+.missao-nome {
+  font-weight: var(--peso-forte);
+}
+
+.missao[data-feita="true"] .missao-nome {
+  font-weight: var(--peso-normal);
+  color: var(--texto-3);
+  text-decoration: line-through;
+}
+
+/* ---------- Cartão de aprovação de treino ---------- */
+.treino {
+  display: flex;
+  flex-direction: column;
+  align-self: start;
+  gap: var(--esp-10);
+  padding: var(--esp-14);
+  border: var(--espessura-borda) dashed var(--borda-forte);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-cartao);
+}
+
+.treino-topo {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.treino-nome {
+  font-weight: var(--peso-forte);
+}
+
+.treino-nota {
+  margin-left: auto;
+}
+
+.treino-texto {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.treino-arquivos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  margin: 0;
+  padding: var(--esp-8) var(--esp-10);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-chip);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-2);
+  list-style: none;
+}
+
+.treino-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--esp-8);
+}
+
+/* ---------- Entrada em Configurações, Geral ---------- */
+.rever-tutorial {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-14);
+  padding: var(--esp-14) var(--esp-16);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-cartao);
+}
+
+.rever-tutorial .primeiros-passos-erro {
+  flex-basis: 100%;
+}

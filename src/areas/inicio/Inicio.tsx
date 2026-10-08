@@ -1,8 +1,11 @@
+import type { ReactNode } from "react";
 import { EstadoVazio, Pagina } from "../Pagina.tsx";
 
-export function Inicio() {
+/** `antes`: o que vem acima dos blocos do dia (os Primeiros passos, enquanto pendentes). */
+export function Inicio({ antes }: { antes?: ReactNode }) {
   return (
     <Pagina titulo="Início">
+      {antes}
       <EstadoVazio
         agentes={["alba"]}
         titulo="O dia ainda não tem blocos"

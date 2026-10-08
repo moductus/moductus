@@ -10,6 +10,12 @@ export const TAMANHO_PERSONAGEM = {
   painel: 36,
   /** Corpo inteiro nos estados vazios (Estados.dc.html). */
   vazio: 96,
+  /** Cabeça nas missões dos Primeiros passos (Tutorial.dc.html). */
+  missao: 26,
+  /** Corpo inteiro no time das boas-vindas (Uso1Boas.dc.html). */
+  boasVindas: 116,
+  /** Corpo inteiro na apresentação do time (Uso4Time.dc.html). */
+  apresentacao: 132,
   cartao: 168,
 } as const;
 
