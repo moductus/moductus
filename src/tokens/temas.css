@@ -1,0 +1,234 @@
+/*
+ * Tokens do Moductus: o único lugar com valor visual literal (regra em scripts/lint-visual.mjs).
+ * Valores de docs/DESIGN.md §3 e §6. Componentes leem só as variáveis; o tema é o atributo
+ * data-tema na raiz, trocado por src/tokens/tema.ts sem recarregar a janela.
+ */
+
+/* ---------- Comum aos três temas ---------- */
+:root {
+  /* Espaço, grade de 4 */
+  --esp-4: 4px;
+  --esp-6: 6px;
+  --esp-8: 8px;
+  --esp-10: 10px;
+  --esp-12: 12px;
+  --esp-14: 14px;
+  --esp-16: 16px;
+  --esp-18: 18px;
+  --esp-20: 20px;
+  --esp-24: 24px;
+  --esp-32: 32px;
+
+  /* Tipo: 11 meta e atalho, 12 rótulo, 13 corpo, 17–22 título de painel,
+     26 título do Sistema, 30–36 número grande (mono) */
+  --tipo-11: 11px;
+  --tipo-12: 12px;
+  --tipo-13: 13px;
+  --tipo-17: 17px;
+  --tipo-20: 20px;
+  --tipo-22: 22px;
+  --tipo-26: 26px;
+  --tipo-30: 30px;
+  --tipo-36: 36px;
+  --altura-linha: 1.4;
+
+  /* Dois pesos, nunca outros */
+  --peso-normal: 400;
+  --peso-forte: 600;
+
+  /* Medidas fixas da estrutura (as mesmas da casca em src-tauri) */
+  --largura-dock: 64px;
+  --largura-painel: 372px;
+  --largura-lateral-sistema: 232px;
+  --tamanho-botao-dock: 44px;
+  --tamanho-badge: 16px;
+
+  /* Traços: elevação por borda de 1 px, ícones de 1,6 px, foco de 2 px */
+  --espessura-borda: 1px;
+  --espessura-icone: 1.6px;
+  --espessura-foco: 2px;
+  --recuo-foco: 2px;
+
+  /* Animação: entrada até 140 ms, saída até 90 ms (zero quando o Windows pede menos) */
+  --dur-entrada: 140ms;
+  --dur-saida: 90ms;
+
+  /* Personagens: as cores não mudam com o tema (DESIGN.md §6) */
+  --alba-corpo: #e2b26a;
+  --alba-sombra: #c9974d;
+  --alba-acessorio: #a9762a;
+  --tula-corpo: #86bc9c;
+  --tula-sombra: #6ca283;
+  --tula-acessorio: #3f7f5c;
+  --faina-corpo: #de9070;
+  --faina-sombra: #c67757;
+  --faina-acessorio: #a24f37;
+  --nuno-corpo: #8faade;
+  --nuno-sombra: #7590c6;
+  --nuno-acessorio: #46639f;
+  --rosto-traco: #1c1d20;
+  --rosto-bochecha: rgba(255, 255, 255, 0.22);
+  --opacidade-dormindo: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-entrada: 0ms;
+    --dur-saida: 0ms;
+  }
+}
+
+/* ---------- Grafite: escuro, sólido, dock colado ---------- */
+:root,
+:root[data-tema="grafite"] {
+  color-scheme: dark;
+
+  --fundo-dock: #0d0e10;
+  --fundo-janela: #131417;
+  --fundo-lateral: #0d0e10;
+  --fundo-cartao: #16181b;
+  --fundo-elevado: #1a1c20;
+  --fundo-campo: #0f1012;
+  --fundo-chip: rgba(255, 255, 255, 0.06);
+  --fundo-ativo: rgba(255, 255, 255, 0.08);
+  --fundo-trilho: rgba(255, 255, 255, 0.08);
+  --borda: rgba(255, 255, 255, 0.07);
+  --borda-forte: rgba(255, 255, 255, 0.14);
+  --texto: #e8e9eb;
+  --texto-2: #b5b8bd;
+  --texto-3: #8c9097;
+  --texto-apagado: #6f737a;
+  --destaque: #e8e9eb;
+  --sobre-destaque: #0d0e10;
+  --sucesso: #7fb89e;
+  --aviso: #e3b262;
+  --perigo: #e5787a;
+  --capa: #2b2f35;
+
+  --agente-alba: #d9a55a;
+  --agente-tula: #6fae8c;
+  --agente-faina: #d2805e;
+  --agente-nuno: #7c9cd6;
+
+  --raio-janela: 10px;
+  --raio-painel: 12px;
+  --raio-cartao: 10px;
+  --raio-controle: 8px;
+  --raio-botao: 8px;
+  --raio-caixa: 4px;
+  --raio-dock: 0px;
+
+  --sombra-janela: 0 24px 64px rgba(0, 0, 0, 0.45);
+  --sombra-painel: 0 24px 48px rgba(0, 0, 0, 0.45);
+  --sombra-dock: none;
+  --desfoque: none;
+
+  --fonte-interface: "Geist", "Segoe UI", system-ui, sans-serif;
+  --fonte-mono: "Geist Mono", Consolas, monospace;
+}
+
+/* ---------- Papel: claro, sólido, dock flutuante ---------- */
+:root[data-tema="papel"] {
+  color-scheme: light;
+
+  --fundo-dock: #fbfaf8;
+  --fundo-janela: #ffffff;
+  --fundo-lateral: #f6f5f2;
+  --fundo-cartao: #ffffff;
+  --fundo-elevado: #f6f5f2;
+  --fundo-campo: #ffffff;
+  --fundo-chip: #efeeea;
+  --fundo-ativo: #eae8e3;
+  --fundo-trilho: #e6e4df;
+  --borda: rgba(20, 20, 19, 0.08);
+  --borda-forte: rgba(20, 20, 19, 0.16);
+  --texto: #1a1a18;
+  --texto-2: #3e3d39;
+  --texto-3: #6b6a64;
+  --texto-apagado: #8a8983;
+  --destaque: #1a1a18;
+  --sobre-destaque: #fbfaf8;
+  --sucesso: #2f7a52;
+  --aviso: #b5761a;
+  --perigo: #b4443c;
+  --capa: #d9d6cf;
+
+  --agente-alba: #9a6a1e;
+  --agente-tula: #2f7a52;
+  --agente-faina: #a34e2e;
+  --agente-nuno: #3f64a8;
+
+  --raio-janela: 14px;
+  --raio-painel: 16px;
+  --raio-cartao: 14px;
+  --raio-controle: 10px;
+  --raio-botao: 17px;
+  --raio-caixa: 8px;
+  --raio-dock: 18px;
+
+  --sombra-janela: 0 24px 64px rgba(40, 36, 28, 0.16);
+  --sombra-painel: 0 16px 40px rgba(40, 36, 28, 0.12);
+  --sombra-dock: 0 8px 24px rgba(40, 36, 28, 0.08);
+  --desfoque: none;
+
+  --fonte-interface: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --fonte-mono: "JetBrains Mono", Consolas, monospace;
+}
+
+/* ---------- Vidro: escuro, Acrylic nativo do Windows 11, dock flutuante ---------- */
+:root[data-tema="vidro"] {
+  color-scheme: dark;
+
+  --fundo-solido-vidro: #1b1f2b;
+  --fundo-dock: rgba(20, 23, 31, 0.55);
+  --fundo-janela: rgba(18, 21, 29, 0.62);
+  --fundo-lateral: rgba(0, 0, 0, 0.16);
+  --fundo-cartao: rgba(255, 255, 255, 0.05);
+  --fundo-elevado: rgba(255, 255, 255, 0.07);
+  --fundo-campo: rgba(0, 0, 0, 0.18);
+  --fundo-chip: rgba(255, 255, 255, 0.08);
+  --fundo-ativo: rgba(255, 255, 255, 0.1);
+  --fundo-trilho: rgba(255, 255, 255, 0.1);
+  --borda: rgba(255, 255, 255, 0.09);
+  --borda-forte: rgba(255, 255, 255, 0.18);
+  --texto: #eef0f6;
+  --texto-2: #c4c9d4;
+  --texto-3: #9aa1b1;
+  --texto-apagado: #7c8394;
+  --destaque: #a3b5ff;
+  --sobre-destaque: #10131c;
+  --sucesso: #7ccba2;
+  --aviso: #e8b86a;
+  --perigo: #f08a8a;
+  --capa: #4a5578;
+
+  --agente-alba: #d9a55a;
+  --agente-tula: #6fae8c;
+  --agente-faina: #d2805e;
+  --agente-nuno: #7c9cd6;
+
+  --raio-janela: 16px;
+  --raio-painel: 18px;
+  --raio-cartao: 14px;
+  --raio-controle: 10px;
+  --raio-botao: 10px;
+  --raio-caixa: 5px;
+  --raio-dock: 20px;
+
+  --sombra-janela: 0 24px 64px rgba(0, 0, 0, 0.35);
+  --sombra-painel: none;
+  --sombra-dock: none;
+  /* O desfoque de verdade é o Acrylic da janela; este vale para camadas dentro dela. */
+  --desfoque: blur(32px) saturate(140%);
+
+  --fonte-interface: "Onest", "Segoe UI", system-ui, sans-serif;
+  --fonte-mono: "IBM Plex Mono", Consolas, monospace;
+}
+
+/* Sem Acrylic (Windows 10, transparência desligada, economia de bateria, falha ou ainda
+   sem resposta da casca): o Vidro vira sólido e mantém texto e destaque. */
+:root[data-tema="vidro"]:not([data-material="acrylic"]) {
+  --fundo-dock: var(--fundo-solido-vidro);
+  --fundo-janela: var(--fundo-solido-vidro);
+  --desfoque: none;
+}

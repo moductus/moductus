@@ -1,0 +1,50 @@
+/* Base mínima sobre os tokens: cada janela já nasce com a pele do tema. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--fundo-janela);
+  color: var(--texto);
+  font-family: var(--fonte-interface);
+  font-size: var(--tipo-13);
+  font-weight: var(--peso-normal);
+  line-height: var(--altura-linha);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* O dock desenha o próprio fundo (colado ou flutuante); a janela em volta fica transparente. */
+:root[data-janela="dock"] body {
+  background: transparent;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+code,
+kbd,
+samp {
+  font-family: var(--fonte-mono);
+}
+
+:focus-visible {
+  outline: var(--espessura-foco) solid var(--destaque);
+  outline-offset: var(--recuo-foco);
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
