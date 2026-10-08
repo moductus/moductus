@@ -1,9 +1,15 @@
+import { CONFIG_PADRAO } from "@moductus/contrato";
 import { ClienteServico } from "@moductus/contrato/cliente";
 import { afterEach, describe, expect, test } from "vitest";
 import { abrirServidorWs, type ServidorWs } from "./servidor.ts";
 
 const TOKEN = "a".repeat(64);
-const atendentes = { "sistema.ping": () => ({ protocolo: 1, pid: process.pid }) };
+const estadoConfig = { config: CONFIG_PADRAO, portable: false, falhasAtalhos: {} };
+const atendentes = {
+  "sistema.ping": () => ({ protocolo: 1, pid: process.pid }),
+  "config.obter": () => estadoConfig,
+  "config.definir": () => estadoConfig,
+};
 
 const abertos: ServidorWs[] = [];
 const clientes: ClienteServico[] = [];

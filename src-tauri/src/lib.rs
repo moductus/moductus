@@ -1,5 +1,6 @@
 mod appbar;
 mod atalhos;
+mod config_nativa;
 mod controles;
 // O serviço chega aqui pelo canal do sidecar; nenhuma janela tem comando para isso.
 mod credenciais;

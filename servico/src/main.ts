@@ -1,7 +1,8 @@
-import { abrirBanco, pastaDeDados } from "./banco/conexao.ts";
-import { VERSAO_PROTOCOLO } from "@moductus/contrato";
-import { abrirServidorWs } from "./api/servidor.ts";
+import { VERSAO_PROTOCOLO, type EstadoConfig } from "@moductus/contrato";
+import { abrirServidorWs, type ServidorWs } from "./api/servidor.ts";
+import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { CanalCasca } from "./casca/canal.ts";
+import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
 
 /**
  * moductus-servico: sobe pela casca como sidecar. Recebe a pasta de dados e o token
@@ -18,11 +19,37 @@ if (!token) {
   process.exit(1);
 }
 
-const servidor = await abrirServidorWs(token, {
+/** A casca aplica o que é nativo e responde { ok, falhas_atalhos } ou { erro }. */
+const nativo: AplicadorNativo = {
+  async aplicar(config, mudou) {
+    const r = await canal.pedir<{ erro?: string; falhas_atalhos?: Record<string, string> }>({
+      tipo: "aplicar",
+      config,
+      mudou,
+    });
+    if (r.erro) throw new Error(r.erro);
+    return { falhasAtalhos: r.falhas_atalhos ?? {} };
+  },
+};
+
+let servidor: ServidorWs | null = null;
+const config = new ServicoConfig(
+  new RepositorioConfig(banco),
+  nativo,
+  (estado: EstadoConfig) => servidor?.emitir("config.mudou", estado),
+  portable(),
+);
+
+servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
+  "config.obter": () => config.obter(),
+  "config.definir": (mudanca) => config.definir(mudanca),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
 canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });
+config
+  .aplicarAoSubir()
+  .catch((erro: unknown) => console.error(`configuração não aplicada ao subir: ${String(erro)}`));
 
 // A casca fechou o stdin: ela saiu, então o serviço sai junto.
 process.stdin.on("end", () => {

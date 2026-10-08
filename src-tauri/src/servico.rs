@@ -175,6 +175,12 @@ fn ouvir(app: &AppHandle, saida: std::process::ChildStdout, token: &str) {
                 crate::registro::info(&format!("servico pronto na porta {porta}"));
                 definir(app, Estado::Pronto { porta, token: token.to_string() });
             }
+            ("aplicar", Some(id)) => {
+                let resposta = serde_json::from_str::<crate::config_nativa::PedidoAplicar>(&linha)
+                    .map(|p| crate::config_nativa::aplicar(app, p))
+                    .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
+                responder(id, resposta);
+            }
             ("credencial", Some(id)) => {
                 let resposta = serde_json::from_str::<credenciais::Pedido>(&linha)
                     .map(credenciais::atender)
