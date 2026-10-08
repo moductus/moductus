@@ -680,8 +680,10 @@ function Roteiro-Acessibilidade {
     Conferir 'Configurações: as 9 seções com nome em todo controle' ($falhas.Count -eq 0) "falhas: $($falhas -join ', ')"
     $paradas = Percorrer-Tab 40
     $nomes = @($paradas | ForEach-Object Nome)
-    $esperados = @('Minimizar', 'Fechar', 'Buscar', 'Levar para outro PC')
+    # A lista de seções é uma parada só (tabindex móvel), na seção que estiver marcada.
+    $esperados = @('Minimizar', 'Fechar', 'Buscar')
     $faltam = @($esperados | Where-Object { $nomes -notcontains $_ })
+    if (-not @($secoes | Where-Object { $nomes -contains $_ }).Count) { $faltam += 'uma seção' }
     Conferir 'Sistema: o Tab passa por barra, busca, área e seção, sem nada sem nome' ($faltam.Count -eq 0 -and (Paradas-Sem-Nome $paradas).Count -eq 0) "faltam: $($faltam -join ', '); paradas: $(Texto-Paradas $paradas)"
     # Ctrl+K foca a busca; Esc sai dela.
     [W]::keybd_event(0x11, 0, 0, [IntPtr]::Zero); Tecla 0x4B; [W]::keybd_event(0x11, 0, 2, [IntPtr]::Zero); Bombear 0.5

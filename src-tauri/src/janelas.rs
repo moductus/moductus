@@ -48,6 +48,14 @@ pub fn iniciar(app: &AppHandle, pasta: PathBuf) {
     }
 }
 
+/// Esconde pelo Win32, que vale também para janela mostrada fora do Tauri (o hide() dele
+/// confia no estado que ele mesmo guardou e não faz nada se a janela apareceu por ShowWindow).
+fn esconder(janela: &WebviewWindow) {
+    unsafe {
+        let _ = ShowWindow(hwnd(janela), SW_HIDE);
+    }
+}
+
 // ---------- painel ----------
 
 /// Retângulo do painel encostado no dock, do lado de dentro da tela.
@@ -212,8 +220,8 @@ pub fn retangulo_captura(monitor: RECT, largura: i32, altura: i32) -> RECT {
 #[tauri::command]
 pub fn captura_alternar(app: AppHandle) {
     let Some(captura) = janela(&app, "captura") else { return };
-    if captura.is_visible().unwrap_or(false) {
-        let _ = captura.hide();
+    if unsafe { IsWindowVisible(hwnd(&captura)) }.as_bool() {
+        esconder(&captura);
         return;
     }
     let mut rc = RECT::default();
@@ -229,7 +237,7 @@ pub fn captura_alternar(app: AppHandle) {
 #[tauri::command]
 pub fn captura_fechar(app: AppHandle) {
     if let Some(captura) = janela(&app, "captura") {
-        let _ = captura.hide();
+        esconder(&captura);
     }
 }
 
