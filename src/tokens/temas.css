@@ -69,12 +69,22 @@
   --rosto-traco: #1c1d20;
   --rosto-bochecha: rgba(255, 255, 255, 0.22);
   --opacidade-dormindo: 0.55;
+  /* Respirar e piscar (Personagem.dc.html); a origem está em unidades do desenho 100 × 120. */
+  --dur-respirar: 4.2s;
+  --dur-piscar: 5.5s;
+  --escala-respirar: 1.018;
+  --escala-piscar: 0.1;
+  --origem-respirar: 50px 108px;
+  /* Moldura de estado em volta da cabeça nas listas (Time.dc.html: 2 px em volta de 40) */
+  --espessura-moldura: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root {
     --dur-entrada: 0ms;
     --dur-saida: 0ms;
+    --dur-respirar: 0ms;
+    --dur-piscar: 0ms;
   }
 }
 
