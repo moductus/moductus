@@ -54,6 +54,9 @@ jobs:
       - name: Build da interface
         run: pnpm build
 
+      - name: Fumaça do serviço (o bundle sobe e fica pronto)
+        run: pnpm --filter @moductus/servico fumaca
+
       - name: Clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets -- -D warnings
