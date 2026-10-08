@@ -2,29 +2,387 @@
   "v": 3,
   "attachments": {},
   "boards": {
-    "Main.dc.html": { "h": 900, "title": "A · Grafite", "w": 1440, "x": 0, "y": 0 },
-    "Papel.dc.html": { "h": 900, "title": "B · Papel", "w": 1440, "x": 1520, "y": 0 },
-    "Vidro.dc.html": { "h": 900, "title": "C · Vidro", "w": 1440, "x": 3040, "y": 0 },
-    "Sistema.dc.html": { "h": 900, "title": "Sistema · Início (troca de tema)", "w": 1440, "x": 0, "y": 1320, "is_interactive": true },
-    "Agentes.dc.html": { "h": 900, "title": "Painel · Agentes e sessões de IA", "w": 1440, "x": 0, "y": 2720 },
-    "Midia.dc.html": { "h": 900, "title": "Painel · Mídia, controles e apps abertos", "w": 1440, "x": 1520, "y": 2720 },
-    "Captura.dc.html": { "h": 900, "title": "Captura rápida", "w": 1440, "x": 3040, "y": 2720 },
-    "Marca.dc.html": { "h": 900, "title": "Marca · quatro opções", "w": 1440, "x": 0, "y": 4120 },
-    "Dock.dc.html": { "h": 900, "title": "Componente · Dock", "w": 88, "x": 1520, "y": 4120 },
-    "Time.dc.html": { "h": 1000, "title": "Agentes · Alba, Tula, Faina e Nuno", "w": 1440, "x": 0, "y": 5520 },
-    "Personagem.dc.html": { "h": 240, "title": "Componente · Personagem", "w": 200, "x": 1688, "y": 4120 }
+    "Main.dc.html": {
+      "h": 900,
+      "title": "A · Grafite",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Papel.dc.html": {
+      "h": 900,
+      "title": "B · Papel",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Vidro.dc.html": {
+      "h": 900,
+      "title": "C · Vidro",
+      "w": 1440,
+      "x": 3040,
+      "y": 0
+    },
+    "Sistema.dc.html": {
+      "h": 900,
+      "title": "Sistema · Início (troca de tema)",
+      "w": 1440,
+      "x": 0,
+      "y": 1320,
+      "is_interactive": true
+    },
+    "Agentes.dc.html": {
+      "h": 900,
+      "title": "Painel · Agentes e sessões de IA",
+      "w": 1440,
+      "x": 0,
+      "y": 2720
+    },
+    "Midia.dc.html": {
+      "h": 900,
+      "title": "Painel · Mídia, controles e apps abertos",
+      "w": 1440,
+      "x": 1520,
+      "y": 2720
+    },
+    "Captura.dc.html": {
+      "h": 900,
+      "title": "Captura rápida",
+      "w": 1440,
+      "x": 3040,
+      "y": 2720
+    },
+    "Marca.dc.html": {
+      "h": 900,
+      "title": "Marca · quatro opções",
+      "w": 1440,
+      "x": 0,
+      "y": 4120
+    },
+    "Dock.dc.html": {
+      "h": 900,
+      "title": "Componente · Dock",
+      "w": 88,
+      "x": 1520,
+      "y": 4120
+    },
+    "Time.dc.html": {
+      "h": 1000,
+      "title": "Agentes · Alba, Tula, Faina e Nuno",
+      "w": 1440,
+      "x": 0,
+      "y": 5520
+    },
+    "Personagem.dc.html": {
+      "h": 240,
+      "title": "Componente · Personagem",
+      "w": 200,
+      "x": 1688,
+      "y": 4120
+    },
+    "Uso1Boas.dc.html": {
+      "h": 900,
+      "title": "Primeiro uso · 1 Boas-vindas",
+      "w": 1440,
+      "x": 0,
+      "y": 6920
+    },
+    "Uso2Tema.dc.html": {
+      "h": 900,
+      "title": "Primeiro uso · 2 Tema e dock",
+      "w": 1440,
+      "x": 1520,
+      "y": 6920
+    },
+    "Uso3Modelo.dc.html": {
+      "h": 900,
+      "title": "Primeiro uso · 3 Modelo",
+      "w": 1440,
+      "x": 3040,
+      "y": 6920
+    },
+    "Uso4Time.dc.html": {
+      "h": 900,
+      "title": "Primeiro uso · 4 Conhecer o time",
+      "w": 1440,
+      "x": 0,
+      "y": 8000
+    },
+    "Uso5Conexoes.dc.html": {
+      "h": 900,
+      "title": "Primeiro uso · 5 Conexões",
+      "w": 1440,
+      "x": 1520,
+      "y": 8000
+    },
+    "Tutorial.dc.html": {
+      "h": 900,
+      "title": "Tutorial · Primeiros passos no Início",
+      "w": 1440,
+      "x": 3040,
+      "y": 8000
+    },
+    "Briefing.dc.html": {
+      "h": 900,
+      "title": "Briefing da manhã",
+      "w": 1440,
+      "x": 0,
+      "y": 9500
+    },
+    "Fechamento.dc.html": {
+      "h": 900,
+      "title": "Fechamento do dia",
+      "w": 1440,
+      "x": 1520,
+      "y": 9500
+    },
+    "PainelFoco.dc.html": {
+      "h": 900,
+      "title": "Painel · Foco",
+      "w": 1440,
+      "x": 0,
+      "y": 10900
+    },
+    "PainelFinancas.dc.html": {
+      "h": 900,
+      "title": "Painel · Finanças",
+      "w": 1440,
+      "x": 1520,
+      "y": 10900
+    },
+    "PainelDev.dc.html": {
+      "h": 900,
+      "title": "Painel · Dev",
+      "w": 1440,
+      "x": 3040,
+      "y": 10900
+    },
+    "PainelArquivos.dc.html": {
+      "h": 900,
+      "title": "Painel · Arquivos",
+      "w": 1440,
+      "x": 0,
+      "y": 11900
+    },
+    "Estados.dc.html": {
+      "h": 680,
+      "title": "Estados · dormindo, erro, teto, vazio, conexão, pausa",
+      "w": 1440,
+      "x": 1520,
+      "y": 11900
+    },
+    "Conversas.dc.html": {
+      "h": 900,
+      "title": "Sistema · Agentes, conversa com o time",
+      "w": 1440,
+      "x": 0,
+      "y": 13400
+    },
+    "ExtratoColunas.dc.html": {
+      "h": 900,
+      "title": "Finanças · extrato sem perfil, mapear colunas",
+      "w": 1440,
+      "x": 1520,
+      "y": 13400
+    },
+    "ExtratoRevisar.dc.html": {
+      "h": 900,
+      "title": "Finanças · revisar o extrato antes de lançar",
+      "w": 1440,
+      "x": 3040,
+      "y": 13400
+    },
+    "PreviaFaina.dc.html": {
+      "h": 900,
+      "title": "Arquivos · prévia antes de organizar",
+      "w": 1440,
+      "x": 0,
+      "y": 14400
+    },
+    "OutroPC.dc.html": {
+      "h": 900,
+      "title": "Configurações · levar para outro PC",
+      "w": 1440,
+      "x": 1520,
+      "y": 14400
+    },
+    "AreaTarefas.dc.html": {
+      "h": 900,
+      "title": "Sistema · Tarefas, o dia",
+      "w": 1440,
+      "x": 0,
+      "y": 15900
+    },
+    "AreaFinancas.dc.html": {
+      "h": 900,
+      "title": "Sistema · Finanças, o dinheiro",
+      "w": 1440,
+      "x": 1520,
+      "y": 15900
+    },
+    "AreaNotas.dc.html": {
+      "h": 900,
+      "title": "Sistema · Notas",
+      "w": 1440,
+      "x": 3040,
+      "y": 15900
+    },
+    "AreaSessoes.dc.html": {
+      "h": 900,
+      "title": "Sistema · Sessões de IA",
+      "w": 1440,
+      "x": 0,
+      "y": 16900
+    },
+    "AreaDev.dc.html": {
+      "h": 900,
+      "title": "Sistema · Dev",
+      "w": 1440,
+      "x": 1520,
+      "y": 16900
+    },
+    "AreaAgente.dc.html": {
+      "h": 900,
+      "title": "Sistema · página de um agente (Tula)",
+      "w": 1440,
+      "x": 3040,
+      "y": 16900
+    },
+    "AreaNotificacoes.dc.html": {
+      "h": 900,
+      "title": "Configurações · notificações",
+      "w": 1440,
+      "x": 0,
+      "y": 17900
+    },
+    "AreaMemoria.dc.html": {
+      "h": 900,
+      "title": "Sistema · Memória do time",
+      "w": 1440,
+      "x": 1520,
+      "y": 17900
+    }
   },
-  "createdOnFiles": { "at": "2026-10-06T15:00:00Z", "v": 1 },
+  "createdOnFiles": {
+    "at": "2026-10-06T15:00:00Z",
+    "v": 1
+  },
   "designSystems": [],
-  "launch": { "view": "canvas" },
-  "notes": {
-    "titulo": { "kind": "title1", "maxW": 4480, "text": "Dock e painel Hoje — três temas", "w": 240, "x": 0, "y": -300 },
-    "titulo2": { "kind": "title1", "maxW": 4480, "text": "Sistema — a janela completa", "x": 0, "y": 1020 },
-    "titulo3": { "kind": "title1", "maxW": 4480, "text": "Painéis do dock e captura", "x": 0, "y": 2420 },
-    "titulo4": { "kind": "title1", "maxW": 4480, "text": "Marca e componentes", "x": 0, "y": 3820 },
-    "titulo5": { "kind": "title1", "maxW": 4480, "text": "O time de agentes", "x": 0, "y": 5220 }
+  "launch": {
+    "view": "canvas"
   },
-  "order": ["Main.dc.html", "Papel.dc.html", "Vidro.dc.html", "Sistema.dc.html", "Agentes.dc.html", "Midia.dc.html", "Captura.dc.html", "Marca.dc.html", "Dock.dc.html", "Personagem.dc.html", "Time.dc.html"],
+  "notes": {
+    "titulo": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Dock e painel Hoje — três temas",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "titulo2": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Sistema — a janela completa",
+      "x": 0,
+      "y": 1020
+    },
+    "titulo3": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Painéis do dock e captura",
+      "x": 0,
+      "y": 2420
+    },
+    "titulo4": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Marca e componentes",
+      "x": 0,
+      "y": 3820
+    },
+    "titulo5": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "O time de agentes",
+      "x": 0,
+      "y": 5220
+    },
+    "titulo6": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Primeiro uso e tutorial",
+      "x": 0,
+      "y": 6620
+    },
+    "titulo7": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Briefing e fechamento do dia",
+      "x": 0,
+      "y": 9200
+    },
+    "titulo8": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Painéis do dock e estados dos agentes",
+      "x": 0,
+      "y": 10600
+    },
+    "titulo9": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Conversas e fluxos com aprovação",
+      "x": 0,
+      "y": 13100
+    },
+    "titulo10": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Áreas do Sistema",
+      "x": 0,
+      "y": 15600
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Papel.dc.html",
+    "Vidro.dc.html",
+    "Sistema.dc.html",
+    "Agentes.dc.html",
+    "Midia.dc.html",
+    "Captura.dc.html",
+    "Marca.dc.html",
+    "Dock.dc.html",
+    "Personagem.dc.html",
+    "Time.dc.html",
+    "Uso1Boas.dc.html",
+    "Uso2Tema.dc.html",
+    "Uso3Modelo.dc.html",
+    "Uso4Time.dc.html",
+    "Uso5Conexoes.dc.html",
+    "Tutorial.dc.html",
+    "Briefing.dc.html",
+    "Fechamento.dc.html",
+    "PainelFoco.dc.html",
+    "PainelFinancas.dc.html",
+    "PainelDev.dc.html",
+    "PainelArquivos.dc.html",
+    "Estados.dc.html",
+    "Conversas.dc.html",
+    "ExtratoColunas.dc.html",
+    "ExtratoRevisar.dc.html",
+    "PreviaFaina.dc.html",
+    "OutroPC.dc.html",
+    "AreaTarefas.dc.html",
+    "AreaFinancas.dc.html",
+    "AreaNotas.dc.html",
+    "AreaSessoes.dc.html",
+    "AreaDev.dc.html",
+    "AreaAgente.dc.html",
+    "AreaNotificacoes.dc.html",
+    "AreaMemoria.dc.html"
+  ],
   "pages": [],
   "title": "Moductus — identidade visual"
 }

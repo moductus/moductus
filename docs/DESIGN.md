@@ -116,10 +116,31 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 | Marca: quatro opções, com a **C · Borda e ponto** escolhida e aplicada em todos os desenhos | ✓ | ✓ | ✓ |
 | Agentes: personagens, expressões e criar agente | ✓ (tweak de tema) | ✓ | ✓ |
 | Componente Personagem (agente, expressão, corpo ou cabeça) | ✓ | ✓ | ✓ |
+| Primeiro uso: boas-vindas, tema e dock, modelo, conhecer o time, conexões | ✓ (tweak de tema) | ✓ | ✓ |
+| Tutorial "Primeiros passos" no Início, com cartão de aprovação de treino | ✓ (tweak de tema) | ✓ | ✓ |
+| Briefing da manhã e fechamento do dia | ✓ (tweak de tema) | ✓ | ✓ |
+| Painéis do dock: Foco, Finanças, Dev, Arquivos | ✓ (tweak de tema) | ✓ | ✓ |
+| Estados do agente: sem modelo, erro, teto de gasto, vazio, conexão caída, pausado | ✓ (tweak de tema) | ✓ | ✓ |
+| Conversa com o time | ✓ (tweak de tema) | ✓ | ✓ |
+| Importar extrato: mapear colunas e revisar antes de lançar | ✓ (tweak de tema) | ✓ | ✓ |
+| Prévia da Faina antes de organizar | ✓ (tweak de tema) | ✓ | ✓ |
+| Sistema: Tarefas, Finanças, Notas, Sessões de IA, Dev, Memória, página do agente | ✓ (tweak de tema) | ✓ | ✓ |
+| Configurações: notificações e levar para outro PC | ✓ (tweak de tema) | ✓ | ✓ |
 
 O cartão de aprovação traz três ações: **Negar**, **Sempre neste projeto** e **Permitir**. A do meio vira uma regra de permissão do Claude Code para aquele projeto, registrada pelo hook.
 
-**A desenhar:** painéis de Foco, Finanças e Dev no dock, as demais áreas do Sistema, estados do agente (vazio, erro, sem modelo), configurações de tema e dock, e a aplicação da marca no ícone do executável e no instalador.
+Padrões que saíram dessas telas e valem para o resto:
+
+- **Aprovação:** cartão elevado com o que vai acontecer, o tamanho e se dá para desfazer; botão primário é verbo com objeto ("Organizar 142 arquivos"), o secundário recusa sem culpa ("Não mover", "Agora não").
+- **Fala do agente:** cabeça do personagem (20 a 30 px) + nome na cor de identidade + até duas frases; ação logo abaixo, nunca num modal.
+- **Origem:** todo item criado por agente diz quem e de onde ("Tula leu o extrato", "você, pela captura").
+- **Status nunca só por cor:** ponto + texto ("esperando você", "CI falhou").
+- **Seleção:** caixa marcada no destaque com ✓; tarefa feita fica apagada e riscada.
+- **Configurações:** sub-navegação própria à esquerda; cada seção numa página.
+
+**A desenhar:** Foco e Ferramentas no Sistema, instruções e ferramentas na página do agente, criar agente (fase 7), demais seções de Configurações (Geral, Modelos, Conexões, Atalhos, Privacidade) e o instalador.
+
+**Ícones da marca:** em [design/marca/](design/marca/): `moductus.ico` (16 a 256 px, Grafite), `app-*.png` (32 a 512), ícones da bandeja claro e escuro (16 e 32) e `marca.svg` em `currentColor`.
 
 ---
 
