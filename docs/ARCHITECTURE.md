@@ -191,6 +191,51 @@ O código .NET do v0 sai da árvore quando a fase 1 começar; a tag `v0.4.0` pre
 - **Atualização:** plugin updater do Tauri, opt-in nas configurações, manifesto assinado publicado no GitHub Releases.
 - **Orçamentos medidos a cada release:** memória privada em repouso abaixo de 200 MB somando casca, WebView2 e serviço (o teste de viabilidade mediu cerca de 150 MB em build de debug); dock visível em menos de 1 s após o login; painel abre em menos de 100 ms.
 
+### Medições da fase 1
+
+Feitas em 08/10/2026 no build de release (`pnpm tauri build --no-bundle`, `0.5.0-alpha`), numa máquina com Windows 11 Pro build 26300, AMD Ryzen 5 1600, 16 GB, monitor principal de 2560×1440 com a barra de tarefas no topo, WebView2 154.0.4258.62 e Node 24.9.0 como sidecar. O roteiro é `scripts/medir.ps1`: abre e fecha o app sozinho e não mexe no mouse nem no teclado.
+
+```powershell
+taskkill /IM moductus.exe /F
+pnpm tauri build --no-bundle
+pwsh -NoProfile -File scripts\medir.ps1
+```
+
+| Orçamento | Meta | Medido | Situação |
+|---|---|---|---|
+| Memória privada em repouso | < 200 MB | **341,7 MB** (337,5 MB numa medição anterior) | ❌ não cumprido; fica para uma etapa dedicada |
+| Dock no lugar depois de iniciar | < 1 s | **1,08 s** com a reserva feita (janela visível em 0,11 s) | ❌ por pouco |
+| Painel abre | < 100 ms | **mediana 12,9 ms**, máximo 21,4 ms | ✅ |
+
+**Memória.** Soma dos bytes privados de `moductus.exe` e de todos os descendentes (o `node.exe` do serviço e os processos do WebView2) depois de 60 s parado, com as quatro janelas criadas e só o dock visível:
+
+| Processo | Privado |
+|---|---|
+| WebView2, processo de GPU | 101,7 MB |
+| WebView2, 4 renderizadores (dock, painel, Sistema, captura) | 26–34 MB cada, 118,5 MB juntos |
+| WebView2, processo principal | 50,9 MB |
+| WebView2, utilitários (rede, armazenamento, áudio etc.) | 23,8 MB |
+| `node.exe` do serviço | 32,1 MB |
+| `moductus.exe` (casca) | 12,4 MB |
+| `conhost.exe` do serviço | 2,2 MB |
+| **Total** | **341,7 MB** |
+
+O WebView2 é 86% da conta; casca, serviço e `conhost` juntos ficam em 47 MB. Flags testadas pela variável `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`, mesma máquina, a partir de 337,5 MB:
+
+| Flags | Total |
+|---|---|
+| nenhuma | 337,5 MB |
+| `--renderer-process-limit=1` | 308,3 MB |
+| `--disable-gpu` | 252,5 MB |
+| as duas | 206,7 MB |
+| as duas + `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection` | 204,0 MB |
+
+Nem a combinação mais agressiva chega aos 200 MB, e cada flag tem custo (sem GPU, o Acrylic e as animações passam para a CPU; um renderizador só põe as quatro janelas no mesmo processo). **Decisão:** o orçamento de memória não é cumprido na fase 1. Estes números são o ponto de partida de uma etapa futura dedicada, que deve avaliar criar painel, Sistema e captura só quando forem abertos pela primeira vez (hoje as quatro janelas nascem com o app), as flags acima e o custo de cada uma no visual.
+
+**Dock.** Média de 5 execuções seguidas, de `Start-Process` até a janela `Moductus dock` estar visível e a área de trabalho já reservada: 1.146, 1.147, 1.050, 1.032 e 1.024 ms (média 1.080 ms). Pelo `%APPDATA%\Moductus\moductus.log`, do início até a linha `dock fixado` a média é 1.128 ms (a linha é gravada depois de a reserva valer). A janela aparece em cerca de 110 ms, mas a reserva só entra quando o `setup` do Tauri roda, e ele roda depois de as quatro janelas declaradas no `tauri.conf.json` criarem os seus WebViews. A mesma mudança sugerida para a memória (criar as outras janelas depois do dock) é o caminho para trazer esse tempo para baixo de 1 s. A medição parte do processo já pedido; o login acrescenta o tempo até o Windows rodar a entrada de autostart, que não depende do app.
+
+**Painel.** A casca marca o instante em `painel_abrir` e fecha a conta quando a interface avisa, por `painel_pronto`, que desenhou a área (depois de dois quadros); o resultado vai para o log como `painel hoje aberto em N ms`. Cinco aberturas pelo roteiro: 21,4, 15,9, 9,8, 7,9 e 12,9 ms. O roteiro `janelas` do `verificar.ps1`, com clique de verdade, mediu 29,1, 8,3, 8,0, 9,6 e 4,7 ms.
+
 ---
 
 ## 8. Questões em aberto
@@ -198,7 +243,7 @@ O código .NET do v0 sai da árvore quando a fase 1 começar; a tag `v0.4.0` pre
 - **Prévia de janela** com `DwmRegisterThumbnail` exige uma janela nativa por cima da WebView; validar no spike da fase 6 antes de prometer.
 - **Translucidez (Acrylic)** no tema Vidro: só dá para validar no Windows 11; o teste de viabilidade rodou no Windows 10, onde vale o fallback sólido.
 - **Vários monitores:** dock em todos ou só no principal — começar pelo principal.
-- **Memória em release:** os números da seção 9 são de build de debug; medir de novo no primeiro build de release da fase 1.
+- **Memória em release:** medida na fase 1 em 341,7 MB, acima do orçamento de 200 MB ([seção 7](#medições-da-fase-1)); reduzir é uma etapa própria.
 
 ---
 
