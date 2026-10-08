@@ -1,0 +1,122 @@
+/*
+ * Alto contraste do Windows (forced-colors): o WebView troca cor de texto, fundo e borda pelas
+ * cores do sistema e apaga sombras. Isso basta para texto e contornos, mas apaga o que só se
+ * distingue por fundo (item ativo, opção marcada, pino do interruptor, divisor, anel de foco
+ * em cor do tema). Aqui esses estados ganham cores do sistema, todas num lugar só: é a única
+ * camada de valor visual que não vem dos temas, e vem do Windows. Carregado por último.
+ *
+ * Onde o estado é fundo + texto, `forced-color-adjust: none` garante que o par Highlight /
+ * HighlightText fica como foi pedido, sem o WebView trocar um dos dois.
+ */
+@media (forced-colors: active) {
+  /* ---------- foco: sempre o Highlight do sistema ---------- */
+  :focus-visible,
+  .botao[data-estado="foco"],
+  .caixa[data-estado="foco"],
+  .interruptor[data-estado="foco"],
+  .uso-opcao:has(input:focus-visible) {
+    outline-color: Highlight;
+  }
+
+  .campo-caixa:focus-within,
+  .busca-caixa:focus-within,
+  .captura-campo:focus-visible {
+    border-color: Highlight;
+    outline-color: Highlight;
+  }
+
+  /* ---------- selecionado, ativo, marcado: Highlight com HighlightText ---------- */
+  .navegacao-item[aria-current="page"],
+  .seletor-opcao[aria-checked="true"],
+  .dock-botao[data-ativo],
+  .dock-controle[aria-pressed="true"],
+  .uso-passo[data-estado="atual"] .uso-passo-marca,
+  .contagem,
+  .botao--primario:not(:disabled),
+  .botao-janela--fechar:hover {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .navegacao-item[aria-current="page"] .navegacao-atalho {
+    color: inherit;
+  }
+
+  /* O time aberto no painel: o grupo inteiro ganha contorno (as cabeças mantêm as cores). */
+  .dock-agentes[data-ativo] {
+    outline: var(--espessura-foco) solid Highlight;
+    outline-offset: var(--recuo-foco-interno);
+  }
+
+  .uso-opcao[data-marcada="true"] {
+    border-color: Highlight;
+    outline: var(--espessura-borda) solid Highlight;
+  }
+
+  /* ---------- controles desenhados com fundo ---------- */
+  .seletor {
+    border: var(--espessura-borda) solid CanvasText;
+  }
+
+  .botao,
+  .campo-atalho {
+    border-color: ButtonText;
+  }
+
+  .botao:disabled,
+  .seletor-opcao:disabled,
+  .campo-atalho:disabled {
+    color: GrayText;
+    border-color: GrayText;
+  }
+
+  .interruptor-pino {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+
+  .interruptor[aria-checked="true"] .interruptor-trilho {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+  }
+
+  .interruptor[aria-checked="true"] .interruptor-pino {
+    background: HighlightText;
+  }
+
+  .caixa[aria-checked="true"] .caixa-quadro {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .progresso {
+    border: var(--espessura-borda) solid CanvasText;
+  }
+
+  .progresso-barra {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+
+  /* ---------- traços que só existiam como fundo ---------- */
+  .dock-divisor,
+  .dock-estado-ponto {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+
+  .busca-atalho {
+    border: var(--espessura-borda) solid CanvasText;
+  }
+
+  /* ---------- desenhos: ficam com as próprias cores, como imagem ---------- */
+  .personagem,
+  .uso-previa,
+  .dock-capa-imagem {
+    forced-color-adjust: none;
+  }
+}

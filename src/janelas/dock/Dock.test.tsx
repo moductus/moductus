@@ -42,6 +42,7 @@ const { Dock, CONVITE_AGENTES } = await import("./Dock.tsx");
 const { Painel } = await import("../painel/Painel.tsx");
 const { formatarHora, ateProximoMinuto } = await import("./relogio.ts");
 const { proximoIndice } = await import("./navegacao.ts");
+const { auditar, marcos } = await import("../../teste/acessibilidade.ts");
 
 let raiz: Root | null = null;
 let recipiente: HTMLElement;
@@ -278,5 +279,52 @@ describe("Painel", () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
     expect(chamadas.map((c) => c.comando)).toContain("painel_fechar");
+  });
+});
+
+describe("acessibilidade do dock e do painel", () => {
+  it("dock: todo controle com nome, estados ARIA válidos e uma navegação com nome", async () => {
+    estado.midia = MIDIA;
+    const el = await montar(<Dock />);
+    expect(auditar(el)).toEqual([]);
+    expect(marcos(el)).toEqual(["navigation: Dock"]);
+    // Sem microfone, o Mic desativado continua com nome (o leitor de tela anuncia "indisponível").
+    estado.mic = null;
+    act(() => raiz?.unmount());
+    recipiente.remove();
+    expect(auditar(await montar(<Dock />))).toEqual([]);
+  });
+
+  it("dock: aria-expanded diz qual área está aberta no painel, também no time", async () => {
+    const el = await montar(<Dock />);
+    const expandidos = () =>
+      Array.from(el.querySelectorAll('[aria-expanded="true"]')).map((b) => b.getAttribute("aria-label"));
+    expect(expandidos()).toEqual([]);
+    await emitir("painel:area", "agentes");
+    expect(expandidos()).toEqual([
+      `Alba, dormindo. ${CONVITE_AGENTES}`,
+      `Tula, dormindo. ${CONVITE_AGENTES}`,
+      `Faina, dormindo. ${CONVITE_AGENTES}`,
+      `Nuno, dormindo. ${CONVITE_AGENTES}`,
+    ]);
+    await emitir("painel:area", "dev");
+    expect(expandidos()).toEqual(["Dev"]);
+    // Os interruptores do dock são botões de alternância: aria-pressed sempre presente.
+    for (const nome of ["Microfone mudo", "Manter acordado"]) {
+      expect(el.querySelector(`[aria-label="${nome}"]`)?.getAttribute("aria-pressed")).toMatch(
+        /^(true|false)$/,
+      );
+    }
+  });
+
+  it("painel: cada área tem main com nome, título e controles com nome", async () => {
+    const el = await montar(<Painel />);
+    for (const area of ["hoje", "tarefas", "foco", "financas", "dev", "notas", "arquivos", "agentes"]) {
+      await emitir("painel:area", area);
+      expect(auditar(el), area).toEqual([]);
+      const [main] = marcos(el);
+      expect(main, area).toMatch(/^main: Painel \S/);
+      expect(el.querySelector("h1")?.textContent, area).toBeTruthy();
+    }
   });
 });

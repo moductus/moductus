@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef } from "react";
+import "./Captura.css";
 
 /** Captura rápida, ainda vazia: transformar a frase em tarefa, gasto ou nota é da fase 3. */
 export function Captura() {
@@ -19,8 +20,13 @@ export function Captura() {
   }, []);
 
   return (
-    <main aria-label="Captura">
-      <input ref={campo} aria-label="Capturar" placeholder="Capture uma tarefa, gasto ou nota" />
+    <main className="captura" aria-label="Captura">
+      <input
+        ref={campo}
+        className="captura-campo"
+        aria-label="Capturar"
+        placeholder="Capture uma tarefa, gasto ou nota"
+      />
     </main>
   );
 }

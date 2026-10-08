@@ -143,6 +143,7 @@ export function Dock() {
             className="dock-agente"
             data-agente={agente}
             aria-label={`${DADOS_AGENTES[agente].nome}, dormindo. ${CONVITE_AGENTES}`}
+            aria-expanded={aberta === "agentes"}
             title={`${DADOS_AGENTES[agente].nome} está dormindo. ${CONVITE_AGENTES}`}
             onClick={() => void invoke("painel_abrir", { area: "agentes" })}
           >

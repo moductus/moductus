@@ -21,14 +21,20 @@
     servico    matar o serviço faz a casca subir outro, e o dock mostra o estado; sair encerra o serviço
     teclado    rótulos de todos os botões do dock (UI Automation); Ctrl+Alt+D cicla mostrar, focar
                e esconder; setas, Home, End e Esc dentro do dock
+    acessibilidade
+               as três superfícies pelo teclado e por UI Automation: dock e painel, Sistema (as 12
+               áreas, as 9 seções das Configurações e o primeiro uso, se o banco for novo) e
+               captura; todo controle com nome, o Tab dá a volta sem parar em nada sem nome, Esc
+               fecha o que abriu; "Efeitos de animação" do Windows desligado e religado chega à
+               casca e às janelas (o valor original volta no fim, mesmo com falha)
 
 .EXAMPLE
   pnpm tauri build --debug --no-bundle
   pwsh -File scripts\verificar.ps1 -Roteiro appbar
 #>
 param(
-  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia', 'controles', 'servico', 'teclado')]
-  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia', 'controles', 'servico', 'teclado'),
+  [ValidateSet('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia', 'controles', 'servico', 'teclado', 'acessibilidade')]
+  [string[]]$Roteiro = @('appbar', 'modos', 'telacheia', 'janelas', 'atalhos', 'inicio', 'midia', 'controles', 'servico', 'teclado', 'acessibilidade'),
   [string]$Exe = (Join-Path $PSScriptRoot '..\src-tauri\target\debug\moductus.exe')
 )
 
@@ -510,6 +516,216 @@ function Roteiro-Teclado {
   Conferir 'com o foco, Ctrl+Alt+D esconde e devolve a faixa' (-not [W]::IsWindowVisible($d.Hwnd) -and (Texto $a) -eq (Texto $antes)) "dock visível: $([W]::IsWindowVisible($d.Hwnd)), área $(Texto $a)"
   [W]::Teclar(0x44); Bombear 1
   Conferir 'escondido, Ctrl+Alt+D mostra sem tirar o foco' ([W]::IsWindowVisible($d.Hwnd) -and [W]::GetForegroundWindow() -ne $d.Hwnd) "primeiro plano: '$([W]::Titulo([W]::GetForegroundWindow()))'"
+  Fechar-Dock $d
+  $janela.Close()
+}
+
+function Carregar-Acessibilidade {
+  Carregar-Controles
+  if ('Spi' -as [type]) { return }
+  Add-Type @"
+using System; using System.Runtime.InteropServices;
+public static class Spi {
+  [DllImport("user32.dll")] static extern bool SystemParametersInfo(int a, int b, ref int v, int c);
+  [DllImport("user32.dll")] static extern bool SystemParametersInfo(int a, int b, IntPtr v, int c);
+  // SPI_GETCLIENTAREAANIMATION / SPI_SETCLIENTAREAANIMATION ("Efeitos de animação"); 3 grava e avisa todo mundo.
+  public static bool Animacoes() { int v = 1; SystemParametersInfo(0x1042, 0, ref v, 0); return v != 0; }
+  public static void DefinirAnimacoes(bool ligadas) { SystemParametersInfo(0x1043, 0, new IntPtr(ligadas ? 1 : 0), 3); }
+}
+"@
+}
+
+# O que o leitor de tela anuncia como controle: botão (inclui switch e toggle), campo, rádio, caixa, link.
+$script:TiposControle = @('Button', 'Edit', 'RadioButton', 'CheckBox', 'Hyperlink', 'ComboBox')
+
+function Condicao-Nome([string]$nome) {
+  [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::NameProperty, $nome)
+}
+
+function Controles($raiz) {
+  $tipos = [Windows.Automation.Condition[]]@($script:TiposControle | ForEach-Object {
+      [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::ControlTypeProperty, [Windows.Automation.ControlType]::$_)
+    })
+  $ou = [Windows.Automation.OrCondition]::new($tipos)
+  # O WebView2 só monta a árvore depois da primeira consulta: tenta por até 5 s.
+  for ($t = 0; $t -lt 10; $t++) {
+    $achados = @($raiz.FindAll([Windows.Automation.TreeScope]::Descendants, $ou))
+    if ($achados.Count) { return $achados }
+    Start-Sleep -Milliseconds 500
+  }
+  @()
+}
+
+function Raiz-Janela([IntPtr]$h) { [Windows.Automation.AutomationElement]::FromHandle($h) }
+
+function Sem-Nome($controles) {
+  @($controles | Where-Object { -not "$($_.Current.Name)".Trim() } | ForEach-Object {
+      "$($_.Current.ControlType.ProgrammaticName -replace '^ControlType\.', '') sem nome"
+    })
+}
+
+function Achar([IntPtr]$h, [string]$nome, $dentro = $null) {
+  $raiz = if ($dentro) { $dentro } else { Raiz-Janela $h }
+  for ($i = 0; $i -lt 20; $i++) {
+    $e = $raiz.FindFirst([Windows.Automation.TreeScope]::Descendants, (Condicao-Nome $nome))
+    if ($e) { return $e }
+    Start-Sleep -Milliseconds 250
+  }
+}
+
+# Tab N vezes e anota cada parada (nome e tipo de controle de UI Automation).
+function Percorrer-Tab([int]$vezes) {
+  $paradas = @()
+  for ($i = 0; $i -lt $vezes; $i++) {
+    Tecla 0x09; Bombear 0.25
+    $f = $null
+    try { $f = [Windows.Automation.AutomationElement]::FocusedElement } catch { }
+    if ($f) {
+      $paradas += [pscustomobject]@{
+        Nome = "$($f.Current.Name)".Trim()
+        Tipo = $f.Current.ControlType.ProgrammaticName -replace '^ControlType\.', ''
+      }
+    }
+  }
+  $paradas
+}
+function Paradas-Sem-Nome($paradas) { @($paradas | Where-Object { -not $_.Nome -and $script:TiposControle -contains $_.Tipo }) }
+function Texto-Paradas($paradas) {
+  ($paradas | ForEach-Object { if ($_.Nome) { $_.Nome } else { "[$($_.Tipo) sem nome]" } }) -join ', '
+}
+
+function Clicar-Titulo([IntPtr]$h) {
+  $r = Retangulo $h
+  [W]::SetCursorPos([int](($r.L + $r.R) / 2), $r.T + 12) | Out-Null
+  [W]::mouse_event(2, 0, 0, 0, 0); [W]::mouse_event(4, 0, 0, 0, 0)
+}
+
+function Roteiro-Acessibilidade {
+  Write-Host "`n== acessibilidade =="
+  Carregar-Acessibilidade
+  Get-Process moductus -ErrorAction SilentlyContinue | Stop-Process -Force
+  Start-Sleep 1
+  $log = Join-Path $env:APPDATA 'Moductus\moductus.log'
+  $janela = Nova-Janela
+  $d = Iniciar-Dock
+  Start-Sleep 1
+  $hPainel = [W]::FindWindow([NullString]::Value, 'Moductus painel')
+  $hSis = [W]::FindWindow([NullString]::Value, 'Moductus')
+  $hCap = [W]::FindWindow([NullString]::Value, 'Moductus captura')
+
+  # ---------- dock ----------
+  $doDock = Controles (Raiz-Janela $d.Hwnd)
+  $semNome = Sem-Nome $doDock
+  Conferir 'dock: todo controle tem nome' ($doDock.Count -ge 13 -and $semNome.Count -eq 0) "$($doDock.Count) controles; sem nome: $($semNome -join ', ')"
+  $ativos = @($doDock | Where-Object { $_.Current.IsEnabled -and $_.Current.ControlType -eq [Windows.Automation.ControlType]::Button })
+  Clicar-Em $janela.Handle; Bombear 0.5
+  [W]::Teclar(0x44); Bombear 1
+  $paradas = Percorrer-Tab $ativos.Count
+  Conferir 'dock: o Tab passa por todos e volta à primeira área' ($paradas.Count -eq $ativos.Count -and $paradas[-1].Nome -eq 'Hoje' -and (Paradas-Sem-Nome $paradas).Count -eq 0) (Texto-Paradas $paradas)
+
+  # Enter na área abre o painel; o painel tem nome em tudo; Esc devolve o foco; o X fecha.
+  Tecla 0x0D; Bombear 1
+  Conferir 'dock: Enter na área abre o painel' ([W]::IsWindowVisible($hPainel)) "painel visível: $([W]::IsWindowVisible($hPainel))"
+  $doPainel = Controles (Raiz-Janela $hPainel)
+  $semNome = Sem-Nome $doPainel
+  $titulo = Achar $hPainel 'Hoje'
+  Conferir 'painel: título e controles com nome' ($titulo -and $doPainel.Count -ge 1 -and $semNome.Count -eq 0) "$(($doPainel | ForEach-Object { $_.Current.Name }) -join ', '); sem nome: $($semNome -join ', ')"
+  Tecla 0x1B; Bombear 1
+  Conferir 'dock: Esc devolve o foco à janela anterior' ([W]::GetForegroundWindow() -eq $janela.Handle) "primeiro plano: '$([W]::Titulo([W]::GetForegroundWindow()))'"
+  $fechar = Achar $hPainel 'Fechar painel'
+  if ($fechar) { Acionar $fechar; Bombear 1 }
+  Conferir 'painel: "Fechar painel" fecha' ($fechar -and -not [W]::IsWindowVisible($hPainel)) "painel visível: $([W]::IsWindowVisible($hPainel))"
+
+  # ---------- Sistema ----------
+  [W]::Teclar(0x4E); Bombear 1.5
+  if ([W]::GetForegroundWindow() -ne $hSis) { Clicar-Titulo $hSis; Bombear 0.5 }
+  $raizSis = Raiz-Janela $hSis
+  $configurando = $raizSis.FindFirst([Windows.Automation.TreeScope]::Descendants, (Condicao-Nome 'Configuração inicial'))
+  if ($configurando) {
+    Write-Host '        banco novo: o Sistema abriu no primeiro uso'
+    $passos = @('Começar', 'Continuar', 'Depois', 'Continuar')
+    $falhas = @()
+    foreach ($seguir in $passos + @($null)) {
+      $falhas += Sem-Nome (Controles $raizSis)
+      if ($seguir) { $b = Achar $hSis $seguir; if ($b) { Acionar $b; Bombear 0.8 } }
+    }
+    Conferir 'primeiro uso: os cinco passos com nome em tudo' ($falhas.Count -eq 0) "sem nome: $($falhas -join ', ')"
+    # Passo novo põe o foco no título, dentro da configuração: o Esc chega a ela e volta um passo.
+    Conferir 'primeiro uso: o passo novo leva o foco ao título' ((Nome-Focado) -eq 'O que cada agente pode alcançar') "focado: '$(Nome-Focado)'"
+    Tecla 0x1B; Bombear 0.8
+    Conferir 'primeiro uso: Esc volta um passo' ((Nome-Focado) -eq 'Alba, Tula, Faina e Nuno') "focado: '$(Nome-Focado)'"
+    $paradas = Percorrer-Tab 20
+    Conferir 'primeiro uso: o Tab não para em nada sem nome' ((Paradas-Sem-Nome $paradas).Count -eq 0) (Texto-Paradas $paradas)
+    Write-Host '        (o roteiro não conclui o primeiro uso: o banco continua novo)'
+  } else {
+    $areas = @('Início', 'Agentes', 'Sessões de IA', 'Tarefas', 'Foco', 'Finanças', 'Dev', 'Notas', 'Arquivos', 'Memória', 'Ferramentas', 'Configurações')
+    $nav = Achar $hSis 'Áreas'
+    $falhas = @()
+    foreach ($area in $areas) {
+      $b = Achar $hSis $area $nav
+      if (-not $b) { $falhas += "$area não achada"; continue }
+      Acionar $b; Bombear 0.6
+      $falhas += @(Sem-Nome (Controles $raizSis) | ForEach-Object { "${area}: $_" })
+    }
+    Conferir 'Sistema: as 12 áreas com nome em todo controle' ($falhas.Count -eq 0) "falhas: $($falhas -join ', ')"
+    $secoes = @('Geral', 'Tema e dock', 'Notificações', 'Modelos', 'Agentes', 'Conexões', 'Atalhos', 'Privacidade', 'Levar para outro PC')
+    $navSecoes = Achar $hSis 'Seções'
+    $falhas = @()
+    foreach ($secao in $secoes) {
+      $b = if ($navSecoes) { Achar $hSis $secao $navSecoes }
+      if (-not $b) { $falhas += "$secao não achada"; continue }
+      Acionar $b; Bombear 0.6
+      $falhas += @(Sem-Nome (Controles $raizSis) | ForEach-Object { "${secao}: $_" })
+    }
+    Conferir 'Configurações: as 9 seções com nome em todo controle' ($falhas.Count -eq 0) "falhas: $($falhas -join ', ')"
+    $paradas = Percorrer-Tab 40
+    $nomes = @($paradas | ForEach-Object Nome)
+    $esperados = @('Minimizar', 'Fechar', 'Buscar', 'Levar para outro PC')
+    $faltam = @($esperados | Where-Object { $nomes -notcontains $_ })
+    Conferir 'Sistema: o Tab passa por barra, busca, área e seção, sem nada sem nome' ($faltam.Count -eq 0 -and (Paradas-Sem-Nome $paradas).Count -eq 0) "faltam: $($faltam -join ', '); paradas: $(Texto-Paradas $paradas)"
+    # Ctrl+K foca a busca; Esc sai dela.
+    [W]::keybd_event(0x11, 0, 0, [IntPtr]::Zero); Tecla 0x4B; [W]::keybd_event(0x11, 0, 2, [IntPtr]::Zero); Bombear 0.5
+    $naBusca = (Nome-Focado) -eq 'Buscar'
+    Tecla 0x1B; Bombear 0.5
+    Conferir 'Sistema: Ctrl+K vai à busca e Esc sai dela' ($naBusca -and (Nome-Focado) -ne 'Buscar') "na busca: $naBusca; depois: '$(Nome-Focado)'"
+    # Volta ao Início para não deixar o Sistema lembrando as Configurações.
+    $inicio = Achar $hSis 'Início' $nav
+    if ($inicio) { Acionar $inicio; Bombear 0.3 }
+  }
+  [W]::Teclar(0x4E); Bombear 1
+
+  # ---------- captura ----------
+  $ocupado = @(Get-Content $log | Where-Object { $_ -match 'Ctrl\+Alt\+Space .* não registrado' }).Count -gt 0
+  if ($ocupado) {
+    # O atalho é de outro programa nesta máquina: mostra a janela como a casca mostraria.
+    [W]::ShowWindow($hCap, 5) | Out-Null; Bombear 0.5; Clicar-Em $hCap; Bombear 0.8
+  } else {
+    [W]::Teclar(0x20); Bombear 1
+  }
+  $focado = $null
+  try { $focado = [Windows.Automation.AutomationElement]::FocusedElement } catch { }
+  $nomeCampo = if ($focado) { $focado.Current.Name } else { '' }
+  $tipoCampo = if ($focado) { $focado.Current.ControlType.ProgrammaticName } else { '' }
+  Conferir 'captura: o foco cai no campo, com nome' ($nomeCampo -eq 'Capturar' -and $tipoCampo -eq 'ControlType.Edit') "focado: '$nomeCampo' ($tipoCampo)"
+  Tecla 0x1B; Bombear 1
+  Conferir 'captura: Esc fecha' (-not [W]::IsWindowVisible($hCap)) "captura visível: $([W]::IsWindowVisible($hCap))"
+
+  # ---------- Efeitos de animação do Windows ----------
+  $original = [Spi]::Animacoes()
+  try {
+    foreach ($ligadas in @((-not $original), $original)) {
+      $marca = (Get-Content $log).Count
+      [Spi]::DefinirAnimacoes($ligadas); Bombear 1.5
+      $palavra = if ($ligadas) { 'ligadas' } else { 'desligadas' }
+      $movimento = if ($ligadas) { 'normal' } else { 'reduzido' }
+      $casca = Linhas-Novas $log $marca "acessibilidade: animações $palavra"
+      $janelas = Linhas-Novas $log $marca "interface: movimento $movimento"
+      Conferir "Efeitos de animação $palavra chega à casca e às janelas" ($casca.Count -ge 1 -and $janelas.Count -ge 1) "casca: $($casca.Count) aviso(s); janelas que aplicaram '$movimento': $($janelas.Count)"
+    }
+  } finally {
+    if ([Spi]::Animacoes() -ne $original) { [Spi]::DefinirAnimacoes($original) }
+  }
+
   Fechar-Dock $d
   $janela.Close()
 }

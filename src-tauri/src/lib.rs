@@ -1,3 +1,4 @@
+mod acessibilidade;
 mod appbar;
 mod atalhos;
 mod config_nativa;
@@ -59,6 +60,7 @@ pub fn run() {
             controles::awake_definir,
             servico::servico_estado,
             material::tema_material,
+            acessibilidade::acessibilidade_estado,
         ])
         .setup(move |app| {
             for rotulo in JANELAS {
@@ -68,6 +70,7 @@ pub fn run() {
             }
             let janela_dock = app.get_webview_window("dock").expect("janela dock");
             dock::iniciar(&janela_dock, dock::Configuracao::default());
+            acessibilidade::iniciar(app.handle().clone(), dock::hwnd_de(&janela_dock));
             janelas::iniciar(app.handle(), pasta.clone());
             tela_cheia::vigiar(app.handle().clone());
             atalhos::iniciar(app.handle(), atalhos::padrao());

@@ -108,8 +108,10 @@
   transition: border-color var(--dur-entrada) ease-out;
 }
 
+/* O foco do campo aparece na caixa inteira, como no Campo: borda e contorno no anel do tema. */
 .busca-caixa:focus-within {
-  border-color: var(--destaque);
+  border-color: var(--cor-foco);
+  outline: var(--espessura-borda) solid var(--cor-foco);
 }
 
 .busca-entrada {

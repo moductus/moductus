@@ -1,5 +1,5 @@
 import type { ModoImportar, PreviaImportar, ResultadoExportar } from "@moductus/contrato";
-import { useState } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import { textoDoAtalho } from "../../componentes/CampoAtalho.tsx";
 import { Botao } from "../../componentes/Botao.tsx";
 import { Cartao } from "../../componentes/Cartao.tsx";
@@ -190,16 +190,34 @@ function Importar({ conectado }: { conectado: boolean }) {
     }
   };
 
+  // Fechar a prévia (Cancelar ou Esc) devolve o foco a quem a abriu.
+  const rodape = useRef<HTMLDivElement>(null);
+  const cancelar = () => {
+    setCaminho(null);
+    setPrevia(null);
+    rodape.current?.querySelector("button")?.focus();
+  };
+  const aoTeclar = (e: KeyboardEvent) => {
+    if (e.key !== "Escape" || ocupado) return;
+    e.preventDefault();
+    cancelar();
+  };
+
   const escolhido = MODOS.find((m) => m.valor === modo)!;
   return (
     <Grupo titulo="Importar">
-      <div className="config-rodape">
+      <div ref={rodape} className="config-rodape">
         <Botao disabled={!conectado || ocupado} onClick={() => void escolher()}>
           {caminho ? "Escolher outro arquivo" : "Escolher arquivo"}
         </Botao>
       </div>
       {caminho && (
-        <Cartao variante="elevado" className="config-cartao" aria-label="Arquivo escolhido">
+        <Cartao
+          variante="elevado"
+          className="config-cartao"
+          aria-label="Arquivo escolhido"
+          onKeyDown={aoTeclar}
+        >
           <span className="config-opcao-titulo">{nomeDoArquivo(caminho)}</span>
           {previa && (
             <span className="config-opcao-descricao">
@@ -226,14 +244,7 @@ function Importar({ conectado }: { conectado: boolean }) {
                   ))}
                 </ul>
                 <div className="config-rodape">
-                  <Botao
-                    variante="fantasma"
-                    disabled={ocupado}
-                    onClick={() => {
-                      setCaminho(null);
-                      setPrevia(null);
-                    }}
-                  >
+                  <Botao variante="fantasma" disabled={ocupado} aria-keyshortcuts="Escape" onClick={cancelar}>
                     Cancelar
                   </Botao>
                   <Botao variante="primario" disabled={ocupado} onClick={() => void confirmar()}>

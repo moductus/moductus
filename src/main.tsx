@@ -3,9 +3,12 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Aplicacao } from "./janelas/Aplicacao.tsx";
 import { janelaDoRotulo, type Janela } from "./janelas/rotas.ts";
+import { useAcessibilidade } from "./nativo/acessibilidade.ts";
 import "./tokens/fontes.css";
 import "./tokens/temas.css";
 import "./tokens/base.css";
+// Por último: no alto contraste do Windows, as regras dele ganham das de cada componente.
+import "./tokens/alto-contraste.css";
 import { aplicarTema, useTema } from "./tokens/tema.ts";
 
 // Antes do primeiro quadro: a janela já nasce com o tema do Windows, sem piscar.
@@ -13,9 +16,13 @@ aplicarTema("automatico");
 const raiz = createRoot(document.getElementById("raiz")!);
 const parametros = new URLSearchParams(window.location.search);
 
-/** Toda janela segue o tema da configuração; os componentes só leem os tokens. */
+/**
+ * Toda janela segue o tema da configuração e a animação do Windows; os componentes só leem
+ * os tokens.
+ */
 function ComTema({ janela }: { janela: Janela }) {
   useTema();
+  useAcessibilidade();
   return <Aplicacao janela={janela} />;
 }
 

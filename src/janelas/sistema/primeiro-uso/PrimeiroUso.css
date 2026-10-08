@@ -187,7 +187,7 @@
 }
 
 .uso-opcao:has(input:focus-visible) {
-  outline: var(--espessura-foco) solid var(--destaque);
+  outline: var(--espessura-foco) solid var(--cor-foco);
   outline-offset: var(--recuo-foco);
 }
 

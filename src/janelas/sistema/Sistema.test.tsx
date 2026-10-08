@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AREAS, areaDoAtalho, IDS_AREAS, lerDestino } from "../../areas/areas.ts";
 import { SECOES } from "../../areas/configuracoes/secoes.ts";
+import { auditar, marcos, nomeAcessivel, ordemDoTab } from "../../teste/acessibilidade.ts";
 import { CHAVE_DESTINO, EVENTO_IR, Sistema } from "./Sistema.tsx";
 
 // A casca não existe no teste: eventos guardados para disparar à mão, janela e comandos falsos.
@@ -239,5 +240,58 @@ describe("Sistema", () => {
     expect(janela.minimize).toHaveBeenCalledOnce();
     expect(janela.toggleMaximize).toHaveBeenCalledOnce();
     expect(janela.close).toHaveBeenCalledOnce();
+  });
+});
+
+describe("acessibilidade do Sistema", () => {
+  it("marcos: barra de título, navegação das áreas e um main", async () => {
+    await montar();
+    expect(marcos(recipiente)).toEqual(["banner", "navigation: Áreas", "main"]);
+    act(() => itemArea("configuracoes").click());
+    expect(marcos(recipiente)).toEqual(["banner", "navigation: Áreas", "main", "navigation: Seções"]);
+  });
+
+  it("as 12 áreas e as 9 seções das Configurações passam na checagem", async () => {
+    await montar();
+    for (const area of AREAS) {
+      act(() => itemArea(area.id).click());
+      expect(auditar(recipiente), area.id).toEqual([]);
+      expect(todos("main h1"), area.id).toHaveLength(1);
+    }
+    for (const secao of SECOES) {
+      act(() => por(`nav[aria-label="Seções"] [data-id="${secao.id}"]`).click());
+      expect(auditar(recipiente), secao.id).toEqual([]);
+    }
+  });
+
+  it("o Tab segue a tela: janela, busca, a área atual (uma só parada), depois o conteúdo", async () => {
+    await montar();
+    await act(async () => itemArea("configuracoes").click());
+    // Sem serviço, o tema da lateral fica desativado e sai do Tab; a seção atual vem em seguida.
+    const paradas = ordemDoTab(recipiente).map(nomeAcessivel);
+    expect(paradas.slice(0, 6)).toEqual([
+      "Minimizar",
+      "Maximizar",
+      "Fechar",
+      "Buscar",
+      "Configurações",
+      "Geral",
+    ]);
+    // Nas duas listas de navegação, só o item atual é parada do Tab; as setas andam no resto.
+    for (const nav of ["Áreas", "Seções"]) {
+      expect(todos(`nav[aria-label="${nav}"] .navegacao-item`).filter((b) => b.tabIndex === 0)).toHaveLength(
+        1,
+      );
+    }
+  });
+
+  it("Esc na busca devolve o campo e esconde o aviso", async () => {
+    await montar();
+    const busca = por<HTMLInputElement>('input[type="search"]');
+    teclar({ ctrlKey: true, code: "KeyK", key: "k" });
+    expect(document.activeElement).toBe(busca);
+    teclar({ key: "Escape" }, busca);
+    expect(document.activeElement).not.toBe(busca);
+    expect(document.getElementById(busca.getAttribute("aria-describedby")!)!.hidden).toBe(true);
   });
 });

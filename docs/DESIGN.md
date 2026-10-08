@@ -25,7 +25,9 @@ Regras que valem para os três:
 - Elevação por borda de 1 px + uma sombra suave. Nunca sombras empilhadas.
 - Animação: entrada até 140 ms, saída até 90 ms, nada acima de 200 ms; duração zero quando o Windows pede menos animação.
 - Ícones de traço único, 1,6 px, no mesmo conjunto.
-- Texto com contraste mínimo de 4,5:1; status nunca só por cor (sempre acompanhado de texto ou forma).
+- Texto com contraste mínimo de 4,5:1; status nunca só por cor (sempre acompanhado de texto ou forma). No Papel, `texto.3` e `aviso` ficaram um tom abaixo do canvas (`#6B6A64` e `#B5761A`) para passar sobre `fundo.ativo` e como texto de selo; `src/tokens/acessibilidade.test.ts` mede todos os pares.
+- Foco do teclado: anel de 2 px no token `--cor-foco` (o destaque do tema, 3:1 ou mais sobre todo fundo) em todo elemento interativo; no dock o anel fica por dentro do botão.
+- Alto contraste do Windows (`forced-colors`): cores do sistema; item atual, opção marcada e foco em `Highlight` (`src/tokens/alto-contraste.css`). Personagens e prévias de tema mantêm as próprias cores, como imagem.
 
 ---
 
@@ -65,12 +67,12 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 | `borda.forte` | Botão secundário, foco | `rgba(255,255,255,0.14)` | `rgba(20,20,19,0.16)` | `rgba(255,255,255,0.18)` |
 | `texto` | Texto principal | `#E8E9EB` | `#1A1A18` | `#EEF0F6` |
 | `texto.2` | Texto de apoio | `#B5B8BD` | `#3E3D39` | `#C4C9D4` |
-| `texto.3` | Rótulos e metadados | `#8C9097` | `#6B6A64` | `#9AA1B1` |
+| `texto.3` | Rótulos e metadados | `#8C9097` | `#686761` | `#9AA1B1` |
 | `texto.apagado` | Concluído, desativado | `#6F737A` | `#8A8983` | `#7C8394` |
 | `destaque` | Ação primária, progresso, marca | `#E8E9EB` | `#1A1A18` | `#A3B5FF` |
 | `sobre.destaque` | Texto sobre o destaque | `#0D0E10` | `#FBFAF8` | `#10131C` |
 | `sucesso` | Trabalhando, dentro do orçamento | `#7FB89E` | `#2F7A52` | `#7CCBA2` |
-| `aviso` | Esperando você, perto do limite | `#E3B262` | `#B5761A` | `#E8B86A` |
+| `aviso` | Esperando você, perto do limite | `#E3B262` | `#96600F` | `#E8B86A` |
 | `perigo` | Erro, estourou | `#E5787A` | `#B4443C` | `#F08A8A` |
 
 ### Forma

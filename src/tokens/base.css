@@ -42,13 +42,35 @@ samp {
   font-family: var(--fonte-mono);
 }
 
+/* Todo elemento interativo mostra o foco do teclado com o mesmo anel (token do tema). */
 :focus-visible {
-  outline: var(--espessura-foco) solid var(--destaque);
+  outline: var(--espessura-foco) solid var(--cor-foco);
   outline-offset: var(--recuo-foco);
 }
 
 :focus:not(:focus-visible) {
   outline: none;
+}
+
+/* Windows pedindo menos animação: zero, não só mais curto. As durações já vão a zero nos
+   tokens; isto cobre o que roda por keyframes (respirar e piscar) e qualquer transição que
+   escape do token. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+:root[data-movimento="reduzido"] *,
+:root[data-movimento="reduzido"] *::before,
+:root[data-movimento="reduzido"] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
 }
 
 /* Some da tela e fica para o leitor de tela. */

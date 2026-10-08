@@ -45,6 +45,11 @@
   cursor: pointer;
 }
 
+/* Botões colados uns nos outros (o time) e a borda da janela cortariam o anel de fora. */
+.dock button:focus-visible {
+  outline-offset: var(--recuo-foco-interno);
+}
+
 .dock button:disabled {
   cursor: default;
   opacity: var(--opacidade-desativado);

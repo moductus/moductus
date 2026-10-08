@@ -172,7 +172,8 @@ export function PrimeiroUso({ aoConcluir }: PropsPrimeiroUso) {
         </p>
       </aside>
 
-      <section className="uso-conteudo" aria-labelledby={idTitulo} data-passo={passo}>
+      {/* O conteúdo principal da janela enquanto configura: o leitor de tela pula direto para cá. */}
+      <main className="uso-conteudo" aria-labelledby={idTitulo} data-passo={passo}>
         <div className="uso-corpo">
           {passo === "boas-vindas" && <BoasVindas {...cabecalho} origem={origem} aoMudar={setOrigem} />}
           {passo === "tema-dock" && <TemaDock {...cabecalho} config={config} definir={definir} />}
@@ -202,7 +203,7 @@ export function PrimeiroUso({ aoConcluir }: PropsPrimeiroUso) {
             {rotuloAvancar}
           </Botao>
         </footer>
-      </section>
+      </main>
     </div>
   );
 }
