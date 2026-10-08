@@ -1,0 +1,82 @@
+/*
+ * Painel lateral (Main.dc.html, "Painel Hoje"): cartão afastado do dock, com o fundo, a borda,
+ * o raio e a sombra do tema. A janela em volta é transparente.
+ */
+.painel {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  padding: var(--margem-painel) 0;
+}
+
+.painel[data-lado="esquerda"] {
+  padding-left: var(--margem-painel);
+}
+
+.painel[data-lado="direita"] {
+  padding-right: var(--margem-painel);
+}
+
+.painel-cartao {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-18);
+  min-width: 0;
+  padding: var(--esp-18);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-painel);
+  background: var(--fundo-janela);
+  box-shadow: var(--sombra-painel);
+  backdrop-filter: var(--desfoque);
+}
+
+.painel-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  color: var(--texto-3);
+}
+
+.painel-titulo {
+  flex: 1;
+  margin: 0;
+  color: var(--texto);
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+}
+
+/* ---------- estado vazio ---------- */
+.painel-vazio {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-8);
+  padding: var(--esp-14);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-elevado);
+}
+
+.painel-vazio-icone {
+  display: flex;
+  color: var(--texto-3);
+}
+
+.painel-time {
+  display: flex;
+  gap: var(--esp-6);
+  margin-bottom: var(--esp-4);
+}
+
+.painel-vazio-titulo {
+  margin: 0;
+  color: var(--texto);
+  font-size: var(--tipo-13);
+  font-weight: var(--peso-forte);
+}
+
+.painel-vazio-texto {
+  margin: 0 0 var(--esp-4);
+  color: var(--texto-2);
+}

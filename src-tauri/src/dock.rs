@@ -10,7 +10,7 @@
 
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicIsize, Ordering},
         Mutex,
     },
     thread,
@@ -22,7 +22,8 @@ use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use windows::Win32::{
     Foundation::{HWND, POINT, RECT},
     UI::WindowsAndMessaging::{
-        GetCursorPos, GetWindowLongPtrW, IsWindowVisible, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_NOTOPMOST,
+        GetCursorPos, GetForegroundWindow, GetWindowLongPtrW, IsWindow, IsWindowVisible, SetForegroundWindow, SetWindowLongPtrW,
+        SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_NOTOPMOST,
         HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE, WS_EX_NOACTIVATE,
         WS_EX_TOOLWINDOW,
     },
@@ -76,6 +77,10 @@ struct Estado {
 
 static ESTADO: Mutex<Option<Estado>> = Mutex::new(None);
 static VIGIA_BORDA: AtomicBool = AtomicBool::new(false);
+/// Modo teclado: o dock está ativável e com o foco, dado pelo Ctrl+Alt+D.
+static TECLADO: AtomicBool = AtomicBool::new(false);
+/// Janela que tinha o foco antes do modo teclado; o Esc devolve o foco a ela.
+static ANTERIOR: AtomicIsize = AtomicIsize::new(0);
 
 pub fn hwnd_de(janela: &WebviewWindow) -> isize {
     janela.hwnd().map(|h| h.0 as isize).unwrap_or_default()
@@ -206,6 +211,10 @@ fn vigiar_borda() {
     thread::spawn(|| {
         while VIGIA_BORDA.load(Ordering::SeqCst) {
             thread::sleep(Duration::from_millis(50));
+            // No modo teclado o dock fica aberto onde quer que o mouse esteja.
+            if TECLADO.load(Ordering::SeqCst) {
+                continue;
+            }
             let (Some((_, faixa)), Some((_, aberto))) = (geometria(false), geometria(true)) else { continue };
             let mut cursor = POINT::default();
             if unsafe { GetCursorPos(&mut cursor) }.is_err() || cursor.y < aberto.top || cursor.y >= aberto.bottom {
@@ -253,27 +262,114 @@ pub fn tela_cheia(cheia: bool) {
     }
 }
 
-/// Ctrl+Alt+D: esconde o dock e devolve a faixa, ou mostra e reserva de novo.
+/// Onde o dock está no ciclo do Ctrl+Alt+D.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Presenca {
+    Escondido,
+    /// Na tela, sem ativar: clicar nele não tira o foco de ninguém.
+    Visivel,
+    /// Modo teclado: ativável e com o foco, as setas andam pelos botões.
+    Focado,
+}
+
+pub fn presenca(visivel: bool, focado: bool) -> Presenca {
+    match (visivel, focado) {
+        (false, _) => Presenca::Escondido,
+        (true, false) => Presenca::Visivel,
+        (true, true) => Presenca::Focado,
+    }
+}
+
+/// Ctrl+Alt+D cicla: escondido → visível → com foco → escondido. Assim o dock, que nunca
+/// ativa com o mouse, é alcançável só pelo teclado.
+pub fn proxima_presenca(atual: Presenca) -> Presenca {
+    match atual {
+        Presenca::Escondido => Presenca::Visivel,
+        Presenca::Visivel => Presenca::Focado,
+        Presenca::Focado => Presenca::Escondido,
+    }
+}
+
+fn hwnd_e_app() -> Option<(isize, AppHandle)> {
+    ESTADO.lock().unwrap().as_ref().map(|e| (e.hwnd, e.app.clone()))
+}
+
+/// Entra no modo teclado: guarda quem tinha o foco, tira o "sem ativar" (como o painel_foco
+/// faz no painel) e pede à interface o foco na primeira área.
+fn focar(hwnd: isize, app: &AppHandle) {
+    ANTERIOR.store(unsafe { GetForegroundWindow() }.0 as isize, Ordering::SeqCst);
+    TECLADO.store(true, Ordering::SeqCst);
+    com_ativar(hwnd);
+    if configuracao().modo == Modo::Esconder {
+        if let Some(e) = ESTADO.lock().unwrap().as_mut() {
+            e.revelado = true;
+        }
+        revelar();
+    }
+    match app.get_webview_window("dock") {
+        Some(janela) => {
+            let _ = janela.set_focus();
+        }
+        None => unsafe {
+            let _ = SetForegroundWindow(HWND(hwnd as _));
+        },
+    }
+    let _ = app.emit_to("dock", "dock:teclado", true);
+    crate::registro::info("dock: modo teclado");
+}
+
+/// Sai do modo teclado: o dock volta a não ativar e, se pedido, o foco volta à janela de antes.
+pub fn soltar_teclado(devolver: bool) {
+    if !TECLADO.swap(false, Ordering::SeqCst) {
+        return;
+    }
+    let Some((hwnd, app)) = hwnd_e_app() else { return };
+    sem_ativar(hwnd);
+    let anterior = HWND(ANTERIOR.swap(0, Ordering::SeqCst) as _);
+    if devolver && !anterior.is_invalid() && unsafe { IsWindow(Some(anterior)) }.as_bool() {
+        unsafe {
+            let _ = SetForegroundWindow(anterior);
+        }
+    }
+    let _ = app.emit_to("dock", "dock:teclado", false);
+    crate::registro::info(&format!("dock: teclado solto (devolveu o foco: {devolver})"));
+}
+
+/// Ctrl+Alt+D: mostra e reserva a faixa; com o dock na tela, dá o foco a ele; com o foco,
+/// esconde e devolve a faixa.
 pub fn alternar_visivel() {
-    let Some(hwnd) = ESTADO.lock().unwrap().as_ref().map(|e| e.hwnd) else { return };
+    let Some((hwnd, app)) = hwnd_e_app() else { return };
     let h = HWND(hwnd as _);
-    if unsafe { IsWindowVisible(h) }.as_bool() {
-        VIGIA_BORDA.store(false, Ordering::SeqCst);
-        appbar::soltar();
-        unsafe {
-            let _ = ShowWindow(h, SW_HIDE);
+    let visivel = unsafe { IsWindowVisible(h) }.as_bool();
+    let focado = TECLADO.load(Ordering::SeqCst) && unsafe { GetForegroundWindow() } == h;
+    match proxima_presenca(presenca(visivel, focado)) {
+        Presenca::Visivel => {
+            unsafe {
+                let _ = ShowWindow(h, SW_SHOWNOACTIVATE);
+            }
+            aplicar(configuracao());
         }
-    } else {
-        unsafe {
-            let _ = ShowWindow(h, SW_SHOWNOACTIVATE);
+        Presenca::Focado => focar(hwnd, &app),
+        Presenca::Escondido => {
+            soltar_teclado(true);
+            VIGIA_BORDA.store(false, Ordering::SeqCst);
+            appbar::soltar();
+            unsafe {
+                let _ = ShowWindow(h, SW_HIDE);
+            }
         }
-        aplicar(configuracao());
     }
 }
 
 #[tauri::command]
 pub fn dock_configuracao() -> Configuracao {
     configuracao()
+}
+
+/// Esc no dock (devolver o foco) ou o dock perdeu o foco para outra janela (só soltar).
+#[tauri::command]
+pub fn dock_soltar_foco(devolver: bool) {
+    soltar_teclado(devolver);
 }
 
 #[tauri::command]
@@ -299,6 +395,29 @@ mod testes {
         assert!(!decidir_revelado(false, 30, faixa, aberto));
         assert!(decidir_revelado(true, 30, faixa, aberto));
         assert!(!decidir_revelado(true, 200, faixa, aberto));
+    }
+
+    #[test]
+    fn ctrl_alt_d_cicla_escondido_visivel_focado() {
+        assert_eq!(presenca(false, false), Presenca::Escondido);
+        // Escondido com o foco não existe: esconder sempre conta como escondido.
+        assert_eq!(presenca(false, true), Presenca::Escondido);
+        assert_eq!(presenca(true, false), Presenca::Visivel);
+        assert_eq!(presenca(true, true), Presenca::Focado);
+
+        let mut p = Presenca::Escondido;
+        let mut caminho = vec![p];
+        for _ in 0..3 {
+            p = proxima_presenca(p);
+            caminho.push(p);
+        }
+        assert_eq!(caminho, [Presenca::Escondido, Presenca::Visivel, Presenca::Focado, Presenca::Escondido]);
+    }
+
+    #[test]
+    fn dock_visivel_que_perdeu_o_foco_volta_a_pedir_foco() {
+        // Clicar fora solta o modo teclado: o próximo Ctrl+Alt+D foca de novo, não esconde.
+        assert_eq!(proxima_presenca(presenca(true, false)), Presenca::Focado);
     }
 
     #[test]

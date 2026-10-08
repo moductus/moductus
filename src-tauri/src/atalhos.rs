@@ -1,5 +1,6 @@
-//! Atalhos globais (PRODUCT §8): Ctrl+Alt+N abre o Sistema, Ctrl+Alt+D mostra ou
-//! esconde o dock, Ctrl+Alt+Espaço abre a captura. Configuráveis; um atalho em
+//! Atalhos globais (PRODUCT §8): Ctrl+Alt+N abre o Sistema, Ctrl+Alt+D mostra o dock,
+//! dá o foco a ele (modo teclado) e esconde, nessa ordem (dock::alternar_visivel),
+//! Ctrl+Alt+Espaço abre a captura. Configuráveis; um atalho em
 //! conflito devolve o motivo e o anterior continua valendo.
 
 use std::{collections::BTreeMap, str::FromStr, sync::Mutex};
