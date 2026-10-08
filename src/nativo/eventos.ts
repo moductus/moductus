@@ -83,18 +83,21 @@ export type EstadoServico =
   | { estado: "reiniciando"; tentativa: number; espera_ms: number }
   | { estado: "parado" };
 
-/** Estado do serviço em Node, como a casca vê: o dock mostra enquanto ele reinicia. */
-export function useServico(): EstadoServico {
+/**
+ * Estado do serviço em Node, como a casca vê: o dock mostra enquanto ele reinicia.
+ * `silencioso` não registra no log (o tema também escuta, e o dock já registra).
+ */
+export function useServico({ silencioso = false }: { silencioso?: boolean } = {}): EstadoServico {
   const [estado, setEstado] = useState<EstadoServico>({ estado: "iniciando" });
   useEffect(() => {
     void invoke<EstadoServico>("servico_estado").then(setEstado);
     const parar = listen<EstadoServico>("servico", (e) => {
       setEstado(e.payload);
-      registrar(`servico ${e.payload.estado}`);
+      if (!silencioso) registrar(`servico ${e.payload.estado}`);
     });
     return () => {
       void parar.then((f) => f());
     };
-  }, []);
+  }, [silencioso]);
   return estado;
 }

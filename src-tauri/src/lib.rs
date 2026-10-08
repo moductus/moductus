@@ -9,6 +9,7 @@ mod dados;
 mod dock;
 mod inicio;
 mod janelas;
+mod material;
 mod midia;
 mod registro;
 mod servico;
@@ -53,6 +54,7 @@ pub fn run() {
             controles::awake_estado,
             controles::awake_definir,
             servico::servico_estado,
+            material::tema_material,
         ])
         .setup(move |app| {
             for rotulo in JANELAS {
