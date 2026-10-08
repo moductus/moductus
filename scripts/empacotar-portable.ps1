@@ -11,12 +11,12 @@
   Usado pelo release.yml e localmente, para o zip do CI ser o mesmo que se confere aqui.
 
 .EXAMPLE
-  pwsh -File scripts/empacotar-portable.ps1 -Versao v0.5.0-alpha -Destino pacotes
+  pwsh -File scripts/empacotar-portable.ps1 -Versao v0.5.0-alpha -Destino artefatos
 #>
 param(
   [Parameter(Mandatory)] [string]$Versao,
   [string]$Origem = (Join-Path $PSScriptRoot '..\src-tauri\target\release'),
-  [string]$Destino = (Join-Path $PSScriptRoot '..\pacotes')
+  [string]$Destino = (Join-Path $PSScriptRoot '..rtefatos')
 )
 
 $ErrorActionPreference = 'Stop'

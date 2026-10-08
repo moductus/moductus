@@ -68,12 +68,12 @@ jobs:
       - name: Empacota
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path pacotes | Out-Null
+          New-Item -ItemType Directory -Force -Path artefatos | Out-Null
           $setup = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe
           if (@($setup).Count -ne 1) { throw "Esperava um instalador NSIS, achei $(@($setup).Count)" }
-          Copy-Item $setup.FullName "pacotes/moductus-$env:VERSAO-win-x64-setup.exe"
-          ./scripts/empacotar-portable.ps1 -Versao $env:VERSAO -Destino pacotes | Out-Null
-          Get-ChildItem pacotes | ForEach-Object {
+          Copy-Item $setup.FullName "artefatos/moductus-$env:VERSAO-win-x64-setup.exe"
+          ./scripts/empacotar-portable.ps1 -Versao $env:VERSAO -Destino artefatos | Out-Null
+          Get-ChildItem artefatos | ForEach-Object {
             Write-Host ("::notice::{0} = {1:N1} MB" -f $_.Name, ($_.Length / 1MB))
           }
 
@@ -83,14 +83,14 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
-            pacotes/*-setup.exe
-            pacotes/*-portable.zip
+            artefatos/*-setup.exe
+            artefatos/*-portable.zip
 
       - name: Guarda na execução
         uses: actions/upload-artifact@v4
         with:
           name: moductus-${{ env.VERSAO }}-win-x64
-          path: pacotes/
+          path: artefatos/
           if-no-files-found: error
 
       - name: Anexa ao release
@@ -98,8 +98,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            pacotes/*-setup.exe
-            pacotes/*-portable.zip
+            artefatos/*-setup.exe
+            artefatos/*-portable.zip
           draft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
