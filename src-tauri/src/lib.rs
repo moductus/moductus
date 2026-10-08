@@ -32,6 +32,8 @@ pub fn run() {
         .plugin(inicio::instancia_unica())
         .plugin(inicio::autostart())
         .plugin(atalhos::plugin())
+        // "Salvar como" e "Abrir" do Windows para o arquivo .moductus (Levar para outro PC).
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![dock::dock_configuracao, dock::dock_aplicar, registro::interface_registro,
             janelas::painel_abrir,
             janelas::painel_fechar,

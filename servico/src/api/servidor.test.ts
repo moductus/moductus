@@ -19,6 +19,12 @@ const atendentes = {
   "config.obter": () => estadoConfig,
   "config.definir": () => estadoConfig,
   "config.exportar": ({ caminho }: { caminho: string }) => ({ caminho, bytes: 0, chaves: [] }),
+  "config.previaImportar": () => ({
+    pc_origem: "casa",
+    criado_em: "2026-10-07T21:14:00.000Z",
+    versao_app: "0.5.0-alpha",
+    mudancas: [],
+  }),
   "config.importar": () => estadoConfig,
   "primeiroUso.obter": () => estadoPrimeiroUso,
   "primeiroUso.concluir": () => estadoPrimeiroUso,

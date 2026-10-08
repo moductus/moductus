@@ -58,6 +58,7 @@ servidor = await abrirServidorWs(token, {
   "config.obter": () => config.obter(),
   "config.definir": (mudanca) => config.definir(mudanca),
   "config.exportar": (pedido) => outroPc.exportar(pedido),
+  "config.previaImportar": (pedido) => outroPc.previa(pedido),
   "config.importar": (pedido) => outroPc.importar(pedido),
   "primeiroUso.obter": () => primeiroUso.obter(),
   "primeiroUso.concluir": (pedido) => primeiroUso.concluir(pedido),

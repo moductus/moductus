@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { metodo } from "./canal.ts";
 import { EstadoConfig, MudancaConfig } from "./config.ts";
-import { PedidoExportar, PedidoImportar, ResultadoExportar } from "./outro-pc.ts";
+import { PedidoExportar, PedidoImportar, PreviaImportar, ResultadoExportar } from "./outro-pc.ts";
 import { EstadoPrimeiroUso, PedidoConcluirPrimeiroUso, PedidoMarcarTutorial } from "./primeiro-uso.ts";
 
 /** Todos os métodos que o serviço atende, com entrada e saída. */
@@ -10,6 +10,7 @@ export const METODOS = {
   "config.obter": metodo(z.undefined(), EstadoConfig),
   "config.definir": metodo(MudancaConfig, EstadoConfig),
   "config.exportar": metodo(PedidoExportar, ResultadoExportar),
+  "config.previaImportar": metodo(PedidoImportar, PreviaImportar),
   "config.importar": metodo(PedidoImportar, EstadoConfig),
   "primeiroUso.obter": metodo(z.undefined(), EstadoPrimeiroUso),
   "primeiroUso.concluir": metodo(PedidoConcluirPrimeiroUso, EstadoPrimeiroUso),

@@ -32,11 +32,11 @@ const aceita = (registro: Aplicacao[] = []): AplicadorNativo => ({
 const CRIADO_EM = new Date("2026-10-08T12:34:56.000Z");
 
 /** Um PC: banco novo, o serviço de configuração e o de levar para outro PC. */
-function pc(nativo: AplicadorNativo = aceita()) {
+function pc(nativo: AplicadorNativo = aceita(), portable = false) {
   const db = abrirBanco(pasta());
   bancos.push(db);
   const eventos: EstadoConfig[] = [];
-  const config = new ServicoConfig(new RepositorioConfig(db), nativo, (e) => eventos.push(e), false);
+  const config = new ServicoConfig(new RepositorioConfig(db), nativo, (e) => eventos.push(e), portable);
   const outro = new ServicoOutroPc(
     config,
     { versaoApp: "0.5.0-alpha", versaoEsquema: 1, pcOrigem: "casa" },
@@ -121,6 +121,46 @@ describe("levar para outro PC: só configurações", () => {
     const caminho = arquivo({ "manifesto.json": manifestoValido(), "config.json": { dock: MINHA.dock } });
     const estado = await trabalho.outro.importar({ caminho, modo: "substituir" });
     expect(estado.config).toEqual({ ...CONFIG_PADRAO, dock: MINHA.dock });
+  });
+
+  test("prévia: lista o que muda, chave a chave, e não grava nada", async () => {
+    const trabalho = pc();
+    await trabalho.config.definir({ tema: "papel" });
+    const antes = trabalho.eventos.length;
+    const caminho = arquivo({
+      "manifesto.json": manifestoValido(),
+      "config.json": { tema: "vidro", dock: MINHA.dock, autostart: false },
+    });
+    const previa = await trabalho.outro.previa({ caminho, modo: "juntar" });
+    expect(previa).toEqual({
+      pc_origem: "casa",
+      criado_em: CRIADO_EM.toISOString(),
+      versao_app: "0.5.0-alpha",
+      // autostart já é false aqui: não aparece.
+      mudancas: [
+        { chave: "tema", atual: "papel", novo: "vidro" },
+        { chave: "dock", atual: CONFIG_PADRAO.dock, novo: MINHA.dock },
+      ],
+    });
+    expect(trabalho.config.obter().config.tema).toBe("papel");
+    expect(trabalho.eventos.length).toBe(antes);
+
+    // Substituir também mostra o que volta ao padrão.
+    const substituir = await trabalho.outro.previa({
+      caminho: arquivo({ "manifesto.json": manifestoValido(), "config.json": { dock: MINHA.dock } }),
+      modo: "substituir",
+    });
+    expect(substituir.mudancas.map((m) => m.chave)).toEqual(["tema", "dock"]);
+    expect(substituir.mudancas[0]).toEqual({ chave: "tema", atual: "papel", novo: CONFIG_PADRAO.tema });
+  });
+
+  test("portable: o autostart do arquivo fica de fora, o resto entra", async () => {
+    const pendrive = pc(aceita(), true);
+    const caminho = arquivo({ "manifesto.json": manifestoValido(), "config.json": MINHA });
+    const previa = await pendrive.outro.previa({ caminho, modo: "juntar" });
+    expect(previa.mudancas.map((m) => m.chave)).not.toContain("autostart");
+    const estado = await pendrive.outro.importar({ caminho, modo: "substituir" });
+    expect(estado.config).toEqual({ ...MINHA, autostart: false });
   });
 
   test("arquivo corrompido é recusado com mensagem clara e nada muda", async () => {

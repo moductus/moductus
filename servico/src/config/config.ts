@@ -15,6 +15,9 @@ export interface AplicadorNativo {
 
 const NATIVAS: (keyof Config)[] = ["dock", "atalhos", "autostart"];
 
+export const AUTOSTART_NO_PORTABLE =
+  "No modo portable o Moductus não inicia com o Windows. Instale para ligar esta opção.";
+
 /** Leitura e gravação da tabela config: uma linha por chave de primeiro nível. */
 export class RepositorioConfig {
   constructor(private readonly db: DatabaseSync) {}
@@ -78,6 +81,8 @@ export class ServicoConfig {
 
   async definir(entrada: Mudanca): Promise<EstadoConfig> {
     const mudanca = MudancaConfig.parse(entrada);
+    // A cópia portable roda de um pendrive ou pasta solta: não se registra no Windows.
+    if (this.portable && mudanca.autostart === true) throw new Error(AUTOSTART_NO_PORTABLE);
     const nova = Config.parse({ ...this.repo.ler(), ...mudanca });
     const nativasMudadas = NATIVAS.filter((k) => k in mudanca);
     if (nativasMudadas.length > 0) {

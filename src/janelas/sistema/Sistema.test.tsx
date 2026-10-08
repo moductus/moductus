@@ -114,6 +114,11 @@ describe("Sistema", () => {
       act(() => itemArea(area.id).click());
       expect(areaAtual()).toBe(area.id);
       expect(por("main h1").textContent).toBe(area.nome);
+      // Configurações já funciona: abre na Geral, com opções em vez de estado vazio.
+      if (area.id === "configuracoes") {
+        expect(por("main .config-secao").textContent!.length).toBeGreaterThan(30);
+        continue;
+      }
       const vazio = por("main .estado-vazio");
       expect(vazio.querySelector(".estado-vazio-titulo")!.textContent!.length).toBeGreaterThan(3);
       expect(vazio.querySelector(".estado-vazio-texto")!.textContent!.length).toBeGreaterThan(30);
@@ -194,7 +199,11 @@ describe("Sistema", () => {
     for (const [i, nome] of nomes.entries()) {
       act(() => itens()[i]!.click());
       expect(por(".config-secao h2").textContent).toBe(nome);
-      expect(por(".config-secao .estado-vazio-texto").textContent!.length).toBeGreaterThan(30);
+      // Fora do ar, a seção ainda diz algo: o estado vazio, o aviso de leitura ou o texto dela.
+      const corpo = todos(".config-secao > :not(h2)")
+        .map((el) => el.textContent)
+        .join("");
+      expect(corpo.length).toBeGreaterThan(30);
     }
   });
 
