@@ -17,6 +17,22 @@ const lancar = ferramenta({
 });
 
 describe("ferramenta()", () => {
+  test("o texto do cartão sai da entrada validada; sem cartão declarado, null", () => {
+    const comentar = ferramenta({
+      nome: "github.comentar",
+      descricao: "Comenta num PR",
+      entrada: z.object({ pr: z.number().int() }),
+      efeito: "externo",
+      executar: () => null,
+      cartao: ({ pr }) => ({ descricao: `Vou comentar no #${pr}.`, rotulo: `Comentar no #${pr}` }),
+    });
+    expect(comentar.cartao({ pr: 142 })).toEqual({
+      descricao: "Vou comentar no #142.",
+      rotulo: "Comentar no #142",
+    });
+    expect(lancar.cartao({ valorCentavos: 1, descricao: "x" })).toBeNull();
+  });
+
   test("gera o JSON Schema da entrada como as APIs pedem", () => {
     expect(lancar.esquema).toEqual({
       type: "object",

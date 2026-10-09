@@ -1,6 +1,11 @@
+import { mkdirSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { VERSAO_PROTOCOLO, type EstadoConfig } from "@moductus/contrato";
+import { RepositorioAgentes, ServicoAgentes } from "./agentes/agentes.ts";
+import { autorizarPorAprovacao } from "./agentes/autorizar.ts";
+import { RepositorioExecucoes, ServicoExecucoes } from "./agentes/execucoes.ts";
+import { Runtime } from "./agentes/runtime.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
@@ -11,9 +16,12 @@ import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config
 import { RepositorioConexoes, ServicoConexoes } from "./conexoes/conexoes.ts";
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
+import { Catalogo } from "./ferramentas/catalogo.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
+import { fabricaClaudeCli } from "./provedores/claude-cli/claude-cli.ts";
+import { RegistroProvedores } from "./provedores/registro.ts";
 import { caminhoSettingsClaude, LigacaoClaudeCode } from "./sessoes/ligacao.ts";
 import { atenderHooks } from "./sessoes/permissao.ts";
 import { abrirReceptorHooks, portaDosHooks } from "./sessoes/receptor.ts";
@@ -94,6 +102,41 @@ const conexoes = new ServicoConexoes(
   (conexao) => servidor?.emitir("conexoes.mudou", conexao),
 );
 
+/**
+ * Os adaptadores de modelo que esta versão tem. O CLI roda numa pasta própria, para não herdar
+ * CLAUDE.md nem `.claude/` de um projeto qualquer; o MCP do Moductus (F2-11) entra aqui, nas
+ * opções do adaptador.
+ */
+function registrarProvedores(): RegistroProvedores {
+  const pastaDoClaudeCli = join(pastaDeDados(), "claude-cli");
+  mkdirSync(pastaDoClaudeCli, { recursive: true });
+  return new RegistroProvedores().registrar("claude-cli", fabricaClaudeCli({ pasta: pastaDoClaudeCli }));
+}
+
+// Runtime dos agentes (F2-15).
+const provedores = registrarProvedores();
+const catalogo = new Catalogo();
+const repositorioAgentes = new RepositorioAgentes(banco);
+const repositorioExecucoes = new RepositorioExecucoes(banco);
+const runtime = new Runtime(
+  {
+    agentes: repositorioAgentes,
+    execucoes: repositorioExecucoes,
+    provedores,
+    catalogo,
+    autorizar: autorizarPorAprovacao(aprovacoes),
+  },
+  {
+    execucao: (execucao) => servidor?.emitir("execucoes.mudou", execucao),
+    agente: (agenteId) => {
+      const agente = agentes.procurar(agenteId);
+      if (agente) servidor?.emitir("agentes.mudou", agente);
+    },
+  },
+);
+const agentes = new ServicoAgentes(repositorioAgentes, catalogo, (agente) => runtime.situacao(agente));
+const execucoes = new ServicoExecucoes(repositorioExecucoes);
+
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
   "config.obter": () => config.obter(),
@@ -116,18 +159,18 @@ servidor = await abrirServidorWs(token, {
   "conexoes.desligar": (pedido) => conexoes.desligar(pedido),
   "github.obter": () => github.obter(),
   "github.atualizar": () => github.atualizar(),
+  "agentes.listar": () => agentes.listar(),
+  "agentes.obter": (pedido) => agentes.obter(pedido),
+  "agentes.capacidades": (pedido) => agentes.capacidades(pedido),
+  "execucoes.listar": (pedido) => execucoes.listar(pedido),
+  "execucoes.obter": (pedido) => execucoes.obter(pedido),
   // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
   ...semAtendente([
-    "agentes.listar",
-    "agentes.obter",
     "agentes.definir",
     "agentes.restaurarPadrao",
     "agentes.ligar",
     "agentes.pausar",
     "agentes.retomar",
-    "agentes.capacidades",
-    "execucoes.listar",
-    "execucoes.obter",
     "execucoes.desfazer",
     "provedores.listar",
     "provedores.detectar",
