@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { abrirBanco } from "../banco/conexao.ts";
 import { limparLixeira } from "../banco/lixeira.ts";
 import { migrar, versaoAtual } from "../banco/migracoes.ts";
@@ -22,6 +22,9 @@ const TABELAS = [
 /** A versão 0.5.0 saiu com as migrações 001 e 002. */
 const VERSAO_050 = 2;
 
+const AGORA = new Date("2026-10-09T12:00:00.000Z");
+const VENCIDA = new Date(AGORA.getTime() - 31 * 24 * 60 * 60 * 1000).toISOString();
+
 const tabelas = (db: DatabaseSync) =>
   (
     db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all() as {
@@ -31,38 +34,76 @@ const tabelas = (db: DatabaseSync) =>
     .map((t) => t.name)
     .filter((t) => TABELAS.includes(t));
 
-interface AgenteSemeado {
+/** O time de fábrica como AGENTS.md §2 e DESIGN.md §6 descrevem. */
+const TIME_ESPERADO = {
+  alba: {
+    nome: "Alba",
+    funcao: "Cuida do seu dia",
+    personagem: { silhueta: "ovo", traco: "raios", tom: "ambar" },
+    ferramentas: ["agenda.*", "tarefas.*", "lembretes.*", "foco.*", "notas.*", "memoria.*"],
+    escopos_memoria: ["dia", "geral"],
+  },
+  faina: {
+    nome: "Faina",
+    funcao: "Faz o serviço pesado",
+    personagem: { silhueta: "bloco", traco: "bandana", tom: "terracota" },
+    ferramentas: ["arquivos.*", "documentos.*", "ocr.ler", "memoria.*"],
+    escopos_memoria: ["arquivos", "geral"],
+  },
+  nuno: {
+    nome: "Nuno",
+    funcao: "Fica de olho nas suas IAs e no seu código",
+    personagem: { silhueta: "capsula", traco: "fones", tom: "ardosia" },
+    ferramentas: ["sessoes.*", "uso.*", "github.*", "tarefas.criar"],
+    escopos_memoria: ["dev", "geral"],
+  },
+  tula: {
+    nome: "Tula",
+    funcao: "Cuida do seu dinheiro",
+    personagem: { silhueta: "pera", traco: "coque", tom: "musgo" },
+    ferramentas: ["financas.*", "dividas.*", "planos.*", "arquivos.ler_texto", "memoria.*"],
+    escopos_memoria: ["financas"],
+  },
+};
+
+interface LinhaAgente {
   id: string;
   nome: string;
   funcao: string;
+  instrucoes: string;
   personagem: string;
   ferramentas: string;
+  gatilhos: string;
+  escopos_memoria: string;
   estado: string;
   de_fabrica: number;
 }
 
-const deFabrica = (db: DatabaseSync) =>
-  db
-    .prepare("SELECT id, nome, funcao, personagem, ferramentas, estado, de_fabrica FROM agentes ORDER BY id")
-    .all() as unknown as AgenteSemeado[];
-
 function conferirTime(db: DatabaseSync) {
-  const time = deFabrica(db);
-  expect(time.map((a) => [a.id, a.nome, a.funcao])).toEqual([
-    ["alba", "Alba", "Cuida do seu dia"],
-    ["faina", "Faina", "Faz o serviço pesado"],
-    ["nuno", "Nuno", "Fica de olho nas suas IAs e no seu código"],
-    ["tula", "Tula", "Cuida do seu dinheiro"],
-  ]);
-  for (const agente of time) {
-    expect(agente.de_fabrica).toBe(1);
+  const linhas = db
+    .prepare(
+      "SELECT id, nome, funcao, instrucoes, personagem, ferramentas, gatilhos, escopos_memoria, estado, de_fabrica FROM agentes ORDER BY id",
+    )
+    .all() as unknown as LinhaAgente[];
+  const time = Object.fromEntries(
+    linhas.map((a) => [
+      a.id,
+      {
+        nome: a.nome,
+        funcao: a.funcao,
+        personagem: JSON.parse(a.personagem) as unknown,
+        ferramentas: JSON.parse(a.ferramentas) as unknown,
+        escopos_memoria: JSON.parse(a.escopos_memoria) as unknown,
+      },
+    ]),
+  );
+  expect(time).toEqual(TIME_ESPERADO);
+  for (const agente of linhas) {
+    expect(agente.instrucoes).toContain(`Você é ${agente.id === "nuno" ? "o" : "a"} ${agente.nome}`);
+    expect(agente.gatilhos).toBe("[]");
     expect(agente.estado).toBe("ativo");
-    expect(Object.keys(JSON.parse(agente.personagem))).toEqual(["silhueta", "traco", "tom"]);
-    expect((JSON.parse(agente.ferramentas) as string[]).length).toBeGreaterThan(0);
+    expect(agente.de_fabrica).toBe(1);
   }
-  const nuno = time.find((a) => a.id === "nuno")!;
-  expect(JSON.parse(nuno.personagem)).toEqual({ silhueta: "capsula", traco: "fones", tom: "ardosia" });
-  expect(JSON.parse(nuno.ferramentas)).toEqual(["sessoes.*", "uso.*", "github.*", "tarefas.criar"]);
 }
 
 function bancoNovo(): DatabaseSync {
@@ -106,24 +147,32 @@ describe("migração 003-agentes", () => {
     db.close();
   });
 
-  test("agente de fábrica não vai para a lixeira", () => {
+  test("agente de fábrica não vai para a lixeira, não se apaga e não deixa de ser de fábrica", () => {
     const db = bancoNovo();
     expect(() =>
       db.prepare("UPDATE agentes SET apagado_em = ? WHERE id = 'tula'").run(new Date().toISOString()),
     ).toThrow("CHECK");
+    expect(() => db.prepare("DELETE FROM agentes WHERE id = 'tula'").run()).toThrow(
+      "agente de fábrica não se apaga",
+    );
+    expect(() => db.prepare("UPDATE agentes SET de_fabrica = 0 WHERE id = 'tula'").run()).toThrow(
+      "agente de fábrica continua de fábrica",
+    );
+    // Renomear e ajustar continua valendo.
+    db.prepare("UPDATE agentes SET nome = 'Tulinha', estado = 'pausado' WHERE id = 'tula'").run();
+
     db.prepare(
       "INSERT INTO agentes (id, nome, funcao, personagem, apagado_em) VALUES ('meu', 'Meu', 'x', '{}', ?)",
     ).run(new Date().toISOString());
+    db.prepare("DELETE FROM agentes WHERE id = 'meu'").run();
+    expect(db.prepare("SELECT count(*) AS n FROM agentes").get()).toEqual({ n: 4 });
   });
 
-  test("execução, conversa e aprovação só apontam para agente que existe", () => {
+  test("conversa e aprovação guardam o vínculo de domínio quando o usuário mexe na linha", () => {
     const db = bancoNovo();
-    const execucao = db.prepare(
-      "INSERT INTO execucoes (id, do_agente_id, gatilho, estado, origem, agente_id) VALUES (?, ?, 'mensagem', 'rodando', 'agente', ?)",
-    );
-    execucao.run("e1", "nuno", "nuno");
-    expect(() => execucao.run("e2", "ninguem", "nuno")).toThrow("FOREIGN KEY");
-    expect(() => execucao.run("e3", "nuno", "ninguem")).toThrow("FOREIGN KEY");
+    db.prepare(
+      "INSERT INTO execucoes (id, do_agente_id, gatilho, estado, origem, agente_id) VALUES ('e1', 'nuno', 'mensagem', 'rodando', 'agente', 'nuno')",
+    ).run();
 
     const conversa = db.prepare("INSERT INTO conversas (id, tipo, do_agente_id) VALUES (?, ?, ?)");
     conversa.run("time", "time", null);
@@ -149,22 +198,65 @@ describe("migração 003-agentes", () => {
         )
         .run(new Date().toISOString()),
     ).toThrow("CHECK");
+    // Execução continua sendo chave de verdade: tabela sem lixeira.
+    expect(() =>
+      db
+        .prepare(
+          "INSERT INTO chamadas_ferramenta (id, da_execucao_id, ferramenta, efeito, entrada) VALUES ('c1', 'nenhuma', 'x', 'leitura', '{}')",
+        )
+        .run(),
+    ).toThrow("FOREIGN KEY");
+  });
+
+  test("agente, provedor e regra apagados há 31 dias saem da lixeira mesmo com histórico apontando", () => {
+    const db = bancoNovo();
+    db.prepare(
+      "INSERT INTO provedores (id, tipo, nome, apagado_em) VALUES ('p1', 'claude-cli', 'Claude', ?)",
+    ).run(VENCIDA);
+    db.prepare(
+      "INSERT INTO agentes (id, nome, funcao, personagem, provedor_id, apagado_em) VALUES ('meu', 'Meu', 'x', '{}', 'p1', ?)",
+    ).run(VENCIDA);
+    db.prepare(
+      "INSERT INTO execucoes (id, do_agente_id, gatilho, estado, provedor_id, origem, agente_id) VALUES ('e1', 'meu', 'mensagem', 'ok', 'p1', 'agente', 'meu')",
+    ).run();
+    db.prepare(
+      "INSERT INTO conversas (id, tipo, do_agente_id, origem, agente_id, execucao_id) VALUES ('c1', 'agente', 'meu', 'agente', 'meu', 'e1')",
+    ).run();
+    db.prepare(
+      "INSERT INTO regras_permissao (id, escopo, do_agente_id, ferramenta, padrao, decisao, apagado_em) VALUES ('r1', 'agente', 'meu', 'github.comentar', '*', 'permitir', ?)",
+    ).run(VENCIDA);
+    db.prepare(
+      "INSERT INTO aprovacoes (id, da_execucao_id, do_agente_id, fonte, descricao, acao, estado, decidida_em, regra_criada_id) VALUES ('a1', 'e1', 'meu', 'moductus', 'x', '{}', 'aprovada', ?, 'r1')",
+    ).run(VENCIDA);
+
+    const preparar = vi.spyOn(db, "prepare");
+    expect(limparLixeira(db, AGORA)).toEqual(
+      new Map([
+        ["agentes", 1],
+        ["provedores", 1],
+        ["regras_permissao", 1],
+      ]),
+    );
+    // Nenhuma chave travou o DELETE de uma vez: a limpeza não caiu no caminho linha a linha.
+    expect(preparar.mock.calls.filter(([sql]) => sql.startsWith("SELECT id FROM"))).toEqual([]);
+    expect(db.prepare("SELECT id FROM agentes WHERE id = 'meu'").get()).toBeUndefined();
+    expect(db.prepare("SELECT count(*) AS n FROM execucoes").get()).toEqual({ n: 1 });
+    expect(db.prepare("SELECT count(*) AS n FROM conversas").get()).toEqual({ n: 1 });
+    expect(db.prepare("SELECT count(*) AS n FROM aprovacoes").get()).toEqual({ n: 1 });
   });
 
   test("conversa apagada com as mensagens sai junto da lixeira; com mensagem viva, fica", () => {
     const db = bancoNovo();
-    const agora = new Date("2026-10-09T12:00:00.000Z");
-    const vencida = new Date(agora.getTime() - 31 * 24 * 60 * 60 * 1000).toISOString();
     const conversa = db.prepare("INSERT INTO conversas (id, tipo, apagado_em) VALUES (?, 'time', ?)");
-    conversa.run("apagada", vencida);
-    conversa.run("presa", vencida);
+    conversa.run("apagada", VENCIDA);
+    conversa.run("presa", VENCIDA);
     const mensagem = db.prepare(
       "INSERT INTO mensagens (id, conversa_id, conteudo, apagado_em) VALUES (?, ?, 'oi', ?)",
     );
-    mensagem.run("m1", "apagada", vencida);
+    mensagem.run("m1", "apagada", VENCIDA);
     mensagem.run("m2", "presa", null);
 
-    expect(limparLixeira(db, agora)).toEqual(
+    expect(limparLixeira(db, AGORA)).toEqual(
       new Map([
         ["conversas", 1],
         ["mensagens", 1],

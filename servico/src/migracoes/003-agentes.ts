@@ -11,15 +11,15 @@ import { criarTabela } from "../banco/tabela.ts";
  * aprovação) tem coluna própria, `do_agente_id` e `da_execucao_id`, que não some quando o
  * usuário aprova, desfaz ou apaga. Pelo mesmo motivo a `origem` das aprovações virou `fonte`.
  *
- * Toda chave estrangeira fica em NO ACTION: agentes, provedores, conversas e regras têm lixeira,
- * e a limpeza dos 30 dias não pode apagar nem mudar linha viva (lixeira.test.ts).
+ * Chaves estrangeiras, só onde não seguram a lixeira (lixeira.test.ts):
+ * - o carimbo de origem não tem chave: é auditoria, não vínculo. Com chave, um agente ou uma
+ *   execução carimbados nunca sairiam da lixeira, e exportar "só configurações" (que leva os
+ *   agentes sem as execuções) quebraria;
+ * - nenhuma chave aponta para tabela com lixeira, a não ser de filha que também tem lixeira e
+ *   vai junto com o pai (`mensagens` → `conversas`). Histórico e configuração guardam o id de
+ *   agente, provedor ou regra como texto, e o que foi apagado some de vez em 30 dias (DATA.md §1);
+ * - para tabela sem lixeira (`execucoes`, `aprovacoes`), a chave fica, em NO ACTION.
  */
-
-/** As colunas de origem apontam para quem existe: agente e execução de verdade. */
-const ORIGEM_REFERENCIADA = [
-  "FOREIGN KEY (agente_id) REFERENCES agentes (id)",
-  "FOREIGN KEY (execucao_id) REFERENCES execucoes (id)",
-] as const;
 
 const lista = (coluna: string) =>
   `${coluna} TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(${coluna}) AND json_type(${coluna}) = 'array')`;
@@ -35,7 +35,7 @@ const provedores = criarTabela(
     "credencial TEXT",
     "testado_em TEXT",
   ],
-  { lixeira: true, restricoes: ORIGEM_REFERENCIADA },
+  { lixeira: true },
 );
 
 const agentes = criarTabela(
@@ -46,8 +46,8 @@ const agentes = criarTabela(
     "instrucoes TEXT NOT NULL DEFAULT ''",
     "personagem TEXT NOT NULL CHECK (json_valid(personagem) AND json_type(personagem) = 'object')",
     lista("ferramentas"),
-    "provedor_id TEXT REFERENCES provedores (id)",
-    "provedor_reserva_id TEXT REFERENCES provedores (id)",
+    "provedor_id TEXT",
+    "provedor_reserva_id TEXT",
     lista("gatilhos"),
     lista("escopos_memoria"),
     "teto_diario_centavos INTEGER CHECK (teto_diario_centavos IS NULL OR teto_diario_centavos >= 0)",
@@ -58,7 +58,6 @@ const agentes = criarTabela(
   {
     lixeira: true,
     restricoes: [
-      ...ORIGEM_REFERENCIADA,
       "CHECK (provedor_reserva_id IS NULL OR provedor_reserva_id <> provedor_id)",
       "CHECK (dorme_ate IS NULL OR estado = 'dormindo')",
       // De fábrica não se apaga: volta ao padrão (AGENTS.md §1).
@@ -71,9 +70,9 @@ const agentes = criarTabela(
 const execucoes = criarTabela(
   "execucoes",
   [
-    "do_agente_id TEXT NOT NULL REFERENCES agentes (id)",
+    "do_agente_id TEXT NOT NULL",
     "gatilho TEXT NOT NULL CHECK (gatilho IN ('mensagem', 'horario', 'intervalo', 'evento'))",
-    "provedor_id TEXT REFERENCES provedores (id)",
+    "provedor_id TEXT",
     "inicio TEXT",
     "fim TEXT",
     "estado TEXT NOT NULL CHECK (estado IN ('rodando', 'ok', 'erro', 'adiada'))",
@@ -84,7 +83,7 @@ const execucoes = criarTabela(
     "custo_estimado_microdolares INTEGER CHECK (custo_estimado_microdolares IS NULL OR custo_estimado_microdolares >= 0)",
     "resumo TEXT",
   ],
-  { lixeira: false, restricoes: ORIGEM_REFERENCIADA },
+  { lixeira: false },
 );
 
 /** Regras de permissão: "sempre neste projeto" e as autorizações dadas uma vez. */
@@ -94,7 +93,7 @@ const regrasPermissao = criarTabela(
     "escopo TEXT NOT NULL CHECK (escopo IN ('projeto', 'agente', 'conexao'))",
     // `projetos` nasce na migração 004: a referência fica sem chave estrangeira.
     "projeto_id TEXT",
-    "do_agente_id TEXT REFERENCES agentes (id)",
+    "do_agente_id TEXT",
     "ferramenta TEXT NOT NULL",
     "padrao TEXT NOT NULL",
     "decisao TEXT NOT NULL CHECK (decisao IN ('permitir', 'negar'))",
@@ -103,7 +102,6 @@ const regrasPermissao = criarTabela(
   {
     lixeira: true,
     restricoes: [
-      ...ORIGEM_REFERENCIADA,
       "CHECK (escopo <> 'projeto' OR projeto_id IS NOT NULL)",
       "CHECK (escopo <> 'agente' OR do_agente_id IS NOT NULL)",
     ],
@@ -118,7 +116,7 @@ const aprovacoes = criarTabela(
   "aprovacoes",
   [
     "da_execucao_id TEXT REFERENCES execucoes (id)",
-    "do_agente_id TEXT REFERENCES agentes (id)",
+    "do_agente_id TEXT",
     "fonte TEXT NOT NULL",
     // `sessoes_ia` nasce na migração 004: a referência fica sem chave estrangeira.
     "sessao_id TEXT",
@@ -126,11 +124,11 @@ const aprovacoes = criarTabela(
     "acao TEXT NOT NULL CHECK (json_valid(acao))",
     "estado TEXT NOT NULL DEFAULT 'pendente' CHECK (estado IN ('pendente', 'aprovada', 'negada', 'expirada'))",
     "decidida_em TEXT",
-    "regra_criada_id TEXT REFERENCES regras_permissao (id)",
+    "regra_criada_id TEXT",
   ],
   {
     lixeira: false,
-    restricoes: [...ORIGEM_REFERENCIADA, "CHECK (estado <> 'pendente' OR decidida_em IS NULL)"],
+    restricoes: ["CHECK (estado <> 'pendente' OR decidida_em IS NULL)"],
   },
 );
 
@@ -146,7 +144,7 @@ const chamadasFerramenta = criarTabela(
     "aprovacao_id TEXT REFERENCES aprovacoes (id)",
     "desfeita_em TEXT",
   ],
-  { lixeira: false, restricoes: ORIGEM_REFERENCIADA },
+  { lixeira: false },
 );
 
 /** Conversa com o time (uma só) ou com um agente. */
@@ -154,13 +152,13 @@ const conversas = criarTabela(
   "conversas",
   [
     "tipo TEXT NOT NULL CHECK (tipo IN ('time', 'agente'))",
-    "do_agente_id TEXT REFERENCES agentes (id)",
+    "do_agente_id TEXT",
     "titulo TEXT",
     "arquivada INTEGER NOT NULL DEFAULT 0 CHECK (arquivada IN (0, 1))",
   ],
   {
     lixeira: true,
-    restricoes: [...ORIGEM_REFERENCIADA, "CHECK ((tipo = 'agente') = (do_agente_id IS NOT NULL))"],
+    restricoes: ["CHECK ((tipo = 'agente') = (do_agente_id IS NOT NULL))"],
   },
 );
 
@@ -172,32 +170,43 @@ const mensagens = criarTabela(
   "mensagens",
   [
     "conversa_id TEXT NOT NULL REFERENCES conversas (id)",
-    "do_agente_id TEXT REFERENCES agentes (id)",
+    "do_agente_id TEXT",
     "conteudo TEXT NOT NULL",
     lista("anexos"),
     "da_execucao_id TEXT REFERENCES execucoes (id)",
   ],
   {
     lixeira: true,
-    restricoes: [...ORIGEM_REFERENCIADA, "CHECK (do_agente_id IS NOT NULL OR da_execucao_id IS NULL)"],
+    restricoes: ["CHECK (do_agente_id IS NOT NULL OR da_execucao_id IS NULL)"],
   },
 );
 
-/** Índices das consultas do dia a dia e das chaves que a limpeza confere ao apagar o pai. */
+/**
+ * Índice em toda coluna-filha de chave estrangeira, que o SQLite confere ao apagar o pai, e nos
+ * dois caminhos de consulta do dia a dia: o histórico do agente e os cartões pendentes.
+ */
 const indices = `
-  CREATE INDEX agentes_provedor_id ON agentes (provedor_id);
-  CREATE INDEX agentes_provedor_reserva_id ON agentes (provedor_reserva_id);
   CREATE INDEX execucoes_do_agente_id ON execucoes (do_agente_id, inicio);
-  CREATE INDEX execucoes_provedor_id ON execucoes (provedor_id);
-  CREATE INDEX regras_permissao_do_agente_id ON regras_permissao (do_agente_id);
   CREATE INDEX aprovacoes_pendentes ON aprovacoes (criado_em) WHERE estado = 'pendente';
   CREATE INDEX aprovacoes_da_execucao_id ON aprovacoes (da_execucao_id);
-  CREATE INDEX aprovacoes_regra_criada_id ON aprovacoes (regra_criada_id);
   CREATE INDEX chamadas_ferramenta_da_execucao_id ON chamadas_ferramenta (da_execucao_id);
   CREATE INDEX chamadas_ferramenta_aprovacao_id ON chamadas_ferramenta (aprovacao_id);
-  CREATE INDEX conversas_do_agente_id ON conversas (do_agente_id);
   CREATE INDEX mensagens_conversa_id ON mensagens (conversa_id, criado_em);
   CREATE INDEX mensagens_da_execucao_id ON mensagens (da_execucao_id);
+`;
+
+/** Agente de fábrica não se apaga nem deixa de ser de fábrica: volta ao padrão (AGENTS.md §1). */
+const travaDeFabrica = `
+  CREATE TRIGGER agentes_de_fabrica_nao_se_apaga BEFORE DELETE ON agentes
+    WHEN OLD.de_fabrica = 1
+  BEGIN
+    SELECT RAISE(ABORT, 'agente de fábrica não se apaga');
+  END;
+  CREATE TRIGGER agentes_de_fabrica_continua BEFORE UPDATE OF de_fabrica ON agentes
+    WHEN OLD.de_fabrica = 1 AND NEW.de_fabrica <> 1
+  BEGIN
+    SELECT RAISE(ABORT, 'agente de fábrica continua de fábrica');
+  END;
 `;
 
 /**
@@ -243,6 +252,7 @@ export const m003: Migracao = {
     conversas,
     mensagens,
     indices,
+    travaDeFabrica,
     deFabrica,
   ].join("\n"),
 };
