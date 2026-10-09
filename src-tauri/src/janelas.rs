@@ -1,5 +1,5 @@
-//! Painel, Sistema e captura. Todas são criadas no início (tauri.conf.json) e só
-//! aparecem ou somem aqui, para abrirem sem atraso.
+//! Painel, Sistema e captura. Todas são criadas no início, logo depois de o dock reservar
+//! a faixa (`criar`), e só aparecem ou somem aqui, para abrirem sem atraso.
 //!
 //! - painel: ao lado do dock, sem ativar; ganha foco só quando a interface pede
 //!   (campo de texto);
@@ -13,7 +13,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow, WebviewWindowBuilder};
 use windows::Win32::{
     Foundation::{HWND, RECT},
     UI::WindowsAndMessaging::{
@@ -35,6 +35,18 @@ fn janela(app: &AppHandle, rotulo: &str) -> Option<WebviewWindow> {
 
 fn hwnd(janela: &WebviewWindow) -> HWND {
     HWND(dock::hwnd_de(janela) as _)
+}
+
+/// Cria as janelas que o tauri.conf.json marca com `"create": false`, com a configuração
+/// de lá. O Tauri só chama o `setup` depois de criar os WebViews declarados; deixando só o
+/// dock para ele, a faixa é reservada antes de os outros três WebViews existirem.
+pub fn criar(app: &AppHandle) -> tauri::Result<()> {
+    for config in app.config().app.windows.iter().filter(|c| !c.create) {
+        if janela(app, &config.label).is_none() {
+            WebviewWindowBuilder::from_config(app, config)?.build()?;
+        }
+    }
+    Ok(())
 }
 
 pub fn iniciar(app: &AppHandle, pasta: PathBuf) {

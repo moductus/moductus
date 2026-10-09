@@ -19,7 +19,7 @@ mod tela_cheia;
 use tauri::{Manager, RunEvent, WindowEvent};
 
 /// Janelas criadas no início, todas servindo o mesmo bundle: o dock aparece, as outras
-/// ficam escondidas para abrirem sem atraso.
+/// ficam escondidas para abrirem sem atraso (e nascem depois do dock, em `janelas::criar`).
 pub const JANELAS: [&str; 4] = ["dock", "painel", "sistema", "captura"];
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -63,14 +63,17 @@ pub fn run() {
             acessibilidade::acessibilidade_estado,
         ])
         .setup(move |app| {
+            // Só o dock nasce antes do setup: a faixa fica reservada antes de painel,
+            // Sistema e captura criarem os seus WebViews (orçamento de 1 s até o dock).
+            let janela_dock = app.get_webview_window("dock").ok_or("janela dock ausente na configuração")?;
+            dock::iniciar(&janela_dock, dock::Configuracao::default());
+            acessibilidade::iniciar(app.handle().clone(), dock::hwnd_de(&janela_dock));
+            janelas::criar(app.handle())?;
             for rotulo in JANELAS {
                 if app.get_webview_window(rotulo).is_none() {
                     return Err(format!("janela {rotulo} ausente na configuração").into());
                 }
             }
-            let janela_dock = app.get_webview_window("dock").expect("janela dock");
-            dock::iniciar(&janela_dock, dock::Configuracao::default());
-            acessibilidade::iniciar(app.handle().clone(), dock::hwnd_de(&janela_dock));
             janelas::iniciar(app.handle(), pasta.clone());
             tela_cheia::vigiar(app.handle().clone());
             atalhos::iniciar(app.handle(), atalhos::padrao());

@@ -27,6 +27,7 @@
       },
       {
         "label": "painel",
+        "create": false,
         "title": "Moductus painel",
         "width": 372,
         "height": 600,
@@ -40,6 +41,7 @@
       },
       {
         "label": "sistema",
+        "create": false,
         "title": "Moductus",
         "width": 1200,
         "height": 780,
@@ -52,6 +54,7 @@
       },
       {
         "label": "captura",
+        "create": false,
         "title": "Moductus captura",
         "width": 640,
         "height": 72,
