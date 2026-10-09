@@ -3,10 +3,14 @@ import { VERSAO_PROTOCOLO, type EstadoConfig } from "@moductus/contrato";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { CanalCasca } from "./casca/canal.ts";
+import { credenciaisPelaCasca } from "./casca/credenciais.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
+import { abrirReceptorHooks, portaDosHooks } from "./sessoes/receptor.ts";
+import { RepositorioSessoes, ServicoSessoes } from "./sessoes/sessoes.ts";
+import { tokenDosHooks } from "./sessoes/token.ts";
 import pacote from "../package.json" with { type: "json" };
 
 /**
@@ -52,6 +56,9 @@ const outroPc = new ServicoOutroPc(config, banco, {
   versaoEsquema: MIGRACOES.length,
   pcOrigem: hostname(),
 });
+const sessoes = new ServicoSessoes(new RepositorioSessoes(banco), (mudanca) =>
+  servidor?.emitir("sessoes.mudou", mudanca),
+);
 
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
@@ -63,6 +70,8 @@ servidor = await abrirServidorWs(token, {
   "primeiroUso.obter": () => primeiroUso.obter(),
   "primeiroUso.concluir": (pedido) => primeiroUso.concluir(pedido),
   "primeiroUso.marcar": (pedido) => primeiroUso.marcar(pedido),
+  "sessoes.listar": () => sessoes.listar(),
+  "sessoes.eventos": (pedido) => sessoes.eventos(pedido),
   // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
   ...semAtendente([
     "agentes.listar",
@@ -91,8 +100,6 @@ servidor = await abrirServidorWs(token, {
     "aprovacoes.decidir",
     "regras.listar",
     "regras.remover",
-    "sessoes.listar",
-    "sessoes.eventos",
     "sessoes.uso",
     "github.obter",
     "github.atualizar",
@@ -107,6 +114,19 @@ canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });
 config
   .aplicarAoSubir()
   .catch((erro: unknown) => console.error(`configuração não aplicada ao subir: ${String(erro)}`));
+
+// Hooks das sessões de IA (F2-21): sem o token ou com a porta ocupada, o resto do serviço segue.
+sessoes.vigiar();
+tokenDosHooks(credenciaisPelaCasca(canal))
+  .then((tokenHooks) =>
+    abrirReceptorHooks(
+      tokenHooks,
+      (ferramenta, evento) => void sessoes.registrar(ferramenta, evento),
+      portaDosHooks(),
+    ),
+  )
+  .then((receptor) => console.error(`hooks das sessões na porta ${receptor.porta}`))
+  .catch((erro: unknown) => console.error(`hooks das sessões fora do ar: ${String(erro)}`));
 
 // A casca fechou o stdin: ela saiu, então o serviço sai junto.
 process.stdin.on("end", () => {
