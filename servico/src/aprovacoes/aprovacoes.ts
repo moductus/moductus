@@ -417,6 +417,11 @@ export class ServicoAprovacoes {
     });
   }
 
+  /** O cartão como está agora, decidido ou não. */
+  obter(id: string): Aprovacao | null {
+    return this.repo.aprovacao(id);
+  }
+
   /** Os cartões que ainda esperam o usuário, depois de expirar os que a situação já derrubou. */
   async pendentes(): Promise<Aprovacao[]> {
     await this.conferir();

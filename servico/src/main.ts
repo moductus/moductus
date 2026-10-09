@@ -25,6 +25,7 @@ import { Catalogo } from "./ferramentas/catalogo.ts";
 import { abrirServidorMcp } from "./mcp/servidor.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
 import { avisarAprovacoes } from "./notificacoes/aprovacoes.ts";
+import { avisarContexto } from "./notificacoes/nuno.ts";
 import { RepositorioNotificacoes, ServicoNotificacoes } from "./notificacoes/notificacoes.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
@@ -96,10 +97,17 @@ const notificacoes = new ServicoNotificacoes(
     naoVistas: (lista) => servidor?.emitir("notificacoes.naoVistas", lista),
   },
 );
+const leituraSessoes = new RepositorioSessoes(banco);
 const avisarAprovacao = avisarAprovacoes(
   notificacoes,
-  (pedido) => aprovacoes.decidir(pedido),
-  (id) => agentesDoTime.agente(id)?.nome ?? null,
+  { obter: (id) => aprovacoes.obter(id), decidir: (pedido) => aprovacoes.decidir(pedido) },
+  {
+    nomeDoAgente: (id) => agentesDoTime.agente(id)?.nome ?? null,
+    projetoDaSessao: (id) => {
+      const projetoId = leituraSessoes.sessao(id)?.projetoId;
+      return projetoId ? (leituraSessoes.projeto(projetoId)?.nome ?? null) : null;
+    },
+  },
 );
 canal.aoAvisar(CLIQUE_NO_AVISO, (aviso) => {
   const clique = lerClique(aviso);
@@ -113,17 +121,7 @@ const sessoes = new ServicoSessoes(
   (mudanca) => servidor?.emitir("sessoes.mudou", mudanca),
   {
     transcripts: TRANSCRIPTS_DO_DISCO,
-    aoAvisarContexto: (aviso) =>
-      void notificacoes
-        .avisar({
-          agenteId: "nuno",
-          tipo: "aviso",
-          titulo: aviso.titulo,
-          corpo: aviso.corpo,
-          referencia: `sessao:${aviso.sessaoId}`,
-          origem: "conexao",
-        })
-        .catch((erro: unknown) => console.error(`notificações: aviso de contexto falhou: ${String(erro)}`)),
+    aoAvisarContexto: avisarContexto(notificacoes),
   },
 );
 const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {

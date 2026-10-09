@@ -159,7 +159,7 @@ fn ao_clicar(tag: &str, argumentos: &str) {
     crate::servico::avisar(serde_json::json!({ "tipo": "notificacao-clique", "notificacao": tag, "botao": botao }));
     if botao.is_none() {
         if let Some(app) = APP.get() {
-            crate::janelas::painel_abrir(app.clone(), "agentes".to_string());
+            crate::janelas::painel_mostrar(app.clone(), "agentes".to_string());
         }
     }
     esquecer(tag);

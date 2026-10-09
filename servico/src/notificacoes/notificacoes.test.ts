@@ -14,7 +14,8 @@ import { RepositorioAgentes } from "../agentes/agentes.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "../aprovacoes/aprovacoes.ts";
 import { abrirBanco } from "../banco/conexao.ts";
 import { RepositorioSessoes } from "../sessoes/sessoes.ts";
-import { avisarAprovacoes, botoesDoCartao } from "./aprovacoes.ts";
+import { avisarAprovacoes, botoesDoCartao, resumoDaAcao } from "./aprovacoes.ts";
+import { avisarContexto } from "./nuno.ts";
 import {
   dentroDoHorario,
   entregaPela,
@@ -50,6 +51,8 @@ function montar(opcoes: { silencio?: Partial<Silencio>; emFoco?: boolean; cascaF
     retirados: [] as string[],
     telaCheia: false,
     perguntas: 0,
+    /** O que acontece enquanto a casca responde (a decisão chegando no meio). */
+    durante: {} as { telaCheia?: () => Promise<void>; mostrar?: () => Promise<void> },
   };
   const eventos = {
     estados: [] as EstadoNotificacoes[],
@@ -64,18 +67,19 @@ function montar(opcoes: { silencio?: Partial<Silencio>; emFoco?: boolean; cascaF
       silencio: () => silencio,
       emFoco: () => opcoes.emFoco ?? false,
       windows: {
-        mostrar: (aviso) => {
-          if (opcoes.cascaFalha) return Promise.reject(new Error("a casca não respondeu"));
+        mostrar: async (aviso) => {
+          if (opcoes.cascaFalha) throw new Error("a casca não respondeu");
+          await casca.durante.mostrar?.();
           casca.mostrados.push(aviso);
-          return Promise.resolve();
         },
         retirar: (id) => {
           casca.retirados.push(id);
           return Promise.resolve();
         },
-        telaCheia: () => {
+        telaCheia: async () => {
           casca.perguntas++;
-          return Promise.resolve(casca.telaCheia);
+          await casca.durante.telaCheia?.();
+          return casca.telaCheia;
         },
       },
     },
@@ -299,7 +303,7 @@ describe("visto", () => {
     const { servico } = montar();
     const n = await servico.avisar(lembrete({ referencia: "aprovacao:x" }));
     let chamadas = 0;
-    servico.registrarAcao("aprovacao", () => Promise.resolve(chamadas++));
+    servico.registrarAcao("aprovacao", () => Promise.resolve(chamadas++ >= 0));
     await servico.aoClicar(n.id, null);
     expect(servico.naoVistas()).toEqual([]);
     expect(chamadas).toBe(0);
@@ -343,10 +347,17 @@ function comAprovacoes(montado: ReturnType<typeof montar>) {
     { aprovacao: (a) => pendentes.push(mudou(a)), regras: () => undefined },
     { agora: () => MEIO_DIA },
   );
+  const sessoes = new RepositorioSessoes(montado.db);
   mudou = avisarAprovacoes(
     montado.servico,
-    (pedido) => aprovacoes.decidir(pedido),
-    (id) => nomes.agente(id)?.nome ?? null,
+    { obter: (id) => aprovacoes.obter(id), decidir: (pedido) => aprovacoes.decidir(pedido) },
+    {
+      nomeDoAgente: (id) => nomes.agente(id)?.nome ?? null,
+      projetoDaSessao: (id) => {
+        const projetoId = sessoes.sessao(id)?.projetoId;
+        return projetoId ? (sessoes.projeto(projetoId)?.nome ?? null) : null;
+      },
+    },
   );
   const assentar = async () => {
     while (pendentes.length > 0) await Promise.all(pendentes.splice(0));
@@ -376,8 +387,10 @@ describe("aprovação pendente", () => {
     expect(aviso).toMatchObject({
       agente: "Nuno",
       titulo: "Claude Code pede permissão",
-      corpo: "O Claude Code quer rodar pnpm test em moductus.",
+      // Na tela de bloqueio e na Central de Notificações, só o resumo: o comando fica no cartão.
+      corpo: "Claude Code quer rodar um comando em moductus.",
     });
+    expect(JSON.stringify(aviso)).not.toContain("pnpm test");
     // Os mesmos do cartão do terminal: Negar, Sempre neste projeto e Permitir.
     expect(aviso.botoes).toEqual(botoesDoCartao(aprovacao));
     expect(aviso.botoes.map((b) => b.rotulo)).toEqual(["Negar", "Sempre neste projeto", "Permitir"]);
@@ -488,5 +501,162 @@ describe("aprovação pendente", () => {
       expect.objectContaining({ tipo: "aprovacao", agenteId: "nuno" }),
     ]);
     expect(await aprovacoes.pendentes()).toHaveLength(1);
+  });
+
+  /** Um pedido do Claude Code na sessão s1 de moductus, já com o aviso mostrado. */
+  async function pedidoComAviso(montado: ReturnType<typeof montar>, command = "pnpm test") {
+    const { aprovacoes, assentar } = comAprovacoes(montado);
+    if (!montado.db.prepare("SELECT 1 FROM sessoes_ia WHERE id = 's1'").get()) {
+      sessaoEm(montado.db, "moductus", "s1");
+    }
+    const pedido = aprovacoes.pedir({
+      fonte: "claude-code",
+      sessaoId: "s1",
+      descricao: command,
+      acao: bash(command),
+    });
+    await assentar();
+    if (pedido.tipo !== "cartao") throw new Error("esperava cartão");
+    return { aprovacoes, assentar, aprovacao: pedido.aprovacao, aviso: montado.casca.mostrados.at(-1)! };
+  }
+
+  const estadoDe = (db: DatabaseSync, id: string) =>
+    (db.prepare("SELECT estado FROM aprovacoes WHERE id = ?").get(id) as { estado: string }).estado;
+
+  test("clique em aviso de cartão já decidido ou expirado não muda nada nem cria regra", async () => {
+    const montado = montar();
+    const decidido = await pedidoComAviso(montado);
+    await decidido.aprovacoes.decidir({ id: decidido.aprovacao.id, decisao: "negar" });
+    await decidido.assentar();
+    await montado.servico.aoClicar(decidido.aviso.id, "sempre");
+    await montado.servico.aoClicar(decidido.aviso.id, "permitir");
+    expect(estadoDe(montado.db, decidido.aprovacao.id)).toBe("negada");
+
+    const expirado = await pedidoComAviso(montado, "pnpm build");
+    expirado.aprovacoes.expirarDaSessao("s1");
+    await expirado.assentar();
+    await montado.servico.aoClicar(expirado.aviso.id, "permitir");
+    expect(estadoDe(montado.db, expirado.aprovacao.id)).toBe("expirada");
+    expect(decidido.aprovacoes.regras()).toEqual([]);
+    expect(montado.servico.naoVistas()).toEqual([]);
+  });
+
+  test("botão que o aviso não oferece não decide e o aviso continua esperando", async () => {
+    const montado = montar();
+    const { aprovacao, aviso, aprovacoes } = await pedidoComAviso(montado);
+    await montado.servico.aoClicar(aviso.id, "apagar-tudo");
+    expect(estadoDe(montado.db, aprovacao.id)).toBe("pendente");
+    expect(montado.servico.naoVistas().map((n) => n.id)).toEqual([aviso.id]);
+    expect(aprovacoes.regras()).toEqual([]);
+  });
+
+  test('"sempre" num cartão que não admite regra é recusado: nada decidido, nada criado', async () => {
+    const montado = montar();
+    const { aprovacoes, assentar } = comAprovacoes(montado);
+    // Sem sessão (e sem projeto), o cartão do terminal não oferece "Sempre neste projeto".
+    const pedido = aprovacoes.pedir({
+      fonte: "claude-code",
+      descricao: "pnpm test",
+      acao: bash("pnpm test"),
+    });
+    await assentar();
+    if (pedido.tipo !== "cartao") throw new Error("esperava cartão");
+    const aviso = montado.casca.mostrados[0]!;
+    expect(aviso.botoes.map((b) => b.id)).toEqual(["negar", "permitir"]);
+    expect(aviso.corpo).toBe("Claude Code quer rodar um comando.");
+    await montado.servico.aoClicar(aviso.id, "sempre");
+    expect(estadoDe(montado.db, pedido.aprovacao.id)).toBe("pendente");
+    expect(aprovacoes.regras()).toEqual([]);
+    expect(montado.servico.naoVistas()).toHaveLength(1);
+  });
+
+  test("cartão decidido enquanto a casca respondia a tela cheia: o aviso nem sai", async () => {
+    const montado = montar();
+    const { aprovacoes, assentar } = comAprovacoes(montado);
+    sessaoEm(montado.db, "moductus", "s1");
+    montado.casca.durante.telaCheia = async () => {
+      const [pendente] = await aprovacoes.pendentes();
+      await aprovacoes.decidir({ id: pendente!.id, decisao: "permitir" });
+    };
+    aprovacoes.pedir({ fonte: "claude-code", sessaoId: "s1", descricao: "x", acao: bash("pnpm test") });
+    await assentar();
+    expect(montado.casca.mostrados).toEqual([]);
+    expect(montado.servico.naoVistas()).toEqual([]);
+  });
+
+  test("cartão decidido enquanto o aviso saía: o aviso é retirado depois de mostrado", async () => {
+    const montado = montar();
+    const { aprovacoes, assentar } = comAprovacoes(montado);
+    sessaoEm(montado.db, "moductus", "s1");
+    montado.casca.durante.mostrar = async () => {
+      const [pendente] = await aprovacoes.pendentes();
+      await aprovacoes.decidir({ id: pendente!.id, decisao: "negar" });
+    };
+    aprovacoes.pedir({ fonte: "claude-code", sessaoId: "s1", descricao: "x", acao: bash("pnpm test") });
+    await assentar();
+    const id = montado.casca.mostrados[0]!.id;
+    expect(montado.casca.retirados.at(-1)).toBe(id);
+  });
+});
+
+describe("resumo do pedido do terminal", () => {
+  test("diz o tipo de ação, nunca o conteúdo", () => {
+    expect(resumoDaAcao("Bash")).toBe("rodar um comando");
+    expect(resumoDaAcao("PowerShell")).toBe("rodar um comando");
+    expect(resumoDaAcao("Edit")).toBe("mudar um arquivo");
+    expect(resumoDaAcao("Write")).toBe("mudar um arquivo");
+    expect(resumoDaAcao("Read")).toBe("ler arquivos");
+    expect(resumoDaAcao("WebFetch")).toBe("acessar a internet");
+    expect(resumoDaAcao("mcp__github__create_issue")).toBe("usar uma ferramenta MCP");
+    expect(resumoDaAcao("Task")).toBe("usar uma ferramenta");
+  });
+});
+
+describe("aviso de contexto do Nuno", () => {
+  const contexto = (sessaoId: string) => ({
+    sessaoId,
+    titulo: "Contexto em 80%",
+    corpo: "A sessão do Claude Code em moductus chegou a 80% do contexto.",
+    usadoTokens: 160_000,
+    janelaTokens: 200_000,
+  });
+  const assentar = () => new Promise((r) => setTimeout(r, 0));
+
+  test("passa pela preferência do Nuno e fica no banco com a sessão como referência", async () => {
+    const montado = montar();
+    montado.servico.definir({ agenteId: "nuno", tipo: "aviso", nivel: "tudo", canal: "dock" });
+    const avisar = avisarContexto(montado.servico);
+    avisar(contexto("s1"));
+    await assentar();
+    expect(montado.linhas()).toEqual([
+      {
+        do_agente_id: "nuno",
+        tipo: "aviso",
+        titulo: "Contexto em 80%",
+        referencia: "sessao:s1",
+        canal: "dock",
+        vista_em: null,
+      },
+    ]);
+    expect(montado.casca.mostrados).toEqual([]);
+    // Enquanto o aviso da sessão não foi visto, o de depois da compactação não repete.
+    avisar(contexto("s1"));
+    await assentar();
+    expect(montado.linhas()).toHaveLength(1);
+    montado.servico.marcarVistas({ agenteId: "nuno" });
+    avisar(contexto("s1"));
+    await assentar();
+    expect(montado.linhas()).toHaveLength(2);
+  });
+
+  test('no padrão ("só o que precisa de mim") o aviso comum fica só registrado', async () => {
+    const montado = montar();
+    avisarContexto(montado.servico)(contexto("s2"));
+    await assentar();
+    expect(montado.linhas()).toEqual([
+      expect.objectContaining({ referencia: "sessao:s2", vista_em: expect.any(String) }),
+    ]);
+    expect(montado.servico.naoVistas()).toEqual([]);
+    expect(montado.casca.mostrados).toEqual([]);
   });
 });

@@ -91,12 +91,21 @@ export function SecaoNotificacoes() {
           const canal = unico(doAgente, (p) => p.canal);
           const nome = DADOS_AGENTES[agente].nome;
           const variado = nivel === null || canal === null;
-          const mudar = (parte: { nivel?: NivelNotificacao; canal?: CanalNotificacao }) =>
-            void notificacoes.definir({
-              agenteId: agente,
-              nivel: parte.nivel ?? nivel ?? "so_o_que_precisa",
-              canal: parte.canal ?? canal ?? "ambos",
-            });
+          // Muda só o campo escolhido: se o outro varia por tipo, cada tipo guarda o seu.
+          const mudar = (parte: { nivel?: NivelNotificacao; canal?: CanalNotificacao }) => {
+            if (nivel !== null && canal !== null) {
+              void notificacoes.definir({ agenteId: agente, nivel, canal, ...parte });
+              return;
+            }
+            for (const p of doAgente) {
+              void notificacoes.definir({
+                agenteId: agente,
+                tipo: p.tipo,
+                nivel: parte.nivel ?? p.nivel,
+                canal: parte.canal ?? p.canal,
+              });
+            }
+          };
           return (
             <Opcao
               key={agente}

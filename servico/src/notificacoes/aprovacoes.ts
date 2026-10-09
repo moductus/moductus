@@ -33,21 +33,48 @@ export function botoesDoCartao(aprovacao: Aprovacao): BotaoAviso[] {
   ];
 }
 
-/** O aviso de um cartão pendente: quem pede no título, o que vai acontecer no corpo. */
-export function avisoDaAprovacao(
-  aprovacao: Aprovacao,
-  nomeDoAgente: (id: string) => string | null,
-): NovoAviso {
+/** O que o pedido do terminal quer fazer, sem o conteúdo: o comando e o arquivo ficam no cartão. */
+export function resumoDaAcao(ferramenta: string): string {
+  if (/^(Bash|PowerShell)$/.test(ferramenta)) return "rodar um comando";
+  if (/^(Edit|MultiEdit|Write|NotebookEdit)$/.test(ferramenta)) return "mudar um arquivo";
+  if (/^(Read|Glob|Grep|LS)$/.test(ferramenta)) return "ler arquivos";
+  if (/^(WebFetch|WebSearch)$/.test(ferramenta)) return "acessar a internet";
+  if (ferramenta.startsWith("mcp__")) return "usar uma ferramenta MCP";
+  return "usar uma ferramenta";
+}
+
+export interface FontesAprovacao {
+  nomeDoAgente: (id: string) => string | null;
+  /** Nome do projeto da sessão do terminal, para o resumo do aviso. */
+  projetoDaSessao: (sessaoId: string) => string | null;
+}
+
+/**
+ * O aviso de um cartão pendente: quem pede no título e, no corpo, o que vai acontecer. O aviso do
+ * Windows aparece na tela de bloqueio e fica na Central de Notificações, então o pedido do
+ * terminal leva só um resumo ("Claude Code quer rodar um comando em moductus."); o comando, o
+ * arquivo e o endereço ficam no cartão. O pedido de agente leva a descrição do cartão, que o
+ * próprio agente escreveu para mostrar.
+ */
+export function avisoDaAprovacao(aprovacao: Aprovacao, fontes: FontesAprovacao): NovoAviso {
   const doTerminal = aprovacao.fonte !== "moductus";
   const agenteId = doTerminal ? NUNO : (aprovacao.agenteId ?? NUNO);
-  const titulo = doTerminal
-    ? `${NOME[aprovacao.fonte as Exclude<Aprovacao["fonte"], "moductus">]} pede permissão`
-    : `${nomeDoAgente(agenteId) ?? "Um agente"} pede sua aprovação`;
+  let titulo: string;
+  let corpo: string;
+  if (doTerminal) {
+    const ferramenta = NOME[aprovacao.fonte as Exclude<Aprovacao["fonte"], "moductus">];
+    const projeto = aprovacao.sessaoId ? fontes.projetoDaSessao(aprovacao.sessaoId) : null;
+    titulo = `${ferramenta} pede permissão`;
+    corpo = `${ferramenta} quer ${resumoDaAcao(aprovacao.acao.ferramenta)}${projeto ? ` em ${projeto}` : ""}.`;
+  } else {
+    titulo = `${fontes.nomeDoAgente(agenteId) ?? "Um agente"} pede sua aprovação`;
+    corpo = aprovacao.descricao;
+  }
   return {
     agenteId,
     tipo: "aprovacao",
     titulo,
-    corpo: aprovacao.descricao,
+    corpo,
     referencia: referenciaDe(aprovacao.id),
     botoes: botoesDoCartao(aprovacao),
     origem: doTerminal ? "conexao" : "agente",
@@ -58,20 +85,28 @@ export function avisoDaAprovacao(
 /**
  * Liga as aprovações às notificações: cartão novo pendente vira aviso com os botões do cartão;
  * cartão decidido ou expirado, em qualquer lugar, tira o ponto e o aviso. Clicar num botão do
- * aviso decide pelo mesmo caminho do cartão (`aprovacoes.decidir`). Devolve o que chamar a cada
- * mudança de aprovação.
+ * aviso decide pelo mesmo caminho do cartão (`aprovacoes.decidir`), só se o cartão ainda estiver
+ * pendente e o botão for um dos que o cartão oferece agora. Devolve o que chamar a cada mudança
+ * de aprovação.
  */
 export function avisarAprovacoes(
   notificacoes: ServicoNotificacoes,
-  decidir: (pedido: PedidoDecidir) => Promise<unknown>,
-  nomeDoAgente: (id: string) => string | null,
+  aprovacoes: {
+    obter: (id: string) => Aprovacao | null;
+    decidir: (pedido: PedidoDecidir) => Promise<unknown>;
+  },
+  fontes: FontesAprovacao,
 ): (aprovacao: Aprovacao) => Promise<void> {
   notificacoes.registrarAcao("aprovacao", async (id, botao) => {
+    const aprovacao = aprovacoes.obter(id);
     const decisao = DECISOES[botao];
-    if (decisao) await decidir({ id, ...decisao });
+    if (!aprovacao || aprovacao.estado !== "pendente" || !decisao) return false;
+    if (!botoesDoCartao(aprovacao).some((b) => b.id === botao)) return false;
+    await aprovacoes.decidir({ id, ...decisao });
+    return true;
   });
   return async (aprovacao) => {
-    if (aprovacao.estado === "pendente") await notificacoes.avisar(avisoDaAprovacao(aprovacao, nomeDoAgente));
+    if (aprovacao.estado === "pendente") await notificacoes.avisar(avisoDaAprovacao(aprovacao, fontes));
     else await notificacoes.resolvido(referenciaDe(aprovacao.id));
   };
 }

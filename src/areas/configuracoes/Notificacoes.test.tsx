@@ -141,6 +141,17 @@ describe("Notificações", () => {
     expect(marcada("Avisar de Alba")).toBeNull();
     expect(recipiente.textContent).toContain("lembretes, briefing · varia por tipo");
     expect(marcada("Onde avisar de Alba")).toBe("Windows e dock");
+
+    // Mudar só onde: cada tipo vai com o próprio nível, e a rotina continua em "nada".
+    await act(async () => opcao("Onde avisar de Alba", "Só o ponto no dock").click());
+    expect(pedidosDe("notificacoes.definir")).toEqual(
+      TipoNotificacao.options.map((tipo) => ({
+        agenteId: "alba",
+        tipo,
+        nivel: tipo === "rotina" ? "nada" : "so_o_que_precisa",
+        canal: "dock",
+      })),
+    );
   });
 
   it("silêncio vai à configuração; o horário ligado mostra as horas e muda uma por vez", async () => {

@@ -245,9 +245,12 @@ export class RepositorioNotificacoes {
     return linhas.map((l) => l.id);
   }
 
+  /** As que pedem o ponto no dock: não vistas e com o dock no canal. */
   naoVistas(): Notificacao[] {
     const linhas = this.db
-      .prepare(`SELECT ${COLUNAS} FROM notificacoes WHERE vista_em IS NULL ORDER BY criado_em, id`)
+      .prepare(
+        `SELECT ${COLUNAS} FROM notificacoes WHERE vista_em IS NULL AND canal <> 'windows' ORDER BY criado_em, id`,
+      )
       .all() as unknown as LinhaNotificacao[];
     return linhas.map(paraNotificacao);
   }
@@ -328,8 +331,12 @@ export interface OpcoesNotificacoes {
   agora?: () => Date;
 }
 
-/** A ação de um botão, registrada pela área dona da referência (`aprovacao`). */
-export type AcaoAviso = (id: string, botao: string) => Promise<unknown>;
+/**
+ * A ação de um botão, registrada pela área dona da referência (`aprovacao`). Devolve `true` se
+ * fez o que o botão pedia; `false` quando o botão não vale mais (o cartão já foi decidido, o botão
+ * não é um dos que o aviso oferece).
+ */
+export type AcaoAviso = (id: string, botao: string) => Promise<boolean>;
 
 /**
  * A regra das notificações (PRODUCT.md §5, DATA.md §7): cada aviso passa pela preferência do
@@ -423,7 +430,7 @@ export class ServicoNotificacoes {
     const agora = this.agora();
     const instante = agora.toISOString();
     const id = novoId();
-    // Sem ponto, nasce visto: "nada" registra sem pedir a atenção de ninguém.
+    // Sem aviso, nasce visto: "nada" registra sem pedir a atenção de ninguém.
     this.repo.inserir({
       id,
       agenteId: novo.agenteId,
@@ -432,7 +439,7 @@ export class ServicoNotificacoes {
       corpo: novo.corpo ?? null,
       referencia,
       canal: preferencia.canal,
-      vistaEm: entrega.ponto ? null : instante,
+      vistaEm: entrega.avisa ? null : instante,
       agora: instante,
       origem: novo.origem ?? (novo.agenteId ? "agente" : "conexao"),
       execucaoId: novo.execucaoId ?? null,
@@ -456,17 +463,21 @@ export class ServicoNotificacoes {
 
   /**
    * O usuário clicou no aviso do Windows: no corpo (`botao` nulo) só marca como visto; num botão,
-   * a área dona da referência executa a ação.
+   * a área dona da referência executa a ação, e o aviso só fica visto se ela fez o que o botão
+   * pedia (um botão que não vale mais não conta como resposta).
    */
   async aoClicar(id: string, botao: string | null): Promise<void> {
     const notificacao = this.repo.notificacao(id);
     if (!notificacao) return;
-    this.marcarVistas({ ids: [id] });
-    if (!botao || !notificacao.referencia) return;
-    const separador = notificacao.referencia.indexOf(":");
-    if (separador < 0) return;
-    const acao = this.acoes.get(notificacao.referencia.slice(0, separador));
-    await acao?.(notificacao.referencia.slice(separador + 1), botao);
+    if (!botao) {
+      this.marcarVistas({ ids: [id] });
+      return;
+    }
+    const referencia = notificacao.referencia ?? "";
+    const separador = referencia.indexOf(":");
+    const acao = separador < 0 ? undefined : this.acoes.get(referencia.slice(0, separador));
+    if (!acao) return;
+    if (await acao(referencia.slice(separador + 1), botao)) this.marcarVistas({ ids: [id] });
   }
 
   /**
@@ -491,14 +502,21 @@ export class ServicoNotificacoes {
         telaCheia: () => this.fontes.windows.telaCheia(),
         emFoco: this.emFoco,
       });
-      if (motivo) return;
+      // O que gerou o aviso pode ter sido resolvido enquanto a casca respondia a tela cheia.
+      if (motivo || this.jaVista(n.id)) return;
       const agente = n.agenteId
         ? (this.fontes.agentes().find((a) => a.id === n.agenteId)?.nome ?? null)
         : null;
       await this.fontes.windows.mostrar({ id: n.id, agente, titulo: n.titulo, corpo: n.corpo, botoes });
+      // Resolvido durante o `mostrar`: o `retirar` do `resolvido` pode ter chegado antes do aviso.
+      if (this.jaVista(n.id)) await this.fontes.windows.retirar(n.id);
     } catch (erro) {
       console.error(`notificações: aviso do Windows não saiu: ${String(erro)}`);
     }
+  }
+
+  private jaVista(id: string): boolean {
+    return (this.repo.notificacao(id)?.vistaEm ?? null) !== null;
   }
 
   private mudou(): EstadoNotificacoes {
