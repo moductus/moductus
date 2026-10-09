@@ -24,11 +24,13 @@ export const RECUSA_TOKEN =
 
 /**
  * Atende um evento já autenticado e lido; o que devolve vai como corpo JSON da resposta (a
- * decisão de um `PermissionRequest`, por exemplo). Pode demorar: a resposta espera.
+ * decisão de um `PermissionRequest`, por exemplo). Pode demorar: a resposta espera. `conexao`
+ * aborta se a ferramenta desistir antes da resposta (a conexão caiu): ninguém mais vai ler.
  */
 export type AtenderHook = (
   ferramenta: FerramentaSessao,
   evento: EventoHook,
+  conexao: AbortSignal,
 ) => object | undefined | Promise<object | undefined>;
 
 export interface ReceptorHooks {
@@ -138,8 +140,14 @@ export function abrirReceptorHooks(
     }
     const evento = lerEventoHook(corpo);
     if (!evento) return responder(res, 400, "evento sem hook_event_name ou session_id");
+    // A conexão fechada antes da resposta (o Claude Code desistiu, o receptor fechou) avisa quem
+    // está segurando a resposta, para ele soltar o que segurava.
+    const conexao = new AbortController();
+    res.once("close", () => {
+      if (!res.writableEnded) conexao.abort(new Error("a conexão do hook caiu antes da resposta"));
+    });
     try {
-      responder(res, 200, (await atender(ferramenta, evento)) ?? {});
+      responder(res, 200, (await atender(ferramenta, evento, conexao.signal)) ?? {});
     } catch (erro) {
       console.error(`hooks: ${evento.tipo} de ${ferramenta} não registrado: ${String(erro)}`);
       // Sem decisão: a ferramenta segue como se o hook não existisse.

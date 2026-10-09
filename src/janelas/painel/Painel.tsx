@@ -5,8 +5,11 @@ import { Botao } from "../../componentes/Botao.tsx";
 import { Icone } from "../../componentes/Icone.tsx";
 import { AGENTES } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
-import { useConfiguracaoDock } from "../../nativo/eventos.ts";
+import { useConfiguracaoDock, useServico } from "../../nativo/eventos.ts";
+import { usePedidosDoTerminal } from "../../servico/aprovacoes.ts";
+import { useCanal } from "../../servico/conexao.ts";
 import { DADOS_AREAS, eAreaPainel, type AreaPainel } from "../areas.ts";
+import { PedidosSessoes } from "./PedidosSessoes.tsx";
 import "./Painel.css";
 
 /** Abre o Sistema na seção de modelos e fecha o painel: o convite do time leva para lá. */
@@ -49,7 +52,10 @@ export function Painel() {
   // O contador muda a cada abertura, mesmo quando a área é a mesma.
   const [abertura, setAbertura] = useState<{ area: string; n: number } | null>(null);
   const { lado } = useConfiguracaoDock();
+  const canal = useCanal(useServico({ silencioso: true }));
   const area = abertura && eAreaPainel(abertura.area) ? abertura.area : null;
+  // Cada abertura relê os pedidos: os já respondidos da vez anterior saem da tela.
+  const pedidos = usePedidosDoTerminal(canal, abertura?.n);
 
   useEffect(() => {
     let n = 0;
@@ -90,6 +96,7 @@ export function Painel() {
             onClick={() => void invoke("painel_fechar")}
           />
         </header>
+        {area === "agentes" && <PedidosSessoes pedidos={pedidos} />}
         {area && <Vazio area={area} />}
       </section>
     </main>

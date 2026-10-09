@@ -39,6 +39,7 @@ const hook = (tipo: string, extra: Partial<EventoHook> = {}): EventoHook => ({
   modelo: null,
   ferramenta: null,
   resumo: null,
+  entrada: null,
   aviso: null,
   origem: null,
   ...extra,

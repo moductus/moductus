@@ -144,6 +144,33 @@ describe("receptor dos hooks", () => {
     expect(await (await postar(r.porta, corpoHook("PermissionRequest"))).json()).toEqual(decisao);
   });
 
+  test("a conexão que cai antes da resposta aborta o sinal do atendente; a respondida, não", async () => {
+    const sinais: AbortSignal[] = [];
+    let soltar = () => {};
+    const r = await receptor((_f, evento, conexao) => {
+      sinais.push(conexao);
+      if (evento.tipo !== "PermissionRequest") return undefined;
+      return new Promise<undefined>((pronto) => {
+        soltar = () => pronto(undefined);
+        conexao.addEventListener("abort", () => pronto(undefined), { once: true });
+      });
+    });
+    await postar(r.porta, corpoHook("Stop"));
+    const desistir = new AbortController();
+    const segurada = fetch(`http://127.0.0.1:${r.porta}/hooks/claude-code`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${TOKEN_HOOKS}` },
+      body: corpoHook("PermissionRequest"),
+      signal: desistir.signal,
+    }).catch((e: unknown) => e);
+    await vi.waitFor(() => expect(sinais).toHaveLength(2));
+    desistir.abort();
+    expect(await segurada).toBeInstanceOf(Error);
+    await vi.waitFor(() => expect(sinais[1]?.aborted).toBe(true));
+    expect(sinais[0]?.aborted).toBe(false);
+    soltar();
+  });
+
   test("sem token, com token errado ou com a variável não expandida: 401 com a explicação, e nada chega", async () => {
     const atender = vi.fn();
     const log = vi.spyOn(console, "error").mockImplementation(() => {});

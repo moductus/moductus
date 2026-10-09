@@ -17,6 +17,11 @@ export interface EventoHook {
   ferramenta: string | null;
   /** Comando, arquivo ou mensagem em uma linha curta; o conteúdo inteiro fica no transcript. */
   resumo: string | null;
+  /**
+   * `tool_input` inteiro, só para decidir um `PermissionRequest` (a regra compara o comando ou o
+   * caminho exato); não é gravado em `eventos_sessao`.
+   */
+  entrada: unknown;
   /** `notification_type` do `Notification` (`idle_prompt`, `permission_prompt`…). */
   aviso: string | null;
   /** `source` do `SessionStart` (`startup`, `resume`, `clear`, `compact`). */
@@ -72,6 +77,7 @@ export function lerEventoHook(corpo: unknown): EventoHook | null {
     modelo,
     ferramenta: texto(c.tool_name),
     resumo: tipo === "UserPromptSubmit" ? null : resumir(c),
+    entrada: c.tool_input ?? null,
     aviso: texto(c.notification_type),
     origem: texto(c.source),
   };

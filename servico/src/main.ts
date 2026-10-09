@@ -9,6 +9,7 @@ import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config
 import { MIGRACOES } from "./migracoes/index.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
+import { atenderHooks } from "./sessoes/permissao.ts";
 import { abrirReceptorHooks, portaDosHooks } from "./sessoes/receptor.ts";
 import { RepositorioSessoes, ServicoSessoes } from "./sessoes/sessoes.ts";
 import { tokenDosHooks } from "./sessoes/token.ts";
@@ -126,18 +127,7 @@ config
 sessoes.vigiar();
 aprovacoes.vigiar();
 tokenDosHooks(credenciaisPelaCasca(canal))
-  .then((tokenHooks) =>
-    abrirReceptorHooks(
-      tokenHooks,
-      (ferramenta, evento) => {
-        // Sessão que terminou não tem mais a quem responder: os cartões dela expiram.
-        const { sessao } = sessoes.registrar(ferramenta, evento);
-        if (sessao.encerradaEm) aprovacoes.expirarDaSessao(sessao.id);
-        return undefined;
-      },
-      portaDosHooks(),
-    ),
-  )
+  .then((tokenHooks) => abrirReceptorHooks(tokenHooks, atenderHooks(sessoes, aprovacoes), portaDosHooks()))
   .then((receptor) => console.error(`hooks das sessões na porta ${receptor.porta}`))
   .catch((erro: unknown) => console.error(`hooks das sessões fora do ar: ${String(erro)}`));
 

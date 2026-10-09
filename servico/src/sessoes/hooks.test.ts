@@ -27,6 +27,7 @@ describe("leitura do hook", () => {
       modelo: null,
       ferramenta: "Bash",
       resumo: "pnpm test",
+      entrada: { command: "pnpm test" },
       aviso: null,
       origem: null,
     });
@@ -89,6 +90,7 @@ describe("estado depois do evento", () => {
     modelo: null,
     ferramenta: null,
     resumo: null,
+    entrada: null,
     aviso: null,
     origem: null,
     ...extra,
