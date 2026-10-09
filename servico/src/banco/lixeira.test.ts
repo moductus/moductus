@@ -147,3 +147,52 @@ test("nenhuma chave estrangeira para tabela com lixeira apaga ou muda linha viva
     "filhos_soltos.pai_id -> pais (ON DELETE SET NULL)",
   ]);
 });
+
+/**
+ * Chave estrangeira não pode segurar a lixeira (DATA.md §1: some de vez em 30 dias). Só pode
+ * apontar para tabela com lixeira a filha que também tem lixeira e vai junto com o pai; e o
+ * carimbo de origem (`agente_id`, `execucao_id`) nunca tem chave, porque é auditoria, não vínculo.
+ */
+test("nenhuma chave estrangeira segura linha na lixeira nem prende o carimbo de origem", () => {
+  const db = new DatabaseSync(":memory:");
+  migrar(db, MIGRACOES);
+  const presas = () => {
+    const comLixeira = new Set(tabelasComLixeira(db));
+    const todas = db
+      .prepare(
+        "SELECT name FROM pragma_table_list WHERE schema = 'main' AND type = 'table' AND name NOT LIKE 'sqlite_%'",
+      )
+      .all() as { name: string }[];
+    return todas
+      .map((t) => t.name)
+      .flatMap((t) =>
+        (
+          db.prepare('SELECT "table" AS alvo, "from" AS coluna FROM pragma_foreign_key_list(?)').all(t) as {
+            alvo: string;
+            coluna: string;
+          }[]
+        )
+          .filter(
+            (fk) =>
+              ["agente_id", "execucao_id"].includes(fk.coluna) ||
+              (comLixeira.has(fk.alvo) && !comLixeira.has(t)),
+          )
+          .map((fk) => `${t}.${fk.coluna} -> ${fk.alvo}`),
+      )
+      .sort();
+  };
+  expect(presas()).toEqual([]);
+
+  // A conferência pega a chave que prende e deixa passar a filha com lixeira e o pai sem lixeira.
+  db.exec(criarTabela("pais", [], { lixeira: true }));
+  db.exec(criarTabela("filhas_juntas", ["pai_id TEXT REFERENCES pais (id)"], { lixeira: true }));
+  db.exec(criarTabela("historico", ["pai_id TEXT REFERENCES pais (id)"], { lixeira: false }));
+  db.exec(criarTabela("registros", ["execucao_ref TEXT REFERENCES execucoes (id)"], { lixeira: false }));
+  db.exec(
+    criarTabela("carimbadas", [], {
+      lixeira: false,
+      restricoes: ["FOREIGN KEY (agente_id) REFERENCES agentes (id)"],
+    }),
+  );
+  expect(presas()).toEqual(["carimbadas.agente_id -> agentes", "historico.pai_id -> pais"]);
+});
