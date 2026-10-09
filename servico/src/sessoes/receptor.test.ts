@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from "node:fs";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
@@ -63,7 +64,61 @@ function postar(
   });
 }
 
+/**
+ * Conversa crua por TCP, para o que o `fetch` não deixa mandar: devolve o que o receptor escreveu
+ * até fechar a conexão (ou o prazo, com `fechou: false`).
+ */
+function cru(porta: number, texto: string, prazoMs = 2000) {
+  return new Promise<{ resposta: string; fechou: boolean }>((pronto, falhou) => {
+    const socket = connect(porta, "127.0.0.1", () => socket.write(texto));
+    let resposta = "";
+    const prazo = setTimeout(() => {
+      socket.destroy();
+      pronto({ resposta, fechou: false });
+    }, prazoMs);
+    socket.on("data", (d) => (resposta += String(d)));
+    socket.on("error", (erro: NodeJS.ErrnoException) => {
+      // O receptor pode derrubar enquanto ainda escrevemos: vale como fechado.
+      if (erro.code !== "ECONNRESET" && erro.code !== "EPIPE") falhou(erro);
+    });
+    socket.on("close", () => {
+      clearTimeout(prazo);
+      pronto({ resposta, fechou: true });
+    });
+  });
+}
+
 describe("receptor dos hooks", () => {
+  test("request-target que não é URL volta 400 e o receptor continua de pé", async () => {
+    const recebidos: EventoHook[] = [];
+    const r = await receptor((_f, evento) => void recebidos.push(evento));
+    for (const alvo of ["http://[", "http://[::1"]) {
+      const { resposta, fechou } = await cru(r.porta, `GET ${alvo} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n`);
+      expect(resposta, alvo).toMatch(/^HTTP\/1\.1 400 /);
+      // Chegou ao receptor (não foi o parser do Node que recusou): é o caminho que derrubava o serviço.
+      expect(resposta).toContain("rota inválida");
+      expect(fechou).toBe(true);
+    }
+    expect((await postar(r.porta, corpoHook("Stop"))).status).toBe(200);
+    expect(recebidos.map((e) => e.tipo)).toEqual(["Stop"]);
+  });
+
+  test("sem token, o corpo não é lido: 401 e a conexão é derrubada mesmo com corpo gigante anunciado", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const atender = vi.fn();
+    const r = await receptor(atender);
+    const { resposta, fechou } = await cru(
+      r.porta,
+      "POST /hooks/claude-code HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n" +
+        `Content-Length: ${CORPO_MAXIMO * 100}\r\n\r\n{"hook_event_name":"Stop"`,
+    );
+    expect(resposta).toMatch(/^HTTP\/1\.1 401 /);
+    expect(resposta.toLowerCase()).toContain("connection: close");
+    expect(resposta).toContain(RECUSA_TOKEN);
+    expect(fechou).toBe(true);
+    expect(atender).not.toHaveBeenCalled();
+  });
+
   test("evento com token chega ao atendente com a ferramenta da rota; resposta vazia é {}", async () => {
     const recebidos: [string, EventoHook][] = [];
     const r = await receptor((ferramenta, evento) => void recebidos.push([ferramenta, evento]));

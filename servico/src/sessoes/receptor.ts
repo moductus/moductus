@@ -55,6 +55,26 @@ function responder(res: ServerResponse, status: number, corpo: object | string):
   res.end(json ? JSON.stringify(corpo) : corpo);
 }
 
+/**
+ * Recusa antes de ler o corpo: avisa que fecha e derruba a conexão depois de responder, para que
+ * quem não tem token não consiga fazer o receptor ler (e descartar) um corpo sem limite.
+ */
+function recusar(
+  res: ServerResponse,
+  status: number,
+  texto: string,
+  cabecalhos: Record<string, string> = {},
+) {
+  res.writeHead(status, { "content-type": "text/plain; charset=utf-8", connection: "close", ...cabecalhos });
+  res.end(texto, () => res.socket?.destroy());
+}
+
+/** O caminho do pedido; `null` quando o request-target nem é URL (o `new URL` lançaria). */
+function caminhoDe(url: string | undefined): string | null {
+  const base = "http://127.0.0.1";
+  return URL.canParse(url ?? "/", base) ? new URL(url ?? "/", base).pathname : null;
+}
+
 /** Lê o corpo até o limite; acima dele, `null`. */
 function lerCorpo(req: IncomingMessage, limite: number): Promise<string | null> {
   return new Promise((pronto, falhou) => {
@@ -83,23 +103,25 @@ export function abrirReceptorHooks(
 ): Promise<ReceptorHooks> {
   if (!token) throw new Error("receptor dos hooks sem token");
 
-  const http: Server = createServer((req, res) => void tratar(req, res));
+  // Nenhuma falha no atendimento pode virar rejeição solta: o Node derrubaria o serviço inteiro.
+  const http: Server = createServer((req, res) => {
+    tratar(req, res).catch((erro: unknown) => {
+      console.error(`hooks: pedido não atendido: ${String(erro)}`);
+      if (!res.headersSent) recusar(res, 500, "pedido não atendido");
+      else res.destroy();
+    });
+  });
 
   async function tratar(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const ferramenta = ROTAS_HOOKS[new URL(req.url ?? "/", "http://127.0.0.1").pathname];
-    if (!ferramenta) {
-      req.resume();
-      return responder(res, 404, "rota desconhecida");
-    }
-    if (req.method !== "POST") {
-      req.resume();
-      res.setHeader("allow", "POST");
-      return responder(res, 405, "use POST");
-    }
+    const caminho = caminhoDe(req.url);
+    if (caminho === null) return recusar(res, 400, "rota inválida");
+    // `hasOwn`: o caminho vem de fora e não pode achar nada no protótipo.
+    const ferramenta = Object.hasOwn(ROTAS_HOOKS, caminho) ? ROTAS_HOOKS[caminho] : undefined;
+    if (!ferramenta) return recusar(res, 404, "rota desconhecida");
+    if (req.method !== "POST") return recusar(res, 405, "use POST", { allow: "POST" });
     if (!tokenConfere(req.headers.authorization, token)) {
-      req.resume();
       console.error(`hooks: evento de ${ferramenta} sem token válido recusado`);
-      return responder(res, 401, RECUSA_TOKEN);
+      return recusar(res, 401, RECUSA_TOKEN);
     }
     let texto: string | null;
     try {
