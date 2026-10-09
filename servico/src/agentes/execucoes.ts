@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import type {
   ChamadaFerramenta,
+  Cobranca,
   Efeito,
   EstadoExecucao,
   Execucao,
@@ -34,11 +35,12 @@ interface LinhaExecucao {
   tokens_entrada: number | null;
   tokens_saida: number | null;
   custo_estimado_microdolares: number | null;
+  cobranca: Cobranca | null;
   resumo: string | null;
 }
 
 const COLUNAS_EXECUCAO = `id, do_agente_id, gatilho, provedor_id, inicio, fim, estado, erro, tokens_entrada,
-  tokens_saida, custo_estimado_microdolares, resumo`;
+  tokens_saida, custo_estimado_microdolares, cobranca, resumo`;
 
 const paraExecucao = (l: LinhaExecucao): Execucao => ({
   id: l.id,
@@ -52,6 +54,7 @@ const paraExecucao = (l: LinhaExecucao): Execucao => ({
   tokensEntrada: l.tokens_entrada,
   tokensSaida: l.tokens_saida,
   custoEstimadoMicrodolares: l.custo_estimado_microdolares,
+  cobranca: l.cobranca,
   resumo: l.resumo,
 });
 
@@ -95,7 +98,10 @@ export interface NovaExecucao {
   inicio: string;
 }
 
-/** Como a execução terminou; tokens e custo vazios quando não há número honesto. */
+/**
+ * Como a execução terminou; tokens e custo vazios quando não há número honesto, e a cobrança
+ * dizendo se o custo vazio é assinatura ou modelo sem preço (vazia sem provedor).
+ */
 export interface FimExecucao {
   fim: string;
   estado: Exclude<EstadoExecucao, "rodando">;
@@ -103,6 +109,7 @@ export interface FimExecucao {
   tokensEntrada: number | null;
   tokensSaida: number | null;
   custoEstimadoMicrodolares: number | null;
+  cobranca: Cobranca | null;
   resumo: string | null;
 }
 
@@ -152,7 +159,7 @@ export class RepositorioExecucoes {
       .prepare(
         `UPDATE execucoes
             SET fim = ?, estado = ?, erro = ?, tokens_entrada = ?, tokens_saida = ?,
-                custo_estimado_microdolares = ?, resumo = ?, atualizado_em = ?
+                custo_estimado_microdolares = ?, cobranca = ?, resumo = ?, atualizado_em = ?
           WHERE id = ?`,
       )
       .run(
@@ -162,6 +169,7 @@ export class RepositorioExecucoes {
         f.tokensEntrada,
         f.tokensSaida,
         f.custoEstimadoMicrodolares,
+        f.cobranca,
         f.resumo,
         f.fim,
         id,

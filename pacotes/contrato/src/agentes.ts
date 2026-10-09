@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Id, Instante, PedidoPagina, pagina } from "./comum.ts";
-import { MotivoFalhaProvedor } from "./provedores.ts";
+import { Cobranca, MotivoFalhaProvedor } from "./provedores.ts";
 
 /**
  * Agentes, execuções e o histórico com desfazer (AGENTS.md §1, §4, §6 e §7; DATA.md §6 agentes,
@@ -121,7 +121,9 @@ export type EstadoExecucao = z.infer<typeof EstadoExecucao>;
 
 /**
  * Cada vez que um agente trabalha. Custo vazio quando não há número honesto (assinatura, modelo
- * sem preço conhecido): a interface diz isso em vez de mostrar zero.
+ * sem preço conhecido): a interface diz isso em vez de mostrar zero, e `cobranca` diz qual dos
+ * dois é. Custo preenchido é sempre estimativa, pela tabela de preços do serviço. `cobranca`
+ * vazia: a execução não chegou a um provedor (agente sem modelo).
  */
 export const Execucao = z.object({
   id: Id,
@@ -135,6 +137,7 @@ export const Execucao = z.object({
   tokensEntrada: z.number().int().nonnegative().nullable(),
   tokensSaida: z.number().int().nonnegative().nullable(),
   custoEstimadoMicrodolares: z.number().int().nonnegative().nullable(),
+  cobranca: Cobranca.nullable(),
   resumo: z.string().nullable(),
 });
 export type Execucao = z.infer<typeof Execucao>;

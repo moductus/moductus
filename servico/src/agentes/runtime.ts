@@ -17,6 +17,7 @@ import type {
   ResultadoDeFerramenta,
 } from "../provedores/provedor.ts";
 import { sonoDaFalha } from "../provedores/provedor.ts";
+import { estimarCusto, type CustoExecucao, type UsoDeChamada } from "../provedores/precos.ts";
 import type { RegistroProvedores } from "../provedores/registro.ts";
 import type { AgenteGuardado, RepositorioAgentes } from "./agentes.ts";
 import type { AutorizarComCartao } from "./autorizar.ts";
@@ -82,11 +83,11 @@ export interface AvisosRuntime {
   agente: (agenteId: string) => void;
 }
 
-/** Custo estimado em microdólares; `null` quando não há número honesto (assinatura, sem preço). */
-export type EstimarCusto = (
-  provedor: ConfigProvedor,
-  uso: { tokensEntrada: number; tokensSaida: number },
-) => number | null;
+/**
+ * Como o uso é pago e o custo estimado em microdólares, pelas chamadas ao modelo; custo `null`
+ * quando não há número honesto (assinatura, modelo sem preço).
+ */
+export type EstimarCusto = (provedor: ConfigProvedor, usos: readonly UsoDeChamada[]) => CustoExecucao;
 
 export interface DependenciasRuntime {
   agentes: RepositorioAgentes;
@@ -100,7 +101,7 @@ export interface DependenciasRuntime {
 export interface OpcoesRuntime {
   agora?: () => Date;
   gerarId?: () => string;
-  /** A tabela de preços entra pela F2-09; até lá, nenhum custo é inventado. */
+  /** Sem ele, a tabela de preços do serviço (provedores/precos.ts). */
   estimarCusto?: EstimarCusto;
 }
 
@@ -152,7 +153,7 @@ export class Runtime {
     this.fila = new FilaPorAgente((agenteId) => this.avisos.agente(agenteId));
     this.agora = opcoes.agora ?? (() => new Date());
     this.gerarId = opcoes.gerarId ?? novoId;
-    this.estimarCusto = opcoes.estimarCusto ?? (() => null);
+    this.estimarCusto = opcoes.estimarCusto ?? estimarCusto;
   }
 
   /**
@@ -226,10 +227,15 @@ export class Runtime {
 
     let texto = "";
     let tokens: { entrada: number; saida: number } | null = null;
+    // Cada chamada ao modelo, para o custo sair pelo preço de cada uma (modelo, cache, faixa).
+    const usos: UsoDeChamada[] = [];
     let continuacao: string | null = null;
     let falha: FalhaProvedor | null = null;
     let sono: SonoPedido | null = null;
-    let fim: Omit<FimExecucao, "fim" | "tokensEntrada" | "tokensSaida" | "custoEstimadoMicrodolares">;
+    let fim: Omit<
+      FimExecucao,
+      "fim" | "tokensEntrada" | "tokensSaida" | "custoEstimadoMicrodolares" | "cobranca"
+    >;
     try {
       // Dentro do try: se avisar falhar, a execução ainda termina registrada e sai das ativas.
       this.ativas.set(id, { agenteId: agente.id, executar });
@@ -259,6 +265,7 @@ export class Runtime {
             tokens ??= { entrada: 0, saida: 0 };
             tokens.entrada += evento.tokensEntrada;
             tokens.saida += evento.tokensSaida;
+            usos.push(evento);
           } else if (evento.tipo === "fim") continuacao = evento.continuacao;
           else if (evento.tipo === "erro") falha = evento.falha;
           repassar(pedido, evento, id);
@@ -277,16 +284,15 @@ export class Runtime {
       encerramento.abort(new Error("A execução terminou."));
     }
 
-    const custo =
-      config && tokens
-        ? this.estimarCusto(config, { tokensEntrada: tokens.entrada, tokensSaida: tokens.saida })
-        : null;
+    // Com provedor, a execução diz como é paga mesmo sem tokens: a assinatura fica marcada.
+    const custo = config ? this.estimarCusto(config, usos) : null;
     this.deps.execucoes.terminar(id, {
       ...fim,
       fim: this.agora().toISOString(),
       tokensEntrada: tokens?.entrada ?? null,
       tokensSaida: tokens?.saida ?? null,
-      custoEstimadoMicrodolares: custo,
+      custoEstimadoMicrodolares: custo?.custoEstimadoMicrodolares ?? null,
+      cobranca: custo?.cobranca ?? null,
     });
     const execucao = this.avisar(id, agente.id);
     return { execucao, texto, continuacao, falha, sono };
