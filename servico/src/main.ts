@@ -1,6 +1,7 @@
 import { hostname } from "node:os";
 import { VERSAO_PROTOCOLO, type EstadoConfig } from "@moductus/contrato";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
+import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { CanalCasca } from "./casca/canal.ts";
 import { credenciaisPelaCasca } from "./casca/credenciais.ts";
@@ -59,6 +60,10 @@ const outroPc = new ServicoOutroPc(config, banco, {
 const sessoes = new ServicoSessoes(new RepositorioSessoes(banco), (mudanca) =>
   servidor?.emitir("sessoes.mudou", mudanca),
 );
+const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {
+  aprovacao: (aprovacao) => servidor?.emitir("aprovacoes.mudou", aprovacao),
+  regras: (regras) => servidor?.emitir("regras.mudou", regras),
+});
 
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
@@ -72,6 +77,10 @@ servidor = await abrirServidorWs(token, {
   "primeiroUso.marcar": (pedido) => primeiroUso.marcar(pedido),
   "sessoes.listar": () => sessoes.listar(),
   "sessoes.eventos": (pedido) => sessoes.eventos(pedido),
+  "aprovacoes.pendentes": () => aprovacoes.pendentes(),
+  "aprovacoes.decidir": (pedido) => aprovacoes.decidir(pedido),
+  "regras.listar": () => aprovacoes.regras(),
+  "regras.remover": (pedido) => aprovacoes.removerRegra(pedido),
   // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
   ...semAtendente([
     "agentes.listar",
@@ -96,10 +105,6 @@ servidor = await abrirServidorWs(token, {
     "conversas.mensagens",
     "conversas.enviar",
     "conversas.arquivar",
-    "aprovacoes.pendentes",
-    "aprovacoes.decidir",
-    "regras.listar",
-    "regras.remover",
     "sessoes.uso",
     "github.obter",
     "github.atualizar",
@@ -117,11 +122,17 @@ config
 
 // Hooks das sessões de IA (F2-21): sem o token ou com a porta ocupada, o resto do serviço segue.
 sessoes.vigiar();
+aprovacoes.vigiar();
 tokenDosHooks(credenciaisPelaCasca(canal))
   .then((tokenHooks) =>
     abrirReceptorHooks(
       tokenHooks,
-      (ferramenta, evento) => void sessoes.registrar(ferramenta, evento),
+      (ferramenta, evento) => {
+        // Sessão que terminou não tem mais a quem responder: os cartões dela expiram.
+        const { sessao } = sessoes.registrar(ferramenta, evento);
+        if (sessao.encerradaEm) aprovacoes.expirarDaSessao(sessao.id);
+        return undefined;
+      },
       portaDosHooks(),
     ),
   )
