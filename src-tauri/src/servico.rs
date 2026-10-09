@@ -6,7 +6,8 @@
 //!
 //! Canal com o serviço pelo stdio, em linhas JSON: o serviço avisa `pronto` com a porta
 //! e pede credenciais (`{"tipo":"credencial","id",…}`) e variáveis do usuário
-//! (`{"tipo":"ambiente","id",…}`), respondidas no stdin.
+//! (`{"tipo":"ambiente","id",…}`), respondidas no stdin. Pelo stdin também vão avisos da
+//! casca sem id, como a retomada da suspensão (`{"tipo":"retomou"}`).
 
 use std::{
     io::{BufRead, BufReader, Write},
@@ -160,6 +161,16 @@ struct Mensagem {
 fn responder(id: u64, resposta: serde_json::Value) {
     let mut linha = resposta;
     linha["id"] = id.into();
+    escrever(&linha);
+}
+
+/// Aviso da casca sem pedido do serviço (`{"tipo":"retomou"}`), sem id. Sem serviço de pé, some:
+/// o que sobe depois começa do zero.
+pub fn avisar(aviso: serde_json::Value) {
+    escrever(&aviso);
+}
+
+fn escrever(linha: &serde_json::Value) {
     if let Some(entrada) = ENTRADA.lock().unwrap().as_mut() {
         let _ = writeln!(entrada, "{linha}");
         let _ = entrada.flush();
