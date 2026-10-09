@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { ConteudoArquivo } from "@moductus/contrato";
 import { describe, expect, test } from "vitest";
 import { migrar } from "../banco/migracoes.ts";
 import { criarTabela } from "../banco/tabela.ts";
@@ -101,6 +102,32 @@ describe("configuração × dado", () => {
       }
     }
     expect(JSON.stringify([...tabelas])).not.toContain("moductus:");
+  });
+
+  test("toda tabela de configuração tem lugar no manifesto do contrato", () => {
+    expect(ConteudoArquivo.options.slice().sort()).toEqual(CONFIGURACOES);
+  });
+
+  test("conexão vai sem a situação deste PC, e regra vencida não vai", () => {
+    const db = bancoNovo();
+    db.prepare(
+      "INSERT INTO conexoes (id, tipo, conta, escopos, estado, ultimo_erro, conectada_em) VALUES ('c1', 'github', 'gustavo', '[\"repo\"]', 'erro', 'gh sem login', ?)",
+    ).run(AGORA);
+    const regra = db.prepare(
+      "INSERT INTO regras_permissao (id, escopo, projeto_id, do_agente_id, ferramenta, padrao, decisao, expira_em) VALUES (?, ?, ?, ?, 'Bash', 'pnpm test', 'permitir', ?)",
+    );
+    regra.run("r-sem-prazo", "projeto", "proj1", null, null);
+    regra.run("r-vencida", "agente", null, "nuno", "2026-10-09T11:59:59.000Z");
+    regra.run("r-no-prazo", "agente", null, "nuno", "2026-10-09T12:00:01.000Z");
+
+    const tabelas = lerConfiguracoes(db, new Date(AGORA));
+    const [conexao] = tabelas.get("conexoes") ?? [];
+    expect(conexao).toEqual(expect.objectContaining({ id: "c1", tipo: "github", conta: "gustavo" }));
+    for (const coluna of ["estado", "ultimo_erro", "conectada_em", "credencial"]) {
+      expect(conexao).not.toHaveProperty(coluna);
+    }
+    // A de projeto viaja; a importação decide o que fazer com o projeto que não existe lá.
+    expect(tabelas.get("regras_permissao")?.map((r) => r.id)).toEqual(["r-no-prazo", "r-sem-prazo"]);
   });
 
   test("tabela sem marcação não sai em só configurações", () => {

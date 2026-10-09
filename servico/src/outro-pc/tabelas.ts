@@ -40,6 +40,19 @@ export const EXPORTACAO: Readonly<Record<string, Exportacao>> = {
 export const COLUNAS_QUE_NUNCA_VAO: readonly string[] = ["credencial", "transcript_caminho"];
 
 /**
+ * Colunas que descrevem a situação neste PC, não a configuração. A conexão vai sem credencial, então
+ * chega desligada no PC novo: estado, último erro e data de conexão daqui não valem lá.
+ */
+const SITUACAO_DESTE_PC: Readonly<Record<string, readonly string[]>> = {
+  conexoes: ["estado", "ultimo_erro", "conectada_em"],
+};
+
+/** Linhas que não viajam: regra que já expirou não autoriza mais nada, aqui nem lá. */
+const SO_AS_QUE_VALEM: Readonly<Record<string, string>> = {
+  regras_permissao: "(expira_em IS NULL OR expira_em > :agora)",
+};
+
+/**
  * `config` vai pelo ServicoConfig, validada chave a chave contra o contrato (config.json do
  * arquivo); aqui ficam as demais tabelas de configuração.
  */
@@ -49,17 +62,24 @@ export type Linha = Record<string, unknown>;
 
 /**
  * As linhas das tabelas de configuração, prontas para "só configurações": sem o que está na
- * lixeira e sem as colunas que nunca vão. Tabela sem marcação não sai: na dúvida, é dado.
+ * lixeira, sem as colunas que nunca vão nem as da situação deste PC, e sem as regras vencidas.
+ * Tabela sem marcação não sai: na dúvida, é dado.
  */
-export function lerConfiguracoes(db: DatabaseSync): Map<string, Linha[]> {
+export function lerConfiguracoes(db: DatabaseSync, agora: Date = new Date()): Map<string, Linha[]> {
   const tabelas = new Map<string, Linha[]>();
   for (const tabela of tabelasDoBanco(db)) {
     if (EXPORTACAO[tabela] !== "configuracao" || tabela === PELO_SERVICO_CONFIG) continue;
     const colunas = colunasDe(db, tabela);
-    const levadas = colunas.filter((c) => !COLUNAS_QUE_NUNCA_VAO.includes(c));
-    const vivas = colunas.includes(COLUNA_LIXEIRA) ? ` WHERE ${COLUNA_LIXEIRA} IS NULL` : "";
-    const sql = `SELECT ${levadas.map((c) => `"${c}"`).join(", ")} FROM "${tabela}"${vivas} ORDER BY id`;
-    tabelas.set(tabela, db.prepare(sql).all() as Linha[]);
+    const ficam = [...COLUNAS_QUE_NUNCA_VAO, ...(SITUACAO_DESTE_PC[tabela] ?? [])];
+    const levadas = colunas.filter((c) => !ficam.includes(c));
+    const condicoes = [
+      ...(colunas.includes(COLUNA_LIXEIRA) ? [`${COLUNA_LIXEIRA} IS NULL`] : []),
+      ...(SO_AS_QUE_VALEM[tabela] ? [SO_AS_QUE_VALEM[tabela]] : []),
+    ];
+    const onde = condicoes.length ? ` WHERE ${condicoes.join(" AND ")}` : "";
+    const sql = `SELECT ${levadas.map((c) => `"${c}"`).join(", ")} FROM "${tabela}"${onde} ORDER BY id`;
+    const parametros: Record<string, string> = sql.includes(":agora") ? { agora: agora.toISOString() } : {};
+    tabelas.set(tabela, db.prepare(sql).all(parametros) as Linha[]);
   }
   return tabelas;
 }

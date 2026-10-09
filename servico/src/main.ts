@@ -47,7 +47,7 @@ const config = new ServicoConfig(
 const primeiroUso = new ServicoPrimeiroUso(new RepositorioPrimeiroUso(banco), (estado) =>
   servidor?.emitir("primeiroUso.mudou", estado),
 );
-const outroPc = new ServicoOutroPc(config, {
+const outroPc = new ServicoOutroPc(config, banco, {
   versaoApp: pacote.version,
   versaoEsquema: MIGRACOES.length,
   pcOrigem: hostname(),
