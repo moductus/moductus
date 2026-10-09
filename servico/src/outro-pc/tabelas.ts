@@ -34,6 +34,8 @@ export const EXPORTACAO: Readonly<Record<string, Exportacao>> = {
   notificacoes: "dado",
   // 008-uso-respostas-contadas: o que já entrou em `uso_ia` daqui; o PC novo conta o dele.
   uso_ia_mensagens: "deste_pc",
+  // agendador-disparos: até onde o agendador daqui contou; o PC novo começa a contar do zero.
+  agendador_disparos: "deste_pc",
 };
 
 /**

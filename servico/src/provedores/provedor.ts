@@ -63,8 +63,13 @@ export type EventoAgente =
   | { tipo: "texto"; texto: string }
   | { tipo: "ferramenta"; chamada: ChamadaDeFerramenta }
   | { tipo: "resultado"; chamadaId: string; resultado: ResultadoDeFerramenta }
-  /** Tokens de uma chamada ao modelo; o runtime soma os da execução. */
-  | { tipo: "uso"; tokensEntrada: number; tokensSaida: number }
+  /**
+   * Tokens de uma chamada ao modelo; o runtime soma os da execução e estima o custo de cada uma
+   * (F2-09). `tokensEntrada` é tudo o que o modelo leu, e `tokensCacheLidos` a parte dela que veio
+   * do cache do prompt, mais barata. `modelo` é o que o provedor diz ter usado, quando diz; sem
+   * ele, vale o configurado.
+   */
+  | { tipo: "uso"; tokensEntrada: number; tokensSaida: number; tokensCacheLidos?: number; modelo?: string }
   /** `continuacao` é o que passar em `continuarDe` para seguir a mesma sessão. */
   | { tipo: "fim"; continuacao: string | null }
   | { tipo: "erro"; falha: FalhaProvedor };

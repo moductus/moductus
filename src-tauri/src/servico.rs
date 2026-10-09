@@ -7,7 +7,8 @@
 //! Canal com o serviço pelo stdio, em linhas JSON: o serviço avisa `pronto` com a porta
 //! e pede credenciais (`{"tipo":"credencial","id",…}`), variáveis do usuário
 //! (`{"tipo":"ambiente","id",…}`) e avisos do Windows (`{"tipo":"notificacao","id",…}`),
-//! respondidos no stdin. Sem pedido, a casca manda no stdin o clique num aviso do Windows.
+//! respondidos no stdin. Pelo stdin também vão avisos da casca sem id, como a retomada da
+//! suspensão (`{"tipo":"retomou"}`) e o clique num aviso do Windows (`notificacao-clique`).
 
 use std::{
     io::{BufRead, BufReader, Write},
@@ -158,23 +159,23 @@ struct Mensagem {
     porta: Option<u16>,
 }
 
-fn escrever(linha: serde_json::Value) {
+fn responder(id: u64, resposta: serde_json::Value) {
+    let mut linha = resposta;
+    linha["id"] = id.into();
+    escrever(&linha);
+}
+
+/// Aviso da casca sem pedido do serviço (`{"tipo":"retomou"}`), sem id. Sem serviço de pé, some:
+/// o que sobe depois começa do zero.
+pub fn avisar(aviso: serde_json::Value) {
+    escrever(&aviso);
+}
+
+fn escrever(linha: &serde_json::Value) {
     if let Some(entrada) = ENTRADA.lock().unwrap().as_mut() {
         let _ = writeln!(entrada, "{linha}");
         let _ = entrada.flush();
     }
-}
-
-fn responder(id: u64, resposta: serde_json::Value) {
-    let mut linha = resposta;
-    linha["id"] = id.into();
-    escrever(linha);
-}
-
-/// Manda ao serviço um aviso que não responde a pedido (o clique num aviso do Windows). Sem o
-/// serviço de pé, o aviso se perde: o cartão continua no dock.
-pub fn avisar(aviso: serde_json::Value) {
-    escrever(aviso);
 }
 
 /// Lê o stdout do serviço até ele sair.

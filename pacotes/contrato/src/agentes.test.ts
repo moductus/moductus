@@ -4,6 +4,7 @@ import {
   Agente,
   ChamadaFerramenta,
   Execucao,
+  ExecucaoDetalhada,
   Gatilho,
   MotivoSono,
   MudancaAgente,
@@ -50,6 +51,7 @@ const execucao = {
   tokensEntrada: null,
   tokensSaida: null,
   custoEstimadoMicrodolares: null,
+  cobranca: null,
   resumo: null,
 };
 
@@ -130,6 +132,23 @@ describe("execução e histórico", () => {
     expect(Execucao.safeParse(execucao).success).toBe(true);
     expect(Execucao.safeParse({ ...execucao, estado: "cancelada" }).success).toBe(false);
     expect(Execucao.safeParse({ ...execucao, custoEstimadoMicrodolares: 1.5 }).success).toBe(false);
+  });
+
+  test("execução terminada diz como o uso é pago: assinatura sem custo, por token com estimativa", () => {
+    const ok = { ...execucao, estado: "ok", tokensEntrada: 1000, tokensSaida: 200 };
+    expect(Execucao.safeParse({ ...ok, cobranca: "assinatura" }).success).toBe(true);
+    expect(
+      Execucao.safeParse({ ...ok, cobranca: "por_token", custoEstimadoMicrodolares: 2600 }).success,
+    ).toBe(true);
+    expect(Execucao.safeParse({ ...ok, cobranca: "gratis" }).success).toBe(false);
+    // Assinatura com custo seria número inventado, no histórico e no detalhe.
+    const comCusto = { ...ok, cobranca: "assinatura", custoEstimadoMicrodolares: 2600 };
+    expect(Execucao.safeParse(comCusto).success).toBe(false);
+    expect(ExecucaoDetalhada.safeParse({ ...comCusto, chamadas: [] }).success).toBe(false);
+    expect(
+      ExecucaoDetalhada.safeParse({ ...comCusto, custoEstimadoMicrodolares: null, chamadas: [] }).success,
+    ).toBe(true);
+    expect(Execucao.safeParse({ ...ok, cobranca: undefined }).success).toBe(false);
   });
 
   test("página de execuções com cursor", () => {

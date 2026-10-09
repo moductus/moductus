@@ -3,8 +3,7 @@ import { createInterface } from "node:readline";
 /**
  * Canal com a casca pelo stdio do sidecar, em linhas JSON.
  * - serviço -> casca (stdout): avisos ({ tipo: "pronto", porta }) e pedidos com id;
- * - casca -> serviço (stdin): respostas com o mesmo id e avisos sem pedido, pelo `tipo`
- *   (o clique num aviso do Windows).
+ * - casca -> serviço (stdin): respostas com o mesmo id e avisos sem id ({ tipo: "retomou" }).
  * O stdout é só do canal; log vai para o stderr.
  */
 export interface Saida {
@@ -14,7 +13,7 @@ export interface Saida {
 export class CanalCasca {
   private proximo = 1;
   private pendentes = new Map<number, (resposta: Record<string, unknown>) => void>();
-  private ouvintes = new Map<string, (aviso: Record<string, unknown>) => void>();
+  private ouvintes = new Map<string, Array<(aviso: Record<string, unknown>) => void>>();
 
   constructor(private readonly saida: Saida) {}
 
@@ -37,13 +36,12 @@ export class CanalCasca {
     });
   }
 
-  /** Recebe os avisos da casca que não respondem a pedido, pelo `tipo`; devolve como parar. */
-  aoReceber(tipo: string, ouvinte: (aviso: Record<string, unknown>) => void): () => void {
-    this.ouvintes.set(tipo, ouvinte);
-    return () => this.ouvintes.delete(tipo);
+  /** Escuta um aviso que a casca manda por conta própria, como a retomada da suspensão. */
+  aoAvisar(tipo: string, ouvinte: (aviso: Record<string, unknown>) => void): void {
+    this.ouvintes.set(tipo, [...(this.ouvintes.get(tipo) ?? []), ouvinte]);
   }
 
-  /** Entrega uma linha recebida da casca ao pedido que espera por ela, ou a quem ouve o tipo. */
+  /** Entrega uma linha recebida da casca ao pedido que espera por ela ou a quem escuta o aviso. */
   receber(linha: string): void {
     let mensagem: Record<string, unknown>;
     try {
@@ -51,15 +49,21 @@ export class CanalCasca {
     } catch {
       return;
     }
+    if (mensagem.id === undefined && typeof mensagem.tipo === "string") {
+      for (const ouvinte of this.ouvintes.get(mensagem.tipo) ?? []) {
+        try {
+          ouvinte(mensagem);
+        } catch (erro) {
+          console.error(`aviso ${mensagem.tipo} da casca falhou: ${String(erro)}`);
+        }
+      }
+      return;
+    }
     const id = typeof mensagem.id === "number" ? mensagem.id : -1;
     const resolver = this.pendentes.get(id);
     if (resolver) {
       this.pendentes.delete(id);
       resolver(mensagem);
-      return;
-    }
-    if (typeof mensagem.tipo === "string" && mensagem.id === undefined) {
-      this.ouvintes.get(mensagem.tipo)?.(mensagem);
     }
   }
 

@@ -18,10 +18,21 @@ process.stdin.on("end", () => {
   const temAcessoMcp = process.env.MODUCTUS_MCP_ACESSO !== undefined;
   // Das outras variáveis do Moductus (token do canal, pasta), só os nomes que chegaram.
   const variaveisMoductus = Object.keys(process.env).filter((nome) => /^MODUCTUS_/i.test(nome));
+  // Das que decidem como o CLI se autentica (assinatura ou API), também só os nomes.
+  const variaveisDeAutenticacao = Object.keys(process.env)
+    .filter((nome) => /^(ANTHROPIC_|CLAUDE_CODE_USE_|CLAUDE_CODE_OAUTH_|AWS_BEARER_TOKEN_)/i.test(nome))
+    .sort();
   if (anotacao !== "-")
     writeFileSync(
       anotacao,
-      JSON.stringify({ argumentos, entrada, pasta: process.cwd(), temAcessoMcp, variaveisMoductus }),
+      JSON.stringify({
+        argumentos,
+        entrada,
+        pasta: process.cwd(),
+        temAcessoMcp,
+        variaveisMoductus,
+        variaveisDeAutenticacao,
+      }),
     );
   const linhas = saida === "-" ? [] : readFileSync(saida, "utf8").split(/\r?\n/).filter(Boolean);
   for (const linha of linhas) process.stdout.write(linha + "\n");

@@ -25,6 +25,14 @@ export const TipoProvedorCli = z.enum(TIPOS_PROVEDOR_CLI);
 export type TipoProvedorCli = z.infer<typeof TipoProvedorCli>;
 
 /**
+ * Como o uso de um provedor é pago (F2-09): `assinatura` (CLI com a conta do usuário: não há custo
+ * por token a mostrar) ou `por_token` (API: custo estimado pela tabela de preços do serviço,
+ * vazio quando o modelo não está nela).
+ */
+export const Cobranca = z.enum(["assinatura", "por_token"]);
+export type Cobranca = z.infer<typeof Cobranca>;
+
+/**
  * Por que o provedor falhou (F2-05): limite de uso, fora do ar, credencial recusada ou CLI
  * ausente. É o que decide se o agente dorme e até quando.
  */
