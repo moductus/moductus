@@ -9,7 +9,8 @@ import type { Runtime } from "./runtime.ts";
  * 2. sem menção, regras simples, trecho a trecho: valor em reais vai para a Tula, link de PR para o
  *    Nuno, arquivo ou pasta para a Faina;
  * 3. sobrou trecho que nenhuma regra pegou, o classificador barato (o modelo da Alba, prompt curto)
- *    decide; a mensagem que ficou sem destino nenhum vai à Alba, que é o padrão.
+ *    decide; o que ele não der a ninguém vai à Alba, que é o padrão (a não ser que um agente só
+ *    responda a mensagem inteira).
  *
  * Pedido com partes de áreas diferentes é dividido: cada agente recebe a parte que é dele, e todos
  * respondem na mesma conversa.
@@ -96,7 +97,7 @@ export const REGRAS: readonly { agenteId: string; padrao: RegExp }[] = [
         "(?<![\\p{L}\\p{N}_])[a-z]:\\\\",
         "(?<!\\S)~[\\\\/]",
         `[\\p{L}\\p{N}_-]+\\.(?:${EXTENSOES})(?![\\p{L}\\p{N}_])`,
-        palavra("downloads|área de trabalho|arquivos?|pastas?"),
+        palavra("downloads|area de trabalho|arquivos?|pastas?"),
       ].join("|"),
       "iu",
     ),
@@ -107,7 +108,9 @@ export const REGRAS: readonly { agenteId: string; padrao: RegExp }[] = [
 
 /** Os agentes que as regras escolhem para um trecho, só entre os que podem responder. */
 export function porRegra(trecho: string, agentes: readonly AgenteRoteavel[]): string[] {
-  return REGRAS.filter((r) => r.padrao.test(trecho) && agentes.some((a) => a.id === r.agenteId)).map(
+  // Sem acento: rea de trabalho e Área de Trabalho são a mesma pasta.
+  const normal = normalizar(trecho);
+  return REGRAS.filter((r) => r.padrao.test(normal) && agentes.some((a) => a.id === r.agenteId)).map(
     (r) => r.agenteId,
   );
 }
@@ -153,13 +156,17 @@ export class Roteador {
       // O classificador vê a mensagem inteira, para entender o trecho solto pelo contexto ("Foi no
       // débito" depois de um valor é da Tula). O que a regra já deu a alguém fica como a regra deu.
       const sobra = resto.join(" ");
-      for (const destino of await this.classificados(texto, agentes, ultimoAResponder)) {
-        if (!partes.has(destino.agenteId)) juntar(destino.agenteId, destino.parte ?? sobra);
-      }
-      // Sem destino nenhum, a Alba é o padrão. Se uma regra já escolheu alguém, ele basta.
-      if (partes.size === 0) {
+      const classificados = await this.classificados(texto, agentes, ultimoAResponder);
+      const novos = classificados.filter((d) => !partes.has(d.agenteId));
+      const daRegra = classificados.filter((d) => partes.has(d.agenteId));
+      if (novos.length > 0) for (const d of novos) juntar(d.agenteId, d.parte ?? sobra);
+      else if (daRegra.length > 0) for (const d of daRegra) juntar(d.agenteId, sobra);
+      // Ninguém ficou com a sobra. Sem destino nenhum, ou com a mensagem dividida entre dois ou mais,
+      // ela vai à Alba, que é o padrão: ninguém ouve "o resto fica com" quem não vai responder. Com
+      // um destino só, ele recebe a mensagem inteira e basta.
+      else if (partes.size !== 1) {
         const padrao = agentes.find((a) => a.id === AGENTE_PADRAO) ?? agentes[0]!;
-        juntar(padrao.id, texto);
+        juntar(padrao.id, partes.size === 0 ? texto : sobra);
       }
     }
 
@@ -232,26 +239,51 @@ export function lerClassificacao(texto: string): Destino[] {
   return lida.data.map((d) => ({ agenteId: d.agente, parte: d.parte ?? null }));
 }
 
+/** Quanto o roteamento espera o classificador antes de mandar a mensagem à Alba. */
+export const PRAZO_CLASSIFICADOR_MS = 20_000;
+
 /**
  * O classificador pelo modelo do agente padrão, como uma execução dele: aparece no histórico com
  * tokens e custo, sem ferramentas e com o prompt curto no lugar das instruções. Agente sem modelo
  * ou desligado não classifica: a mensagem vai ao padrão sem uma execução a mais.
+ *
+ * Roda fora da fila da Alba, para não esperar uma resposta longa dela nem atrasar a próxima, e com
+ * prazo curto: estourou, a execução é cancelada e a mensagem vai ao padrão.
  */
 export function classificadorPeloRuntime(
   runtime: Pick<Runtime, "executar">,
   agentes: Pick<RepositorioAgentes, "agente">,
-  agenteId: string = AGENTE_PADRAO,
+  opcoes: { agenteId?: string; prazoMs?: number } = {},
 ): Classificador {
+  const agenteId = opcoes.agenteId ?? AGENTE_PADRAO;
+  const prazoMs = opcoes.prazoMs ?? PRAZO_CLASSIFICADOR_MS;
   return async ({ texto, agentes: roteaveis, ultimoAResponder }) => {
     const quem = agentes.agente(agenteId);
     if (!quem?.provedorId || quem.estado === "desligado") return [];
-    const resultado = await runtime.executar({
-      agenteId,
-      gatilho: "mensagem",
-      mensagens: [{ papel: "usuario", texto }],
-      instrucoes: promptDoClassificador(roteaveis, ultimoAResponder),
-      semFerramentas: true,
-    });
-    return resultado.execucao.estado === "ok" ? lerClassificacao(resultado.texto) : [];
+    const controle = new AbortController();
+    let estourou!: () => void;
+    const prazo = new Promise<null>((resolve) => (estourou = () => resolve(null)));
+    const relogio = setTimeout(() => {
+      controle.abort(new Error("o classificador passou do prazo"));
+      estourou();
+    }, prazoMs);
+    try {
+      const execucao = runtime.executar({
+        agenteId,
+        gatilho: "mensagem",
+        mensagens: [{ papel: "usuario", texto }],
+        instrucoes: promptDoClassificador(roteaveis, ultimoAResponder),
+        semFerramentas: true,
+        foraDaFila: true,
+        sinal: controle.signal,
+      });
+      // O runtime cancela pelo sinal; a corrida garante o prazo mesmo se o adaptador demorar a parar.
+      void execucao.catch(() => {});
+      const resultado = await Promise.race([execucao, prazo]);
+      if (!resultado || resultado.execucao.estado !== "ok") return [];
+      return lerClassificacao(resultado.texto);
+    } finally {
+      clearTimeout(relogio);
+    }
   };
 }

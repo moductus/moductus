@@ -57,6 +57,8 @@ describe("regras", () => {
       "lê o extrato.ofx",
       "limpa os Downloads",
       "joga na Área de Trabalho",
+      "joga na area de trabalho",
+      "LIMPA A ÁREA DE TRABALHO",
       "acha o arquivo do contrato",
     ]) {
       expect(porRegra(texto, TIME), texto).toEqual(["faina"]);
@@ -113,6 +115,23 @@ describe("rotear", () => {
     expect(destinos).toEqual([
       { agenteId: "tula", parte: "Paguei R$ 45 no mercado." },
       { agenteId: "alba", parte: "Me lembra de ligar pro banco amanhã às 15h." },
+    ]);
+  });
+
+  test("dividida por regra entre dois, o trecho que o classificador não dá a ninguém vai à Alba", async () => {
+    const texto = "Paguei R$ 45 no mercado. O CI do github.com/a/b/pull/142 quebrou? E amanhã cedo?";
+    const esperado = [
+      { agenteId: "tula", parte: "Paguei R$ 45 no mercado." },
+      { agenteId: "nuno", parte: "O CI do github.com/a/b/pull/142 quebrou?" },
+      { agenteId: "alba", parte: "E amanhã cedo?" },
+    ];
+    expect(await new Roteador(classificadorFixo([])).rotear(texto, TIME)).toEqual(esperado);
+    expect(await new Roteador().rotear(texto, TIME)).toEqual(esperado);
+    // O classificador que dá a sobra a quem a regra já escolheu põe o trecho na parte dele.
+    const peloNuno = new Roteador(classificadorFixo([{ agenteId: "nuno", parte: null }]));
+    expect(await peloNuno.rotear(texto, TIME)).toEqual([
+      esperado[0],
+      { agenteId: "nuno", parte: "O CI do github.com/a/b/pull/142 quebrou? E amanhã cedo?" },
     ]);
   });
 

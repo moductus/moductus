@@ -48,6 +48,11 @@ export interface PedidoExecucao {
   instrucoes?: string;
   /** Nenhuma ferramenta oferecida: o modelo só responde texto. */
   semFerramentas?: boolean;
+  /**
+   * Roda já, sem esperar a vez do agente nem tomar a dele, no runtime e no adaptador: para um
+   * trabalho curto que não pode ficar atrás de uma resposta longa (o classificador do roteamento).
+   */
+  foraDaFila?: boolean;
   /** Cada evento do provedor, na hora, para a conversa mostrar a resposta em streaming. */
   aoEvento?: (evento: EventoAgente, execucaoId: string) => void;
   /** Cancela a execução, ou tira o pedido da fila se ainda não chegou a vez. */
@@ -157,6 +162,10 @@ export class Runtime {
    */
   async executar(pedido: PedidoExecucao): Promise<ResultadoExecucao> {
     if (!this.deps.agentes.agente(pedido.agenteId)) throw new Error("agente não encontrado");
+    if (pedido.foraDaFila) {
+      pedido.sinal?.throwIfAborted();
+      return this.rodar(pedido);
+    }
     return this.fila.rodar(pedido.agenteId, () => this.rodar(pedido), pedido.sinal);
   }
 
@@ -230,6 +239,8 @@ export class Runtime {
             ferramentas: pedido.semFerramentas ? [] : escopo.oferecidas(),
             executarFerramenta: executar,
             continuarDe: pedido.continuarDe ?? null,
+            // Fora da fila, a execução é a própria fila no adaptador: não espera nem segura ninguém.
+            ...(pedido.foraDaFila ? { fila: id } : {}),
           },
           sinal,
         );
