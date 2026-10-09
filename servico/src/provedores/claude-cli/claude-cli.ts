@@ -21,6 +21,22 @@ const PREFIXO_MCP = "mcp__moductus__";
 /** Quanto esperar o CLI sair sozinho depois do `result` (ele grava a sessão do `--resume`). */
 const ESPERA_SAIDA_MS = 5000;
 
+/** Quanto esperar o processo sair depois de encerrado, para não deixar a execução pendurada. */
+const ESPERA_ENCERRAR_MS = 2000;
+
+/**
+ * A variável de ambiente que leva o token do MCP ao CLI, que a expande no cabeçalho. O nome evita
+ * TOKEN, KEY, SECRET, PASSWORD e AUTH: a documentação do Claude Code lê como vazias as variáveis de
+ * credencial conhecidas no cabeçalho de servidor remoto e tira do ambiente de helpers os nomes com
+ * essas palavras, e um nome neutro fica longe das duas regras.
+ */
+export const VARIAVEL_ACESSO_MCP = "MODUCTUS_MCP_ACESSO";
+
+/** O `--resume` apontou para uma sessão que o CLI não tem mais (apagada, outra máquina). */
+const SESSAO_PERDIDA = /no conversation found/i;
+
+class SessaoPerdida extends Error {}
+
 export type IniciarProcesso = (
   argumentos: string[],
   opcoes: SpawnOptionsWithoutStdio,
@@ -29,15 +45,18 @@ export type IniciarProcesso = (
 export interface OpcoesClaudeCli {
   /** Executável do CLI; a detecção (F2-08) passa o caminho achado. */
   comando?: string;
-  /** Pasta de trabalho do CLI. O `--resume` só acha a sessão na mesma pasta, então ela é fixa. */
+  /**
+   * Pasta de trabalho do CLI, própria do Moductus e sempre a mesma. O CLI lê `CLAUDE.md` e
+   * `.claude/` da pasta onde roda: numa pasta própria o agente não herda instruções nem
+   * configuração de um projeto qualquer, e as sessões dos agentes ficam juntas num projeto só em
+   * `~/.claude/projects`. (O `--resume` por ID acha a sessão em qualquer projeto desde a 2.1.223.)
+   */
   pasta?: string;
   /**
-   * Servidor MCP do Moductus (ADR-0014). O token vai por variável de ambiente, nunca literal:
-   * a configuração leva `${variavelToken}` e o CLI expande.
+   * Servidor MCP do Moductus (ADR-0014). O token vai no ambiente do processo, em
+   * `VARIAVEL_ACESSO_MCP`, nunca nos argumentos: a configuração leva `${VARIAVEL}` e o CLI expande.
    */
-  mcp?: { url: string; variavelToken: string };
-  /** Variáveis somadas ao ambiente do serviço (ex.: o token do MCP). */
-  ambiente?: Record<string, string>;
+  mcp?: { url: string; token: string };
   /** Como iniciar o processo; os testes trocam o CLI por um roteiro gravado. */
   iniciar?: IniciarProcesso;
   agora?: () => Date;
@@ -76,6 +95,10 @@ export function argumentosDoClaude(
     "--tools",
     "",
     "--strict-mcp-config",
+    // Sem isso o CLI reaproveita, no --resume, o prompt de sistema gravado na primeira chamada, e
+    // instruções editadas do agente só valeriam depois de compactar a conversa (2.1.257+).
+    "--system-prompt-snapshot",
+    "off",
   ];
   if (pedido.instrucoes) argumentos.push("--append-system-prompt", pedido.instrucoes);
   if (config.modelo) argumentos.push("--model", config.modelo);
@@ -84,7 +107,7 @@ export function argumentosDoClaude(
     const servidor = {
       type: "http",
       url: opcoes.mcp.url,
-      headers: { Authorization: `Bearer \${${opcoes.mcp.variavelToken}}` },
+      headers: { Authorization: `Bearer \${${VARIAVEL_ACESSO_MCP}}` },
     };
     argumentos.push("--mcp-config", JSON.stringify({ mcpServers: { moductus: servidor } }));
     argumentos.push("--allowedTools", pedido.ferramentas.map((f) => nomeNoCli(f.nome)).join(","));
@@ -108,29 +131,40 @@ export class ProvedorClaudeCli implements Provedor {
     sinal.throwIfAborted();
     const liberar = await this.entrarNaFila(pedido.agenteId, sinal);
     try {
-      yield* this.rodar(pedido, sinal);
+      try {
+        yield* this.rodar(pedido, sinal);
+      } catch (erro) {
+        if (!(erro instanceof SessaoPerdida)) throw erro;
+        // A sessão a continuar sumiu: começa outra, com o histórico curto no prompt. O `fim`
+        // traz a continuação nova, e o runtime passa a usar essa.
+        yield* this.rodar({ ...pedido, continuarDe: null }, sinal);
+      }
     } finally {
       liberar();
     }
   }
 
+  /**
+   * Entra no fim da fila do agente e espera a vez. Cancelar na espera só solta a própria vez: quem
+   * chegou depois continua esperando quem estava antes. A entrada do mapa sai quando a fila
+   * inteira esvazia.
+   */
   private async entrarNaFila(agenteId: string, sinal: AbortSignal): Promise<() => void> {
     const anterior = this.filas.get(agenteId) ?? Promise.resolve();
     let soltar!: () => void;
     const minha = new Promise<void>((resolve) => (soltar = resolve));
     const cauda = anterior.then(() => minha);
     this.filas.set(agenteId, cauda);
-    const liberar = () => {
-      soltar();
+    void cauda.then(() => {
       if (this.filas.get(agenteId) === cauda) this.filas.delete(agenteId);
-    };
+    });
     try {
       await esperarOuCancelar(anterior, sinal);
     } catch (erro) {
-      liberar();
+      soltar();
       throw erro;
     }
-    return liberar;
+    return soltar;
   }
 
   private async *rodar(pedido: PedidoDoAgente, sinal: AbortSignal): AsyncIterable<EventoAgente> {
@@ -139,7 +173,9 @@ export class ProvedorClaudeCli implements Provedor {
     const iniciar: IniciarProcesso = this.opcoes.iniciar ?? ((args, o) => spawn(comando, args, o));
     const processo = iniciar(argumentosDoClaude(pedido, this.config, this.opcoes), {
       cwd: this.opcoes.pasta,
-      env: { ...process.env, ...this.opcoes.ambiente },
+      env: this.opcoes.mcp
+        ? { ...process.env, [VARIAVEL_ACESSO_MCP]: this.opcoes.mcp.token }
+        : { ...process.env },
       windowsHide: true,
     });
     const saida = new Promise<{ codigo: number | null; erro: Error | null }>((resolve) => {
@@ -159,9 +195,23 @@ export class ProvedorClaudeCli implements Provedor {
       nomeDaFerramenta: (nome) => this.nomeNoCatalogo(nome, pedido),
       agora: this.opcoes.agora ?? (() => new Date()),
     });
+    // Sessão perdida só é reconhecida antes de qualquer evento: depois disso, recomeçar repetiria a fala.
+    let emitiu = false;
+    const sessaoPerdida = (texto: string) =>
+      pedido.continuarDe !== null && !emitiu && SESSAO_PERDIDA.test(texto);
     try {
       for await (const linha of createInterface({ input: processo.stdout, crlfDelay: Infinity })) {
-        yield* leitor.ler(linha);
+        let eventos: EventoAgente[];
+        try {
+          eventos = leitor.ler(linha);
+        } catch (erro) {
+          if (sessaoPerdida(String((erro as Error).message))) throw new SessaoPerdida(String(erro));
+          throw erro;
+        }
+        for (const evento of eventos) {
+          emitiu = true;
+          yield evento;
+        }
         if (leitor.terminou) return;
       }
       sinal.throwIfAborted();
@@ -178,13 +228,21 @@ export class ProvedorClaudeCli implements Provedor {
         return;
       }
       if (erro) throw erro;
+      if (sessaoPerdida(erros)) throw new SessaoPerdida(erros.trim());
       const detalhe = erros.trim() ? `: ${erros.trim()}` : "";
       throw new Error(`O Claude Code saiu sem resposta (código ${codigo})${detalhe}`);
     } finally {
-      sinal.removeEventListener("abort", aoAbortar);
-      if (processo.exitCode === null && processo.signalCode === null) {
-        if (leitor.terminou && !sinal.aborted) await Promise.race([saida, pausa(ESPERA_SAIDA_MS)]);
-        if (processo.exitCode === null && processo.signalCode === null) processo.kill();
+      // O cancelamento vale até o processo sair, inclusive na espera depois do `result`.
+      try {
+        if (vivo(processo)) {
+          if (leitor.terminou && !sinal.aborted) await Promise.race([saida, pausa(ESPERA_SAIDA_MS)]);
+          if (vivo(processo)) {
+            processo.kill();
+            await Promise.race([saida, pausa(ESPERA_ENCERRAR_MS)]);
+          }
+        }
+      } finally {
+        sinal.removeEventListener("abort", aoAbortar);
       }
     }
   }
@@ -212,6 +270,10 @@ function esperarOuCancelar(promessa: Promise<void>, sinal: AbortSignal): Promise
       resolve();
     });
   });
+}
+
+function vivo(processo: ChildProcessWithoutNullStreams): boolean {
+  return processo.exitCode === null && processo.signalCode === null;
 }
 
 function pausa(ms: number): Promise<void> {

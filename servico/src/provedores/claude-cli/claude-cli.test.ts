@@ -12,6 +12,7 @@ import {
   montarPrompt,
   ProvedorClaudeCli,
   type OpcoesClaudeCli,
+  VARIAVEL_ACESSO_MCP,
 } from "./claude-cli.ts";
 
 const CLI_FALSO = fileURLToPath(new URL("./fixtures/cli-falso.mjs", import.meta.url));
@@ -59,25 +60,38 @@ afterEach(async () => {
   rmSync(pasta, { recursive: true, force: true });
 });
 
-/** O adaptador com o CLI trocado pelo falso, que devolve a saída gravada. */
-function comCliFalso(saidas: string[], modo = "normal", extra: OpcoesClaudeCli = {}) {
-  const anotacao = join(pasta, "anotacao.json");
+interface Anotacao {
+  argumentos: string[];
+  entrada: string;
+  pasta: string;
+  temAcessoMcp: boolean;
+}
+
+/**
+ * O adaptador com o CLI trocado pelo falso, que devolve a saída gravada. `saidas` e `modos` valem
+ * por processo, na ordem em que sobem; o último se repete.
+ */
+function comCliFalso(saidas: string[], modos: string | string[] = "normal", extra: OpcoesClaudeCli = {}) {
+  const listaDeModos = typeof modos === "string" ? [modos] : modos;
+  const anotacao = (n: number) => join(pasta, `anotacao-${n}.json`);
   const provedor = new ProvedorClaudeCli(config({ modelo: "haiku" }), {
     pasta,
     ...extra,
     iniciar: (argumentos, opcoes) => {
-      const saida = saidas[processos.length] ?? saidas.at(-1) ?? "-";
+      const n = processos.length;
+      const saida = saidas[n] ?? saidas.at(-1) ?? "-";
+      const modo = listaDeModos[n] ?? listaDeModos.at(-1) ?? "normal";
       const processo = spawn(
         process.execPath,
-        [CLI_FALSO, saida, modo, anotacao, "--", ...argumentos],
+        [CLI_FALSO, saida, modo, anotacao(n), "--", ...argumentos],
         opcoes,
       );
       processos.push(processo);
       return processo;
     },
   });
-  const anotado = () =>
-    JSON.parse(readFileSync(anotacao, "utf8")) as { argumentos: string[]; entrada: string; pasta: string };
+  /** O que o processo `n` recebeu; sem `n`, o último. */
+  const anotado = (n = processos.length - 1) => JSON.parse(readFileSync(anotacao(n), "utf8")) as Anotacao;
   return { provedor, anotado };
 }
 
@@ -121,7 +135,57 @@ describe("adaptador Claude Code CLI", () => {
     expect(argumentos[argumentos.indexOf("--model") + 1]).toBe("haiku");
     // O argumento vazio sobrevive à linha de comando do Windows: nenhuma ferramenta nativa.
     expect(argumentos[argumentos.indexOf("--tools") + 1]).toBe("");
+    // Instrução editada vale já, mesmo continuando a sessão.
+    expect(argumentos[argumentos.indexOf("--system-prompt-snapshot") + 1]).toBe("off");
     expect(argumentos).not.toContain("--resume");
+  });
+
+  test("o token do MCP chega ao CLI pelo ambiente e nunca pelos argumentos", async () => {
+    const token = "acesso-de-teste-que-nao-pode-aparecer";
+    const { provedor, anotado } = comCliFalso([gravada("sessao-com-ferramenta.jsonl")], "normal", {
+      mcp: { url: "http://127.0.0.1:47822/mcp", token },
+    });
+    await coletar(provedor.executar(pedido(), new AbortController().signal));
+    const { argumentos, temAcessoMcp } = anotado();
+    expect(temAcessoMcp).toBe(true);
+    expect(argumentos.join(" ")).not.toContain(token);
+    expect(argumentos.join(" ")).toContain(`\${${VARIAVEL_ACESSO_MCP}}`);
+
+    const semMcp = comCliFalso([gravada("sessao-com-ferramenta.jsonl")]);
+    await coletar(semMcp.provedor.executar(pedido(), new AbortController().signal));
+    expect(semMcp.anotado().temAcessoMcp).toBe(false);
+  });
+
+  test("sessão do --resume sumiu: recomeça sem --resume, com o histórico curto", async () => {
+    const { provedor, anotado } = comCliFalso(
+      ["-", gravada("sessao-com-ferramenta.jsonl")],
+      ["falhar", "normal"],
+    );
+    const mensagens = [
+      { papel: "usuario" as const, texto: "Quais sessões estão abertas?" },
+      { papel: "agente" as const, texto: "Duas." },
+      { papel: "usuario" as const, texto: "E qual espera por mim?" },
+    ];
+    const eventos = await coletar(
+      provedor.executar(pedido({ continuarDe: "sessao-apagada", mensagens }), new AbortController().signal),
+    );
+    expect(processos).toHaveLength(2);
+    expect(anotado(0).argumentos).toContain("--resume");
+    const segunda = anotado(1);
+    expect(segunda.argumentos).not.toContain("--resume");
+    expect(segunda.entrada).toBe(
+      "Conversa até aqui:\nUsuário: Quais sessões estão abertas?\nVocê: Duas.\n\nMensagem nova:\nE qual espera por mim?",
+    );
+    // A continuação nova vem no fim, para o runtime trocar a que sumiu.
+    expect(eventos.at(-1)).toEqual({ tipo: "fim", continuacao: "78e523d4-fecc-4ec2-9fd7-87a2c33372d6" });
+  });
+
+  test("sem --resume, a mesma falha não vira nova tentativa", async () => {
+    const { provedor } = comCliFalso(["-"], "falhar");
+    await expect(coletar(provedor.executar(pedido(), new AbortController().signal))).rejects.toThrow(
+      /saiu sem resposta/,
+    );
+    expect(processos).toHaveLength(1);
   });
 
   test("limite gravado vira erro `limite` com a hora de volta", async () => {
@@ -169,8 +233,9 @@ describe("adaptador Claude Code CLI", () => {
     expect((await eventos.next()).value).toMatchObject({ tipo: "ferramenta" });
     controle.abort(new Error("pausado pela bandeja"));
     await expect(drenar(eventos)).rejects.toThrow("pausado pela bandeja");
-    await esperarSaida(processos[0]);
+    // A execução só termina depois que o processo saiu.
     expect(processos[0]?.killed).toBe(true);
+    expect(vivo(processos[0])).toBe(false);
     // Já cancelado, nem sobe outro processo.
     await expect(coletar(provedor.executar(pedido(), controle.signal))).rejects.toThrow(
       "pausado pela bandeja",
@@ -183,6 +248,24 @@ describe("adaptador Claude Code CLI", () => {
     await coletar(provedor.executar(pedido(), new AbortController().signal));
     expect(processos[0]?.killed).toBe(false);
     expect(processos[0]?.exitCode).toBe(0);
+  });
+
+  test("cancelar durante a espera depois do `result` encerra o processo na hora", async () => {
+    // A saída termina no `result`, mas o processo não sai sozinho: o adaptador esperaria 5 s.
+    const { provedor } = comCliFalso([gravada("sessao-com-ferramenta.jsonl")], "pendurar");
+    const controle = new AbortController();
+    const eventos = provedor.executar(pedido(), controle.signal)[Symbol.asyncIterator]();
+    let evento = await eventos.next();
+    while (!evento.done && evento.value.tipo !== "fim") evento = await eventos.next();
+    expect(evento.value).toMatchObject({ tipo: "fim" });
+
+    const inicio = Date.now();
+    const depoisDoFim = eventos.next();
+    controle.abort(new Error("pausado pela bandeja"));
+    expect((await depoisDoFim).done).toBe(true);
+    expect(Date.now() - inicio).toBeLessThan(2000);
+    expect(processos[0]?.killed).toBe(true);
+    expect(vivo(processos[0])).toBe(false);
   });
 
   test("CLI que não está instalado vira erro `ausente`", async () => {
@@ -241,11 +324,19 @@ describe("adaptador Claude Code CLI", () => {
     await expect(resultado).rejects.toThrow("desisti");
     expect(processos).toHaveLength(1);
 
+    // Quem chega depois do cancelado continua esperando o primeiro, que ainda roda.
+    const terceiro = provedor
+      .executar(pedido({ execucaoId: "exec-3" }), new AbortController().signal)
+      [Symbol.asyncIterator]();
+    const doTerceiro = terceiro.next();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(processos).toHaveLength(1);
+
     primeiro.abort(new Error("fim"));
     await expect(drenar(doNuno)).rejects.toThrow("fim");
-    // A fila andou: o próximo pedido do Nuno sobe na hora.
-    const terceiro = provedor.executar(pedido({ execucaoId: "exec-3" }), new AbortController().signal);
-    expect((await terceiro[Symbol.asyncIterator]().next()).value).toMatchObject({ tipo: "ferramenta" });
+    expect((await doTerceiro).value).toMatchObject({ tipo: "ferramenta" });
+    expect(processos).toHaveLength(2);
+    expect(vivo(processos[0])).toBe(false);
   });
 
   test("a fábrica registra o tipo claude-cli no registro de provedores", () => {
@@ -259,8 +350,7 @@ describe("adaptador Claude Code CLI", () => {
 describe("argumentos e prompt", () => {
   test("MCP do Moductus: token por variável, nunca literal, e só as ferramentas do agente", () => {
     const argumentos = argumentosDoClaude(pedido(), config(), {
-      mcp: { url: "http://127.0.0.1:47822/mcp", variavelToken: "MODUCTUS_MCP_TOKEN" },
-      ambiente: { MODUCTUS_MCP_TOKEN: "segredo-que-nao-pode-aparecer" },
+      mcp: { url: "http://127.0.0.1:47822/mcp", token: "segredo-que-nao-pode-aparecer" },
     });
     const mcp = JSON.parse(argumentos[argumentos.indexOf("--mcp-config") + 1] ?? "{}");
     expect(mcp).toEqual({
@@ -268,10 +358,12 @@ describe("argumentos e prompt", () => {
         moductus: {
           type: "http",
           url: "http://127.0.0.1:47822/mcp",
-          headers: { Authorization: "Bearer ${MODUCTUS_MCP_TOKEN}" },
+          headers: { Authorization: "Bearer ${MODUCTUS_MCP_ACESSO}" },
         },
       },
     });
+    // Nome neutro: nada de TOKEN, KEY, SECRET, PASSWORD ou AUTH.
+    expect(VARIAVEL_ACESSO_MCP).not.toMatch(/token|key|secret|password|auth/i);
     expect(argumentos[argumentos.indexOf("--allowedTools") + 1]).toBe("mcp__moductus__sessoes_listar");
     expect(argumentos).toContain("--strict-mcp-config");
     expect(argumentos.join(" ")).not.toContain("segredo-que-nao-pode-aparecer");
@@ -280,7 +372,7 @@ describe("argumentos e prompt", () => {
   test("sem MCP ou sem ferramentas, nenhuma ferramenta é liberada", () => {
     expect(argumentosDoClaude(pedido(), config())).not.toContain("--allowedTools");
     const semFerramentas = argumentosDoClaude(pedido({ ferramentas: [] }), config(), {
-      mcp: { url: "http://127.0.0.1:47822/mcp", variavelToken: "MODUCTUS_MCP_TOKEN" },
+      mcp: { url: "http://127.0.0.1:47822/mcp", token: "t" },
     });
     expect(semFerramentas).not.toContain("--mcp-config");
     expect(semFerramentas).not.toContain("--allowedTools");
@@ -311,6 +403,10 @@ function gravadaSemResult(): string {
 
 async function drenar(eventos: AsyncIterator<EventoAgente>): Promise<void> {
   for (;;) if ((await eventos.next()).done) return;
+}
+
+function vivo(processo: ChildProcessWithoutNullStreams | undefined): boolean {
+  return processo !== undefined && processo.exitCode === null && processo.signalCode === null;
 }
 
 function esperarSaida(processo: ChildProcessWithoutNullStreams | undefined): Promise<void> {

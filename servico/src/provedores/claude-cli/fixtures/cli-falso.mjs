@@ -14,8 +14,10 @@ let entrada = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (pedaco) => (entrada += pedaco));
 process.stdin.on("end", () => {
+  // Do token do MCP só se anota se chegou; o valor nunca vai para o arquivo.
+  const temAcessoMcp = process.env.MODUCTUS_MCP_ACESSO !== undefined;
   if (anotacao !== "-")
-    writeFileSync(anotacao, JSON.stringify({ argumentos, entrada, pasta: process.cwd() }));
+    writeFileSync(anotacao, JSON.stringify({ argumentos, entrada, pasta: process.cwd(), temAcessoMcp }));
   const linhas = saida === "-" ? [] : readFileSync(saida, "utf8").split(/\r?\n/).filter(Boolean);
   for (const linha of linhas) process.stdout.write(linha + "\n");
   if (modo === "pendurar") setInterval(() => {}, 60_000);
