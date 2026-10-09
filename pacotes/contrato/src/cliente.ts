@@ -27,6 +27,17 @@ export function esperaReconexao(tentativa: number): number {
   return Math.min(250 * 2 ** Math.max(0, tentativa - 1), 5000);
 }
 
+/**
+ * O pedido nem saiu: sem conexão aberta com o serviço. Diferente de uma falha depois do envio
+ * (conexão caiu, resposta de erro), em que o serviço pode já ter agido.
+ */
+export class ServicoIndisponivel extends Error {
+  constructor() {
+    super("serviço indisponível");
+    this.name = "ServicoIndisponivel";
+  }
+}
+
 interface Pendente {
   metodo: NomeMetodo;
   resolver: (dados: unknown) => void;
@@ -83,7 +94,7 @@ export class ClienteServico {
   ): Promise<SaidaDe<M>> {
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-      return Promise.reject(new Error("serviço indisponível"));
+      return Promise.reject(new ServicoIndisponivel());
     }
     const id = this.proximoId++;
     const pedido: Pedido = { tipo: "pedido", id, metodo, dados: dados[0] };
