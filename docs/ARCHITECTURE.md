@@ -109,7 +109,7 @@ Na fase 1 entraram o dock que reserva espaço (com os modos esconder e inteligen
 
 ### Janelas
 
-As quatro são declaradas no `tauri.conf.json`, todas sem borda do sistema e transparentes, e criadas no início, escondidas, para abrirem sem atraso. Cada uma carrega o mesmo bundle; `src/main.tsx` lê o rótulo da janela e `src/janelas/Aplicacao.tsx` escolhe a rota (`src/janelas/{dock,painel,sistema,captura}`).
+As quatro são declaradas no `tauri.conf.json`, todas sem borda do sistema e transparentes, e criadas no início, escondidas, para abrirem sem atraso. Só o dock é criado pelo Tauri antes do `setup`; painel, Sistema e captura têm `"create": false` e nascem no `setup` (`janelas::criar`, com a mesma configuração) depois de o dock reservar a faixa, para que os três WebViews não atrasem o dock. Cada uma carrega o mesmo bundle; `src/main.tsx` lê o rótulo da janela e `src/janelas/Aplicacao.tsx` escolhe a rota (`src/janelas/{dock,painel,sistema,captura}`).
 
 | Janela | Rótulo e tamanho | Detalhe |
 |---|---|---|
@@ -289,9 +289,9 @@ pwsh -NoProfile -File scripts\medir.ps1
 
 | Orçamento | Meta | Medido | Situação |
 |---|---|---|---|
-| Memória privada em repouso | < 200 MB | **341,7 MB** (337,5 MB numa medição anterior) | ❌ não cumprido; fica para uma etapa dedicada |
-| Dock no lugar depois de iniciar | < 1 s | **1,08 s** com a reserva feita (janela visível em 0,11 s) | ❌ por pouco |
-| Painel abre | < 100 ms | **mediana 12,9 ms**, máximo 21,4 ms | ✅ |
+| Memória privada em repouso | < 200 MB | **341,7 MB** (337,5 MB numa medição anterior; 341,0 e 349,9 MB depois de o dock nascer antes das outras janelas) | ❌ não cumprido; fica para uma etapa dedicada |
+| Dock no lugar depois de iniciar | < 1 s | **0,56 s** com a reserva feita (janela visível em 0,10 s); era 1,08 s antes de o dock nascer antes das outras janelas | ✅ |
+| Painel abre | < 100 ms | **mediana 12,9 ms**, máximo 21,4 ms (mediana 11,8 ms, máximo 20,4 ms depois da mudança no dock) | ✅ |
 
 **Memória.** Soma dos bytes privados de `moductus.exe` e de todos os descendentes (o `node.exe` do serviço e os processos do WebView2) depois de 60 s parado, com as quatro janelas criadas e só o dock visível:
 
@@ -318,7 +318,7 @@ O WebView2 é 86% da conta; casca, serviço e `conhost` juntos ficam em 47 MB. F
 
 Nem a combinação mais agressiva chega aos 200 MB, e cada flag tem custo (sem GPU, o Acrylic e as animações passam para a CPU; um renderizador só põe as quatro janelas no mesmo processo). **Decisão:** o orçamento de memória não é cumprido na fase 1. Estes números são o ponto de partida de uma etapa futura dedicada, que deve avaliar criar painel, Sistema e captura só quando forem abertos pela primeira vez (hoje as quatro janelas nascem com o app), as flags acima e o custo de cada uma no visual.
 
-**Dock.** Média de 5 execuções seguidas, de `Start-Process` até a janela `Moductus dock` estar visível e a área de trabalho já reservada: 1.146, 1.147, 1.050, 1.032 e 1.024 ms (média 1.080 ms). Pelo `%APPDATA%\Moductus\moductus.log`, do início até a linha `dock fixado` a média é 1.128 ms (a linha é gravada depois de a reserva valer). A janela aparece em cerca de 110 ms, mas a reserva só entra quando o `setup` do Tauri roda, e ele roda depois de as quatro janelas declaradas no `tauri.conf.json` criarem os seus WebViews. A mesma mudança sugerida para a memória (criar as outras janelas depois do dock) é o caminho para trazer esse tempo para baixo de 1 s. A medição parte do processo já pedido; o login acrescenta o tempo até o Windows rodar a entrada de autostart, que não depende do app.
+**Dock.** Média de 5 execuções seguidas, de `Start-Process` até a janela `Moductus dock` estar visível e a área de trabalho já reservada. Primeira medição: 1.146, 1.147, 1.050, 1.032 e 1.024 ms (média 1.080 ms; 1.128 ms pelo `%APPDATA%\Moductus\moductus.log`, do início até a linha `dock fixado`, gravada depois de a reserva valer). A janela aparecia em cerca de 110 ms, mas a reserva só entrava quando o `setup` do Tauri rodava, e ele roda depois de todas as janelas declaradas no `tauri.conf.json` criarem os seus WebViews. Agora só o dock é criado antes do `setup`, que fixa o dock e depois cria painel, Sistema e captura (`janelas::criar`): 626, 551, 575, 548 e 507 ms (média 562 ms; 641 ms pelo log), com a janela visível em 96 ms na média. Os cerca de 450 ms que sobram entre a janela aparecer e a reserva são a criação do WebView do próprio dock. Numa rodada anterior, a primeira execução do executável recém-compilado levou 1.966 ms (janela visível só em 1.136 ms, partida a frio do disco) e as outras quatro ficaram entre 520 e 568 ms. A medição parte do processo já pedido; o login acrescenta o tempo até o Windows rodar a entrada de autostart, que não depende do app.
 
 **Painel.** A casca marca o instante em `painel_abrir` e fecha a conta quando a interface avisa, por `painel_pronto`, que desenhou a área (depois de dois quadros); o resultado vai para o log como `painel hoje aberto em N ms`. Cinco aberturas pelo roteiro: 21,4, 15,9, 9,8, 7,9 e 12,9 ms. O roteiro `janelas` do `verificar.ps1`, com clique de verdade, mediu 29,1, 8,3, 8,0, 9,6 e 4,7 ms.
 
