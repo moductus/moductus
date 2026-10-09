@@ -5,9 +5,10 @@
 //! morrer de repente, o Windows derruba o serviço também.
 //!
 //! Canal com o serviço pelo stdio, em linhas JSON: o serviço avisa `pronto` com a porta
-//! e pede credenciais (`{"tipo":"credencial","id",…}`) e variáveis do usuário
-//! (`{"tipo":"ambiente","id",…}`), respondidas no stdin. Pelo stdin também vão avisos da
-//! casca sem id, como a retomada da suspensão (`{"tipo":"retomou"}`).
+//! e pede credenciais (`{"tipo":"credencial","id",…}`), variáveis do usuário
+//! (`{"tipo":"ambiente","id",…}`) e avisos do Windows (`{"tipo":"notificacao","id",…}`),
+//! respondidos no stdin. Pelo stdin também vão avisos da casca sem id, como a retomada da
+//! suspensão (`{"tipo":"retomou"}`) e o clique num aviso do Windows (`notificacao-clique`).
 
 use std::{
     io::{BufRead, BufReader, Write},
@@ -35,7 +36,7 @@ use windows::Win32::{
     },
 };
 
-use crate::{ambiente, credenciais};
+use crate::{ambiente, credenciais, notificacao};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "estado", rename_all = "lowercase")]
@@ -196,6 +197,13 @@ fn ouvir(app: &AppHandle, saida: std::process::ChildStdout, token: &str) {
             ("credencial", Some(id)) => {
                 let resposta = serde_json::from_str::<credenciais::Pedido>(&linha)
                     .map(credenciais::atender)
+                    .map(|r| serde_json::to_value(r).unwrap_or_default())
+                    .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
+                responder(id, resposta);
+            }
+            ("notificacao", Some(id)) => {
+                let resposta = serde_json::from_str::<notificacao::Pedido>(&linha)
+                    .map(notificacao::atender)
                     .map(|r| serde_json::to_value(r).unwrap_or_default())
                     .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
                 responder(id, resposta);

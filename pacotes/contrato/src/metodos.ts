@@ -17,6 +17,7 @@ import {
 } from "./agentes.ts";
 import { Aprovacao, PedidoDecidir, PedidoRegra, RegraPermissao } from "./aprovacoes.ts";
 import { metodo } from "./canal.ts";
+import { PedidoPagina } from "./comum.ts";
 import { EstadoConfig, MudancaConfig } from "./config.ts";
 import {
   Conversa,
@@ -29,6 +30,14 @@ import {
   PedidoMensagens,
   ResultadoEnviar,
 } from "./conversas.ts";
+import {
+  EstadoNotificacoes,
+  MudancaPreferencia,
+  Notificacao,
+  PaginaNotificacoes,
+  PedidoMarcarVistas,
+  PedidoRestaurarPreferencia,
+} from "./notificacoes.ts";
 import { PedidoExportar, PedidoImportar, PreviaImportar, ResultadoExportar } from "./outro-pc.ts";
 import { EstadoPrimeiroUso, PedidoConcluirPrimeiroUso, PedidoMarcarTutorial } from "./primeiro-uso.ts";
 import {
@@ -106,6 +115,13 @@ export const METODOS = {
   "conexoes.previa": metodo(PedidoConexao, PreviaConexao),
   "conexoes.ligar": metodo(PedidoConexao, Conexao),
   "conexoes.desligar": metodo(PedidoConexao, Conexao),
+
+  "notificacoes.obter": metodo(z.undefined(), EstadoNotificacoes),
+  "notificacoes.definir": metodo(MudancaPreferencia, EstadoNotificacoes),
+  "notificacoes.restaurar": metodo(PedidoRestaurarPreferencia, EstadoNotificacoes),
+  "notificacoes.listar": metodo(PedidoPagina, PaginaNotificacoes),
+  "notificacoes.naoVistas": metodo(z.undefined(), z.array(Notificacao)),
+  "notificacoes.marcarVistas": metodo(PedidoMarcarVistas, z.array(Notificacao)),
 } as const;
 
 export type Metodos = typeof METODOS;
@@ -130,6 +146,10 @@ export const EVENTOS = {
   "sessoes.mudou": MudancaSessao,
   "github.mudou": SituacaoGithub,
   "conexoes.mudou": Conexao,
+  "notificacoes.mudou": EstadoNotificacoes,
+  "notificacoes.nova": Notificacao,
+  /** O que ainda não foi visto e pede o ponto no dock, a cada mudança. */
+  "notificacoes.naoVistas": z.array(Notificacao),
 } as const;
 
 export type NomeEvento = keyof typeof EVENTOS;

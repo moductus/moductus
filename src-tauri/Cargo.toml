@@ -37,6 +37,8 @@ windows = { version = "0.62", features = [
   "Foundation_Collections",
   "Media_Control",
   "Storage_Streams",
+  "UI_Notifications",
+  "Data_Xml_Dom",
 ] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"

@@ -16,6 +16,7 @@ import {
   useTelaCheia,
 } from "../../nativo/eventos.ts";
 import { useCanal } from "../../servico/conexao.ts";
+import { marcarVistasDe, usePontosTime } from "../../servico/notificacoes.ts";
 import { useSituacaoTime } from "../../servico/time.ts";
 import { AREAS_DOCK, DADOS_AREAS } from "../areas.ts";
 import { proximoIndice } from "./navegacao.ts";
@@ -51,6 +52,7 @@ export function Dock() {
   const servico = useServico();
   const canal = useCanal(servico);
   const time = useSituacaoTime(canal);
+  const pontos = usePontosTime(canal);
   const config = useConfiguracaoDock();
   const aberta = useAreaAberta();
   const hora = useRelogio();
@@ -143,7 +145,10 @@ export function Dock() {
           // A cabeça segue o runtime: expressão, anel no tom do status e o status no rótulo.
           const { expressao, moldura, texto, dica } = lerSituacao(time[agente]);
           const nome = DADOS_AGENTES[agente].nome;
-          const rotulo = dica ? `${nome}, ${texto}. ${dica}` : `${nome}, ${texto}`;
+          const avisos = pontos[agente] ?? 0;
+          const situacao = dica ? `${nome}, ${texto}. ${dica}` : `${nome}, ${texto}`;
+          const rotulo =
+            avisos > 0 ? `${situacao}. ${avisos} ${avisos === 1 ? "aviso novo" : "avisos novos"}` : situacao;
           return (
             <button
               key={agente}
@@ -153,9 +158,14 @@ export function Dock() {
               aria-label={rotulo}
               aria-expanded={aberta === "agentes"}
               title={rotulo}
-              onClick={() => void invoke("painel_abrir", { area: "agentes" })}
+              onClick={() => {
+                if (avisos > 0) marcarVistasDe(agente);
+                void invoke("painel_abrir", { area: "agentes" });
+              }}
             >
               <Personagem agente={agente} modo="cabeca" tamanho="dock" estado={expressao} moldura={moldura} />
+              {/* Ponto de aviso (Dock.dc.html): o agente tem algo para você. */}
+              {avisos > 0 && <span className="dock-agente-ponto" data-ponto="" aria-hidden="true" />}
             </button>
           );
         })}

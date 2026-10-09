@@ -37,7 +37,8 @@ export function metodo<E extends z.ZodType, S extends z.ZodType>(entrada: E, sai
 
 /**
  * Versão do protocolo entre interface e serviço; sobe quando uma mensagem muda de forma.
- * 2: agentes, provedores, execuções, conversas, aprovações, sessões, GitHub e conexões (fase 2).
+ * 2: agentes, provedores, execuções, conversas, aprovações, sessões, GitHub, conexões e
+ * notificações (fase 2).
  */
 export const VERSAO_PROTOCOLO = 2;
 

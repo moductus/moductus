@@ -106,7 +106,7 @@ export function diaLocal(instante: Date): string {
 export const porcentagem = (usado: number, janela: number) => Math.floor((usado * 100) / janela);
 
 /** Nome das ferramentas na fala do Nuno. */
-const NOME: Readonly<Record<FerramentaSessao, string>> = {
+export const NOME_DA_FERRAMENTA: Readonly<Record<FerramentaSessao, string>> = {
   "claude-code": "Claude Code",
   codex: "Codex",
   opencode: "OpenCode",
@@ -133,7 +133,7 @@ export function textoDoAviso(
   const onde = projeto ? ` em ${projeto}` : "";
   return {
     titulo: `Contexto em ${pct}%`,
-    corpo: `A sessão do ${NOME[ferramenta]}${onde} chegou a ${pct}% do contexto. Vale compactar com /compact ou encerrar.`,
+    corpo: `A sessão do ${NOME_DA_FERRAMENTA[ferramenta]}${onde} chegou a ${pct}% do contexto. Vale compactar com /compact ou encerrar.`,
   };
 }
 
@@ -254,7 +254,7 @@ export const TRANSCRIPTS_DO_DISCO: Transcripts = {
 
 export interface OpcoesContexto {
   agora: () => Date;
-  /** Quem mais quer saber do aviso (o vigia do Nuno, F2-26). */
+  /** Quem registra e entrega o aviso (notificações) e quem mais quer saber dele (o vigia do Nuno). */
   aoAvisar?: (aviso: AvisoContexto) => void;
 }
 
@@ -356,7 +356,6 @@ export class AcompanhamentoContexto {
           agora,
         });
       }
-      if (aviso && gravou) this.repo.registrarAviso(aviso, agora);
       return gravou;
     });
 

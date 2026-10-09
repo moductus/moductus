@@ -51,6 +51,7 @@ const MINHA: Config = {
   dock: { lado: "direita", modo: "inteligente", forma: "flutuante" },
   atalhos: { sistema: "Ctrl+Alt+M", dock: "Ctrl+Alt+B", captura: "Ctrl+Shift+Space" },
   autostart: true,
+  silencio: { horario: { ligado: true, inicio: "22:00", fim: "07:30" }, telaCheia: true, foco: false },
 };
 
 const manifestoValido = (extra: Partial<Record<string, unknown>> = {}) => ({

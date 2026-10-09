@@ -16,6 +16,8 @@ mod inicio;
 mod janelas;
 mod material;
 mod midia;
+// O serviço chega aqui pelo canal do sidecar; o clique no aviso volta pelo mesmo canal.
+mod notificacao;
 mod registro;
 mod servico;
 mod tela_cheia;
@@ -81,6 +83,7 @@ pub fn run() {
             }
             janelas::iniciar(app.handle(), pasta.clone());
             tela_cheia::vigiar(app.handle().clone());
+            notificacao::iniciar(app.handle());
             atalhos::iniciar(app.handle(), atalhos::padrao());
             bandeja::iniciar(app.handle())?;
             midia::iniciar(app.handle().clone());
