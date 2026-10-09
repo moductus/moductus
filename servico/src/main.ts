@@ -26,6 +26,7 @@ import { MIGRACOES } from "./migracoes/index.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
 import { fabricaClaudeCli, rotaPreToolUse, type AberturaMcp } from "./provedores/claude-cli/claude-cli.ts";
+import { fabricaOpenAiCompativel } from "./provedores/openai-compativel/openai-compativel.ts";
 import { RegistroProvedores } from "./provedores/registro.ts";
 import { TRANSCRIPTS_DO_DISCO } from "./sessoes/contexto.ts";
 import { caminhoSettingsClaude, LigacaoClaudeCode } from "./sessoes/ligacao.ts";
@@ -113,12 +114,17 @@ const conexoes = new ServicoConexoes(
 /**
  * Os adaptadores de modelo que esta versão tem. O CLI roda numa pasta própria, para não herdar
  * CLAUDE.md nem `.claude/` de um projeto qualquer, e recebe as ferramentas do agente pelo MCP do
- * Moductus. Sem o MCP, o agente ainda conversa, só sem ferramentas.
+ * Moductus. Sem o MCP, o agente ainda conversa, só sem ferramentas. As APIs compatíveis com OpenAI
+ * rodam o ciclo de ferramentas no serviço e leem a chave do Gerenciador de Credenciais a cada uso.
  */
 function registrarProvedores(mcp: AberturaMcp | undefined): RegistroProvedores {
   const pastaDoClaudeCli = join(pastaDeDados(), "claude-cli");
   mkdirSync(pastaDoClaudeCli, { recursive: true });
-  return new RegistroProvedores().registrar("claude-cli", fabricaClaudeCli({ pasta: pastaDoClaudeCli, mcp }));
+  const api = fabricaOpenAiCompativel({ credenciais: credenciaisPelaCasca(canal) });
+  return new RegistroProvedores()
+    .registrar("claude-cli", fabricaClaudeCli({ pasta: pastaDoClaudeCli, mcp }))
+    .registrar("openai-compativel", api)
+    .registrar("openai", api);
 }
 
 // Servidor MCP do Moductus (F2-11): cada execução em CLI abre o próprio acesso, e as chamadas rodam
