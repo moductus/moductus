@@ -81,10 +81,22 @@ pub fn retangulo_painel(dock: RECT, lado: appbar::Lado, largura: i32) -> RECT {
 /// Abre o painel de uma área ao lado do dock; a mesma área de novo fecha.
 #[tauri::command]
 pub fn painel_abrir(app: AppHandle, area: String) {
+    abrir_painel(app, area, true);
+}
+
+/// Abre o painel de uma área sem alternar: já aberto nela, fica aberto (o clique no aviso do
+/// Windows leva ao time, nunca o esconde).
+pub fn painel_mostrar(app: AppHandle, area: String) {
+    abrir_painel(app, area, false);
+}
+
+fn abrir_painel(app: AppHandle, area: String, alternar: bool) {
     let (Some(painel), Some(janela_dock)) = (janela(&app, "painel"), janela(&app, "dock")) else { return };
     let aberta = PAINEL.lock().unwrap().as_ref().map(|(a, _)| a.clone());
     if aberta.as_deref() == Some(area.as_str()) && unsafe { IsWindowVisible(hwnd(&painel)) }.as_bool() {
-        painel_fechar(app);
+        if alternar {
+            painel_fechar(app);
+        }
         return;
     }
     *PAINEL.lock().unwrap() = Some((area.clone(), Instant::now()));

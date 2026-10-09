@@ -239,6 +239,20 @@ export class RepositorioExecucoes {
     return linha ?? null;
   }
 
+  /**
+   * Quanto as execuções do agente que começaram desde `desde` custaram, em microdólares: só a
+   * estimativa que existe (assinatura e modelo sem preço não somam nada).
+   */
+  custoDesde(agenteId: string, desde: string): number {
+    const linha = this.db
+      .prepare(
+        `SELECT coalesce(sum(custo_estimado_microdolares), 0) AS total FROM execucoes
+          WHERE do_agente_id = ? AND inicio >= ?`,
+      )
+      .get(agenteId, desde) as unknown as { total: number };
+    return linha.total;
+  }
+
   execucao(id: string): Execucao | null {
     const linha = this.db
       .prepare(`SELECT ${COLUNAS_EXECUCAO} FROM execucoes WHERE id = ?`)

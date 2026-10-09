@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { Agente, SituacaoAgente } from "@moductus/contrato";
+import type { Agente, Notificacao, SituacaoAgente } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -21,9 +21,14 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => undefined) }));
 
-const canal: { estado: EstadoConexao; lista: () => Promise<Agente[]> } = {
+const canal: {
+  estado: EstadoConexao;
+  lista: () => Promise<Agente[]>;
+  naoVistas: () => Promise<Notificacao[]>;
+} = {
   estado: "conectado",
   lista: async () => [],
+  naoVistas: async () => [],
 };
 const ouvintes = new Map<string, Set<(dados: unknown) => void>>();
 
@@ -37,6 +42,8 @@ vi.mock("../../servico/conexao.ts", () => ({
     },
     pedir: vi.fn(async (metodo: string) => {
       if (metodo === "agentes.listar") return canal.lista();
+      if (metodo === "notificacoes.naoVistas") return canal.naoVistas();
+      if (metodo === "notificacoes.marcarVistas") return [];
       throw new Error(`método ${metodo} sem atendente`);
     }),
   },
@@ -44,6 +51,7 @@ vi.mock("../../servico/conexao.ts", () => ({
 
 const { Dock, CONVITE_AGENTES } = await import("./Dock.tsx");
 const { juntarSituacoes } = await import("../../servico/time.ts");
+const { servico } = await import("../../servico/conexao.ts");
 
 const ATIVO: SituacaoAgente = {
   estado: "ativo",
@@ -93,6 +101,8 @@ beforeEach(() => {
   ouvintes.clear();
   canal.estado = "conectado";
   canal.lista = async () => [];
+  canal.naoVistas = async () => [];
+  vi.mocked(servico.pedir).mockClear();
 });
 
 afterEach(() => {
@@ -209,5 +219,66 @@ describe("juntarSituacoes", () => {
     const depois = juntarSituacoes(antes, [agente("alba", { atividade: "erro" })]);
     expect(depois.alba?.atividade).toBe("erro");
     expect(antes.alba?.atividade).toBe("ocioso");
+  });
+});
+
+function aviso(id: string, agenteId: string | null): Notificacao {
+  return {
+    id,
+    agenteId,
+    tipo: "aprovacao",
+    titulo: "Claude Code pede permissão",
+    corpo: null,
+    referencia: `aprovacao:${id}`,
+    canal: "ambos",
+    criadoEm: "2026-10-09T12:00:00.000Z",
+    vistaEm: null,
+  };
+}
+
+/** Os agentes com ponto de aviso, na ordem do time. */
+const comPonto = () =>
+  [...recipiente.querySelectorAll<HTMLElement>(".dock-agente")]
+    .filter((b) => b.querySelector("[data-ponto]"))
+    .map((b) => b.dataset.agente);
+
+describe("ponto de aviso no dock", () => {
+  it("quem tem aviso não visto ganha o ponto e o número no rótulo", async () => {
+    canal.lista = async () => ["alba", "tula", "faina", "nuno"].map((id) => agente(id));
+    canal.naoVistas = async () => [
+      aviso("a", "nuno"),
+      aviso("b", "nuno"),
+      aviso("c", "alba"),
+      aviso("d", null),
+    ];
+    await montar();
+    expect(comPonto()).toEqual(["alba", "nuno"]);
+    expect(cabecas()[3]!.rotulo).toBe("Nuno, ocioso. 2 avisos novos");
+    expect(cabecas()[0]!.rotulo).toBe("Alba, ocioso. 1 aviso novo");
+    expect(cabecas()[1]!.rotulo).toBe("Tula, ocioso");
+  });
+
+  it("a lista nova do serviço troca os pontos; abrir o agente marca os dele como vistos", async () => {
+    await montar();
+    expect(comPonto()).toEqual([]);
+    await act(async () => {
+      ouvintes.get("notificacoes.naoVistas")?.forEach((fn) => fn([aviso("a", "faina")]));
+    });
+    expect(comPonto()).toEqual(["faina"]);
+    await act(async () => recipiente.querySelector<HTMLButtonElement>('[data-agente="faina"]')!.click());
+    expect(servico.pedir).toHaveBeenCalledWith("notificacoes.marcarVistas", { agenteId: "faina" });
+    await act(async () => {
+      ouvintes.get("notificacoes.naoVistas")?.forEach((fn) => fn([]));
+    });
+    expect(comPonto()).toEqual([]);
+  });
+
+  it("canal caído: nenhum ponto", async () => {
+    canal.naoVistas = async () => [aviso("a", "nuno")];
+    await montar();
+    expect(comPonto()).toEqual(["nuno"]);
+    canal.estado = "desconectado";
+    await act(async () => raiz!.render(<Dock />));
+    expect(comPonto()).toEqual([]);
   });
 });

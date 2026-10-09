@@ -14,9 +14,10 @@ import type {
 import { colunasDeOrigem, DO_USUARIO, type Carimbo } from "../banco/tabela.ts";
 import { novoId } from "../banco/ulid.ts";
 import type { RepositorioAgentes } from "../agentes/agentes.ts";
+import { AgenteDesligado } from "../agentes/estado.ts";
 import { HISTORICO_CURTO } from "../agentes/pedido.ts";
 import { AGENTE_PADRAO, type AgenteRoteavel, type Destino, type Roteador } from "../agentes/roteador.ts";
-import type { Runtime } from "../agentes/runtime.ts";
+import type { ResultadoExecucao, Runtime } from "../agentes/runtime.ts";
 import type { MensagemModelo } from "../provedores/provedor.ts";
 
 /**
@@ -66,7 +67,10 @@ const paraMensagem = (l: LinhaMensagem): Mensagem => ({
   criadoEm: l.criado_em,
 });
 
-/** Mensagem do histórico que vai ao modelo; `falhou` é a fala de uma execução que deu erro. */
+/**
+ * Mensagem do histórico que vai ao modelo; `falhou` é a fala de uma execução que deu erro, ou a
+ * fala de agente sem execução (a recusa de um agente desligado).
+ */
 export interface MensagemDoHistorico extends Mensagem {
   falhou: boolean;
 }
@@ -242,13 +246,32 @@ export class RepositorioConversas {
     const linhas = this.db
       .prepare(
         `SELECT m.id, m.conversa_id, m.do_agente_id, m.conteudo, m.da_execucao_id, m.criado_em,
-                COALESCE(e.estado = 'erro', 0) AS falhou
+                CASE WHEN m.do_agente_id IS NOT NULL AND m.da_execucao_id IS NULL THEN 1
+                     ELSE COALESCE(e.estado = 'erro', 0) END AS falhou
            FROM mensagens m LEFT JOIN execucoes e ON e.id = m.da_execucao_id
           WHERE m.conversa_id = ? AND m.apagado_em IS NULL AND m.id <= ?
           ORDER BY m.id DESC LIMIT ?`,
       )
       .all(conversaId, ateId, limite) as unknown as (LinhaMensagem & { falhou: number })[];
     return linhas.reverse().map((l) => ({ ...paraMensagem(l), falhou: l.falhou === 1 }));
+  }
+
+  /**
+   * A última fala de cada conversa em uso (não arquivada) quando ela é do usuário: ninguém
+   * respondeu, nem com erro. Na ordem em que foram ditas.
+   */
+  pendentes(): Mensagem[] {
+    const linhas = this.db
+      .prepare(
+        `SELECT m.id, m.conversa_id, m.do_agente_id, m.conteudo, m.da_execucao_id, m.criado_em
+           FROM conversas c
+           JOIN mensagens m ON m.id = (
+             SELECT MAX(u.id) FROM mensagens u WHERE u.conversa_id = c.id AND u.apagado_em IS NULL)
+          WHERE c.apagado_em IS NULL AND c.arquivada = 0 AND m.do_agente_id IS NULL
+          ORDER BY m.id`,
+      )
+      .all() as unknown as LinhaMensagem[];
+    return linhas.map(paraMensagem);
   }
 
   /** Qual agente falou por último na conversa; `null` se nenhum falou. */
@@ -363,6 +386,30 @@ export class ServicoConversas {
     return { mensagem, agentes: destinos.map((d) => d.agenteId) };
   }
 
+  /**
+   * Na subida: a fala do usuário que esperava resposta quando o serviço parou (o agente dormia, a
+   * fila não tinha chegado nela) é respondida de novo, pelo agente da conversa ou, no time, por quem
+   * o roteamento escolher. Fala que já teve resposta, mesmo de erro, não volta. Devolve quantas.
+   */
+  async retomarPendentes(): Promise<number> {
+    const pendentes = this.deps.repo.pendentes();
+    for (const mensagem of pendentes) {
+      const conversa = this.deps.repo.conversa(mensagem.conversaId);
+      if (!conversa) continue;
+      try {
+        // Na conversa direta, o agente responde mesmo desligado: a recusa vira a fala dele.
+        const destinos =
+          conversa.agenteId !== null
+            ? [{ agenteId: conversa.agenteId, parte: null }]
+            : await this.destinos(conversa, mensagem.conteudo, this.disponiveis(conversa));
+        for (const destino of destinos) this.responder(conversa.id, mensagem, destino, destinos);
+      } catch (erro) {
+        console.error(`fala pendente da conversa ${conversa.id} não foi retomada: ${String(erro)}`);
+      }
+    }
+    return pendentes.length;
+  }
+
   /** Espera as respostas em andamento: para os testes e para sair sem cortar uma resposta. */
   async ocioso(): Promise<void> {
     while (this.andamento.size > 0) await Promise.all(this.andamento);
@@ -373,6 +420,8 @@ export class ServicoConversas {
     if (conversa.agenteId !== null) {
       const agente = this.deps.agentes.agente(conversa.agenteId);
       if (!agente) throw new Error("agente não encontrado");
+      // Dormindo ou pausado, a resposta espera na fila dele; desligado, não viria nunca.
+      if (agente.estado === "desligado") throw new AgenteDesligado(agente.id, agente.nome);
       return [agente];
     }
     const ligados = this.deps.agentes.agentes().filter((a) => a.estado !== "desligado");
@@ -435,29 +484,42 @@ export class ServicoConversas {
     const chave = `${conversaId}:${agenteId}`;
     const sessao = this.sessoes.get(chave);
     const nomes = new Map(this.deps.agentes.agentes().map((a) => [a.id, a.nome]));
-    const historico = this.deps.repo
+    const conversa = this.deps.repo
       .historico(conversaId, gatilho.id, HISTORICO_CURTO.mensagens)
       // Fala de execução que falhou não é resposta: a pergunta dela continua pendente.
-      .filter((m) => !m.falhou)
-      // Retomando, a sessão já tem o que recebeu e o que o agente disse: vai só o que veio depois.
-      .filter((m) => !sessao || (m.id > sessao.ultimaRecebida && m.agenteId !== agenteId))
-      .map((m) =>
+      .filter((m) => !m.falhou);
+    const paraOModelo = (falas: readonly MensagemDoHistorico[]) =>
+      falas.map((m) =>
         m.id === gatilho.id ? pedidoDe(m, destino, todos, nomes) : paraModelo(m, agenteId, nomes),
       );
+    // Retomando, a sessão já tem o que recebeu e o que o agente disse: vai só o que veio depois.
+    const historico = paraOModelo(
+      conversa.filter((m) => !sessao || (m.id > sessao.ultimaRecebida && m.agenteId !== agenteId)),
+    );
 
     let texto = "";
-    const resultado = await this.deps.runtime.executar({
-      agenteId,
-      gatilho: "mensagem",
-      mensagens: historico,
-      continuarDe: sessao?.continuacao ?? null,
-      aoEvento: (evento, execucaoId) => {
-        if (evento.tipo === "texto") texto += evento.texto;
-        // Ferramenta sem texto ainda é "pensando": a janela sabe que a execução está viva.
-        else if (evento.tipo !== "ferramenta") return;
-        this.avisos.parcial({ conversaId, agenteId, execucaoId, texto });
-      },
-    });
+    let resultado: ResultadoExecucao;
+    try {
+      resultado = await this.deps.runtime.executar({
+        agenteId,
+        gatilho: "mensagem",
+        mensagens: historico,
+        continuarDe: sessao?.continuacao ?? null,
+        // Na reserva a sessão não vale: vai a conversa inteira.
+        ...(sessao ? { mensagensSemSessao: paraOModelo(conversa) } : {}),
+        aoEvento: (evento, execucaoId) => {
+          if (evento.tipo === "texto") texto += evento.texto;
+          // Ferramenta sem texto ainda é "pensando": a janela sabe que a execução está viva.
+          else if (evento.tipo !== "ferramenta") return;
+          this.avisos.parcial({ conversaId, agenteId, execucaoId, texto });
+        },
+      });
+    } catch (erro) {
+      // Desligado enquanto a fala esperava a vez: a recusa vira a fala dele, sem execução.
+      if (!(erro instanceof AgenteDesligado)) throw erro;
+      if (this.deps.repo.conversa(conversaId)) this.gravar(conversaId, agenteId, erro.message, null);
+      return;
+    }
     const { execucao } = resultado;
     // Com erro, a sessão fica onde estava: o que esta vez mandou vai de novo na próxima.
     if (execucao.estado === "ok") {

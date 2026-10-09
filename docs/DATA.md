@@ -166,7 +166,7 @@ Migração `003-agentes`. Nas colunas abaixo, `do_agente_id` e `da_execucao_id` 
 
 ### `agentes`
 Tem lixeira.
-`id`, `nome`, `funcao`, `instrucoes`, `personagem` (JSON objeto: silhueta, traço, tom), `ferramentas` (JSON lista), `provedor_id`, `provedor_reserva_id` (diferente do principal), `gatilhos` (JSON lista; vazia até o agendador), `escopos_memoria` (JSON lista), `teto_diario_centavos`, `estado` (`ativo`, `pausado`, `dormindo`, `desligado`), `dorme_ate` (só com `dormindo`), `de_fabrica`.
+`id`, `nome`, `funcao`, `instrucoes`, `personagem` (JSON objeto: silhueta, traço, tom), `ferramentas` (JSON lista), `provedor_id`, `provedor_reserva_id` (diferente do principal), `gatilhos` (JSON lista; vazia até o agendador), `escopos_memoria` (JSON lista), `teto_diario_centavos`, `estado` (`ativo`, `pausado`, `dormindo`, `desligado`), `dorme_ate` (só com `dormindo`; vazio é "até o provedor voltar"), `motivo_sono` (`limite`, `fora_do_ar`, `credencial`, `ausente`, `teto`; só com `dormindo`; migração `011-agentes-sono`; agente sem modelo não guarda motivo, aparece como `sem_modelo` pela falta de `provedor_id`), `pausado_ate` (só com `pausado`; vazio é "até retomar"; migração `011-agentes-sono`), `de_fabrica`.
 Os quatro de fábrica vêm semeados na migração, com os ids `alba`, `tula`, `faina` e `nuno`, sem provedor (o primeiro uso conecta um modelo e o atribui aos quatro).
 
 ### `provedores`

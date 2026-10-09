@@ -99,8 +99,8 @@ export interface Sono {
 /**
  * Toda falha tipada do provedor põe o agente para dormir (AGENTS.md §3): nenhuma chamada nova ao
  * modelo até a hora de volta. Só limite e queda têm hora, e só quando o provedor a informa;
- * credencial recusada e CLI ausente dependem do usuário, então dormem sem hora mesmo que alguém
- * mande uma.
+ * credencial recusada e CLI ausente dependem do usuário, então vêm sem hora mesmo que alguém
+ * mande uma. Sem hora, o estado do agente tenta de novo com espera crescente (agentes/estado.ts).
  */
 export function sonoDaFalha(falha: FalhaProvedor): Sono {
   const temHora = falha.motivo === "limite" || falha.motivo === "fora_do_ar";

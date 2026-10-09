@@ -1,9 +1,17 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { Conexao, EstadoCi, EstadoItemGithub, ItemGithub, SituacaoGithub } from "@moductus/contrato";
+import type {
+  Conexao,
+  EstadoCi,
+  EstadoItemGithub,
+  ItemGithub,
+  SituacaoGithub,
+  TipoItemGithub,
+} from "@moductus/contrato";
 import { novoId } from "../../banco/ulid.ts";
 import type { OrigemConexao, RepositorioConexoes } from "../conexoes.ts";
+import { comentar, lerDetalhe, SemLoginGh, type AlvoGithub, type DetalheGithub } from "./acoes.ts";
 import { lerGithub, type ItemLido, type LeituraGithub } from "./cliente.ts";
-import type { ExecutorGh } from "./gh.ts";
+import { GhAusente, type ExecutorGh } from "./gh.ts";
 
 /** O GitHub é consultado a cada 15 minutos (AGENTS.md §6, vigia do Nuno). */
 export const INTERVALO_GITHUB_MS = 15 * 60_000;
@@ -15,6 +23,44 @@ export const AVISO_SEM_LOGIN =
   "O gh não está conectado a uma conta. Rode gh auth login no terminal e conecte de novo.";
 export const avisoFalhou = (motivo: string) =>
   `Não consegui ler o GitHub (${motivo}). Tento de novo em 15 minutos.`;
+/** O Nuno não sabe nada do GitHub com a conexão desligada, e não vai lá sem ela. */
+export const AVISO_DESLIGADA =
+  "O GitHub não está conectado, então não sei o que tem lá. Conecte em Configurações › Conexões.";
+
+/** Por que o item precisa de você, na fala do Nuno; `null` quando ele não precisa. */
+export function motivoDoItem(item: ItemGithub): string | null {
+  if (!item.precisaDeMim) return null;
+  switch (item.meuPapel) {
+    case "revisor":
+      return "review pedido a você";
+    case "atribuido":
+      return item.tipo === "issue" ? "issue atribuída a você" : "PR atribuído a você";
+    default:
+      // Seu PR precisa de você quando o CI quebrou ou alguém pediu mudanças (cliente.ts).
+      return item.ciEstado === "falhou" ? "CI quebrado no seu PR" : "mudanças pedidas no seu PR";
+  }
+}
+
+export interface PendenciaGithub {
+  repositorio: string;
+  numero: number;
+  tipo: TipoItemGithub;
+  titulo: string;
+  autor: string | null;
+  motivo: string;
+  ciEstado: EstadoCi | null;
+  atualizadoNoGithub: string | null;
+  url: string;
+}
+
+/** O que precisa de você no GitHub, com a data da leitura e o aviso quando ela não vale. */
+export interface PendenciasGithub {
+  conexao: Conexao["estado"];
+  /** Por que a lista pode estar velha ou vazia sem querer dizer "nada"; `null` quando vale. */
+  aviso: string | null;
+  lidoEm: string | null;
+  itens: PendenciaGithub[];
+}
 
 /** Linhas gravadas pela leitura do GitHub levam a origem `conexao` (DATA.md §1). */
 const ORIGEM = "conexao";
@@ -179,6 +225,66 @@ export class ServicoGithub {
     };
   }
 
+  /**
+   * O que precisa de você, pelo cache: PR esperando seu review, seu PR com mudanças pedidas ou CI
+   * quebrado, issue atribuída. Desligada, a lista vem vazia com o aviso de que não há como saber;
+   * em erro, com o motivo, porque a lista é a da última leitura que deu certo.
+   */
+  pendencias(): PendenciasGithub {
+    const conexao = this.conexao();
+    const { itens, atualizadoEm } = this.obter();
+    const aviso =
+      conexao.estado === "desligada"
+        ? AVISO_DESLIGADA
+        : conexao.estado === "erro"
+          ? conexao.ultimoErro
+          : null;
+    const pendentes: PendenciaGithub[] = [];
+    for (const item of itens) {
+      const motivo = motivoDoItem(item);
+      if (!motivo) continue;
+      pendentes.push({
+        repositorio: item.repositorio,
+        numero: item.numero,
+        tipo: item.tipo,
+        titulo: item.titulo,
+        autor: item.autor,
+        motivo,
+        ciEstado: item.ciEstado,
+        atualizadoNoGithub: item.atualizadoNoGithub,
+        url: item.url,
+      });
+    }
+    return { conexao: conexao.estado, aviso, lidoEm: atualizadoEm, itens: pendentes };
+  }
+
+  /**
+   * Um PR ou uma issue lidos agora no GitHub, para resumir. Sem o tipo, vale o do cache; fora do
+   * cache, PR. Só com a conexão ligada ou em erro: desligada, o Nuno não vai ao GitHub.
+   */
+  async detalhe(alvo: AlvoGithub & { tipo?: TipoItemGithub }): Promise<DetalheGithub> {
+    this.exigirConexao();
+    const tipo = alvo.tipo ?? this.doCache(alvo)?.tipo ?? "pr";
+    return traduzir(lerDetalhe(this.gh, { repositorio: alvo.repositorio, numero: alvo.numero, tipo }));
+  }
+
+  /** Comenta no PR ou na issue. Ação externa: quem chama já tem o sim do usuário. */
+  async comentar(alvo: AlvoGithub & { texto: string }): Promise<{ url: string | null }> {
+    this.exigirConexao();
+    return traduzir(comentar(this.gh, alvo));
+  }
+
+  private exigirConexao(): void {
+    if (this.conexao().estado === "desligada") throw new Error(AVISO_DESLIGADA);
+  }
+
+  private doCache(alvo: AlvoGithub): ItemGithub | undefined {
+    const repositorio = alvo.repositorio.toLowerCase();
+    return this.repo
+      .itens()
+      .find((i) => i.numero === alvo.numero && i.repositorio.toLowerCase() === repositorio);
+  }
+
   /** Conectar é ler agora; o resultado diz se ficou ligada ou o que falta. */
   async ligar(): Promise<Conexao> {
     await this.ler("usuario");
@@ -288,5 +394,16 @@ export class ServicoGithub {
     origem: OrigemConexao,
   ): void {
     this.conexoes.gravar("github", { ...dados, credencial: null }, this.agora().toISOString(), origem);
+  }
+}
+
+/** Sem `gh` ou sem login, o erro diz o que fazer, como na Conexão. */
+async function traduzir<T>(acao: Promise<T>): Promise<T> {
+  try {
+    return await acao;
+  } catch (erro) {
+    if (erro instanceof GhAusente) throw new Error(AVISO_SEM_GH, { cause: erro });
+    if (erro instanceof SemLoginGh) throw new Error(AVISO_SEM_LOGIN, { cause: erro });
+    throw erro;
   }
 }

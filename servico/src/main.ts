@@ -8,11 +8,13 @@ import { RepositorioExecucoes, ServicoExecucoes } from "./agentes/execucoes.ts";
 import { aberturaMcpDoRuntime } from "./agentes/mcp.ts";
 import { classificadorPeloRuntime, Roteador } from "./agentes/roteador.ts";
 import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
+import { VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ambientePelaCasca } from "./casca/ambiente.ts";
+import { avisosPelaCasca, CLIQUE_NO_AVISO, lerClique } from "./casca/avisos.ts";
 import { CanalCasca } from "./casca/canal.ts";
 import { credenciaisPelaCasca } from "./casca/credenciais.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
@@ -21,8 +23,14 @@ import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
+import { ferramentasGithub } from "./ferramentas/github/github.ts";
+import { ferramentasSessoes } from "./ferramentas/sessoes/sessoes.ts";
+import { ferramentasUso } from "./ferramentas/uso/uso.ts";
 import { abrirServidorMcp } from "./mcp/servidor.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
+import { avisarAprovacoes } from "./notificacoes/aprovacoes.ts";
+import { avisarContexto, avisarDoVigia } from "./notificacoes/nuno.ts";
+import { RepositorioNotificacoes, ServicoNotificacoes } from "./notificacoes/notificacoes.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
 import { fabricaClaudeCli, rotaPreToolUse, type AberturaMcp } from "./provedores/claude-cli/claude-cli.ts";
@@ -65,6 +73,8 @@ const nativo: AplicadorNativo = {
 };
 
 let servidor: ServidorWs | null = null;
+// Os vigias do Nuno (F2-26) nascem com o runtime; os eventos de antes disso não pedem julgamento.
+let vigiaNuno: VigiaNuno | null = null;
 const config = new ServicoConfig(
   new RepositorioConfig(banco),
   nativo,
@@ -79,20 +89,73 @@ const outroPc = new ServicoOutroPc(config, banco, {
   versaoEsquema: MIGRACOES.length,
   pcOrigem: hostname(),
 });
+// Notificações (F2-20): preferência por agente e tipo, ponto no dock e aviso do Windows pela casca.
+const agentesDoTime = new RepositorioAgentes(banco);
+const notificacoes = new ServicoNotificacoes(
+  new RepositorioNotificacoes(banco),
+  {
+    agentes: () => agentesDoTime.agentes().map((a) => ({ id: a.id, nome: a.nome })),
+    silencio: () => config.obter().config.silencio,
+    windows: avisosPelaCasca(canal),
+  },
+  {
+    estado: (estado) => servidor?.emitir("notificacoes.mudou", estado),
+    nova: (notificacao) => servidor?.emitir("notificacoes.nova", notificacao),
+    naoVistas: (lista) => servidor?.emitir("notificacoes.naoVistas", lista),
+  },
+);
+const leituraSessoes = new RepositorioSessoes(banco);
+const avisarAprovacao = avisarAprovacoes(
+  notificacoes,
+  { obter: (id) => aprovacoes.obter(id), decidir: (pedido) => aprovacoes.decidir(pedido) },
+  {
+    nomeDoAgente: (id) => agentesDoTime.agente(id)?.nome ?? null,
+    projetoDaSessao: (id) => {
+      const projetoId = leituraSessoes.sessao(id)?.projetoId;
+      return projetoId ? (leituraSessoes.projeto(projetoId)?.nome ?? null) : null;
+    },
+  },
+);
+canal.aoAvisar(CLIQUE_NO_AVISO, (aviso) => {
+  const clique = lerClique(aviso);
+  if (!clique) return;
+  notificacoes
+    .aoClicar(clique.id, clique.botao)
+    .catch((erro: unknown) => console.error(`notificações: clique no aviso falhou: ${String(erro)}`));
+});
+const avisarContextoAoUsuario = avisarContexto(notificacoes);
 const sessoes = new ServicoSessoes(
   new RepositorioSessoes(banco),
-  (mudanca) => servidor?.emitir("sessoes.mudou", mudanca),
-  { transcripts: TRANSCRIPTS_DO_DISCO },
+  (mudanca) => {
+    servidor?.emitir("sessoes.mudou", mudanca);
+    vigiaNuno?.aoMudarSessao(mudanca);
+  },
+  {
+    transcripts: TRANSCRIPTS_DO_DISCO,
+    // O aviso de contexto vai às notificações (preferência do Nuno, ponto, Windows) e ao vigia.
+    aoAvisarContexto: (aviso) => {
+      avisarContextoAoUsuario(aviso);
+      vigiaNuno?.aoAvisarContexto(aviso);
+    },
+  },
 );
 const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {
-  aprovacao: (aprovacao) => servidor?.emitir("aprovacoes.mudou", aprovacao),
+  aprovacao: (aprovacao) => {
+    servidor?.emitir("aprovacoes.mudou", aprovacao);
+    avisarAprovacao(aprovacao).catch((erro: unknown) =>
+      console.error(`notificações: aviso da aprovação falhou: ${String(erro)}`),
+    );
+  },
   regras: (regras) => servidor?.emitir("regras.mudou", regras),
 });
 // Quem segurava a resposta dos hooks do terminal era o serviço que caiu: esses cartões expiram.
 aprovacoes.expirarDoTerminal();
 const repositorioConexoes = new RepositorioConexoes(banco);
 const github = new ServicoGithub(new RepositorioGithub(banco), repositorioConexoes, executorGh(), {
-  github: (situacao) => servidor?.emitir("github.mudou", situacao),
+  github: (situacao) => {
+    servidor?.emitir("github.mudou", situacao);
+    vigiaNuno?.aoLerGithub(situacao);
+  },
   conexao: (conexao) => servidor?.emitir("conexoes.mudou", conexao),
 });
 const conexoes = new ServicoConexoes(
@@ -142,7 +205,12 @@ const provedores = registrarProvedores(
     ? aberturaMcpDoRuntime(servidorMcp, (execucaoId) => runtime.executorDaExecucao(execucaoId))
     : undefined,
 );
-const catalogo = new Catalogo();
+// As ferramentas de cada área (F2-26: as do Nuno); cada agente só vê as da lista dele.
+const catalogo = new Catalogo([
+  ...ferramentasSessoes(sessoes),
+  ...ferramentasUso(sessoes),
+  ...ferramentasGithub(github),
+]);
 const repositorioAgentes = new RepositorioAgentes(banco);
 const repositorioExecucoes = new RepositorioExecucoes(banco);
 // Quem rodava essas execuções era o serviço que parou: fecham como erro e os cartões delas expiram.
@@ -165,7 +233,18 @@ const runtime = new Runtime(
     },
   },
 );
-const agentes = new ServicoAgentes(repositorioAgentes, catalogo, (agente) => runtime.situacao(agente));
+const agentes = new ServicoAgentes(
+  repositorioAgentes,
+  catalogo,
+  (agente) => runtime.situacao(agente),
+  runtime.estados,
+);
+vigiaNuno = new VigiaNuno({
+  executar: (pedido) => runtime.executar(pedido),
+  githubConhecido: github.obter().itens,
+  avisar: avisarDoVigia(notificacoes),
+  detalhar: (alvo) => github.detalhe(alvo),
+});
 const execucoes = new ServicoExecucoes(repositorioExecucoes, catalogo, {
   mudou: (execucao) => servidor?.emitir("execucoes.mudou", execucao),
 });
@@ -183,6 +262,13 @@ const conversas = new ServicoConversas(
     parcial: (parcial) => servidor?.emitir("conversas.parcial", parcial),
   },
 );
+// Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
+// Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
+runtime.estados.vigiar();
+conversas
+  .retomarPendentes()
+  .then((n) => n > 0 && console.error(`falas pendentes retomadas: ${n}`))
+  .catch((erro: unknown) => console.error(`falas pendentes não retomadas: ${String(erro)}`));
 
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
@@ -210,6 +296,9 @@ servidor = await abrirServidorWs(token, {
   "agentes.listar": () => agentes.listar(),
   "agentes.obter": (pedido) => agentes.obter(pedido),
   "agentes.capacidades": (pedido) => agentes.capacidades(pedido),
+  "agentes.ligar": (pedido) => agentes.ligar(pedido),
+  "agentes.pausar": (pedido) => agentes.pausar(pedido),
+  "agentes.retomar": (pedido) => agentes.retomar(pedido),
   "execucoes.listar": (pedido) => execucoes.listar(pedido),
   "execucoes.obter": (pedido) => execucoes.obter(pedido),
   "execucoes.desfazer": (pedido) => execucoes.desfazer(pedido),
@@ -218,13 +307,16 @@ servidor = await abrirServidorWs(token, {
   "conversas.mensagens": (pedido) => conversas.mensagens(pedido),
   "conversas.enviar": (pedido) => conversas.enviar(pedido),
   "conversas.arquivar": (pedido) => conversas.arquivar(pedido),
+  "notificacoes.obter": () => notificacoes.obter(),
+  "notificacoes.definir": (mudanca) => notificacoes.definir(mudanca),
+  "notificacoes.restaurar": (pedido) => notificacoes.restaurar(pedido),
+  "notificacoes.listar": (pedido) => notificacoes.listar(pedido),
+  "notificacoes.naoVistas": () => notificacoes.naoVistas(),
+  "notificacoes.marcarVistas": (pedido) => notificacoes.marcarVistas(pedido),
   // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
   ...semAtendente([
     "agentes.definir",
     "agentes.restaurarPadrao",
-    "agentes.ligar",
-    "agentes.pausar",
-    "agentes.retomar",
     "provedores.listar",
     "provedores.detectar",
     "provedores.criar",

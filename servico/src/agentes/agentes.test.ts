@@ -9,6 +9,8 @@ import { abrirBanco } from "../banco/conexao.ts";
 import { Catalogo } from "../ferramentas/catalogo.ts";
 import { ferramenta } from "../ferramentas/ferramenta.ts";
 import { RepositorioAgentes, ServicoAgentes } from "./agentes.ts";
+import { EstadosAgentes } from "./estado.ts";
+import { RepositorioExecucoes } from "./execucoes.ts";
 
 const pastas: string[] = [];
 const bancos: DatabaseSync[] = [];
@@ -42,11 +44,21 @@ function montar() {
   bancos.push(db);
   const repo = new RepositorioAgentes(db);
   const catalogo = new Catalogo([leitura("agenda.ver"), leitura("tarefas.criar"), leitura("financas.saldo")]);
-  const servico = new ServicoAgentes(repo, catalogo, (a) => ({
-    ...ociosa,
-    estado: a.estado,
-    fila: a.id === "nuno" ? 2 : 0,
-  }));
+  const estados = new EstadosAgentes(
+    { agentes: repo, execucoes: new RepositorioExecucoes(db) },
+    { agora: () => new Date("2026-10-09T12:00:00.000Z"), programar: () => () => {} },
+  );
+  const servico = new ServicoAgentes(
+    repo,
+    catalogo,
+    (a) => ({
+      ...ociosa,
+      estado: a.estado,
+      pausadoAte: a.pausadoAte,
+      fila: a.id === "nuno" ? 2 : 0,
+    }),
+    estados,
+  );
   return { db, repo, servico };
 }
 
@@ -82,6 +94,28 @@ describe("agentes", () => {
       { nome: "tarefas.criar", descricao: "Faz tarefas.criar", efeito: "leitura" },
     ]);
     expect(servico.capacidades({ id: "tula" }).map((c) => c.nome)).toEqual(["financas.saldo"]);
+  });
+
+  test("pausar e retomar devolvem quem mudou, no formato do contrato; desligado fica de fora", () => {
+    const { servico } = montar();
+    servico.ligar({ id: "faina", ligado: false });
+
+    const pausados = servico.pausar({ ate: "2026-10-09T13:00:00.000Z" });
+    expect(pausados.map((a) => a.id)).toEqual(["alba", "tula", "nuno"]);
+    for (const a of pausados) expect(Agente.safeParse(a).success, a.id).toBe(true);
+    expect(pausados[0]!.situacao).toMatchObject({
+      estado: "pausado",
+      pausadoAte: "2026-10-09T13:00:00.000Z",
+    });
+    expect(() => servico.pausar({ agenteId: "faina", ate: null })).toThrow("Faina está desligado");
+    expect(() => servico.pausar({ agenteId: "alba", ate: "2026-10-09T11:00:00.000Z" })).toThrow(
+      "O fim da pausa já passou.",
+    );
+
+    expect(servico.retomar({ agenteId: "tula" }).map((a) => a.id)).toEqual(["tula"]);
+    expect(servico.retomar({}).map((a) => a.id)).toEqual(["alba", "nuno"]);
+    expect(servico.retomar({})).toEqual([]);
+    expect(servico.ligar({ id: "faina", ligado: true }).situacao.estado).toBe("ativo");
   });
 
   test("o provedor vem com a configuração para o registro; o da lixeira não", () => {
