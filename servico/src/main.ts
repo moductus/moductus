@@ -6,6 +6,7 @@ import { RepositorioAgentes, ServicoAgentes } from "./agentes/agentes.ts";
 import { autorizarPorAprovacao } from "./agentes/autorizar.ts";
 import { RepositorioExecucoes, ServicoExecucoes } from "./agentes/execucoes.ts";
 import { aberturaMcpDoRuntime } from "./agentes/mcp.ts";
+import { classificadorPeloRuntime, Roteador } from "./agentes/roteador.ts";
 import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
@@ -15,6 +16,7 @@ import { CanalCasca } from "./casca/canal.ts";
 import { credenciaisPelaCasca } from "./casca/credenciais.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
 import { RepositorioConexoes, ServicoConexoes } from "./conexoes/conexoes.ts";
+import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts";
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
@@ -157,6 +159,20 @@ const runtime = new Runtime(
 );
 const agentes = new ServicoAgentes(repositorioAgentes, catalogo, (agente) => runtime.situacao(agente));
 const execucoes = new ServicoExecucoes(repositorioExecucoes);
+// Conversas (F2-19): o roteamento classifica pelo modelo da Alba o que as regras não pegam.
+const conversas = new ServicoConversas(
+  {
+    repo: new RepositorioConversas(banco),
+    agentes: repositorioAgentes,
+    runtime,
+    roteador: new Roteador(classificadorPeloRuntime(runtime, repositorioAgentes)),
+  },
+  {
+    conversa: (conversa) => servidor?.emitir("conversas.mudou", conversa),
+    mensagem: (mensagem) => servidor?.emitir("conversas.mensagem", mensagem),
+    parcial: (parcial) => servidor?.emitir("conversas.parcial", parcial),
+  },
+);
 
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
@@ -186,6 +202,11 @@ servidor = await abrirServidorWs(token, {
   "agentes.capacidades": (pedido) => agentes.capacidades(pedido),
   "execucoes.listar": (pedido) => execucoes.listar(pedido),
   "execucoes.obter": (pedido) => execucoes.obter(pedido),
+  "conversas.listar": () => conversas.listar(),
+  "conversas.abrir": (pedido) => conversas.abrir(pedido),
+  "conversas.mensagens": (pedido) => conversas.mensagens(pedido),
+  "conversas.enviar": (pedido) => conversas.enviar(pedido),
+  "conversas.arquivar": (pedido) => conversas.arquivar(pedido),
   // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
   ...semAtendente([
     "agentes.definir",
@@ -200,11 +221,6 @@ servidor = await abrirServidorWs(token, {
     "provedores.definir",
     "provedores.remover",
     "provedores.testar",
-    "conversas.listar",
-    "conversas.abrir",
-    "conversas.mensagens",
-    "conversas.enviar",
-    "conversas.arquivar",
   ]),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);

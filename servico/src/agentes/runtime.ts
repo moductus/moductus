@@ -41,6 +41,13 @@ export interface PedidoExecucao {
   mensagens: readonly MensagemModelo[];
   /** Sessão do provedor a continuar (`--resume`); devolvida no resultado da execução anterior. */
   continuarDe?: string | null;
+  /**
+   * Prompt de sistema no lugar das instruções do agente, para um trabalho curto que não é a voz
+   * dele (o classificador do roteamento roda no modelo da Alba).
+   */
+  instrucoes?: string;
+  /** Nenhuma ferramenta oferecida: o modelo só responde texto. */
+  semFerramentas?: boolean;
   /** Cada evento do provedor, na hora, para a conversa mostrar a resposta em streaming. */
   aoEvento?: (evento: EventoAgente, execucaoId: string) => void;
   /** Cancela a execução, ou tira o pedido da fila se ainda não chegou a vez. */
@@ -218,9 +225,9 @@ export class Runtime {
           {
             agenteId: agente.id,
             execucaoId: id,
-            instrucoes: montarInstrucoes(agente),
+            instrucoes: pedido.instrucoes ?? montarInstrucoes(agente),
             mensagens: historicoCurto(pedido.mensagens),
-            ferramentas: escopo.oferecidas(),
+            ferramentas: pedido.semFerramentas ? [] : escopo.oferecidas(),
             executarFerramenta: executar,
             continuarDe: pedido.continuarDe ?? null,
           },
