@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Id, Instante, PedidoPagina, pagina } from "./comum.ts";
-import { MotivoFalhaProvedor } from "./provedores.ts";
+import { Cobranca, MotivoFalhaProvedor } from "./provedores.ts";
 
 /**
  * Agentes, execuções e o histórico com desfazer (AGENTS.md §1, §4, §6 e §7; DATA.md §6 agentes,
@@ -121,9 +121,11 @@ export type EstadoExecucao = z.infer<typeof EstadoExecucao>;
 
 /**
  * Cada vez que um agente trabalha. Custo vazio quando não há número honesto (assinatura, modelo
- * sem preço conhecido): a interface diz isso em vez de mostrar zero.
+ * sem preço conhecido): a interface diz isso em vez de mostrar zero, e `cobranca` diz qual dos
+ * dois é. Custo preenchido é sempre estimativa, pela tabela de preços do serviço. `cobranca`
+ * vazia: a execução não chegou a um provedor (agente sem modelo). Assinatura nunca tem custo.
  */
-export const Execucao = z.object({
+const CamposExecucao = z.object({
   id: Id,
   agenteId: Id,
   gatilho: TipoGatilho,
@@ -135,8 +137,19 @@ export const Execucao = z.object({
   tokensEntrada: z.number().int().nonnegative().nullable(),
   tokensSaida: z.number().int().nonnegative().nullable(),
   custoEstimadoMicrodolares: z.number().int().nonnegative().nullable(),
+  cobranca: Cobranca.nullable(),
   resumo: z.string().nullable(),
 });
+
+/** Assinatura não tem custo por token: um número ali seria inventado (AGENTS.md §5 "Consumo"). */
+const assinaturaSemCusto = (e: { cobranca: Cobranca | null; custoEstimadoMicrodolares: number | null }) =>
+  e.cobranca !== "assinatura" || e.custoEstimadoMicrodolares === null;
+const MENSAGEM_ASSINATURA_COM_CUSTO = {
+  path: ["custoEstimadoMicrodolares"],
+  message: "execução por assinatura não tem custo estimado",
+};
+
+export const Execucao = CamposExecucao.refine(assinaturaSemCusto, MENSAGEM_ASSINATURA_COM_CUSTO);
 export type Execucao = z.infer<typeof Execucao>;
 
 export const ChamadaFerramenta = z.object({
@@ -154,7 +167,10 @@ export const ChamadaFerramenta = z.object({
 });
 export type ChamadaFerramenta = z.infer<typeof ChamadaFerramenta>;
 
-export const ExecucaoDetalhada = Execucao.extend({ chamadas: z.array(ChamadaFerramenta) });
+export const ExecucaoDetalhada = CamposExecucao.extend({ chamadas: z.array(ChamadaFerramenta) }).refine(
+  assinaturaSemCusto,
+  MENSAGEM_ASSINATURA_COM_CUSTO,
+);
 export type ExecucaoDetalhada = z.infer<typeof ExecucaoDetalhada>;
 
 /** Histórico: de um agente ou, sem `agenteId`, do time todo. */

@@ -65,7 +65,9 @@ function montar(pasta = mkdtempSync(join(tmpdir(), "moductus-runtime-"))) {
     "p-alba": new ProvedorFalso("p-alba"),
     "p-nuno": new ProvedorFalso("p-nuno"),
   };
-  const provedores = new RegistroProvedores().registrar("claude-cli", (config) => falsos[config.id]!);
+  const provedores = new RegistroProvedores()
+    .registrar("claude-cli", (config) => falsos[config.id]!)
+    .registrar("openai-compativel", (config) => falsos[config.id]!);
 
   const porta = portoes();
   const publicados: string[] = [];
@@ -136,11 +138,8 @@ function montar(pasta = mkdtempSync(join(tmpdir(), "moductus-runtime-"))) {
       autorizar: autorizarPorAprovacao(aprovacoes),
     },
     { execucao: (e) => avisosExecucao.push(e), agente: (id) => avisosAgente.push(id) },
-    {
-      agora: () => new Date(Date.UTC(2026, 9, 9, 12, 0, segundos++)),
-      // Um preço qualquer, só para ver o custo chegar à execução.
-      estimarCusto: (_config, uso) => uso.tokensEntrada * 3 + uso.tokensSaida * 15,
-    },
+    // Sem `estimarCusto`: vale a tabela de preços de verdade (provedores/precos.ts).
+    { agora: () => new Date(Date.UTC(2026, 9, 9, 12, 0, segundos++)) },
   );
   const situacao = (id: string) => runtime.situacao(agentes.agente(id)!);
   const historico = new ServicoExecucoes(repositorioExecucoes, catalogo);
@@ -318,7 +317,7 @@ describe("runtime: pedido ao modelo", () => {
 });
 
 describe("runtime: registro em execucoes", () => {
-  test("execução que dá certo grava tokens somados, custo, duração, resumo e a continuação", async () => {
+  test("execução por CLI que dá certo grava tokens somados, assinatura sem custo, duração, resumo e a continuação", async () => {
     const { runtime, falsos, avisosExecucao, historico } = montar();
     falsos["p-nuno"]!.roteirizar([
       { tipo: "texto", texto: "2 PRs esperam " },
@@ -347,7 +346,9 @@ describe("runtime: registro em execucoes", () => {
       erro: null,
       tokensEntrada: 150,
       tokensSaida: 30,
-      custoEstimadoMicrodolares: 150 * 3 + 30 * 15,
+      // CLI roda com a assinatura: nenhum preço de API inventado.
+      custoEstimadoMicrodolares: null,
+      cobranca: "assinatura",
       resumo: "2 PRs esperam seu review.",
     });
     expect(Execucao.safeParse(r.execucao).success).toBe(true);
@@ -358,7 +359,7 @@ describe("runtime: registro em execucoes", () => {
     expect(historico.listar({ agenteId: "nuno" }).itens).toEqual([r.execucao]);
   });
 
-  test("sem evento de uso, tokens e custo ficam vazios em vez de zero", async () => {
+  test("sem evento de uso, tokens e custo ficam vazios em vez de zero, e a assinatura continua marcada", async () => {
     const { runtime, falsos } = montar();
     falsos["p-nuno"]!.roteirizar([{ tipo: "texto", texto: "ok" }, { tipo: "fim" }]);
     const { execucao } = await runtime.executar(pedir("nuno", "oi"));
@@ -366,6 +367,44 @@ describe("runtime: registro em execucoes", () => {
       tokensEntrada: null,
       tokensSaida: null,
       custoEstimadoMicrodolares: null,
+      cobranca: "assinatura",
+    });
+  });
+
+  test("execução por API grava tokens e o custo estimado pela tabela, chamada a chamada", async () => {
+    const { db, runtime, falsos, historico } = montar();
+    db.exec("UPDATE provedores SET tipo = 'openai-compativel', modelo = 'gpt-5-mini' WHERE id = 'p-nuno'");
+    falsos["p-nuno"]!.roteirizar([
+      // gpt-5-mini: US$ 0,25 entrada, 0,025 cache, 2 saída por milhão.
+      { tipo: "uso", tokensEntrada: 10_000, tokensSaida: 1_000, tokensCacheLidos: 8_000 },
+      { tipo: "texto", texto: "Feito." },
+      // O provedor disse que respondeu com outro modelo: vale o preço dele (gpt-4.1: 2 e 8).
+      { tipo: "uso", tokensEntrada: 1_000, tokensSaida: 100, modelo: "gpt-4.1-2025-04-14" },
+      { tipo: "fim" },
+    ]);
+
+    const { execucao } = await runtime.executar(pedir("nuno", "oi"));
+    // 2000 × 0,25 + 8000 × 0,025 + 1000 × 2 = 2700 µ$; 1000 × 2 + 100 × 8 = 2800 µ$.
+    expect(execucao).toMatchObject({
+      tokensEntrada: 11_000,
+      tokensSaida: 1_100,
+      custoEstimadoMicrodolares: 2700 + 2800,
+      cobranca: "por_token",
+    });
+    expect(Execucao.safeParse(execucao).success).toBe(true);
+    expect(historico.listar({ agenteId: "nuno" }).itens[0]).toEqual(execucao);
+  });
+
+  test("execução por API com modelo fora da tabela grava tokens, sem custo inventado", async () => {
+    const { db, runtime, falsos } = montar();
+    db.exec("UPDATE provedores SET tipo = 'openai-compativel', modelo = 'llama3.1:8b' WHERE id = 'p-nuno'");
+    falsos["p-nuno"]!.roteirizar(roteiros.resposta("Oi."));
+    const { execucao } = await runtime.executar(pedir("nuno", "oi"));
+    expect(execucao).toMatchObject({
+      tokensEntrada: 100,
+      tokensSaida: 20,
+      custoEstimadoMicrodolares: null,
+      cobranca: "por_token",
     });
   });
 
@@ -389,7 +428,12 @@ describe("runtime: registro em execucoes", () => {
   test("agente sem modelo registra o erro sem chamar provedor e pede sono sem hora", async () => {
     const { runtime } = montar();
     const r = await runtime.executar(pedir("tula", "quanto gastei?"));
-    expect(r.execucao).toMatchObject({ estado: "erro", provedorId: null, erro: MENSAGEM_SEM_MODELO("Tula") });
+    expect(r.execucao).toMatchObject({
+      estado: "erro",
+      provedorId: null,
+      erro: MENSAGEM_SEM_MODELO("Tula"),
+      cobranca: null,
+    });
     expect(r.sono).toEqual({ motivo: "sem_modelo", ate: null });
   });
 

@@ -75,6 +75,7 @@ describe("histórico de execuções", () => {
       tokensEntrada: 10,
       tokensSaida: 2,
       custoEstimadoMicrodolares: null,
+      cobranca: "assinatura",
       resumo: "ok",
     });
 
@@ -85,6 +86,7 @@ describe("histórico de execuções", () => {
     expect(servico.obter({ id: "E1" })).toMatchObject({
       estado: "ok",
       fim: "2026-10-09T12:00:02.000Z",
+      cobranca: "assinatura",
       chamadas: [{ id: "C1", entrada: null, resultado: { ok: true, valor: "1" }, desfazerAte: null }],
     });
     expect(() => servico.obter({ id: "nada" })).toThrow("execução não encontrada");
