@@ -22,6 +22,18 @@ export interface ContextoFerramenta {
   sinal: AbortSignal;
 }
 
+/**
+ * O texto do cartão de uma ação `externo`, na voz do agente: o que vai acontecer, o tamanho e se
+ * dá para desfazer; o botão é verbo com objeto ("Comentar no #142"), nunca "OK".
+ */
+export interface TextoCartao {
+  descricao: string;
+  rotulo: string;
+  /** Botão de recusar ("Depois"); sem ele, a interface mostra "Negar". */
+  rotuloRecusar?: string;
+  desfazivel?: boolean;
+}
+
 export interface DefinicaoFerramenta<E extends z.ZodObject> {
   nome: string;
   /** Lida pelo modelo para decidir quando chamar e pelo usuário em `/capacidades`. */
@@ -30,6 +42,11 @@ export interface DefinicaoFerramenta<E extends z.ZodObject> {
   efeito: Efeito;
   /** Chamada só com a entrada já validada; erro lançado volta ao modelo como texto. */
   executar: (entrada: z.output<E>, ctx: ContextoFerramenta) => unknown;
+  /**
+   * O cartão de aprovação, obrigatório em `externo`: só a área sabe dizer o que vai acontecer e o
+   * tamanho, e um texto genérico pediria o sim sem dizer isso.
+   */
+  cartao?: (entrada: z.output<E>) => TextoCartao;
 }
 
 export type Validacao = { ok: true; valor: unknown } | { ok: false; erro: string };
@@ -46,6 +63,8 @@ export interface Ferramenta {
   validar(entrada: unknown): Validacao;
   /** Roda a função da área; `entrada` tem de ter passado por {@link validar}. */
   executar(entrada: unknown, ctx: ContextoFerramenta): Promise<unknown>;
+  /** O texto do cartão para a entrada validada; `null` fora de `externo`. */
+  cartao(entrada: unknown): TextoCartao | null;
 }
 
 /**
@@ -71,6 +90,9 @@ export function ferramenta<E extends z.ZodObject>(definicao: DefinicaoFerramenta
   if (!NOME_MODELO.test(nomeModelo))
     throw new Error(`ferramenta "${nome}": nome longo demais para os modelos`);
   if (descricao.trim() === "") throw new Error(`ferramenta "${nome}": falta a descrição`);
+  if (efeito === "externo" && !definicao.cartao) {
+    throw new Error(`ferramenta "${nome}": ação externo precisa do texto do cartão de aprovação`);
+  }
   const esquema = esquemaJson(nome, entrada);
 
   return {
@@ -85,6 +107,9 @@ export function ferramenta<E extends z.ZodObject>(definicao: DefinicaoFerramenta
     },
     async executar(valor, ctx) {
       return definicao.executar(valor as z.output<E>, ctx);
+    },
+    cartao(valor) {
+      return definicao.cartao?.(valor as z.output<E>) ?? null;
     },
   };
 }

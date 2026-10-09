@@ -1,6 +1,12 @@
+import { mkdirSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { VERSAO_PROTOCOLO, type EstadoConfig } from "@moductus/contrato";
+import { RepositorioAgentes, ServicoAgentes } from "./agentes/agentes.ts";
+import { autorizarPorAprovacao } from "./agentes/autorizar.ts";
+import { RepositorioExecucoes, ServicoExecucoes } from "./agentes/execucoes.ts";
+import { aberturaMcpDoRuntime } from "./agentes/mcp.ts";
+import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
@@ -11,9 +17,13 @@ import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config
 import { RepositorioConexoes, ServicoConexoes } from "./conexoes/conexoes.ts";
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
+import { Catalogo } from "./ferramentas/catalogo.ts";
+import { abrirServidorMcp } from "./mcp/servidor.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
+import { fabricaClaudeCli, type AberturaMcp } from "./provedores/claude-cli/claude-cli.ts";
+import { RegistroProvedores } from "./provedores/registro.ts";
 import { TRANSCRIPTS_DO_DISCO } from "./sessoes/contexto.ts";
 import { caminhoSettingsClaude, LigacaoClaudeCode } from "./sessoes/ligacao.ts";
 import { atenderHooks } from "./sessoes/permissao.ts";
@@ -97,6 +107,57 @@ const conexoes = new ServicoConexoes(
   (conexao) => servidor?.emitir("conexoes.mudou", conexao),
 );
 
+/**
+ * Os adaptadores de modelo que esta versão tem. O CLI roda numa pasta própria, para não herdar
+ * CLAUDE.md nem `.claude/` de um projeto qualquer, e recebe as ferramentas do agente pelo MCP do
+ * Moductus. Sem o MCP, o agente ainda conversa, só sem ferramentas.
+ */
+function registrarProvedores(mcp: AberturaMcp | undefined): RegistroProvedores {
+  const pastaDoClaudeCli = join(pastaDeDados(), "claude-cli");
+  mkdirSync(pastaDoClaudeCli, { recursive: true });
+  return new RegistroProvedores().registrar("claude-cli", fabricaClaudeCli({ pasta: pastaDoClaudeCli, mcp }));
+}
+
+// Servidor MCP do Moductus (F2-11): cada execução em CLI abre o próprio acesso, e as chamadas rodam
+// pelo executor da execução no runtime (escopo, cartão e registro).
+const servidorMcp = await abrirServidorMcp().catch((erro: unknown) => {
+  console.error(`MCP do Moductus fora do ar: ${String(erro)}`);
+  return null;
+});
+if (servidorMcp) console.error(`MCP do Moductus na porta ${servidorMcp.porta}`);
+
+// Runtime dos agentes (F2-15).
+const provedores = registrarProvedores(
+  servidorMcp
+    ? aberturaMcpDoRuntime(servidorMcp, (execucaoId) => runtime.executorDaExecucao(execucaoId))
+    : undefined,
+);
+const catalogo = new Catalogo();
+const repositorioAgentes = new RepositorioAgentes(banco);
+const repositorioExecucoes = new RepositorioExecucoes(banco);
+// Quem rodava essas execuções era o serviço que parou: fecham como erro e os cartões delas expiram.
+const interrompidas = encerrarInterrompidas(repositorioExecucoes, aprovacoes);
+if (interrompidas.length > 0)
+  console.error(`execuções interrompidas na última subida: ${interrompidas.length}`);
+const runtime = new Runtime(
+  {
+    agentes: repositorioAgentes,
+    execucoes: repositorioExecucoes,
+    provedores,
+    catalogo,
+    autorizar: autorizarPorAprovacao(aprovacoes),
+  },
+  {
+    execucao: (execucao) => servidor?.emitir("execucoes.mudou", execucao),
+    agente: (agenteId) => {
+      const agente = agentes.procurar(agenteId);
+      if (agente) servidor?.emitir("agentes.mudou", agente);
+    },
+  },
+);
+const agentes = new ServicoAgentes(repositorioAgentes, catalogo, (agente) => runtime.situacao(agente));
+const execucoes = new ServicoExecucoes(repositorioExecucoes);
+
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
   "config.obter": () => config.obter(),
@@ -120,18 +181,18 @@ servidor = await abrirServidorWs(token, {
   "conexoes.desligar": (pedido) => conexoes.desligar(pedido),
   "github.obter": () => github.obter(),
   "github.atualizar": () => github.atualizar(),
+  "agentes.listar": () => agentes.listar(),
+  "agentes.obter": (pedido) => agentes.obter(pedido),
+  "agentes.capacidades": (pedido) => agentes.capacidades(pedido),
+  "execucoes.listar": (pedido) => execucoes.listar(pedido),
+  "execucoes.obter": (pedido) => execucoes.obter(pedido),
   // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
   ...semAtendente([
-    "agentes.listar",
-    "agentes.obter",
     "agentes.definir",
     "agentes.restaurarPadrao",
     "agentes.ligar",
     "agentes.pausar",
     "agentes.retomar",
-    "agentes.capacidades",
-    "execucoes.listar",
-    "execucoes.obter",
     "execucoes.desfazer",
     "provedores.listar",
     "provedores.detectar",

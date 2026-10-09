@@ -53,16 +53,32 @@ export interface OpcoesClaudeCli {
    */
   pasta?: string;
   /**
-   * Servidor MCP do Moductus (ADR-0014). O token vai no ambiente do processo, em
-   * `VARIAVEL_ACESSO_MCP`, nunca nos argumentos: a configuração leva `${VARIAVEL}` e o CLI expande.
+   * Servidor MCP do Moductus (ADR-0014). Cada execução abre o próprio acesso e o fecha ao terminar.
+   * O token vai no ambiente do processo, em `VARIAVEL_ACESSO_MCP`, nunca nos argumentos: a
+   * configuração leva `${VARIAVEL}` e o CLI expande.
    */
-  mcp?: { url: string; token: string };
+  mcp?: AberturaMcp;
   /** Como iniciar o processo; os testes trocam o CLI por um roteiro gravado. */
   iniciar?: IniciarProcesso;
   agora?: () => Date;
 }
 
-/** O nome com que o CLI vê uma ferramenta do catálogo: MCP aceita só letras, números, `_` e `-`. */
+/**
+ * Quem dá a uma execução o acesso às ferramentas dela pelo MCP (`ServidorMcp` em `mcp/`): só as do
+ * pedido, rodadas pelo `executarFerramenta` dele, com um token que vale até `fechar`.
+ */
+export interface AberturaMcp {
+  abrir(execucao: Pick<PedidoDoAgente, "execucaoId" | "ferramentas" | "executarFerramenta">): {
+    url: string;
+    token: string;
+    fechar(): void;
+  };
+}
+
+/**
+ * O nome com que o CLI vê uma ferramenta oferecida. O nome já vem no formato do modelo
+ * (`sessoes__listar`), que é o que o servidor MCP publica; o resto só protege o que o MCP não aceita.
+ */
 export function nomeNoCli(nome: string): string {
   return PREFIXO_MCP + nome.replace(/[^A-Za-z0-9_-]/g, "_");
 }
@@ -80,10 +96,22 @@ export function montarPrompt(pedido: PedidoDoAgente): string {
   return `Conversa até aqui:\n${historico.join("\n")}\n\nMensagem nova:\n${novas.join("\n\n")}`;
 }
 
+/**
+ * O ambiente do processo do CLI: o do serviço sem nenhuma variável `MODUCTUS_*` (token do canal
+ * das janelas, pasta de dados...), porque hooks e plugins do usuário rodam dentro do CLI e as
+ * herdariam. Só entra o acesso ao MCP desta execução, quando houver.
+ */
+export function ambienteDoCli(base: NodeJS.ProcessEnv, acessoMcp: string | null): NodeJS.ProcessEnv {
+  const ambiente = Object.fromEntries(Object.entries(base).filter(([nome]) => !/^MODUCTUS_/i.test(nome)));
+  if (acessoMcp !== null) ambiente[VARIAVEL_ACESSO_MCP] = acessoMcp;
+  return ambiente;
+}
+
+/** `mcpUrl` é o endereço do acesso aberto para esta execução; sem ele, nenhuma ferramenta. */
 export function argumentosDoClaude(
   pedido: PedidoDoAgente,
   config: ConfigProvedor,
-  opcoes: OpcoesClaudeCli = {},
+  mcpUrl: string | null = null,
 ): string[] {
   const argumentos = [
     "-p",
@@ -103,10 +131,10 @@ export function argumentosDoClaude(
   if (pedido.instrucoes) argumentos.push("--append-system-prompt", pedido.instrucoes);
   if (config.modelo) argumentos.push("--model", config.modelo);
   if (pedido.continuarDe) argumentos.push("--resume", pedido.continuarDe);
-  if (opcoes.mcp && pedido.ferramentas.length > 0) {
+  if (mcpUrl && pedido.ferramentas.length > 0) {
     const servidor = {
       type: "http",
-      url: opcoes.mcp.url,
+      url: mcpUrl,
       headers: { Authorization: `Bearer \${${VARIAVEL_ACESSO_MCP}}` },
     };
     argumentos.push("--mcp-config", JSON.stringify({ mcpServers: { moductus: servidor } }));
@@ -167,15 +195,27 @@ export class ProvedorClaudeCli implements Provedor {
     return soltar;
   }
 
+  /** O acesso ao MCP vale enquanto o processo roda: o token morre junto com ele. */
   private async *rodar(pedido: PedidoDoAgente, sinal: AbortSignal): AsyncIterable<EventoAgente> {
     sinal.throwIfAborted();
+    const acesso = this.opcoes.mcp && pedido.ferramentas.length > 0 ? this.opcoes.mcp.abrir(pedido) : null;
+    try {
+      yield* this.rodarProcesso(pedido, sinal, acesso);
+    } finally {
+      acesso?.fechar();
+    }
+  }
+
+  private async *rodarProcesso(
+    pedido: PedidoDoAgente,
+    sinal: AbortSignal,
+    acesso: { url: string; token: string } | null,
+  ): AsyncIterable<EventoAgente> {
     const comando = this.opcoes.comando ?? "claude";
     const iniciar: IniciarProcesso = this.opcoes.iniciar ?? ((args, o) => spawn(comando, args, o));
-    const processo = iniciar(argumentosDoClaude(pedido, this.config, this.opcoes), {
+    const processo = iniciar(argumentosDoClaude(pedido, this.config, acesso?.url ?? null), {
       cwd: this.opcoes.pasta,
-      env: this.opcoes.mcp
-        ? { ...process.env, [VARIAVEL_ACESSO_MCP]: this.opcoes.mcp.token }
-        : { ...process.env },
+      env: ambienteDoCli(process.env, acesso?.token ?? null),
       windowsHide: true,
     });
     const saida = new Promise<{ codigo: number | null; erro: Error | null }>((resolve) => {

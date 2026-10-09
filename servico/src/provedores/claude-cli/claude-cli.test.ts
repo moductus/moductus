@@ -3,12 +3,16 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { z } from "zod";
+import { ferramenta, oferecida } from "../../ferramentas/ferramenta.ts";
 import type { ConfigProvedor, EventoAgente, PedidoDoAgente } from "../provedor.ts";
 import { RegistroProvedores } from "../registro.ts";
 import {
+  ambienteDoCli,
   argumentosDoClaude,
   fabricaClaudeCli,
+  type AberturaMcp,
   montarPrompt,
   ProvedorClaudeCli,
   type OpcoesClaudeCli,
@@ -65,6 +69,8 @@ interface Anotacao {
   entrada: string;
   pasta: string;
   temAcessoMcp: boolean;
+  /** Só os nomes das variáveis `MODUCTUS_*` que chegaram ao CLI, nunca os valores. */
+  variaveisMoductus: string[];
 }
 
 /**
@@ -142,18 +148,57 @@ describe("adaptador Claude Code CLI", () => {
 
   test("o token do MCP chega ao CLI pelo ambiente e nunca pelos argumentos", async () => {
     const token = "acesso-de-teste-que-nao-pode-aparecer";
-    const { provedor, anotado } = comCliFalso([gravada("sessao-com-ferramenta.jsonl")], "normal", {
-      mcp: { url: "http://127.0.0.1:47822/mcp", token },
-    });
-    await coletar(provedor.executar(pedido(), new AbortController().signal));
+    const abertos: { fechado: boolean; execucao: unknown }[] = [];
+    const mcp: AberturaMcp = {
+      abrir(execucao) {
+        const acesso = { fechado: false, execucao };
+        abertos.push(acesso);
+        return { url: "http://127.0.0.1:47822/mcp", token, fechar: () => (acesso.fechado = true) };
+      },
+    };
+    const { provedor, anotado } = comCliFalso([gravada("sessao-com-ferramenta.jsonl")], "normal", { mcp });
+    const doPedido = pedido();
+    await coletar(provedor.executar(doPedido, new AbortController().signal));
     const { argumentos, temAcessoMcp } = anotado();
     expect(temAcessoMcp).toBe(true);
     expect(argumentos.join(" ")).not.toContain(token);
     expect(argumentos.join(" ")).toContain(`\${${VARIAVEL_ACESSO_MCP}}`);
+    // Um acesso por execução, com as ferramentas do pedido, fechado quando o processo termina.
+    expect(abertos).toEqual([{ fechado: true, execucao: doPedido }]);
 
     const semMcp = comCliFalso([gravada("sessao-com-ferramenta.jsonl")]);
     await coletar(semMcp.provedor.executar(pedido(), new AbortController().signal));
     expect(semMcp.anotado().temAcessoMcp).toBe(false);
+  });
+
+  test("o CLI não herda o token do canal nem outra variável MODUCTUS_*, só o acesso ao MCP", async () => {
+    vi.stubEnv("MODUCTUS_TOKEN", "token-do-canal-das-janelas");
+    vi.stubEnv("MODUCTUS_PASTA", pasta);
+    vi.stubEnv("MODUCTUS_PORTABLE", "1");
+    // Um acesso velho no ambiente do serviço também não passa.
+    vi.stubEnv("MODUCTUS_MCP_ACESSO", "acesso-velho");
+    try {
+      const mcp: AberturaMcp = {
+        abrir: () => ({ url: "http://127.0.0.1:47822/mcp", token: "acesso-novo", fechar: () => {} }),
+      };
+      const comMcp = comCliFalso([gravada("sessao-com-ferramenta.jsonl")], "normal", { mcp });
+      await coletar(comMcp.provedor.executar(pedido(), new AbortController().signal));
+      expect(comMcp.anotado().variaveisMoductus).toEqual(["MODUCTUS_MCP_ACESSO"]);
+
+      const semMcp = comCliFalso([gravada("sessao-com-ferramenta.jsonl")]);
+      await coletar(semMcp.provedor.executar(pedido(), new AbortController().signal));
+      expect(semMcp.anotado().variaveisMoductus).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("ambiente do CLI: tira MODUCTUS_* em qualquer caixa e põe o acesso desta execução", () => {
+    const ambiente = ambienteDoCli(
+      { PATH: "C:\\bin", Moductus_Token: "x", MODUCTUS_MCP_ACESSO: "velho", USERPROFILE: "C:\\u" },
+      "novo",
+    );
+    expect(ambiente).toEqual({ PATH: "C:\\bin", USERPROFILE: "C:\\u", MODUCTUS_MCP_ACESSO: "novo" });
   });
 
   test("sessão do --resume sumiu: recomeça sem --resume, com o histórico curto", async () => {
@@ -349,9 +394,7 @@ describe("adaptador Claude Code CLI", () => {
 
 describe("argumentos e prompt", () => {
   test("MCP do Moductus: token por variável, nunca literal, e só as ferramentas do agente", () => {
-    const argumentos = argumentosDoClaude(pedido(), config(), {
-      mcp: { url: "http://127.0.0.1:47822/mcp", token: "segredo-que-nao-pode-aparecer" },
-    });
+    const argumentos = argumentosDoClaude(pedido(), config(), "http://127.0.0.1:47822/mcp");
     const mcp = JSON.parse(argumentos[argumentos.indexOf("--mcp-config") + 1] ?? "{}");
     expect(mcp).toEqual({
       mcpServers: {
@@ -366,16 +409,33 @@ describe("argumentos e prompt", () => {
     expect(VARIAVEL_ACESSO_MCP).not.toMatch(/token|key|secret|password|auth/i);
     expect(argumentos[argumentos.indexOf("--allowedTools") + 1]).toBe("mcp__moductus__sessoes_listar");
     expect(argumentos).toContain("--strict-mcp-config");
-    expect(argumentos.join(" ")).not.toContain("segredo-que-nao-pode-aparecer");
   });
 
   test("sem MCP ou sem ferramentas, nenhuma ferramenta é liberada", () => {
     expect(argumentosDoClaude(pedido(), config())).not.toContain("--allowedTools");
-    const semFerramentas = argumentosDoClaude(pedido({ ferramentas: [] }), config(), {
-      mcp: { url: "http://127.0.0.1:47822/mcp", token: "t" },
-    });
+    const semFerramentas = argumentosDoClaude(
+      pedido({ ferramentas: [] }),
+      config(),
+      "http://127.0.0.1:47822/mcp",
+    );
     expect(semFerramentas).not.toContain("--mcp-config");
     expect(semFerramentas).not.toContain("--allowedTools");
+  });
+
+  test("o --allowedTools usa o nome que o MCP publica: o do modelo, com `__`", () => {
+    const listar = ferramenta({
+      nome: "sessoes.listar",
+      descricao: "Lista as sessões de IA",
+      entrada: z.object({}),
+      efeito: "leitura",
+      executar: () => [],
+    });
+    const argumentos = argumentosDoClaude(
+      pedido({ ferramentas: [oferecida(listar)] }),
+      config(),
+      "http://127.0.0.1:47822/mcp",
+    );
+    expect(argumentos[argumentos.indexOf("--allowedTools") + 1]).toBe("mcp__moductus__sessoes__listar");
   });
 
   test("sessão nova leva o histórico curto; continuando, só o que veio depois do agente", () => {
