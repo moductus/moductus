@@ -44,7 +44,10 @@ describe("tabela de preços", () => {
     expect(precoDoModelo("claude-haiku-4-5")).toBe(haiku);
     expect(precoDoModelo("claude-haiku-4-5-20251001")).toBe(haiku);
     expect(precoDoModelo("Claude-Haiku-4-5@20251001")).toBe(haiku);
+    // Id de nuvem cai no preço global da Anthropic: estimativa, porque o endpoint regional custa
+    // 10% a mais e o Moductus não sabe qual endpoint a conta usa.
     expect(precoDoModelo("us.anthropic.claude-haiku-4-5-20251001-v1:0")).toBe(haiku);
+    expect(precoDoModelo("global.anthropic.claude-haiku-4-5-20251001-v1:0")).toBe(haiku);
     expect(precoDoModelo("anthropic/claude-haiku-4.5")).toBe(haiku);
     expect(precoDoModelo("claude-opus-5-5[1m]")).toBe(PRECOS_POR_MODELO["claude-opus-5-5"]);
     expect(precoDoModelo("openai/gpt-5-mini")).toBe(PRECOS_POR_MODELO["gpt-5-mini"]);

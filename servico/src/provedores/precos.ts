@@ -43,6 +43,9 @@ export const PRECOS_CONFERIDOS_EM = "2026-10-09";
 
 /**
  * Preço por id de modelo, versionado aqui: preço padrão, sem lote, sem modo rápido, sem região.
+ * É o preço da API da Anthropic, que equivale ao endpoint global das nuvens: endpoint regional ou
+ * multirregional do Bedrock e do Google Cloud custa 10% a mais (Claude 4.5 em diante), e o custo
+ * de um id de nuvem continua sendo estimativa pelo preço global, nunca o valor da fatura.
  * Fontes, consultadas em 09/10/2026:
  * - Anthropic: https://platform.claude.com/docs/en/about-claude/pricing ("Model pricing" e "Long
  *   context pricing": só o Haiku 5.5 cobra mais acima de 100 mil tokens de entrada);
@@ -116,8 +119,8 @@ const naTabela = (id: string): PrecoModelo | null =>
  * Preço de um id de modelo pela tabela. Aceita o id como as APIs e os roteadores o escrevem: com
  * prefixo de quem serve (`anthropic/claude-sonnet-4.5`, `openai/gpt-5`), com data
  * (`claude-haiku-4-5-20251001`, `claude-opus-4-5@20251101`, `gpt-4o-2024-08-06`), com prefixo e
- * versão do Bedrock (`us.anthropic.claude-sonnet-4-5-20250929-v1:0`) e com o `[1m]` do Claude
- * Code. Um retrato com preço próprio (`gpt-4o-2024-05-13`) vale antes do modelo sem data. Fora da
+ * versão do Bedrock (`us.anthropic.claude-sonnet-4-5-20250929-v1:0`, pelo preço global: o
+ * regional custa mais) e com o `[1m]` do Claude Code. Um retrato com preço próprio (`gpt-4o-2024-05-13`) vale antes do modelo sem data. Fora da
  * tabela: `null`.
  */
 export function precoDoModelo(modelo: string | null | undefined): PrecoModelo | null {

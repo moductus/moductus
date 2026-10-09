@@ -4,6 +4,7 @@ import {
   Agente,
   ChamadaFerramenta,
   Execucao,
+  ExecucaoDetalhada,
   Gatilho,
   MotivoSono,
   MudancaAgente,
@@ -140,6 +141,13 @@ describe("execução e histórico", () => {
       Execucao.safeParse({ ...ok, cobranca: "por_token", custoEstimadoMicrodolares: 2600 }).success,
     ).toBe(true);
     expect(Execucao.safeParse({ ...ok, cobranca: "gratis" }).success).toBe(false);
+    // Assinatura com custo seria número inventado, no histórico e no detalhe.
+    const comCusto = { ...ok, cobranca: "assinatura", custoEstimadoMicrodolares: 2600 };
+    expect(Execucao.safeParse(comCusto).success).toBe(false);
+    expect(ExecucaoDetalhada.safeParse({ ...comCusto, chamadas: [] }).success).toBe(false);
+    expect(
+      ExecucaoDetalhada.safeParse({ ...comCusto, custoEstimadoMicrodolares: null, chamadas: [] }).success,
+    ).toBe(true);
     expect(Execucao.safeParse({ ...ok, cobranca: undefined }).success).toBe(false);
   });
 
