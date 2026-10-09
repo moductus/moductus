@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
+import { DO_USUARIO } from "../banco/tabela.ts";
 import { capacidade, ferramenta, nomeParaModelo, oferecida } from "./ferramenta.ts";
 
 const lancar = ferramenta({
@@ -13,6 +14,7 @@ const lancar = ferramenta({
     itens: z.array(z.object({ nome: z.string(), valorCentavos: z.number() })).optional(),
   }),
   efeito: "interno",
+  desfazer: () => {},
   executar: (entrada) => ({ gravado: entrada }),
 });
 
@@ -27,6 +29,62 @@ describe("ferramenta()", () => {
         executar: () => null,
       }),
     ).toThrow('ferramenta "github.comentar": ação externo precisa do texto do cartão de aprovação');
+  });
+
+  test("ação interno sem a função inversa falha na declaração; leitura e externo não aceitam uma", () => {
+    const base = { descricao: "x", entrada: z.object({}), executar: () => null };
+    expect(() => ferramenta({ ...base, nome: "tarefas.criar", efeito: "interno" })).toThrow(
+      'ferramenta "tarefas.criar": ação interno precisa da função que a desfaz',
+    );
+    expect(() =>
+      ferramenta({ ...base, nome: "tarefas.listar", efeito: "leitura", desfazer: () => null }),
+    ).toThrow('ferramenta "tarefas.listar": só ação interno se desfaz pelo histórico');
+    expect(() =>
+      ferramenta({
+        ...base,
+        nome: "github.comentar",
+        efeito: "externo",
+        cartao: () => ({ descricao: "Vou comentar.", rotulo: "Comentar" }),
+        desfazer: () => null,
+      }),
+    ).toThrow(/só ação interno se desfaz/);
+  });
+
+  test("a inversa recebe o resultado e o contexto, e precisa ser síncrona", () => {
+    const recebido: unknown[] = [];
+    const criar = ferramenta({
+      nome: "tarefas.criar",
+      descricao: "Cria uma tarefa",
+      entrada: z.object({ titulo: z.string() }),
+      efeito: "interno",
+      executar: () => ({ id: "t1" }),
+      desfazer: (resultado, ctx) => {
+        recebido.push(resultado, ctx);
+      },
+    });
+    const ler = ferramenta({
+      nome: "tarefas.listar",
+      descricao: "Lista",
+      entrada: z.object({}),
+      efeito: "leitura",
+      executar: () => [],
+    });
+    const assincrona = ferramenta({
+      nome: "tarefas.mover",
+      descricao: "Move",
+      entrada: z.object({}),
+      efeito: "interno",
+      executar: () => null,
+      desfazer: async () => {},
+    });
+    expect([criar.desfazivel, ler.desfazivel]).toEqual([true, false]);
+
+    const ctx = { chamadaId: "c1", agenteId: "alba", execucaoId: "e1", carimbo: DO_USUARIO };
+    criar.desfazer({ id: "t1" }, ctx);
+    expect(recebido).toEqual([{ id: "t1" }, ctx]);
+    expect(() => ler.desfazer(null, ctx)).toThrow("tarefas.listar não se desfaz");
+    // Terminaria fora da transação do histórico.
+    expect(() => assincrona.desfazer(null, ctx)).toThrow("a inversa de tarefas.mover precisa ser síncrona");
   });
 
   test("o texto do cartão sai da entrada validada; fora de externo, null", () => {
@@ -127,6 +185,7 @@ describe("ferramenta()", () => {
         prioridade: z.number().int().min(1).lt(5),
       }),
       efeito: "interno",
+      desfazer: () => {},
       executar: () => null,
     });
     const curto = limites.validar({ titulo: "a", etiquetas: [], prioridade: 0 });

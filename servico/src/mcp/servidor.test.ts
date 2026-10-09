@@ -36,6 +36,7 @@ const catalogo = new Catalogo([
     descricao: "Registra um gasto",
     entrada: z.object({ valor: z.number().positive() }),
     efeito: "interno",
+    desfazer: () => {},
     executar: () => "lançado",
   }),
   ferramenta({

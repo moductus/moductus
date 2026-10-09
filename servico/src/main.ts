@@ -158,7 +158,9 @@ const runtime = new Runtime(
   },
 );
 const agentes = new ServicoAgentes(repositorioAgentes, catalogo, (agente) => runtime.situacao(agente));
-const execucoes = new ServicoExecucoes(repositorioExecucoes);
+const execucoes = new ServicoExecucoes(repositorioExecucoes, catalogo, {
+  mudou: (execucao) => servidor?.emitir("execucoes.mudou", execucao),
+});
 // Conversas (F2-19): o roteamento classifica pelo modelo da Alba o que as regras não pegam.
 const conversas = new ServicoConversas(
   {
@@ -202,6 +204,7 @@ servidor = await abrirServidorWs(token, {
   "agentes.capacidades": (pedido) => agentes.capacidades(pedido),
   "execucoes.listar": (pedido) => execucoes.listar(pedido),
   "execucoes.obter": (pedido) => execucoes.obter(pedido),
+  "execucoes.desfazer": (pedido) => execucoes.desfazer(pedido),
   "conversas.listar": () => conversas.listar(),
   "conversas.abrir": (pedido) => conversas.abrir(pedido),
   "conversas.mensagens": (pedido) => conversas.mensagens(pedido),
@@ -214,7 +217,6 @@ servidor = await abrirServidorWs(token, {
     "agentes.ligar",
     "agentes.pausar",
     "agentes.retomar",
-    "execucoes.desfazer",
     "provedores.listar",
     "provedores.detectar",
     "provedores.criar",

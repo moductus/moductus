@@ -5,6 +5,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { PaginaExecucoes } from "@moductus/contrato";
 import { afterEach, describe, expect, test } from "vitest";
 import { abrirBanco } from "../banco/conexao.ts";
+import { Catalogo } from "../ferramentas/catalogo.ts";
 import { emJson, MARCA_CIRCULAR, RepositorioExecucoes, ServicoExecucoes } from "./execucoes.ts";
 
 const pastas: string[] = [];
@@ -20,7 +21,7 @@ function montar() {
   const db = abrirBanco(pasta);
   bancos.push(db);
   const repo = new RepositorioExecucoes(db);
-  return { db, repo, servico: new ServicoExecucoes(repo) };
+  return { db, repo, servico: new ServicoExecucoes(repo, new Catalogo()) };
 }
 
 describe("histórico de execuções", () => {

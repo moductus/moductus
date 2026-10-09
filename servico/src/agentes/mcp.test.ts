@@ -34,6 +34,7 @@ const anotar = ferramenta({
   descricao: "Anota um texto",
   entrada: z.object({ texto: z.string().min(1) }),
   efeito: "interno",
+  desfazer: () => {},
   executar: ({ texto }) => ({ anotado: texto }),
 });
 
@@ -81,7 +82,9 @@ describe("runtime pelo MCP do Moductus", () => {
     });
     expect(r.execucao).toMatchObject({ estado: "ok", tokensEntrada: 3, tokensSaida: 1 });
     expect(r.continuacao).toBe("sessao-mcp");
-    expect(new ServicoExecucoes(execucoes).obter({ id: r.execucao.id }).chamadas).toEqual([
+    expect(
+      new ServicoExecucoes(execucoes, new Catalogo([anotar])).obter({ id: r.execucao.id }).chamadas,
+    ).toEqual([
       expect.objectContaining({
         execucaoId: r.execucao.id,
         ferramenta: "teste.anotar",
