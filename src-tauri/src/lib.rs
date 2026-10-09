@@ -1,4 +1,6 @@
 mod acessibilidade;
+// O serviço chega aqui pelo canal do sidecar, como às credenciais.
+mod ambiente;
 mod appbar;
 mod atalhos;
 mod config_nativa;

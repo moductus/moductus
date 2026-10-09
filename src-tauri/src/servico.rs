@@ -5,7 +5,8 @@
 //! morrer de repente, o Windows derruba o serviço também.
 //!
 //! Canal com o serviço pelo stdio, em linhas JSON: o serviço avisa `pronto` com a porta
-//! e pede credenciais (`{"tipo":"credencial","id",…}`), respondidas no stdin.
+//! e pede credenciais (`{"tipo":"credencial","id",…}`) e variáveis do usuário
+//! (`{"tipo":"ambiente","id",…}`), respondidas no stdin.
 
 use std::{
     io::{BufRead, BufReader, Write},
@@ -33,7 +34,7 @@ use windows::Win32::{
     },
 };
 
-use crate::credenciais;
+use crate::{ambiente, credenciais};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "estado", rename_all = "lowercase")]
@@ -184,6 +185,13 @@ fn ouvir(app: &AppHandle, saida: std::process::ChildStdout, token: &str) {
             ("credencial", Some(id)) => {
                 let resposta = serde_json::from_str::<credenciais::Pedido>(&linha)
                     .map(credenciais::atender)
+                    .map(|r| serde_json::to_value(r).unwrap_or_default())
+                    .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
+                responder(id, resposta);
+            }
+            ("ambiente", Some(id)) => {
+                let resposta = serde_json::from_str::<ambiente::Pedido>(&linha)
+                    .map(ambiente::atender)
                     .map(|r| serde_json::to_value(r).unwrap_or_default())
                     .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
                 responder(id, resposta);
