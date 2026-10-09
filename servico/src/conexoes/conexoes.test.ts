@@ -9,6 +9,8 @@ import type { AmbienteDoUsuario } from "../casca/ambiente.ts";
 import { LigacaoClaudeCode, VARIAVEL_TOKEN } from "../sessoes/ligacao.ts";
 import { CREDENCIAL_HOOKS } from "../sessoes/token.ts";
 import { AVISO_DESATUALIZADA, AVISO_SAIU, RepositorioConexoes, ServicoConexoes } from "./conexoes.ts";
+import { GhAusente } from "./github/gh.ts";
+import { AVISO_SEM_GH, RepositorioGithub, ServicoGithub } from "./github/github.ts";
 
 const pastas: string[] = [];
 const bancos: DatabaseSync[] = [];
@@ -45,12 +47,24 @@ function montar(conteudo: string | null = ORIGINAL, falhas: { ambiente?: string 
   };
   const avisos: Conexao[] = [];
   const ligacao = new LigacaoClaudeCode({ caminho, porta: 47821 });
+  const repositorio = new RepositorioConexoes(db);
+  // O GitHub sem `gh` instalado: nenhum teste daqui chama o GitHub.
+  const github = new ServicoGithub(
+    new RepositorioGithub(db),
+    repositorio,
+    () => Promise.reject(new GhAusente()),
+    {
+      github: () => undefined,
+      conexao: (c) => avisos.push(c),
+    },
+  );
   const servico = new ServicoConexoes(
-    new RepositorioConexoes(db),
+    repositorio,
     {
       ligacao,
       ambiente,
       token: () => Promise.resolve(TOKEN),
+      github,
       agora: () => new Date("2026-10-09T12:00:00.000Z"),
     },
     (c) => avisos.push(c),
@@ -68,6 +82,7 @@ describe("conexão com o Claude Code", () => {
     const { servico, variaveis, avisos, ler, db } = montar();
     expect(servico.listar()).toEqual([
       { tipo: "hooks-claude-code", estado: "desligada", conta: null, ultimoErro: null, conectadaEm: null },
+      { tipo: "github", estado: "desligada", conta: null, ultimoErro: null, conectadaEm: null },
     ]);
 
     for (let volta = 0; volta < 2; volta++) {
@@ -156,10 +171,22 @@ describe("conexão com o Claude Code", () => {
     expect(servico.listar()[0]).toMatchObject({ estado: "erro", ultimoErro: AVISO_DESATUALIZADA });
     expect((await servico.ligar(CLAUDE)).estado).toBe("ligada");
   });
+});
 
-  test("GitHub ainda não é desta tarefa", async () => {
-    const { servico } = montar();
-    expect(() => servico.previa({ tipo: "github" })).toThrow(/ainda não está disponível/);
-    await expect(servico.ligar({ tipo: "github" })).rejects.toThrow(/ainda não está disponível/);
+describe("conexão com o GitHub", () => {
+  test("não mexe em arquivo; ligar sem gh explica o que fazer e desligar volta ao começo", async () => {
+    const { servico, avisos, ler } = montar();
+    expect(servico.previa({ tipo: "github" })).toEqual({ tipo: "github", arquivos: [] });
+    const ligada = await servico.ligar({ tipo: "github" });
+    expect(ligada).toMatchObject({ tipo: "github", estado: "erro", ultimoErro: AVISO_SEM_GH });
+    expect(servico.listar()[1]).toEqual(ligada);
+    expect(await servico.desligar({ tipo: "github" })).toMatchObject({
+      estado: "desligada",
+      ultimoErro: null,
+    });
+    expect(avisos.map((a) => `${a.tipo}:${a.estado}`)).toEqual(["github:erro", "github:desligada"]);
+    // O Claude Code não foi tocado.
+    expect(ler()).toBe(ORIGINAL);
+    expect(servico.listar()[0]?.estado).toBe("desligada");
   });
 });

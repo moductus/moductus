@@ -12,6 +12,7 @@ export const AVISO_DESATUALIZADA = "A ligação com o Claude Code está desatual
 interface LinhaConexao {
   id: string;
   estado: string;
+  conta: string | null;
   ultimo_erro: string | null;
   conectada_em: string | null;
 }
@@ -23,7 +24,7 @@ export class RepositorioConexoes {
   obter(tipo: TipoConexao): LinhaConexao | null {
     const linha = this.db
       .prepare(
-        `SELECT id, estado, ultimo_erro, conectada_em FROM conexoes
+        `SELECT id, estado, conta, ultimo_erro, conectada_em FROM conexoes
           WHERE tipo = ? AND apagado_em IS NULL ORDER BY id DESC LIMIT 1`,
       )
       .get(tipo) as LinhaConexao | undefined;
@@ -37,26 +38,46 @@ export class RepositorioConexoes {
       ultimoErro: string | null;
       conectadaEm: string | null;
       credencial: string | null;
+      /** Usuário da conta conectada (o login do GitHub); vazio quando não há. */
+      conta?: string | null;
     },
     agora: string,
   ): void {
     const atual = this.obter(tipo);
+    const conta = dados.conta ?? null;
     if (atual) {
       this.db
         .prepare(
-          `UPDATE conexoes SET estado = ?, ultimo_erro = ?, conectada_em = ?, credencial = ?,
+          `UPDATE conexoes SET estado = ?, ultimo_erro = ?, conectada_em = ?, credencial = ?, conta = ?,
                   origem = 'usuario', atualizado_em = ? WHERE id = ?`,
         )
-        .run(dados.estado, dados.ultimoErro, dados.conectadaEm, dados.credencial, agora, atual.id);
+        .run(dados.estado, dados.ultimoErro, dados.conectadaEm, dados.credencial, conta, agora, atual.id);
       return;
     }
     this.db
       .prepare(
-        `INSERT INTO conexoes (id, tipo, credencial, estado, ultimo_erro, conectada_em, criado_em, atualizado_em)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO conexoes (id, tipo, conta, credencial, estado, ultimo_erro, conectada_em, criado_em, atualizado_em)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(novoId(), tipo, dados.credencial, dados.estado, dados.ultimoErro, dados.conectadaEm, agora, agora);
+      .run(
+        novoId(),
+        tipo,
+        conta,
+        dados.credencial,
+        dados.estado,
+        dados.ultimoErro,
+        dados.conectadaEm,
+        agora,
+        agora,
+      );
   }
+}
+
+/** A conexão com o GitHub (`ServicoGithub`), que avisa as janelas ela mesma. */
+export interface ConexaoGithub {
+  conexao(): Conexao;
+  ligar(): Promise<Conexao>;
+  desligar(): Promise<Conexao>;
 }
 
 export interface DependenciasConexoes {
@@ -64,15 +85,17 @@ export interface DependenciasConexoes {
   ambiente: AmbienteDoUsuario;
   /** O token dos hooks (`tokenDosHooks`), lido do Gerenciador de Credenciais na hora. */
   token: () => Promise<string>;
+  github: ConexaoGithub;
   agora?: () => Date;
 }
 
 const mensagem = (erro: unknown) => (erro instanceof Error ? erro.message : String(erro));
 
 /**
- * Conexões da tela de Configurações › Conexões. Nesta tarefa, a do Claude Code (F2-22): ligar
- * mostra antes o que muda no `settings.json`, publica `MODUCTUS_HOOKS_TOKEN` e grava os hooks;
- * desligar tira só o que é do Moductus e apaga a variável. A do GitHub chega com a F2-25.
+ * Conexões da tela de Configurações › Conexões. A do Claude Code (F2-22): ligar mostra antes o que
+ * muda no `settings.json`, publica `MODUCTUS_HOOKS_TOKEN` e grava os hooks; desligar tira só o que
+ * é do Moductus e apaga a variável. A do GitHub (F2-25) não mexe em arquivo nenhum: ligar é ler o
+ * GitHub pelo `gh` já autenticado, e o `ServicoGithub` cuida dela.
  */
 export class ServicoConexoes {
   private readonly agora: () => Date;
@@ -86,10 +109,11 @@ export class ServicoConexoes {
   }
 
   listar(): Conexao[] {
-    return [this.claudeCode()];
+    return [this.claudeCode(), this.deps.github.conexao()];
   }
 
   previa(pedido: PedidoConexao): PreviaConexao {
+    if (pedido.tipo === "github") return { tipo: "github", arquivos: [] };
     this.soClaudeCode(pedido.tipo);
     return { tipo: pedido.tipo, arquivos: [this.deps.ligacao.previa()] };
   }
@@ -99,6 +123,7 @@ export class ServicoConexoes {
    * no meio vira estado `erro` com o motivo, que a tela mostra; o arquivo não fica pela metade.
    */
   async ligar(pedido: PedidoConexao): Promise<Conexao> {
+    if (pedido.tipo === "github") return this.deps.github.ligar();
     this.soClaudeCode(pedido.tipo);
     const agora = this.agora().toISOString();
     let publicou = false;
@@ -136,6 +161,7 @@ export class ServicoConexoes {
 
   /** O arquivo sai antes da variável, pelo mesmo motivo de ligar ao contrário. */
   async desligar(pedido: PedidoConexao): Promise<Conexao> {
+    if (pedido.tipo === "github") return this.deps.github.desligar();
     this.soClaudeCode(pedido.tipo);
     const agora = this.agora().toISOString();
     try {

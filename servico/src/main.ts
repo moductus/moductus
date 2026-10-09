@@ -9,6 +9,8 @@ import { CanalCasca } from "./casca/canal.ts";
 import { credenciaisPelaCasca } from "./casca/credenciais.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
 import { RepositorioConexoes, ServicoConexoes } from "./conexoes/conexoes.ts";
+import { executorGh } from "./conexoes/github/gh.ts";
+import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
@@ -71,9 +73,15 @@ const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {
 });
 // Quem segurava a resposta dos hooks do terminal era o serviço que caiu: esses cartões expiram.
 aprovacoes.expirarDoTerminal();
+const repositorioConexoes = new RepositorioConexoes(banco);
+const github = new ServicoGithub(new RepositorioGithub(banco), repositorioConexoes, executorGh(), {
+  github: (situacao) => servidor?.emitir("github.mudou", situacao),
+  conexao: (conexao) => servidor?.emitir("conexoes.mudou", conexao),
+});
 const conexoes = new ServicoConexoes(
-  new RepositorioConexoes(banco),
+  repositorioConexoes,
   {
+    github,
     ligacao: new LigacaoClaudeCode({
       caminho: caminhoSettingsClaude(),
       porta: portaDosHooks(),
@@ -106,6 +114,8 @@ servidor = await abrirServidorWs(token, {
   "conexoes.previa": (pedido) => conexoes.previa(pedido),
   "conexoes.ligar": (pedido) => conexoes.ligar(pedido),
   "conexoes.desligar": (pedido) => conexoes.desligar(pedido),
+  "github.obter": () => github.obter(),
+  "github.atualizar": () => github.atualizar(),
   // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
   ...semAtendente([
     "agentes.listar",
@@ -131,8 +141,6 @@ servidor = await abrirServidorWs(token, {
     "conversas.enviar",
     "conversas.arquivar",
     "sessoes.uso",
-    "github.obter",
-    "github.atualizar",
   ]),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
@@ -144,6 +152,8 @@ config
 // Hooks das sessões de IA (F2-21): sem o token ou com a porta ocupada, o resto do serviço segue.
 sessoes.vigiar();
 aprovacoes.vigiar();
+// GitHub pelo `gh` (F2-25): lê agora e a cada 15 min, se a conexão não estiver desligada.
+github.vigiar();
 tokenDosHooks(credenciaisPelaCasca(canal))
   .then((tokenHooks) => abrirReceptorHooks(tokenHooks, atenderHooks(sessoes, aprovacoes), portaDosHooks()))
   .then((receptor) => console.error(`hooks das sessões na porta ${receptor.porta}`))
