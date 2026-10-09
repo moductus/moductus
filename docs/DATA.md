@@ -139,6 +139,7 @@ O `caminho` é único entre os projetos vivos, sem diferenciar maiúsculas (o Wi
 ### `sessoes_ia`
 `id`, `projeto_id`, `ferramenta` (`claude-code`, `codex`, `opencode`, `gemini`, `antigravity`), `id_externo` (session id da ferramenta), `modelo`, `estado` (`trabalhando`, `esperando`, `terminou`, `erro`, `parada`), `iniciada_em`, `ultimo_evento_em`, `encerrada_em`, `contexto_usado_tokens`, `contexto_janela_tokens`, `transcript_caminho`.
 `ferramenta` e `id_externo` juntos são únicos: é assim que o evento de um hook acha a sessão.
+A migração `007-transcript-lido` acrescenta a leitura incremental do transcript: `transcript_lido_bytes` (até onde o arquivo foi lido), `transcript_ultima_mensagem` (a última resposta cujo uso entrou em `uso_ia`, para não contar duas vezes) e `contexto_avisado_em` (quando saiu o aviso de 80% no trecho atual; volta a vazio na compactação). As duas primeiras são posições num arquivo deste PC e não vão para outro.
 
 ### `eventos_sessao`
 `id`, `sessao_id` (a única chave estrangeira desta migração, para `sessoes_ia`), `tipo` (nome do hook), `ferramenta_usada`, `entrada_resumo`. A data do evento é o `criado_em`.
@@ -220,7 +221,7 @@ O que foi avisado, para o histórico e para não repetir. Sem lixeira.
 
 | Vai em "só configurações" | Vai só em "configurações e dados" | Nunca vai |
 |---|---|---|
-| `config`, `agentes`, `provedores` (sem credencial), `conexoes` (sem credencial e sem estado), `notificacoes_preferencias`, `regras_permissao` (as que ainda valem), `perfis_importacao`, `regras_categoria`, `categorias`, `listas`, `etiquetas`, `rotinas`, `pastas_autorizadas` (como sugestão, reconfirmada no PC novo) | Todas as demais tabelas de dados, entre elas `execucoes`, `chamadas_ferramenta`, `aprovacoes`, `conversas`, `mensagens`, `projetos`, `sessoes_ia`, `eventos_sessao`, `uso_ia`, `github_itens`, `notificacoes` e `onboarding` | Credenciais, `transcript_caminho`, caminhos absolutos que não existem no PC novo, `operacoes_arquivo`, o que está na lixeira |
+| `config`, `agentes`, `provedores` (sem credencial), `conexoes` (sem credencial e sem estado), `notificacoes_preferencias`, `regras_permissao` (as que ainda valem), `perfis_importacao`, `regras_categoria`, `categorias`, `listas`, `etiquetas`, `rotinas`, `pastas_autorizadas` (como sugestão, reconfirmada no PC novo) | Todas as demais tabelas de dados, entre elas `execucoes`, `chamadas_ferramenta`, `aprovacoes`, `conversas`, `mensagens`, `projetos`, `sessoes_ia`, `eventos_sessao`, `uso_ia`, `github_itens`, `notificacoes` e `onboarding` | Credenciais, `transcript_caminho` e a posição da leitura dele (`transcript_lido_bytes`, `transcript_ultima_mensagem`), caminhos absolutos que não existem no PC novo, `operacoes_arquivo`, o que está na lixeira |
 
 A marcação de cada tabela mora em `servico/src/outro-pc/tabelas.ts`, e um teste reprova tabela nova sem marcação (na dúvida, é dado). O que "só configurações" tira, além das tabelas de dado:
 

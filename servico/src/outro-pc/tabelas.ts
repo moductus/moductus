@@ -35,9 +35,15 @@ export const EXPORTACAO: Readonly<Record<string, Exportacao>> = {
 
 /**
  * Colunas que nunca saem deste PC, em nenhuma modalidade: o nome da credencial (a chave não
- * está no banco, e no PC novo a conexão é refeita) e o caminho do transcript.
+ * está no banco, e no PC novo a conexão é refeita), o caminho do transcript e até onde ele já foi
+ * lido (posições num arquivo daqui).
  */
-export const COLUNAS_QUE_NUNCA_VAO: readonly string[] = ["credencial", "transcript_caminho"];
+export const COLUNAS_QUE_NUNCA_VAO: readonly string[] = [
+  "credencial",
+  "transcript_caminho",
+  "transcript_lido_bytes",
+  "transcript_ultima_mensagem",
+];
 
 /**
  * Colunas que descrevem a situação neste PC, não a configuração. A conexão vai sem credencial, então

@@ -3,15 +3,19 @@ import type { DatabaseSync } from "node:sqlite";
 import { win32 } from "node:path";
 import {
   PedidoEventosSessao,
+  PedidoUso,
   type EstadoSessao,
   type EventoSessao,
   type FerramentaSessao,
+  type FonteUso,
   type ListaSessoes,
   type MudancaSessao,
   type Projeto,
   type SessaoIa,
+  type UsoIa,
 } from "@moductus/contrato";
 import { novoId } from "../banco/ulid.ts";
+import { AcompanhamentoContexto, type AvisoContexto, type Transcripts, type UsoDoDia } from "./contexto.ts";
 import { estadoDepois, type EventoHook } from "./hooks.ts";
 
 /** Sem evento por este tempo, a sessão aberta vira `parada` (AGENTS.md §5). */
@@ -68,6 +72,46 @@ const SELECT_SESSAO = `
     FROM sessoes_ia s
     LEFT JOIN eventos_sessao e
       ON e.id = (SELECT id FROM eventos_sessao WHERE sessao_id = s.id ORDER BY id DESC LIMIT 1)`;
+
+/** Onde parou a leitura do transcript de uma sessão (migração 007), e o que ela já sabe. */
+export interface LeituraGravada {
+  ferramenta: FerramentaSessao;
+  projetoId: string | null;
+  caminho: string | null;
+  lidoAte: number;
+  ultimaMensagem: string | null;
+  usado: number | null;
+  janela: number | null;
+  modelo: string | null;
+  avisadoEm: string | null;
+}
+
+interface LinhaLeitura {
+  ferramenta: FerramentaSessao;
+  projeto_id: string | null;
+  transcript_caminho: string | null;
+  transcript_lido_bytes: number | null;
+  transcript_ultima_mensagem: string | null;
+  contexto_usado_tokens: number | null;
+  contexto_janela_tokens: number | null;
+  modelo: string | null;
+  contexto_avisado_em: string | null;
+}
+
+interface LinhaUso {
+  dia: string;
+  ferramenta: FerramentaSessao;
+  modelo: string | null;
+  projeto_id: string | null;
+  tokens_entrada: number;
+  tokens_saida: number;
+  tokens_cache: number;
+  custo_estimado_microdolares: number | null;
+  fonte: FonteUso;
+}
+
+/** O agente que fala das sessões de IA; o aviso de contexto sai em nome dele. */
+const NUNO = "nuno";
 
 const paraProjeto = (l: LinhaProjeto): Projeto => ({
   id: l.id,
@@ -217,7 +261,10 @@ export class RepositorioSessoes {
       );
   }
 
-  /** Atualiza a sessão com o evento; o que o evento não traz continua como estava. */
+  /**
+   * Atualiza a sessão com o evento; o que o evento não traz continua como estava. Transcript em
+   * outro arquivo é lido do início (no `SET`, a coluna ainda tem o valor de antes).
+   */
   atualizarSessao(s: {
     id: string;
     projetoId: string | null;
@@ -232,6 +279,8 @@ export class RepositorioSessoes {
         `UPDATE sessoes_ia
             SET projeto_id = coalesce(?, projeto_id), modelo = coalesce(?, modelo), estado = ?,
                 ultimo_evento_em = ?, encerrada_em = ?, transcript_caminho = coalesce(?, transcript_caminho),
+                transcript_lido_bytes = CASE WHEN coalesce(?, transcript_caminho) IS transcript_caminho
+                                             THEN transcript_lido_bytes END,
                 atualizado_em = ?, origem = ?, agente_id = NULL, execucao_id = NULL
           WHERE id = ?`,
       )
@@ -241,6 +290,7 @@ export class RepositorioSessoes {
         s.estado,
         s.agora,
         s.encerrada ? s.agora : null,
+        s.transcript,
         s.transcript,
         s.agora,
         ORIGEM,
@@ -300,6 +350,139 @@ export class RepositorioSessoes {
     return linhas.map((l) => l.id);
   }
 
+  leituraTranscript(id: string): LeituraGravada | null {
+    const l = this.db
+      .prepare(
+        `SELECT ferramenta, projeto_id, transcript_caminho, transcript_lido_bytes, transcript_ultima_mensagem,
+                contexto_usado_tokens, contexto_janela_tokens, modelo, contexto_avisado_em
+           FROM sessoes_ia WHERE id = ?`,
+      )
+      .get(id) as unknown as LinhaLeitura | undefined;
+    if (!l) return null;
+    return {
+      ferramenta: l.ferramenta,
+      projetoId: l.projeto_id,
+      caminho: l.transcript_caminho,
+      lidoAte: l.transcript_lido_bytes ?? 0,
+      ultimaMensagem: l.transcript_ultima_mensagem,
+      usado: l.contexto_usado_tokens,
+      janela: l.contexto_janela_tokens,
+      modelo: l.modelo,
+      avisadoEm: l.contexto_avisado_em,
+    };
+  }
+
+  /**
+   * Grava o que a leitura do transcript achou; o modelo só muda quando a leitura achou um. Não
+   * grava (e devolve `false`) se a sessão passou para outro arquivo enquanto a leitura corria.
+   */
+  gravarLeitura(
+    id: string,
+    g: {
+      caminho: string;
+      lidoAte: number;
+      ultimaMensagem: string | null;
+      usado: number | null;
+      janela: number | null;
+      modelo: string | null;
+      avisadoEm: string | null;
+      agora: string;
+    },
+  ): boolean {
+    const gravou = this.db
+      .prepare(
+        `UPDATE sessoes_ia
+            SET transcript_lido_bytes = ?, transcript_ultima_mensagem = ?, contexto_usado_tokens = ?,
+                contexto_janela_tokens = ?, modelo = coalesce(?, modelo), contexto_avisado_em = ?,
+                atualizado_em = ?
+          WHERE id = ? AND transcript_caminho = ?`,
+      )
+      .run(g.lidoAte, g.ultimaMensagem, g.usado, g.janela, g.modelo, g.avisadoEm, g.agora, id, g.caminho);
+    return Number(gravou.changes) > 0;
+  }
+
+  /**
+   * Soma o uso na linha do dia, ferramenta, modelo e projeto (a chave única da 004). A soma com
+   * qualquer parte estimada é estimativa.
+   */
+  somarUso(
+    u: UsoDoDia & {
+      ferramenta: FerramentaSessao;
+      projetoId: string | null;
+      fonte: FonteUso;
+      agora: string;
+    },
+  ): void {
+    const somou = this.db
+      .prepare(
+        `UPDATE uso_ia
+            SET tokens_entrada = tokens_entrada + ?, tokens_saida = tokens_saida + ?,
+                tokens_cache = tokens_cache + ?,
+                fonte = CASE WHEN fonte = 'estimativa' OR ? = 'estimativa' THEN 'estimativa' ELSE 'ferramenta' END,
+                atualizado_em = ?
+          WHERE dia = ? AND ferramenta = ? AND coalesce(modelo, '') = coalesce(?, '')
+            AND coalesce(projeto_id, '') = coalesce(?, '')`,
+      )
+      .run(u.entrada, u.saida, u.cache, u.fonte, u.agora, u.dia, u.ferramenta, u.modelo, u.projetoId);
+    if (Number(somou.changes) > 0) return;
+    this.db
+      .prepare(
+        `INSERT INTO uso_ia (id, dia, ferramenta, modelo, projeto_id, tokens_entrada, tokens_saida,
+           tokens_cache, fonte, criado_em, atualizado_em, origem)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        novoId(),
+        u.dia,
+        u.ferramenta,
+        u.modelo,
+        u.projetoId,
+        u.entrada,
+        u.saida,
+        u.cache,
+        u.fonte,
+        u.agora,
+        u.agora,
+        ORIGEM,
+      );
+  }
+
+  usoEntre(de: string, ate: string): UsoIa[] {
+    const linhas = this.db
+      .prepare(
+        `SELECT dia, ferramenta, modelo, projeto_id, tokens_entrada, tokens_saida, tokens_cache,
+                custo_estimado_microdolares, fonte
+           FROM uso_ia WHERE dia BETWEEN ? AND ?
+          ORDER BY dia, ferramenta, coalesce(modelo, ''), coalesce(projeto_id, '')`,
+      )
+      .all(de, ate) as unknown as LinhaUso[];
+    return linhas.map((l) => ({
+      dia: l.dia,
+      ferramenta: l.ferramenta,
+      modelo: l.modelo,
+      projetoId: l.projeto_id,
+      tokensEntrada: l.tokens_entrada,
+      tokensSaida: l.tokens_saida,
+      tokensCache: l.tokens_cache,
+      custoEstimadoMicrodolares: l.custo_estimado_microdolares,
+      fonte: l.fonte,
+    }));
+  }
+
+  /**
+   * Guarda o aviso de contexto alto em `notificacoes` (migração 005), em nome do Nuno, com a
+   * sessão como referência. Quem entrega (aviso do Windows, ponto no dock) é a F2-20.
+   */
+  registrarAviso(aviso: AvisoContexto, agora: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO notificacoes (id, do_agente_id, tipo, titulo, corpo, referencia, canal, criado_em,
+           atualizado_em, origem)
+         VALUES (?, ?, 'aviso', ?, ?, ?, 'dock', ?, ?, ?)`,
+      )
+      .run(novoId(), NUNO, aviso.titulo, aviso.corpo, `sessao:${aviso.sessaoId}`, agora, agora, ORIGEM);
+  }
+
   transacao<T>(fazer: () => T): T {
     this.db.exec("BEGIN");
     try {
@@ -317,6 +500,13 @@ export interface OpcoesSessoes {
   agora?: () => Date;
   /** Pasta do projeto de um `cwd` novo; o padrão sobe até achar `.git`. */
   raizDoProjeto?: (cwd: string) => string;
+  /**
+   * Leitura do transcript do Claude Code para contexto e uso (F2-24); sem ela, o contexto fica
+   * vazio. O serviço passa `TRANSCRIPTS_DO_DISCO`.
+   */
+  transcripts?: Transcripts;
+  /** Recebe o aviso de contexto alto, depois de gravado. */
+  aoAvisarContexto?: (aviso: AvisoContexto) => void;
 }
 
 /**
@@ -327,6 +517,7 @@ export interface OpcoesSessoes {
 export class ServicoSessoes {
   private readonly agora: () => Date;
   private readonly raizDoProjeto: (cwd: string) => string;
+  private readonly contexto: AcompanhamentoContexto | null;
 
   constructor(
     private readonly repo: RepositorioSessoes,
@@ -335,6 +526,12 @@ export class ServicoSessoes {
   ) {
     this.agora = opcoes.agora ?? (() => new Date());
     this.raizDoProjeto = opcoes.raizDoProjeto ?? ((cwd) => raizPeloGit(cwd));
+    this.contexto = opcoes.transcripts
+      ? new AcompanhamentoContexto(repo, emitir, opcoes.transcripts, {
+          agora: this.agora,
+          aoAvisar: opcoes.aoAvisarContexto,
+        })
+      : null;
   }
 
   /** Um hook de uma ferramenta: grava, muda o estado e avisa. */
@@ -371,7 +568,20 @@ export class ServicoSessoes {
       return { sessao, projeto: doProjeto };
     });
     this.emitir(mudanca);
+    // Só o transcript do Claude Code tem formato conhecido; a leitura corre depois da resposta.
+    if (ferramenta === "claude-code") this.contexto?.agendar(mudanca.sessao.id);
     return mudanca;
+  }
+
+  /** Uso por dia, ferramenta, modelo e projeto no intervalo (os dois dias inclusos). */
+  uso(entrada: PedidoUso): UsoIa[] {
+    const pedido = PedidoUso.parse(entrada);
+    return this.repo.usoEntre(pedido.de, pedido.ate);
+  }
+
+  /** Espera as leituras de transcript em andamento (testes e fechamento). */
+  async leiturasOciosas(): Promise<void> {
+    await this.contexto?.ociosas();
   }
 
   listar(): ListaSessoes {

@@ -14,6 +14,7 @@ import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
+import { TRANSCRIPTS_DO_DISCO } from "./sessoes/contexto.ts";
 import { caminhoSettingsClaude, LigacaoClaudeCode } from "./sessoes/ligacao.ts";
 import { atenderHooks } from "./sessoes/permissao.ts";
 import { abrirReceptorHooks, portaDosHooks } from "./sessoes/receptor.ts";
@@ -64,8 +65,10 @@ const outroPc = new ServicoOutroPc(config, banco, {
   versaoEsquema: MIGRACOES.length,
   pcOrigem: hostname(),
 });
-const sessoes = new ServicoSessoes(new RepositorioSessoes(banco), (mudanca) =>
-  servidor?.emitir("sessoes.mudou", mudanca),
+const sessoes = new ServicoSessoes(
+  new RepositorioSessoes(banco),
+  (mudanca) => servidor?.emitir("sessoes.mudou", mudanca),
+  { transcripts: TRANSCRIPTS_DO_DISCO },
 );
 const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {
   aprovacao: (aprovacao) => servidor?.emitir("aprovacoes.mudou", aprovacao),
@@ -106,6 +109,7 @@ servidor = await abrirServidorWs(token, {
   "primeiroUso.marcar": (pedido) => primeiroUso.marcar(pedido),
   "sessoes.listar": () => sessoes.listar(),
   "sessoes.eventos": (pedido) => sessoes.eventos(pedido),
+  "sessoes.uso": (pedido) => sessoes.uso(pedido),
   "aprovacoes.pendentes": () => aprovacoes.pendentes(),
   "aprovacoes.decidir": (pedido) => aprovacoes.decidir(pedido),
   "regras.listar": () => aprovacoes.regras(),
@@ -140,7 +144,6 @@ servidor = await abrirServidorWs(token, {
     "conversas.mensagens",
     "conversas.enviar",
     "conversas.arquivar",
-    "sessoes.uso",
   ]),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);

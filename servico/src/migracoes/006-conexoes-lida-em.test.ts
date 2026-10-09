@@ -13,7 +13,7 @@ describe("migração 006-conexoes-lida-em", () => {
     db.prepare("INSERT INTO conexoes (id, tipo, estado) VALUES ('01', 'github', 'ligada')").run();
     expect(colunas(db)).not.toContain("lida_em");
 
-    expect(migrar(db, MIGRACOES)).toEqual({ de: 5, para: 6 });
+    expect(migrar(db, MIGRACOES)).toEqual({ de: 5, para: MIGRACOES.length });
     expect(versaoAtual(db)).toBe(MIGRACOES.length);
     expect(colunas(db)).toContain("lida_em");
     expect(db.prepare("SELECT tipo, lida_em FROM conexoes").get()).toEqual({ tipo: "github", lida_em: null });
