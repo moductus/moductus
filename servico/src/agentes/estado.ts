@@ -9,15 +9,16 @@ import type { RepositorioExecucoes } from "./execucoes.ts";
  * acordar ou retomar, a fila roda. Desligado não roda nada: quem espera é recusado.
  *
  * O agente dorme quando o provedor falha (limite, fora do ar, credencial, CLI ausente) e quando
- * chega ao teto de gasto do dia. Acorda sozinho na hora de volta; sem hora, quando alguém o acorda
- * (configuração do provedor mudou). O despertador vive na memória e é refeito na subida pelo que
- * ficou guardado.
+ * chega ao teto de gasto do dia. Acorda sozinho na hora de volta que o provedor deu; sem ela, depois
+ * de uma espera que cresce a cada falha seguida, e antes disso se alguém o acordar (a configuração
+ * do provedor mudou). O despertador e a contagem de falhas vivem na memória: na subida, o
+ * despertador é refeito pelo que ficou guardado e a contagem recomeça.
  *
- * Com provedor reserva, a falha do principal não põe o agente para dormir: o mesmo pedido vai à
- * reserva, e os próximos também, até a hora de tentar o principal de novo.
+ * Com provedor reserva, a falha do principal não põe o agente para dormir: os pedidos vão à
+ * reserva até a hora de tentar o principal de novo.
  */
 
-/** Primeira espera de um limite ou queda sem hora de volta; dobra a cada falha seguida. */
+/** Primeira espera de uma falha sem hora de volta; dobra a cada falha seguida. */
 export const ESPERA_INICIAL_MS = 60_000;
 
 /** A espera crescente para aqui: o provedor que volta não fica mais que isso sem ser tentado. */
@@ -31,6 +32,17 @@ const ATRASO_MAXIMO_MS = 2 ** 31 - 1;
 
 export const MENSAGEM_DESLIGADO = (nome: string) =>
   `${nome} está desligado. Ligue de novo em Agentes para ele voltar a trabalhar.`;
+
+/** O agente está desligado: o pedido não roda. A mensagem já é a fala para o usuário. */
+export class AgenteDesligado extends Error {
+  constructor(
+    readonly agenteId: string,
+    nome: string,
+  ) {
+    super(MENSAGEM_DESLIGADO(nome));
+    this.name = "AgenteDesligado";
+  }
+}
 
 export const MENSAGEM_PAUSA_PASSADA = "O fim da pausa já passou.";
 
@@ -118,11 +130,15 @@ export class EstadosAgentes {
   }
 
   /**
-   * Na subida: acorda ou retoma quem passou da hora enquanto o serviço estava parado e programa o
-   * despertador dos outros.
+   * Na subida: acorda quem dormia sem hora (a contagem de falhas recomeçou, então o provedor é
+   * tentado de novo), acorda ou retoma quem passou da hora enquanto o serviço estava parado e
+   * programa o despertador dos outros.
    */
   vigiar(): void {
-    for (const agente of this.deps.agentes.agentes()) this.conferir(agente.id);
+    for (const agente of this.deps.agentes.agentes()) {
+      if (agente.estado === "dormindo" && agente.dormeAte === null) this.acordar(agente.id);
+      else this.conferir(agente.id);
+    }
   }
 
   /**
@@ -135,7 +151,7 @@ export class EstadosAgentes {
       sinal?.throwIfAborted();
       const agente = this.deps.agentes.agente(agenteId);
       if (!agente) throw new Error("agente não encontrado");
-      if (agente.estado === "desligado") throw new Error(MENSAGEM_DESLIGADO(agente.nome));
+      if (agente.estado === "desligado") throw new AgenteDesligado(agente.id, agente.nome);
       if (agente.estado === "ativo") {
         if (!this.chegouAoTeto(agente)) return agente;
         this.dormirNoTeto(agente.id);
@@ -163,7 +179,7 @@ export class EstadosAgentes {
     return false;
   }
 
-  /** O principal falhou e o pedido vai à reserva: até a hora de volta dele, a reserva atende. */
+  /** O principal falhou: até a hora de volta dele, a reserva atende. */
   principalFalhou(agenteId: string, sono: SonoDaExecucao): void {
     const volta = sono.ate !== null ? Date.parse(sono.ate) : Number.NaN;
     this.principalForaAte.set(
@@ -174,8 +190,8 @@ export class EstadosAgentes {
 
   /**
    * Depois de cada execução: a falha do provedor põe o agente para dormir, até a hora que o provedor
-   * deu ou, num limite ou queda sem hora, por uma espera que cresce a cada falha seguida. Sem modelo
-   * não dorme guardado (a configuração já diz). Execução que deu certo zera a espera e confere o teto.
+   * deu ou, sem ela, por uma espera que cresce a cada falha seguida. Sem modelo não dorme guardado
+   * (a configuração já diz). Execução que deu certo zera a espera e confere o teto.
    */
   depoisDaExecucao(agenteId: string, sono: SonoDaExecucao | null, deuCerto: boolean): void {
     if (sono && sono.motivo !== "sem_modelo") {
@@ -240,20 +256,21 @@ export class EstadosAgentes {
     }
     const agente = this.deps.agentes.agente(agenteId);
     if (!agente) throw new Error("agente não encontrado");
-    if (agente.estado === "desligado") throw new Error(MENSAGEM_DESLIGADO(agente.nome));
+    if (agente.estado === "desligado") throw new AgenteDesligado(agente.id, agente.nome);
     return [agente.id];
   }
 
   /**
-   * A hora de acordar: a que o provedor deu; sem ela, num limite ou queda, a espera crescente
-   * (credencial e CLI ausente dependem do usuário e ficam sem hora). Se o principal já estava fora e
-   * foi a reserva que falhou, vale a primeira das duas voltas.
+   * A hora de acordar: a que o provedor deu; sem ela, a espera crescente. Credencial recusada e CLI
+   * ausente também esperam: o usuário pode consertar fora do Moductus (instalar o CLI, entrar de
+   * novo), e ninguém avisaria. Se o principal já estava fora e foi a reserva que falhou, vale a
+   * primeira das duas voltas.
    */
-  private horaDeVolta(agenteId: string, sono: SonoDaExecucao): string | null {
+  private horaDeVolta(agenteId: string, sono: SonoDaExecucao): string {
     const voltas: number[] = [];
     const dada = sono.ate !== null ? Date.parse(sono.ate) : Number.NaN;
     if (Number.isFinite(dada)) voltas.push(dada);
-    else if (sono.motivo === "limite" || sono.motivo === "fora_do_ar") {
+    else {
       const n = (this.falhasSeguidas.get(agenteId) ?? 0) + 1;
       this.falhasSeguidas.set(agenteId, n);
       voltas.push(this.agora().getTime() + esperaCrescente(n));
@@ -262,7 +279,7 @@ export class EstadosAgentes {
     // Ao acordar, o principal é tentado primeiro de novo.
     this.principalForaAte.delete(agenteId);
     if (principal !== undefined) voltas.push(principal);
-    return voltas.length > 0 ? new Date(Math.min(...voltas)).toISOString() : null;
+    return new Date(Math.min(...voltas)).toISOString();
   }
 
   private dormir(agenteId: string, motivo: MotivoSonoGuardado, ate: string | null): void {

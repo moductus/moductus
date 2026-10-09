@@ -34,13 +34,16 @@ afterEach(() => {
  * Banco migrado de verdade, o runtime de verdade e um provedor falso por agente (a Faina sem
  * modelo), com o classificador do roteamento rodando no modelo da Alba como em produção.
  */
-function montar(opcoes: { prazoMs?: number; roteador?: (padrao: Roteador) => Roteador } = {}) {
-  const pasta = mkdtempSync(join(tmpdir(), "moductus-conversas-"));
-  pastas.push(pasta);
+function montar(
+  opcoes: { prazoMs?: number; roteador?: (padrao: Roteador) => Roteador; pasta?: string } = {},
+) {
+  // Com `pasta`, sobe outro serviço sobre o mesmo banco, como depois de reiniciar.
+  const pasta = opcoes.pasta ?? mkdtempSync(join(tmpdir(), "moductus-conversas-"));
+  if (!pastas.includes(pasta)) pastas.push(pasta);
   const db = abrirBanco(pasta);
   bancos.push(db);
   db.exec(`
-    INSERT INTO provedores (id, tipo, nome) VALUES
+    INSERT OR IGNORE INTO provedores (id, tipo, nome) VALUES
       ('p-alba', 'claude-cli', 'Falso'), ('p-tula', 'claude-cli', 'Falso'), ('p-nuno', 'claude-cli', 'Falso');
     UPDATE agentes SET provedor_id = 'p-' || id WHERE id IN ('alba', 'tula', 'nuno');
   `);
@@ -76,7 +79,7 @@ function montar(opcoes: { prazoMs?: number; roteador?: (padrao: Roteador) => Rot
     },
     { agora },
   );
-  return { db, falsos, execucoes, eventos, repo, servico, runtime };
+  return { pasta, db, falsos, execucoes, eventos, repo, servico, runtime };
 }
 
 /** As mensagens da conversa na ordem em que foram ditas. */
@@ -355,7 +358,77 @@ describe("conversa com o time", () => {
   });
 });
 
+describe("depois de reiniciar", () => {
+  test("a fala que esperava resposta vai de novo; a que teve resposta, mesmo de erro, não volta", async () => {
+    const antes = montar();
+    antes.db
+      .exec(`UPDATE agentes SET estado = 'dormindo', motivo_sono = 'limite', dorme_ate = '2026-10-09T18:00:00.000Z'
+                   WHERE id = 'tula'`);
+    antes.falsos.nuno.roteirizar(roteiros.falha("credencial"));
+    const tula = antes.servico.abrir({ agenteId: "tula" });
+    const nuno = antes.servico.abrir({ agenteId: "nuno" });
+    const time = antes.servico.abrir({});
+    await antes.servico.enviar({ conversaId: tula.id, conteudo: "quanto foi o mercado?" });
+    await antes.servico.enviar({ conversaId: time.id, conteudo: "Paguei R$ 45 no mercado." });
+    await antes.servico.enviar({ conversaId: nuno.id, conteudo: "algum PR?" });
+    await vi.waitFor(() =>
+      expect(conversaInteira(antes.servico, nuno.id).map((m) => m.conteudo)).toEqual([
+        "algum PR?",
+        "falha roteirizada: credencial",
+      ]),
+    );
+    const arquivada = antes.servico.abrir({ agenteId: "alba" });
+    await antes.servico.enviar({ conversaId: arquivada.id, conteudo: "esquece" });
+    antes.servico.arquivar({ id: arquivada.id, arquivada: true });
+
+    // O serviço parou com as duas falas da Tula na porta. Sobe outro, e a hora dela já passou.
+    antes.db.exec("UPDATE agentes SET dorme_ate = '2026-10-09T13:00:00.000Z' WHERE id = 'tula'");
+    const depois = montar({ pasta: antes.pasta });
+    depois.falsos.tula.roteirizar(
+      (pedido) => roteiros.resposta(`sobre: ${pedido.mensagens.at(-1)?.texto}`),
+      (pedido) => roteiros.resposta(`sobre: ${pedido.mensagens.at(-1)?.texto}`),
+    );
+    depois.runtime.estados.vigiar();
+    expect(await depois.servico.retomarPendentes()).toBe(2);
+    await depois.servico.ocioso();
+
+    expect(conversaInteira(depois.servico, tula.id).map((m) => m.conteudo)).toEqual([
+      "quanto foi o mercado?",
+      "sobre: quanto foi o mercado?",
+    ]);
+    expect(conversaInteira(depois.servico, time.id).at(-1)).toMatchObject({
+      agenteId: "tula",
+      conteudo: "sobre: Paguei R$ 45 no mercado.",
+    });
+    expect(depois.falsos.nuno.pedidos).toHaveLength(0);
+    expect(depois.falsos.alba.pedidos).toHaveLength(0);
+    expect(await depois.servico.retomarPendentes()).toBe(0);
+  });
+});
+
 describe("conversa com um agente", () => {
+  test("desligado enquanto a fala esperava a vez: a recusa vira a fala dele", async () => {
+    const { db, servico, runtime, falsos } = montar();
+    runtime.estados.pausar("nuno", null);
+    const nuno = servico.abrir({ agenteId: "nuno" });
+    await servico.enviar({ conversaId: nuno.id, conteudo: "algum PR?" });
+    runtime.estados.ligar("nuno", false);
+    await servico.ocioso();
+
+    expect(falsos.nuno.pedidos).toHaveLength(0);
+    expect(conversaInteira(servico, nuno.id).at(-1)).toMatchObject({
+      agenteId: "nuno",
+      conteudo: MENSAGEM_DESLIGADO("Nuno"),
+      execucaoId: null,
+    });
+    // Não é resposta: ligado de novo, a pergunta vai junto com a próxima.
+    falsos.nuno.roteirizar(roteiros.resposta("Nenhum."));
+    db.exec("UPDATE agentes SET estado = 'ativo' WHERE id = 'nuno'");
+    await servico.enviar({ conversaId: nuno.id, conteudo: "e agora?" });
+    await servico.ocioso();
+    expect(montarPrompt(falsos.nuno.pedidos[0]!)).toBe("algum PR?\n\ne agora?");
+  });
+
   test("desligado, a fala é recusada antes de ser gravada", async () => {
     const { db, servico } = montar();
     db.exec("UPDATE agentes SET estado = 'desligado' WHERE id = 'nuno'");

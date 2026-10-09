@@ -9,6 +9,7 @@ import { ProvedorFalso, roteiros } from "../provedores/falso.ts";
 import { RegistroProvedores } from "../provedores/registro.ts";
 import { RepositorioAgentes } from "./agentes.ts";
 import {
+  AgenteDesligado,
   ESPERA_INICIAL_MS,
   ESPERA_MAXIMA_MS,
   esperaCrescente,
@@ -211,37 +212,47 @@ describe("dormir pelo provedor e acordar", () => {
     expect(esperaCrescente(20)).toBe(ESPERA_MAXIMA_MS);
   });
 
-  test("credencial recusada dorme sem hora: só acorda quando alguém acorda", async () => {
+  test("credencial e CLI ausente tentam de novo pela espera crescente; acordar antes também vale", async () => {
     const { runtime, falsos, tempo, guardado } = montar();
     falsos["p-alba"]!.roteirizar(
+      // A hora que o provedor manda numa credencial recusada não vale: quem conserta é o usuário.
       roteiros.falha("credencial", "2026-10-09T13:00:00.000Z"),
+      roteiros.falha("ausente"),
       roteiros.resposta("ok"),
     );
     await runtime.executar(pedir("alba", "oi"));
     expect(guardado("alba")).toMatchObject({
       estado: "dormindo",
-      dorme_ate: null,
+      dorme_ate: as(INICIO + ESPERA_INICIAL_MS),
       motivo_sono: "credencial",
     });
 
-    const depois = acompanhar(runtime.executar(pedir("alba", "e agora?")));
-    tempo.avancar(24 * 3_600_000);
-    await assentar();
-    expect(depois.resultado).toBeNull();
+    const segundo = acompanhar(runtime.executar(pedir("alba", "instalei o CLI?")));
+    tempo.avancar(ESPERA_INICIAL_MS);
+    await vi.waitFor(() => expect(segundo.resultado).not.toBeNull());
+    expect(guardado("alba")).toMatchObject({
+      dorme_ate: as(INICIO + 3 * ESPERA_INICIAL_MS),
+      motivo_sono: "ausente",
+    });
 
+    const terceiro = acompanhar(runtime.executar(pedir("alba", "e agora?")));
+    await assentar();
+    expect(terceiro.resultado).toBeNull();
     runtime.estados.acordar("alba");
-    await vi.waitFor(() => expect(depois.resultado?.texto).toBe("ok"));
+    await vi.waitFor(() => expect(terceiro.resultado?.texto).toBe("ok"));
   });
 
-  test("na subida, quem passou da hora acorda e quem não passou ganha despertador", () => {
+  test("na subida, quem passou da hora ou dormia sem hora acorda; quem não passou ganha despertador", () => {
     const { db, runtime, tempo, guardado } = montar();
     db.exec(`
+      UPDATE agentes SET estado = 'dormindo', motivo_sono = 'credencial', dorme_ate = NULL WHERE id = 'tula';
       UPDATE agentes SET estado = 'dormindo', motivo_sono = 'limite', dorme_ate = '${as(INICIO - 1)}' WHERE id = 'alba';
       UPDATE agentes SET estado = 'dormindo', motivo_sono = 'limite', dorme_ate = '${as(INICIO + 60_000)}' WHERE id = 'nuno';
       UPDATE agentes SET estado = 'pausado', pausado_ate = '${as(INICIO + 120_000)}' WHERE id = 'faina';
     `);
     runtime.estados.vigiar();
     expect(guardado("alba")).toMatchObject({ estado: "ativo", dorme_ate: null, motivo_sono: null });
+    expect(guardado("tula")).toMatchObject({ estado: "ativo", dorme_ate: null, motivo_sono: null });
     expect(tempo.pendentes).toBe(2);
 
     tempo.avancar(60_000);
@@ -303,17 +314,45 @@ describe("provedor reserva", () => {
     expect(falsos["p-reserva"]!.pedidos).toHaveLength(1);
   });
 
-  test("principal que já respondeu algo antes de falhar não é repetido na reserva", async () => {
+  test("principal que já respondeu algo antes de falhar não é repetido, mas os próximos vão à reserva", async () => {
     const { db, runtime, falsos, guardado } = montar();
     db.exec("UPDATE agentes SET provedor_reserva_id = 'p-reserva' WHERE id = 'alba'");
     falsos["p-alba"]!.roteirizar([
       { tipo: "texto", texto: "Começando" },
       { tipo: "erro", falha: { motivo: "limite", mensagem: "acabou", voltaEm: as(INICIO + 60_000) } },
     ]);
+    falsos["p-reserva"]!.roteirizar(roteiros.resposta("pela reserva"));
     const r = await runtime.executar(pedir("alba", "oi"));
     expect(r.execucao).toMatchObject({ estado: "erro", provedorId: "p-alba" });
     expect(falsos["p-reserva"]!.pedidos).toHaveLength(0);
-    expect(guardado("alba")).toMatchObject({ estado: "dormindo", dorme_ate: as(INICIO + 60_000) });
+    expect(guardado("alba")).toMatchObject({ estado: "ativo", dorme_ate: null });
+
+    expect((await runtime.executar(pedir("alba", "de novo"))).texto).toBe("pela reserva");
+    expect(falsos["p-alba"]!.pedidos).toHaveLength(1);
+  });
+
+  test("na reserva, a sessão do principal não vale: vai a conversa inteira e não volta continuação", async () => {
+    const { db, runtime, falsos } = montar();
+    db.exec("UPDATE agentes SET provedor_reserva_id = 'p-reserva' WHERE id = 'alba'");
+    falsos["p-alba"]!.roteirizar(roteiros.falha("limite", as(INICIO + 60_000)));
+    falsos["p-reserva"]!.roteirizar([
+      { tipo: "texto", texto: "pela reserva" },
+      { tipo: "fim", continuacao: "sessao-da-reserva" },
+    ]);
+    const inteira = [
+      { papel: "usuario" as const, texto: "quanto foi?" },
+      { papel: "agente" as const, texto: "R$ 512." },
+      { papel: "usuario" as const, texto: "e o previsto?" },
+    ];
+    const r = await runtime.executar(
+      pedir("alba", "e o previsto?", { continuarDe: "sessao-do-principal", mensagensSemSessao: inteira }),
+    );
+    expect(falsos["p-alba"]!.pedidos[0]).toMatchObject({
+      continuarDe: "sessao-do-principal",
+      mensagens: [{ papel: "usuario", texto: "e o previsto?" }],
+    });
+    expect(falsos["p-reserva"]!.pedidos[0]).toMatchObject({ continuarDe: null, mensagens: inteira });
+    expect(r).toMatchObject({ texto: "pela reserva", continuacao: null });
   });
 });
 
@@ -427,7 +466,7 @@ describe("pausar, retomar e desligar", () => {
     await assentar();
 
     runtime.estados.ligar("alba", false);
-    await vi.waitFor(() => expect(pedido.erro).toEqual(new Error(MENSAGEM_DESLIGADO("Alba"))));
+    await vi.waitFor(() => expect(pedido.erro).toBeInstanceOf(AgenteDesligado));
     await expect(runtime.executar(pedir("alba", "e agora?"))).rejects.toThrow(MENSAGEM_DESLIGADO("Alba"));
     expect(situacao("alba")).toMatchObject({ estado: "desligado", fila: 0 });
   });

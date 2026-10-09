@@ -239,8 +239,6 @@ vigiaNuno = new VigiaNuno({
   avisar: avisarDoVigia(notificacoes),
   detalhar: (alvo) => github.detalhe(alvo),
 });
-// Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
-runtime.estados.vigiar();
 const execucoes = new ServicoExecucoes(repositorioExecucoes, catalogo, {
   mudou: (execucao) => servidor?.emitir("execucoes.mudou", execucao),
 });
@@ -258,6 +256,13 @@ const conversas = new ServicoConversas(
     parcial: (parcial) => servidor?.emitir("conversas.parcial", parcial),
   },
 );
+// Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
+// Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
+runtime.estados.vigiar();
+conversas
+  .retomarPendentes()
+  .then((n) => n > 0 && console.error(`falas pendentes retomadas: ${n}`))
+  .catch((erro: unknown) => console.error(`falas pendentes não retomadas: ${String(erro)}`));
 
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),

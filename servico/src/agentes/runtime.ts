@@ -34,7 +34,8 @@ import { historicoCurto, montarInstrucoes, resumir } from "./pedido.ts";
  *
  * Na vez, o pedido ainda espera o agente poder chamar o modelo (estado.ts): dormindo ou pausado,
  * fica na frente da fila até ele acordar ou retomar. A falha do provedor põe o agente para dormir,
- * ou, com provedor reserva, manda o mesmo pedido à reserva.
+ * ou, com provedor reserva, manda os pedidos à reserva (e o mesmo pedido, se o principal não chegou
+ * a fazer nada).
  */
 
 export interface PedidoExecucao {
@@ -44,6 +45,11 @@ export interface PedidoExecucao {
   mensagens: readonly MensagemModelo[];
   /** Sessão do provedor a continuar (`--resume`); devolvida no resultado da execução anterior. */
   continuarDe?: string | null;
+  /**
+   * A conversa inteira, para quando `continuarDe` não vale: a sessão é do provedor principal, e na
+   * reserva o pedido começa outra. Sem ele, valem as `mensagens`.
+   */
+  mensagensSemSessao?: readonly MensagemModelo[];
   /**
    * Prompt de sistema no lugar das instruções do agente, para um trabalho curto que não é a voz
    * dele (o classificador do roteamento roda no modelo da Alba).
@@ -72,7 +78,10 @@ export interface ResultadoExecucao {
   execucao: Execucao;
   /** A resposta inteira, para quem não acompanhou o streaming. */
   texto: string;
-  /** O que passar em `continuarDe` para seguir a mesma sessão do provedor. */
+  /**
+   * O que passar em `continuarDe` para seguir a mesma sessão do provedor. Na reserva é sempre
+   * `null`: a próxima vez pode ser no principal, que não conhece a sessão da reserva.
+   */
   continuacao: string | null;
   falha: FalhaProvedor | null;
   sono: SonoPedido | null;
@@ -228,12 +237,19 @@ export class Runtime {
     const reserva =
       principal && agente.provedorReservaId ? this.deps.agentes.provedor(agente.provedorReservaId) : null;
     const naReserva = reserva !== null && this.estados.naReserva(agente.id);
-    let tentativa = await this.tentar(pedido, agente, naReserva ? reserva : principal);
-    // O principal falhou sem ter feito nada: o mesmo pedido vai à reserva, numa execução própria.
+    let tentativa = naReserva
+      ? await this.tentar(pedido, agente, reserva, true)
+      : await this.tentar(pedido, agente, principal, false);
     const sono = tentativa.resultado.sono;
-    if (!naReserva && reserva && sono && !tentativa.agiu && !pedido.sinal?.aborted) {
+    if (!naReserva && reserva && sono) {
+      // O principal falhou e há reserva: o agente não dorme, os próximos pedidos vão a ela. Este
+      // vai também, numa execução própria, se o principal não chegou a responder nem agir.
       this.estados.principalFalhou(agente.id, sono);
-      tentativa = await this.tentar(pedido, agente, reserva);
+      if (tentativa.agiu || pedido.sinal?.aborted) {
+        this.estados.depoisDaExecucao(agente.id, null, false);
+        return tentativa.resultado;
+      }
+      tentativa = await this.tentar(pedido, agente, reserva, true);
     }
     const { resultado } = tentativa;
     this.estados.depoisDaExecucao(agente.id, resultado.sono, resultado.execucao.estado === "ok");
@@ -242,12 +258,14 @@ export class Runtime {
 
   /**
    * Uma execução registrada pelo provedor dado. `agiu` diz se o provedor chegou a responder texto
-   * ou chamar ferramenta: só o que não agiu pode ser repetido na reserva.
+   * ou chamar ferramenta: só o que não agiu pode ser repetido na reserva. Na reserva, o pedido não
+   * continua a sessão do principal: vai com a conversa inteira e não devolve continuação.
    */
   private async tentar(
     pedido: PedidoExecucao,
     agente: AgenteGuardado,
     config: ConfigProvedor | null,
+    naReserva: boolean,
   ): Promise<{ resultado: ResultadoExecucao; agiu: boolean }> {
     const sinal = pedido.sinal ?? new AbortController().signal;
     const id = this.gerarId();
@@ -297,10 +315,12 @@ export class Runtime {
             agenteId: agente.id,
             execucaoId: id,
             instrucoes: pedido.instrucoes ?? montarInstrucoes(agente),
-            mensagens: historicoCurto(pedido.mensagens),
+            mensagens: historicoCurto(
+              naReserva ? (pedido.mensagensSemSessao ?? pedido.mensagens) : pedido.mensagens,
+            ),
             ferramentas: pedido.semFerramentas ? [] : escopo.oferecidas(),
             executarFerramenta: executar,
-            continuarDe: pedido.continuarDe ?? null,
+            continuarDe: naReserva ? null : (pedido.continuarDe ?? null),
             // Fora da fila, a execução é a própria fila no adaptador: não espera nem segura ninguém.
             ...(pedido.foraDaFila ? { fila: id } : {}),
           },
@@ -343,7 +363,10 @@ export class Runtime {
       cobranca: custo?.cobranca ?? null,
     });
     const execucao = this.avisar(id, agente.id);
-    return { resultado: { execucao, texto, continuacao, falha, sono }, agiu };
+    return {
+      resultado: { execucao, texto, continuacao: naReserva ? null : continuacao, falha, sono },
+      agiu,
+    };
   }
 
   /**
