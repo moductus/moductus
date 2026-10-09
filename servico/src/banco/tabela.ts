@@ -17,6 +17,10 @@ export const COLUNA_LIXEIRA = "apagado_em";
 /** Agora em ISO 8601 UTC com milissegundos, igual ao `toISOString()` do JavaScript. */
 export const AGORA_SQL = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
+/** O formato de AGORA_SQL, exato: só assim a comparação como texto da limpeza vale como data. */
+const FORMATO_DATA_GLOB =
+  "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z";
+
 export const COLUNAS_ORIGEM = [
   `origem TEXT NOT NULL DEFAULT 'usuario' CHECK (origem IN (${ORIGENS.map((o) => `'${o}'`).join(", ")}))`,
   "agente_id TEXT",
@@ -44,7 +48,11 @@ export function criarTabela(nome: string, colunas: readonly string[], opcoes: Op
     `criado_em TEXT NOT NULL DEFAULT (${AGORA_SQL})`,
     `atualizado_em TEXT NOT NULL DEFAULT (${AGORA_SQL})`,
     ...COLUNAS_ORIGEM,
-    ...(opcoes.lixeira ? [`${COLUNA_LIXEIRA} TEXT`] : []),
+    ...(opcoes.lixeira
+      ? [
+          `${COLUNA_LIXEIRA} TEXT CHECK (${COLUNA_LIXEIRA} IS NULL OR ${COLUNA_LIXEIRA} GLOB '${FORMATO_DATA_GLOB}')`,
+        ]
+      : []),
     RESTRICAO_ORIGEM,
     ...(opcoes.restricoes ?? []),
   ];

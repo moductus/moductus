@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, test } from "vitest";
 import { MIGRACOES } from "../migracoes/index.ts";
 import { migrar } from "./migracoes.ts";
-import { colunasDeOrigem, criarTabela, DO_USUARIO } from "./tabela.ts";
+import { AGORA_SQL, colunasDeOrigem, criarTabela, DO_USUARIO } from "./tabela.ts";
 
 const colunas = (db: DatabaseSync, tabela: string) =>
   (db.prepare("SELECT name FROM pragma_table_info(?)").all(tabela) as { name: string }[]).map((c) => c.name);
@@ -60,6 +60,19 @@ describe("criarTabela", () => {
       origem: "agente",
       agente_id: "alba",
     });
+  });
+
+  test("apagado_em só aceita ISO UTC com milissegundos, o formato que a limpeza compara", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(criarTabela("tarefas", [], { lixeira: true }));
+    const apagar = (id: string, quando: string) =>
+      db.prepare(`INSERT INTO tarefas (id, apagado_em) VALUES (?, ${quando})`).run(id);
+    apagar("js", `'${new Date("2026-10-09T12:00:00Z").toISOString()}'`);
+    apagar("sql", AGORA_SQL);
+    apagar("viva", "NULL");
+    expect(() => apagar("sem-ms", "datetime('now')")).toThrow("CHECK");
+    expect(() => apagar("sem-z", "'2026-10-09T12:00:00.000'")).toThrow("CHECK");
+    expect(() => apagar("so-data", "'2026-10-09'")).toThrow("CHECK");
   });
 
   test("o carimbo do usuário e o de importação não levam agente", () => {

@@ -27,10 +27,15 @@ export function abrirBanco(pasta: string): DatabaseSync {
   db.exec("PRAGMA busy_timeout = 3000");
   const { de, para } = migrar(db, MIGRACOES);
   if (de !== para) console.error(`banco migrado da versão ${de} para ${para}`);
-  const removidas = limparLixeira(db);
-  if (removidas.size > 0) {
-    const resumo = [...removidas].map(([tabela, n]) => `${tabela} ${n}`).join(", ");
-    console.error(`lixeira: apagado de vez o que passou de 30 dias (${resumo})`);
+  // Lixeira que não esvaziou (banco ocupado, por exemplo) não impede a subida: tenta na próxima.
+  try {
+    const removidas = limparLixeira(db);
+    if (removidas.size > 0) {
+      const resumo = [...removidas].map(([tabela, n]) => `${tabela} ${n}`).join(", ");
+      console.error(`lixeira: apagado de vez o que passou de 30 dias (${resumo})`);
+    }
+  } catch (erro) {
+    console.error(`lixeira não esvaziada ao subir: ${String(erro)}`);
   }
   return db;
 }

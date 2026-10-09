@@ -20,9 +20,11 @@ export function tabelasComLixeira(db: DatabaseSync): string[] {
 
 /**
  * Apaga de vez o que está na lixeira há mais de 30 dias, em todas as tabelas com lixeira. Roda
- * na subida do serviço. Uma linha que ainda é referenciada por outra (chave estrangeira) não
- * sai; as tabelas são repassadas enquanto alguma coisa sair, para que filhos vencidos liberem
- * os pais vencidos na mesma limpeza, qualquer que seja a ordem das tabelas.
+ * na subida do serviço. Uma linha referenciada por outra não sai, desde que a chave estrangeira
+ * seja NO ACTION ou RESTRICT: com CASCADE ou SET NULL o SQLite apagaria ou mexeria em linhas
+ * vivas, e por isso nenhuma chave para tabela com lixeira pode ter essas ações (a guarda está em
+ * lixeira.test.ts). As tabelas são repassadas enquanto alguma coisa sair, para que filhos
+ * vencidos liberem os pais vencidos na mesma limpeza, qualquer que seja a ordem das tabelas.
  */
 export function limparLixeira(db: DatabaseSync, agora: Date = new Date()): Map<string, number> {
   const limite = new Date(agora.getTime() - DIAS_NA_LIXEIRA * DIA_MS).toISOString();
@@ -66,6 +68,13 @@ function apagarVencidas(db: DatabaseSync, tabela: string, limite: string): numbe
   return n;
 }
 
+/** SQLITE_CONSTRAINT_FOREIGNKEY, o código estendido que o node:sqlite põe em `errcode`. */
+const SQLITE_CONSTRAINT_FOREIGNKEY = 787;
+
 function ehChaveEstrangeira(erro: unknown): boolean {
-  return erro instanceof Error && erro.message.includes("FOREIGN KEY constraint failed");
+  return (
+    erro instanceof Error &&
+    "errcode" in erro &&
+    (erro as { errcode: unknown }).errcode === SQLITE_CONSTRAINT_FOREIGNKEY
+  );
 }
