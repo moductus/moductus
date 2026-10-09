@@ -15,7 +15,7 @@ import { RepositorioAprovacoes, ServicoAprovacoes } from "../aprovacoes/aprovaco
 import { abrirBanco } from "../banco/conexao.ts";
 import { RepositorioSessoes } from "../sessoes/sessoes.ts";
 import { avisarAprovacoes, botoesDoCartao, resumoDaAcao } from "./aprovacoes.ts";
-import { avisarContexto } from "./nuno.ts";
+import { avisarContexto, avisarDoVigia } from "./nuno.ts";
 import {
   dentroDoHorario,
   entregaPela,
@@ -656,6 +656,54 @@ describe("aviso de contexto do Nuno", () => {
     expect(montado.linhas()).toEqual([
       expect.objectContaining({ referencia: "sessao:s2", vista_em: expect.any(String) }),
     ]);
+    expect(montado.servico.naoVistas()).toEqual([]);
+    expect(montado.casca.mostrados).toEqual([]);
+  });
+});
+
+describe("aviso do vigia do Nuno", () => {
+  const doVigia = {
+    titulo: "1 item precisa de você",
+    corpo: "O #412.",
+    referencia: "vigia:nuno:e1",
+    execucaoId: "e1",
+  };
+  const assentar = () => new Promise((r) => setTimeout(r, 0));
+  const carimbo = (db: DatabaseSync) =>
+    db
+      .prepare(
+        "SELECT do_agente_id, tipo, referencia, canal, origem, agente_id, execucao_id, vista_em FROM notificacoes",
+      )
+      .all();
+
+  test("passa pela preferência do Nuno, com o carimbo da execução que o escreveu", async () => {
+    const montado = montar();
+    montado.servico.definir({ agenteId: "nuno", nivel: "tudo", canal: "ambos" });
+    avisarDoVigia(montado.servico)(doVigia);
+    await assentar();
+    expect(carimbo(montado.db)).toEqual([
+      {
+        do_agente_id: "nuno",
+        tipo: "aviso",
+        referencia: "vigia:nuno:e1",
+        canal: "ambos",
+        origem: "agente",
+        agente_id: "nuno",
+        execucao_id: "e1",
+        vista_em: null,
+      },
+    ]);
+    expect(montado.casca.mostrados).toEqual([
+      expect.objectContaining({ agente: "Nuno", titulo: doVigia.titulo }),
+    ]);
+  });
+
+  test('com "nada" para o Nuno, fica só no histórico: sem ponto e sem Windows', async () => {
+    const montado = montar();
+    montado.servico.definir({ agenteId: "nuno", nivel: "nada", canal: "ambos" });
+    avisarDoVigia(montado.servico)(doVigia);
+    await assentar();
+    expect(carimbo(montado.db)).toEqual([expect.objectContaining({ vista_em: expect.any(String) })]);
     expect(montado.servico.naoVistas()).toEqual([]);
     expect(montado.casca.mostrados).toEqual([]);
   });

@@ -8,10 +8,12 @@ import { abrirBanco } from "../../banco/conexao.ts";
 import { RepositorioConexoes } from "../conexoes.ts";
 import { GhAusente, type ExecutorGh, type SaidaGh } from "./gh.ts";
 import {
+  AVISO_DESLIGADA,
   AVISO_SEM_GH,
   AVISO_SEM_LOGIN,
   avisoFalhou,
   INTERVALO_GITHUB_MS,
+  motivoDoItem,
   RepositorioGithub,
   ServicoGithub,
 } from "./github.ts";
@@ -260,5 +262,122 @@ describe("conexão com o GitHub", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(chamadas).toHaveLength(2);
     parar2();
+  });
+});
+
+describe("o que precisa de você (pendências do Nuno)", () => {
+  test("pelo cache, cada item com o motivo, sem ir ao gh", async () => {
+    const { servico, chamadas } = montar();
+    await servico.ligar();
+    chamadas.length = 0;
+    const pendencias = servico.pendencias();
+    expect(pendencias).toMatchObject({ conexao: "ligada", aviso: null, lidoEm: "2026-10-09T12:00:00.000Z" });
+    expect(pendencias.itens.map((i) => [`${i.repositorio}#${i.numero}`, i.motivo])).toEqual([
+      ["loja/api-pedidos#409", "mudanças pedidas no seu PR"],
+      ["loja/api-pedidos#412", "review pedido a você"],
+      ["voce/site#57", "CI quebrado no seu PR"],
+      ["voce/moductus#31", "issue atribuída a você"],
+    ]);
+    expect(chamadas).toHaveLength(0);
+  });
+
+  test("desligada, a lista vazia diz que não sabe; em erro, diz por que pode estar velha", async () => {
+    const { servico, roteiro } = montar([OK(), SEM_REDE]);
+    expect(servico.pendencias()).toEqual({
+      conexao: "desligada",
+      aviso: AVISO_DESLIGADA,
+      lidoEm: null,
+      itens: [],
+    });
+    await servico.ligar();
+    await servico.atualizar();
+    expect(roteiro).toEqual([SEM_REDE]);
+    const pendencias = servico.pendencias();
+    expect(pendencias.conexao).toBe("erro");
+    expect(pendencias.aviso).toBe(avisoFalhou("error connecting to api.github.com"));
+    expect(pendencias.itens).toHaveLength(4);
+  });
+
+  test("motivo: só o que precisa de você tem", () => {
+    const base = {
+      id: "x",
+      repositorio: "a/b",
+      numero: 1,
+      tipo: "pr" as const,
+      titulo: "t",
+      autor: null,
+      estado: "aberto" as const,
+      meuPapel: "autor" as const,
+      precisaDeMim: true,
+      ciEstado: "falhou" as const,
+      atualizadoNoGithub: null,
+      url: "https://github.com/a/b/pull/1",
+    };
+    expect(motivoDoItem(base)).toBe("CI quebrado no seu PR");
+    expect(motivoDoItem({ ...base, ciEstado: "passou" })).toBe("mudanças pedidas no seu PR");
+    expect(motivoDoItem({ ...base, precisaDeMim: false })).toBeNull();
+    expect(motivoDoItem({ ...base, meuPapel: "atribuido" })).toBe("PR atribuído a você");
+  });
+});
+
+describe("ler um item e comentar pelo gh", () => {
+  const PR = { number: 412, title: "Cancelar pedido", body: "corpo", state: "OPEN", url: "https://x" };
+
+  test("detalhe usa o tipo do cache e o gh com a conta do usuário", async () => {
+    const { servico, chamadas, roteiro } = montar([OK(), OK(PR)]);
+    await servico.ligar();
+    expect(roteiro).toHaveLength(1);
+    chamadas.length = 0;
+    const detalhe = await servico.detalhe({ repositorio: "loja/api-pedidos", numero: 412 });
+    expect(detalhe).toMatchObject({ tipo: "pr", numero: 412, titulo: "Cancelar pedido", estado: "aberto" });
+    expect(chamadas[0]?.slice(0, 5)).toEqual(["pr", "view", "412", "--repo", "loja/api-pedidos"]);
+
+    await servico.detalhe({ repositorio: "Voce/Moductus", numero: 31 });
+    expect(chamadas[1]?.slice(0, 2)).toEqual(["issue", "view"]);
+  });
+
+  test("comentar manda o texto cru pela API de issues e devolve o endereço", async () => {
+    const { servico, chamadas } = montar([
+      OK(),
+      OK({ html_url: "https://github.com/loja/api-pedidos/pull/412#c1" }),
+    ]);
+    await servico.ligar();
+    chamadas.length = 0;
+    const texto = "@colega -F body=@segredo.txt; rm -rf .";
+    expect(await servico.comentar({ repositorio: "loja/api-pedidos", numero: 412, texto })).toEqual({
+      url: "https://github.com/loja/api-pedidos/pull/412#c1",
+    });
+    expect(chamadas).toEqual([
+      ["api", "--method", "POST", "repos/loja/api-pedidos/issues/412/comments", "-f", `body=${texto}`],
+    ]);
+  });
+
+  test("desligada não vai ao gh; sem gh e sem login dizem o que fazer; repositório estranho nem sai", async () => {
+    const { servico, chamadas } = montar([
+      OK(),
+      new GhAusente(),
+      SEM_LOGIN,
+      { codigo: 1, saida: "", erro: "GraphQL: Could not resolve to a PullRequest" },
+    ]);
+    await expect(servico.comentar({ repositorio: "a/b", numero: 1, texto: "oi" })).rejects.toThrow(
+      AVISO_DESLIGADA,
+    );
+    await expect(servico.detalhe({ repositorio: "a/b", numero: 1 })).rejects.toThrow(AVISO_DESLIGADA);
+    expect(chamadas).toHaveLength(0);
+
+    await servico.ligar();
+    await expect(servico.detalhe({ repositorio: "a/b", numero: 1 })).rejects.toThrow(AVISO_SEM_GH);
+    await expect(servico.comentar({ repositorio: "a/b", numero: 1, texto: "oi" })).rejects.toThrow(
+      AVISO_SEM_LOGIN,
+    );
+    await expect(servico.detalhe({ repositorio: "a/b", numero: 1 })).rejects.toThrow(
+      "GraphQL: Could not resolve to a PullRequest",
+    );
+
+    chamadas.length = 0;
+    await expect(servico.comentar({ repositorio: "../a/b", numero: 1, texto: "oi" })).rejects.toThrow(
+      "não é um repositório dono/nome",
+    );
+    expect(chamadas).toHaveLength(0);
   });
 });

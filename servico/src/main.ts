@@ -8,6 +8,7 @@ import { RepositorioExecucoes, ServicoExecucoes } from "./agentes/execucoes.ts";
 import { aberturaMcpDoRuntime } from "./agentes/mcp.ts";
 import { classificadorPeloRuntime, Roteador } from "./agentes/roteador.ts";
 import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
+import { VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
@@ -22,10 +23,13 @@ import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
+import { ferramentasGithub } from "./ferramentas/github/github.ts";
+import { ferramentasSessoes } from "./ferramentas/sessoes/sessoes.ts";
+import { ferramentasUso } from "./ferramentas/uso/uso.ts";
 import { abrirServidorMcp } from "./mcp/servidor.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
 import { avisarAprovacoes } from "./notificacoes/aprovacoes.ts";
-import { avisarContexto } from "./notificacoes/nuno.ts";
+import { avisarContexto, avisarDoVigia } from "./notificacoes/nuno.ts";
 import { RepositorioNotificacoes, ServicoNotificacoes } from "./notificacoes/notificacoes.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
@@ -68,6 +72,8 @@ const nativo: AplicadorNativo = {
 };
 
 let servidor: ServidorWs | null = null;
+// Os vigias do Nuno (F2-26) nascem com o runtime; os eventos de antes disso não pedem julgamento.
+let vigiaNuno: VigiaNuno | null = null;
 const config = new ServicoConfig(
   new RepositorioConfig(banco),
   nativo,
@@ -116,12 +122,20 @@ canal.aoAvisar(CLIQUE_NO_AVISO, (aviso) => {
     .aoClicar(clique.id, clique.botao)
     .catch((erro: unknown) => console.error(`notificações: clique no aviso falhou: ${String(erro)}`));
 });
+const avisarContextoAoUsuario = avisarContexto(notificacoes);
 const sessoes = new ServicoSessoes(
   new RepositorioSessoes(banco),
-  (mudanca) => servidor?.emitir("sessoes.mudou", mudanca),
+  (mudanca) => {
+    servidor?.emitir("sessoes.mudou", mudanca);
+    vigiaNuno?.aoMudarSessao(mudanca);
+  },
   {
     transcripts: TRANSCRIPTS_DO_DISCO,
-    aoAvisarContexto: avisarContexto(notificacoes),
+    // O aviso de contexto vai às notificações (preferência do Nuno, ponto, Windows) e ao vigia.
+    aoAvisarContexto: (aviso) => {
+      avisarContextoAoUsuario(aviso);
+      vigiaNuno?.aoAvisarContexto(aviso);
+    },
   },
 );
 const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {
@@ -137,7 +151,10 @@ const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {
 aprovacoes.expirarDoTerminal();
 const repositorioConexoes = new RepositorioConexoes(banco);
 const github = new ServicoGithub(new RepositorioGithub(banco), repositorioConexoes, executorGh(), {
-  github: (situacao) => servidor?.emitir("github.mudou", situacao),
+  github: (situacao) => {
+    servidor?.emitir("github.mudou", situacao);
+    vigiaNuno?.aoLerGithub(situacao);
+  },
   conexao: (conexao) => servidor?.emitir("conexoes.mudou", conexao),
 });
 const conexoes = new ServicoConexoes(
@@ -182,7 +199,12 @@ const provedores = registrarProvedores(
     ? aberturaMcpDoRuntime(servidorMcp, (execucaoId) => runtime.executorDaExecucao(execucaoId))
     : undefined,
 );
-const catalogo = new Catalogo();
+// As ferramentas de cada área (F2-26: as do Nuno); cada agente só vê as da lista dele.
+const catalogo = new Catalogo([
+  ...ferramentasSessoes(sessoes),
+  ...ferramentasUso(sessoes),
+  ...ferramentasGithub(github),
+]);
 const repositorioAgentes = new RepositorioAgentes(banco);
 const repositorioExecucoes = new RepositorioExecucoes(banco);
 // Quem rodava essas execuções era o serviço que parou: fecham como erro e os cartões delas expiram.
@@ -206,6 +228,12 @@ const runtime = new Runtime(
   },
 );
 const agentes = new ServicoAgentes(repositorioAgentes, catalogo, (agente) => runtime.situacao(agente));
+vigiaNuno = new VigiaNuno({
+  executar: (pedido) => runtime.executar(pedido),
+  githubConhecido: github.obter().itens,
+  avisar: avisarDoVigia(notificacoes),
+  detalhar: (alvo) => github.detalhe(alvo),
+});
 const execucoes = new ServicoExecucoes(repositorioExecucoes, catalogo, {
   mudou: (execucao) => servidor?.emitir("execucoes.mudou", execucao),
 });

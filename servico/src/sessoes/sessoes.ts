@@ -593,6 +593,11 @@ export class ServicoSessoes {
     return { projetos, sessoes };
   }
 
+  /** Os projetos que não estão na lixeira, para dar nome ao `projetoId` do uso. */
+  projetos(): Projeto[] {
+    return this.repo.projetosVivos();
+  }
+
   eventos(entrada: PedidoEventosSessao): EventoSessao[] {
     const pedido = PedidoEventosSessao.parse(entrada);
     return this.repo.eventos(pedido.sessaoId, pedido.limite ?? LIMITE_EVENTOS);

@@ -106,7 +106,7 @@ export function diaLocal(instante: Date): string {
 export const porcentagem = (usado: number, janela: number) => Math.floor((usado * 100) / janela);
 
 /** Nome das ferramentas na fala do Nuno. */
-export const NOME: Readonly<Record<FerramentaSessao, string>> = {
+export const NOME_DA_FERRAMENTA: Readonly<Record<FerramentaSessao, string>> = {
   "claude-code": "Claude Code",
   codex: "Codex",
   opencode: "OpenCode",
@@ -133,7 +133,7 @@ export function textoDoAviso(
   const onde = projeto ? ` em ${projeto}` : "";
   return {
     titulo: `Contexto em ${pct}%`,
-    corpo: `A sessão do ${NOME[ferramenta]}${onde} chegou a ${pct}% do contexto. Vale compactar com /compact ou encerrar.`,
+    corpo: `A sessão do ${NOME_DA_FERRAMENTA[ferramenta]}${onde} chegou a ${pct}% do contexto. Vale compactar com /compact ou encerrar.`,
   };
 }
 

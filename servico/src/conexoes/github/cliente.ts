@@ -167,7 +167,7 @@ export function itensDaResposta(resposta: unknown): { conta: string; itens: Item
 }
 
 /** A primeira linha útil do stderr, sem o prefixo `gh:`. */
-function motivoDo(erro: string): string {
+export function motivoDo(erro: string): string {
   const linha = erro
     .split(/\r?\n/)
     .map((l) => l.trim())
@@ -176,7 +176,7 @@ function motivoDo(erro: string): string {
 }
 
 /** Sem login: o `gh` sai com 4 ("gh auth login"), ou o token guardado nele deixou de valer (401). */
-function semLogin(codigo: number, erro: string): boolean {
+export function semLogin(codigo: number, erro: string): boolean {
   return codigo === 4 || /gh auth login|HTTP 401|Bad credentials/i.test(erro);
 }
 

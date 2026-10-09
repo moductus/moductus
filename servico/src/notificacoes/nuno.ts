@@ -1,3 +1,4 @@
+import type { AvisoDoNuno } from "../agentes/vigias/nuno.ts";
 import type { AvisoContexto } from "../sessoes/contexto.ts";
 import type { NovoAviso, ServicoNotificacoes } from "./notificacoes.ts";
 
@@ -23,5 +24,30 @@ export function avisarContexto(notificacoes: ServicoNotificacoes): (aviso: Aviso
     notificacoes
       .avisar(avisoDoContexto(aviso))
       .catch((erro: unknown) => console.error(`notificações: aviso de contexto falhou: ${String(erro)}`));
+  };
+}
+
+/**
+ * O aviso do vigia do Nuno (o que precisa de você no GitHub, sessão esperando), com o carimbo da
+ * execução que o escreveu: passa pela preferência do Nuno para o tipo "aviso" como qualquer outro.
+ */
+export function avisoDoVigia(aviso: AvisoDoNuno): NovoAviso {
+  return {
+    agenteId: "nuno",
+    tipo: "aviso",
+    titulo: aviso.titulo,
+    corpo: aviso.corpo,
+    referencia: aviso.referencia,
+    origem: "agente",
+    execucaoId: aviso.execucaoId,
+  };
+}
+
+/** Entrega o aviso do vigia pelas notificações; falha vai ao log, nunca ao vigia. */
+export function avisarDoVigia(notificacoes: ServicoNotificacoes): (aviso: AvisoDoNuno) => void {
+  return (aviso) => {
+    notificacoes
+      .avisar(avisoDoVigia(aviso))
+      .catch((erro: unknown) => console.error(`notificações: aviso do Nuno falhou: ${String(erro)}`));
   };
 }

@@ -1,5 +1,5 @@
 import type { Aprovacao, PedidoDecidir } from "@moductus/contrato";
-import { NOME } from "../sessoes/contexto.ts";
+import { NOME_DA_FERRAMENTA } from "../sessoes/contexto.ts";
 import type { BotaoAviso, NovoAviso, ServicoNotificacoes } from "./notificacoes.ts";
 
 /** As sessões de IA do terminal são do Nuno (PRODUCT.md §6): o pedido delas sai em nome dele. */
@@ -62,7 +62,7 @@ export function avisoDaAprovacao(aprovacao: Aprovacao, fontes: FontesAprovacao):
   let titulo: string;
   let corpo: string;
   if (doTerminal) {
-    const ferramenta = NOME[aprovacao.fonte as Exclude<Aprovacao["fonte"], "moductus">];
+    const ferramenta = NOME_DA_FERRAMENTA[aprovacao.fonte as Exclude<Aprovacao["fonte"], "moductus">];
     const projeto = aprovacao.sessaoId ? fontes.projetoDaSessao(aprovacao.sessaoId) : null;
     titulo = `${ferramenta} pede permissão`;
     corpo = `${ferramenta} quer ${resumoDaAcao(aprovacao.acao.ferramenta)}${projeto ? ` em ${projeto}` : ""}.`;
