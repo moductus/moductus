@@ -8,7 +8,13 @@ const doTerminal = {
   execucaoId: null,
   sessaoId: "01K79Z6N7Q4W3J5XG2B8C1D0EM",
   descricao: "O Claude Code quer rodar pnpm test em moductus.",
-  acao: { ferramenta: "Bash", entrada: { command: "pnpm test" }, rotulo: null, desfazivel: false },
+  acao: {
+    ferramenta: "Bash",
+    entrada: { command: "pnpm test" },
+    rotulo: null,
+    rotuloRecusar: null,
+    desfazivel: false,
+  },
   estado: "pendente",
   criadoEm: "2026-10-09T12:00:00.000Z",
   decididaEm: null,
@@ -31,22 +37,36 @@ describe("aprovação", () => {
     expect(Aprovacao.parse(doTerminal)).toEqual(doTerminal);
   });
 
-  test("pedido de agente com rótulo de verbo e objeto passa", () => {
-    const daFaina = {
-      ...doTerminal,
-      fonte: "moductus",
-      agenteId: "faina",
-      execucaoId: "01K79Z6N7Q4W3J5XG2B8C1D0EN",
-      sessaoId: null,
-      descricao: "Vou mover 38 arquivos (1,4 GB) para a Lixeira.",
-      acao: {
-        ferramenta: "arquivos.mover",
-        entrada: { ids: [] },
-        rotulo: "Mover 38 arquivos",
-        desfazivel: true,
-      },
-    };
-    expect(Aprovacao.safeParse(daFaina).success).toBe(true);
+  const daAlba = {
+    ...doTerminal,
+    fonte: "moductus",
+    agenteId: "alba",
+    execucaoId: "01K79Z6N7Q4W3J5XG2B8C1D0EN",
+    sessaoId: null,
+    descricao: "A tarefa X não cabe hoje. Passo para amanhã de manhã?",
+    acao: {
+      ferramenta: "tarefas.adiar",
+      entrada: { id: "01K79Z6N7Q4W3J5XG2B8C1D0EY" },
+      rotulo: "Passar para amanhã",
+      rotuloRecusar: "Manter",
+      desfazivel: true,
+    },
+  };
+
+  test("pedido de agente com os dois botões de verbo passa", () => {
+    expect(Aprovacao.parse(daAlba)).toEqual(daAlba);
+  });
+
+  test("pedido de agente sem o rótulo de permitir é recusado; o de recusar pode cair em Negar", () => {
+    const semRotulo = Aprovacao.safeParse({ ...daAlba, acao: { ...daAlba.acao, rotulo: null } });
+    expect(semRotulo.success).toBe(false);
+    expect(semRotulo.error?.issues[0]?.path).toEqual(["acao", "rotulo"]);
+    expect(Aprovacao.safeParse({ ...daAlba, acao: { ...daAlba.acao, rotuloRecusar: null } }).success).toBe(
+      true,
+    );
+    expect(Aprovacao.safeParse({ ...daAlba, acao: { ...daAlba.acao, rotuloRecusar: " " } }).success).toBe(
+      false,
+    );
   });
 
   test("estado, fonte e ação fora do contrato são recusados", () => {

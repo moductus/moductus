@@ -15,31 +15,47 @@ export type FonteAprovacao = z.infer<typeof FonteAprovacao>;
 export const EstadoAprovacao = z.enum(["pendente", "aprovada", "negada", "expirada"]);
 export type EstadoAprovacao = z.infer<typeof EstadoAprovacao>;
 
-/** O que será feito com o sim. */
+/**
+ * O que será feito com o sim. Os botões são verbo com objeto, nunca "OK" (AGENTS.md "Voz dos
+ * agentes"); só o cartão de uma sessão do terminal usa os genéricos do DESIGN.md §5.
+ */
 export const AcaoAprovacao = z.object({
   ferramenta: z.string().min(1),
   entrada: z.unknown(),
-  /** Verbo com objeto para o botão de permitir ("Mover 38 arquivos"); `null` usa "Permitir". */
-  rotulo: z.string().min(1).nullable(),
+  /** Botão de permitir ("Mover 38 arquivos"); `null`, só nas sessões do terminal, é "Permitir". */
+  rotulo: z.string().trim().min(1).nullable(),
+  /** Botão de recusar ("Manter", "Depois"); `null` é "Negar". */
+  rotuloRecusar: z.string().trim().min(1).nullable(),
   desfazivel: z.boolean(),
 });
 export type AcaoAprovacao = z.infer<typeof AcaoAprovacao>;
 
-export const Aprovacao = z.object({
-  id: Id,
-  fonte: FonteAprovacao,
-  /** Agente e execução que pediram; vazios quando o pedido vem de uma sessão do terminal. */
-  agenteId: Id.nullable(),
-  execucaoId: Id.nullable(),
-  sessaoId: Id.nullable(),
-  /** O que vai acontecer e o tamanho, na voz do agente. */
-  descricao: z.string().min(1),
-  acao: AcaoAprovacao,
-  estado: EstadoAprovacao,
-  criadoEm: Instante,
-  decididaEm: Instante.nullable(),
-  regraCriadaId: Id.nullable(),
-});
+export const Aprovacao = z
+  .object({
+    id: Id,
+    fonte: FonteAprovacao,
+    /** Agente e execução que pediram; vazios quando o pedido vem de uma sessão do terminal. */
+    agenteId: Id.nullable(),
+    execucaoId: Id.nullable(),
+    sessaoId: Id.nullable(),
+    /** O que vai acontecer e o tamanho, na voz do agente. */
+    descricao: z.string().min(1),
+    acao: AcaoAprovacao,
+    estado: EstadoAprovacao,
+    criadoEm: Instante,
+    decididaEm: Instante.nullable(),
+    regraCriadaId: Id.nullable(),
+  })
+  .superRefine((aprovacao, ctx) => {
+    // Pedido de agente do Moductus diz o que o sim faz; "Permitir" fica para o terminal.
+    if (aprovacao.fonte === "moductus" && aprovacao.acao.rotulo === null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["acao", "rotulo"],
+        message: "pedido de agente precisa do botão com verbo e objeto",
+      });
+    }
+  });
 export type Aprovacao = z.infer<typeof Aprovacao>;
 
 /** "Sempre neste projeto" (sessões) ou "sempre para este agente" (Moductus). */

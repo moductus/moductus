@@ -51,6 +51,13 @@ describe("sessão de IA", () => {
     );
   });
 
+  test("sem projeto e sem datas, como a 004 aceita", () => {
+    const solta = { ...sessao, projetoId: null, iniciadaEm: null, ultimoEventoEm: null };
+    expect(SessaoIa.safeParse(solta).success).toBe(true);
+    expect(MudancaSessao.safeParse({ sessao: solta, projeto: null }).success).toBe(true);
+    expect(SessaoIa.safeParse({ ...sessao, iniciadaEm: "ontem" }).success).toBe(false);
+  });
+
   test("ferramenta e estado fora da lista são recusados", () => {
     expect(SessaoIa.safeParse({ ...sessao, ferramenta: "cursor" }).success).toBe(false);
     expect(SessaoIa.safeParse({ ...sessao, estado: "ocupada" }).success).toBe(false);
@@ -109,6 +116,11 @@ describe("GitHub", () => {
     expect(ItemGithub.safeParse({ ...pr, ciEstado: "SUCCESS" }).success).toBe(false);
     expect(ItemGithub.safeParse({ ...pr, ciEstado: null }).success).toBe(true);
   });
+
+  test("autor e data do GitHub podem faltar, como a 004 aceita", () => {
+    expect(ItemGithub.safeParse({ ...pr, autor: null, atualizadoNoGithub: null }).success).toBe(true);
+    expect(ItemGithub.safeParse({ ...pr, atualizadoNoGithub: "ontem" }).success).toBe(false);
+  });
 });
 
 describe("conexões", () => {
@@ -125,14 +137,27 @@ describe("conexões", () => {
     expect(Conexao.safeParse({ ...github, estado: "quebrada" }).success).toBe(false);
   });
 
-  test("prévia mostra o arquivo antes e depois, inclusive quando ainda não existe", () => {
-    const previa = {
-      tipo: "hooks-claude-code",
-      arquivos: [{ caminho: "C:\\Users\\voce\\.claude\\settings.json", antes: null, depois: "{}" }],
-    };
-    expect(PreviaConexao.safeParse(previa).success).toBe(true);
+  const hooks = {
+    caminho: "C:\\Users\\voce\\.claude\\settings.json",
+    trecho: "hooks",
+    antes: null,
+    depois: '{"PermissionRequest":[]}',
+  };
+
+  test("prévia mostra só o bloco que muda, antes e depois, inclusive quando ainda não existe", () => {
+    expect(PreviaConexao.safeParse({ tipo: "hooks-claude-code", arquivos: [hooks] }).success).toBe(true);
     expect(
-      PreviaConexao.safeParse({ ...previa, arquivos: [{ caminho: "", antes: null, depois: "" }] }).success,
+      PreviaConexao.safeParse({ tipo: "hooks-claude-code", arquivos: [{ ...hooks, caminho: "" }] }).success,
     ).toBe(false);
+  });
+
+  test("prévia sem o nome do trecho é recusada, e o arquivo inteiro não passa adiante", () => {
+    const { trecho: _trecho, ...semTrecho } = hooks;
+    expect(PreviaConexao.safeParse({ tipo: "hooks-claude-code", arquivos: [semTrecho] }).success).toBe(false);
+    const lida = PreviaConexao.parse({
+      tipo: "hooks-claude-code",
+      arquivos: [{ ...hooks, conteudo: '{"env":{"TOKEN":"segredo"}}' }],
+    });
+    expect(lida.arquivos[0]).not.toHaveProperty("conteudo");
   });
 });

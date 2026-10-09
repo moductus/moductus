@@ -48,14 +48,16 @@ export type ContextoSessao = z.infer<typeof ContextoSessao>;
 
 export const SessaoIa = z.object({
   id: Id,
-  projetoId: Id,
+  /** Vazio enquanto o `cwd` ainda não virou projeto (a 004 aceita). */
+  projetoId: Id.nullable(),
   ferramenta: FerramentaSessao,
   /** Session id da própria ferramenta. */
   idExterno: z.string().min(1),
   modelo: z.string().nullable(),
   estado: EstadoSessao,
-  iniciadaEm: Instante,
-  ultimoEventoEm: Instante,
+  /** Vazios quando a ferramenta não informou (a 004 aceita). */
+  iniciadaEm: Instante.nullable(),
+  ultimoEventoEm: Instante.nullable(),
   encerradaEm: Instante.nullable(),
   /** `null` quando não há fonte: a área diz que não sabe, sem inventar número. */
   contexto: ContextoSessao.nullable(),
@@ -71,8 +73,8 @@ export const ListaSessoes = z.object({
 });
 export type ListaSessoes = z.infer<typeof ListaSessoes>;
 
-/** Uma sessão que mudou, com o projeto dela (que pode ter acabado de ser reconhecido). */
-export const MudancaSessao = z.object({ sessao: SessaoIa, projeto: Projeto });
+/** Uma sessão que mudou, com o projeto dela (que pode ter acabado de ser reconhecido, ou nenhum). */
+export const MudancaSessao = z.object({ sessao: SessaoIa, projeto: Projeto.nullable() });
 export type MudancaSessao = z.infer<typeof MudancaSessao>;
 
 export const PedidoEventosSessao = z.object({
@@ -124,12 +126,13 @@ export const ItemGithub = z.object({
   numero: z.number().int().positive(),
   tipo: TipoItemGithub,
   titulo: z.string(),
-  autor: z.string(),
+  /** Vazio quando o GitHub não informa (a 004 aceita). */
+  autor: z.string().nullable(),
   estado: EstadoItemGithub,
   meuPapel: PapelGithub,
   precisaDeMim: z.boolean(),
   ciEstado: EstadoCi.nullable(),
-  atualizadoNoGithub: Instante,
+  atualizadoNoGithub: Instante.nullable(),
   url: z.url(),
 });
 export type ItemGithub = z.infer<typeof ItemGithub>;
@@ -162,9 +165,16 @@ export type Conexao = z.infer<typeof Conexao>;
 export const PedidoConexao = z.object({ tipo: TipoConexao });
 export type PedidoConexao = z.infer<typeof PedidoConexao>;
 
-/** Arquivo do usuário que ligar muda: o texto de antes (`null` se ainda não existe) e o de depois. */
+/**
+ * Trecho de um arquivo do usuário que ligar muda: só o bloco do Moductus (`hooks` no
+ * `settings.json` do Claude Code), em JSON, antes e depois. O resto do arquivo não vem na prévia,
+ * para não expor o que o usuário guarda ali (o bloco `env`, por exemplo).
+ */
 export const MudancaArquivo = z.object({
   caminho: z.string().min(1),
+  /** Chave de primeiro nível do arquivo que muda. */
+  trecho: z.string().min(1),
+  /** O bloco de hoje; `null` quando o arquivo ou a chave ainda não existem. */
   antes: z.string().nullable(),
   depois: z.string(),
 });

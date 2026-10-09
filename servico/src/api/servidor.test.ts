@@ -159,6 +159,40 @@ describe("canal WebSocket", () => {
     await expect(c.pedir("config.obter")).resolves.toEqual(estadoConfig);
   });
 
+  test("a resposta passa pelo contrato: campo a mais não sai, forma errada vira erro", async () => {
+    const provedor = {
+      id: "01K79Z6N7Q4W3J5XG2B8C1D0EF",
+      tipo: "openai" as const,
+      nome: "OpenAI",
+      modelo: "gpt-5",
+      baseUrl: null,
+      temChave: true,
+      testadoEm: null,
+    };
+    const vazado = { ...provedor, credencial: "moductus/openai", chave: "sk-segredo" };
+    const s = await abrirServidorWs(TOKEN, {
+      ...atendentes,
+      // Atendente com defeito: devolve a credencial e a chave junto.
+      "provedores.listar": () => [vazado],
+      "provedores.detectar": () => [{ tipo: "claude-cli" }] as never,
+    });
+    abertos.push(s);
+    const respostas = await pedirCru(
+      `ws://127.0.0.1:${s.porta}/?token=${TOKEN}&protocolo=${VERSAO_PROTOCOLO}`,
+      [{ metodo: "provedores.listar" }, { metodo: "provedores.detectar" }],
+    );
+    const [listar, detectar] = respostas;
+    expect(listar).toEqual({ tipo: "resposta", id: 1, ok: true, dados: [provedor] });
+    expect(JSON.stringify(respostas)).not.toContain("sk-segredo");
+    expect(JSON.stringify(respostas)).not.toContain("moductus/openai");
+    expect(detectar).toEqual({
+      tipo: "resposta",
+      id: 2,
+      ok: false,
+      erro: "resposta de provedores.detectar fora do contrato",
+    });
+  });
+
   test("método do contrato que o serviço ainda não atende volta erro claro", async () => {
     const s = await servidor();
     const c = cliente();

@@ -62,7 +62,8 @@ export function semAtendente<M extends NomeMetodo>(nomes: readonly M[]): Pick<At
 /**
  * Canal WebSocket com as janelas, em 127.0.0.1 numa porta aleatória. Conexão sem o
  * token certo é recusada com 401 antes do upgrade. Cada pedido é validado pelo schema do
- * contrato antes de chegar ao atendente; a regra fica no atendente, nunca aqui.
+ * contrato antes de chegar ao atendente, e cada resposta antes de sair; a regra fica no
+ * atendente, nunca aqui.
  */
 export function abrirServidorWs(token: string, atendentes: Atendentes, porta = 0): Promise<ServidorWs> {
   const http: Server = createServer((_req, res) => {
@@ -124,7 +125,15 @@ export function abrirServidorWs(token: string, atendentes: Atendentes, porta = 0
     }
     try {
       const atendente = atendentes[nome] as (e: unknown) => unknown;
-      responder({ ok: true, dados: await atendente(entrada.data) });
+      // A saída passa pelo contrato antes de sair: campo a mais (uma credencial, por engano) cai aqui.
+      const saida = METODOS[nome].saida.safeParse(await atendente(entrada.data));
+      if (!saida.success) {
+        const problema = saida.error.issues[0];
+        console.error(`canal: resposta de ${metodo} fora do contrato em ${problema?.path.join(".") ?? ""}`);
+        responder({ ok: false, erro: `resposta de ${metodo} fora do contrato` });
+        return;
+      }
+      responder({ ok: true, dados: saida.data });
     } catch (erro) {
       responder({ ok: false, erro: erro instanceof Error ? erro.message : String(erro) });
     }
