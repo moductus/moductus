@@ -2,12 +2,15 @@ import { hostname } from "node:os";
 import { VERSAO_PROTOCOLO, type EstadoConfig } from "@moductus/contrato";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
+import { ambientePelaCasca } from "./casca/ambiente.ts";
 import { CanalCasca } from "./casca/canal.ts";
 import { credenciaisPelaCasca } from "./casca/credenciais.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
+import { RepositorioConexoes, ServicoConexoes } from "./conexoes/conexoes.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
+import { caminhoSettingsClaude, LigacaoClaudeCode } from "./sessoes/ligacao.ts";
 import { abrirReceptorHooks, portaDosHooks } from "./sessoes/receptor.ts";
 import { RepositorioSessoes, ServicoSessoes } from "./sessoes/sessoes.ts";
 import { tokenDosHooks } from "./sessoes/token.ts";
@@ -59,6 +62,15 @@ const outroPc = new ServicoOutroPc(config, banco, {
 const sessoes = new ServicoSessoes(new RepositorioSessoes(banco), (mudanca) =>
   servidor?.emitir("sessoes.mudou", mudanca),
 );
+const conexoes = new ServicoConexoes(
+  new RepositorioConexoes(banco),
+  {
+    ligacao: new LigacaoClaudeCode({ caminho: caminhoSettingsClaude(), porta: portaDosHooks() }),
+    ambiente: ambientePelaCasca(canal),
+    token: () => tokenDosHooks(credenciaisPelaCasca(canal)),
+  },
+  (conexao) => servidor?.emitir("conexoes.mudou", conexao),
+);
 
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
@@ -72,6 +84,10 @@ servidor = await abrirServidorWs(token, {
   "primeiroUso.marcar": (pedido) => primeiroUso.marcar(pedido),
   "sessoes.listar": () => sessoes.listar(),
   "sessoes.eventos": (pedido) => sessoes.eventos(pedido),
+  "conexoes.listar": () => conexoes.listar(),
+  "conexoes.previa": (pedido) => conexoes.previa(pedido),
+  "conexoes.ligar": (pedido) => conexoes.ligar(pedido),
+  "conexoes.desligar": (pedido) => conexoes.desligar(pedido),
   // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
   ...semAtendente([
     "agentes.listar",
@@ -103,10 +119,6 @@ servidor = await abrirServidorWs(token, {
     "sessoes.uso",
     "github.obter",
     "github.atualizar",
-    "conexoes.listar",
-    "conexoes.previa",
-    "conexoes.ligar",
-    "conexoes.desligar",
   ]),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
