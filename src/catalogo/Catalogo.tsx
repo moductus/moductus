@@ -438,6 +438,7 @@ const DO_TERMINAL: Aprovacao = {
   criadoEm: INSTANTE,
   decididaEm: null,
   regraCriadaId: null,
+  admiteSempre: true,
 };
 
 const DA_FAINA: Aprovacao = {
@@ -459,6 +460,7 @@ const DA_FAINA: Aprovacao = {
   criadoEm: INSTANTE,
   decididaEm: null,
   regraCriadaId: null,
+  admiteSempre: true,
 };
 
 /** No catálogo, decidir só muda o cartão na tela; nada sai daqui. */

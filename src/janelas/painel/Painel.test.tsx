@@ -27,7 +27,7 @@ vi.mock("@tauri-apps/api/event", () => ({
   }),
 }));
 
-const servidor: { pendentes: Aprovacao[]; sessoes: ListaSessoes } = {
+const servidor: { pendentes: Aprovacao[] | Promise<Aprovacao[]>; sessoes: ListaSessoes } = {
   pendentes: [],
   sessoes: { projetos: [], sessoes: [] },
 };
@@ -67,6 +67,7 @@ const pedido = (id: string, command: string, extra: Partial<Aprovacao> = {}): Ap
   criadoEm: INSTANTE,
   decididaEm: null,
   regraCriadaId: null,
+  admiteSempre: true,
   ...extra,
 });
 
@@ -197,6 +198,52 @@ describe("pedidos das sessões no painel do time", () => {
     servidor.pendentes = [];
     await abrir("agentes");
     expect(cartoes()).toHaveLength(0);
+  });
+
+  it("aviso que chega enquanto a lista está a caminho não se perde", async () => {
+    let entregar!: (lista: Aprovacao[]) => void;
+    servidor.pendentes = new Promise<Aprovacao[]>((pronto) => (entregar = pronto));
+    await montar();
+    await abrir("agentes");
+    // A lista saiu antes destes avisos e volta sem eles.
+    avisar(pedido("a2", "pnpm build"));
+    avisar(pedido("a1", "npm test -- --watch=false", { estado: "aprovada" }));
+    await act(async () => entregar([pedido("a1", "npm test -- --watch=false")]));
+    expect(cartoes().map((c) => c.dataset.estado)).toEqual(["aprovada", "pendente"]);
+    expect(cartoes()[1]!.querySelector("code")?.textContent).toBe("pnpm build");
+  });
+
+  it("sessão nova com o painel aberto: o nome do projeto chega pelo sessoes.mudou", async () => {
+    servidor.pendentes = [];
+    await montar();
+    await abrir("agentes");
+    avisar(pedido("a5", "cargo test", { sessaoId: "s2" }));
+    expect(cartoes()[0]!.querySelector(".pedidos-projeto")).toBeNull();
+    act(() =>
+      ouvintes.get("sessoes.mudou")?.forEach((fn) =>
+        fn({
+          sessao: { ...SESSOES.sessoes[0]!, id: "s2", projetoId: "p2" },
+          projeto: {
+            id: "p2",
+            nome: "moductus",
+            caminho: "V:\\moductus",
+            repositorio: null,
+            arquivado: false,
+          },
+        }),
+      ),
+    );
+    expect(cartoes()[0]!.querySelector(".pedidos-projeto")?.textContent).toBe("moductus");
+  });
+
+  it("pedido sem regra possível mostra só Negar e Permitir", async () => {
+    servidor.pendentes = [pedido("a6", "x", { admiteSempre: false })];
+    await montar();
+    await abrir("agentes");
+    expect([...cartoes()[0]!.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
+      "Negar",
+      "Permitir",
+    ]);
   });
 
   it("outras áreas não mostram os pedidos", async () => {

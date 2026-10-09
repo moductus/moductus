@@ -1,4 +1,5 @@
 import type { EstadoSessao } from "@moductus/contrato";
+import { entradaParaGuardar } from "../aprovacoes/padrao.ts";
 
 /**
  * O que o Moductus lê de um hook do Claude Code (AGENTS.md §5). O corpo chega em JSON com os
@@ -18,10 +19,12 @@ export interface EventoHook {
   /** Comando, arquivo ou mensagem em uma linha curta; o conteúdo inteiro fica no transcript. */
   resumo: string | null;
   /**
-   * `tool_input` inteiro, só para decidir um `PermissionRequest` (a regra compara o comando ou o
-   * caminho exato); não é gravado em `eventos_sessao`.
+   * `tool_input`, só para decidir um `PermissionRequest` (a regra compara o comando ou o caminho
+   * exato). Das ferramentas de arquivo fica só o caminho: o conteúdo nunca sai daqui.
    */
   entrada: unknown;
+  /** Tarefas em segundo plano que o `Stop` ainda lista (`background_tasks`); 0 sem o campo. */
+  emSegundoPlano: number;
   /** `notification_type` do `Notification` (`idle_prompt`, `permission_prompt`…). */
   aviso: string | null;
   /** `source` do `SessionStart` (`startup`, `resume`, `clear`, `compact`). */
@@ -58,6 +61,12 @@ function resumir(corpo: Record<string, unknown>): string | null {
   return mensagem ? encurtar(mensagem) : null;
 }
 
+/** Itens de uma lista (ou chaves de um objeto) que veio no corpo; o que não é nenhum dos dois, 0. */
+function quantos(valor: unknown): number {
+  if (Array.isArray(valor)) return valor.length;
+  return valor && typeof valor === "object" ? Object.keys(valor).length : 0;
+}
+
 /** Lê o corpo de um hook; `null` quando falta o nome do evento ou a sessão. */
 export function lerEventoHook(corpo: unknown): EventoHook | null {
   if (!corpo || typeof corpo !== "object" || Array.isArray(corpo)) return null;
@@ -69,15 +78,17 @@ export function lerEventoHook(corpo: unknown): EventoHook | null {
   const modelo =
     texto(c.model) ??
     (c.model && typeof c.model === "object" ? texto((c.model as { id?: unknown }).id) : null);
+  const ferramenta = texto(c.tool_name);
   return {
     tipo,
     idSessao,
     cwd: texto(c.cwd),
     transcript: texto(c.transcript_path),
     modelo,
-    ferramenta: texto(c.tool_name),
+    ferramenta,
     resumo: tipo === "UserPromptSubmit" ? null : resumir(c),
-    entrada: c.tool_input ?? null,
+    entrada: ferramenta ? entradaParaGuardar(ferramenta, c.tool_input ?? null) : null,
+    emSegundoPlano: quantos(c.background_tasks),
     aviso: texto(c.notification_type),
     origem: texto(c.source),
   };

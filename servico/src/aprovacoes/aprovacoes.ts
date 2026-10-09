@@ -30,6 +30,7 @@ interface LinhaAprovacao {
   criado_em: string;
   decidida_em: string | null;
   regra_criada_id: string | null;
+  caminho_projeto: string | null;
 }
 
 interface LinhaRegra {
@@ -44,8 +45,11 @@ interface LinhaRegra {
   expira_em: string | null;
 }
 
+/** A pasta do projeto da sessão vem junto: o `admiteSempre` do cartão depende dela. */
 const COLUNAS_APROVACAO = `id, da_execucao_id, do_agente_id, fonte, sessao_id, descricao, acao, estado,
-  criado_em, decidida_em, regra_criada_id`;
+  criado_em, decidida_em, regra_criada_id,
+  (SELECT p.caminho FROM sessoes_ia s JOIN projetos p ON p.id = s.projeto_id
+    WHERE s.id = aprovacoes.sessao_id AND p.apagado_em IS NULL) AS caminho_projeto`;
 
 const COLUNAS_REGRA =
   "id, escopo, projeto_id, do_agente_id, ferramenta, padrao, decisao, criado_em, expira_em";
@@ -53,20 +57,39 @@ const COLUNAS_REGRA =
 /** Regra que vale agora: fora da lixeira e não vencida (DATA.md §6). */
 const REGRA_VALE = "apagado_em IS NULL AND (expira_em IS NULL OR expira_em > ?)";
 
-const paraAprovacao = (l: LinhaAprovacao): Aprovacao => ({
-  id: l.id,
-  fonte: l.fonte,
-  agenteId: l.do_agente_id,
-  execucaoId: l.da_execucao_id,
-  sessaoId: l.sessao_id,
-  descricao: l.descricao,
+/**
+ * Dá para criar a regra "sempre" deste pedido, com o mesmo critério do `novaRegra`: o padrão
+ * existe; do terminal, a sessão tem projeto e o arquivo fica dentro dele; do Moductus, há agente.
+ */
+export function admiteSempre(
+  pedido: { fonte: FonteAprovacao; agenteId: string | null; acao: AcaoAprovacao },
+  caminhoProjeto: string | null,
+): boolean {
+  const padrao = padraoDe(pedido.acao.ferramenta, pedido.acao.entrada);
+  if (padrao === null) return false;
+  if (pedido.fonte === "moductus") return pedido.agenteId !== null;
+  if (caminhoProjeto === null) return false;
+  return !ehDeArquivo(pedido.acao.ferramenta) || dentroDe(padrao, caminhoProjeto);
+}
+
+function paraAprovacao(l: LinhaAprovacao): Aprovacao {
   // Gravada só depois de passar pelo contrato (`pedir`).
-  acao: JSON.parse(l.acao) as AcaoAprovacao,
-  estado: l.estado,
-  criadoEm: l.criado_em,
-  decididaEm: l.decidida_em,
-  regraCriadaId: l.regra_criada_id,
-});
+  const acao = JSON.parse(l.acao) as AcaoAprovacao;
+  return {
+    id: l.id,
+    fonte: l.fonte,
+    agenteId: l.do_agente_id,
+    execucaoId: l.da_execucao_id,
+    sessaoId: l.sessao_id,
+    descricao: l.descricao,
+    acao,
+    estado: l.estado,
+    criadoEm: l.criado_em,
+    decididaEm: l.decidida_em,
+    regraCriadaId: l.regra_criada_id,
+    admiteSempre: admiteSempre({ fonte: l.fonte, agenteId: l.do_agente_id, acao }, l.caminho_projeto),
+  };
+}
 
 const paraRegra = (l: LinhaRegra): RegraPermissao => ({
   id: l.id,
@@ -356,6 +379,10 @@ export class ServicoAprovacoes {
       criadoEm: agora,
       decididaEm: null,
       regraCriadaId: null,
+      admiteSempre: admiteSempre(
+        { fonte: pedido.fonte, agenteId, acao: pedido.acao },
+        projetoId ? this.repo.caminhoDoProjeto(projetoId) : null,
+      ),
     });
     const carimbo: Carimbo =
       agenteId !== null ? { origem: "agente", agenteId, execucaoId } : { origem: "conexao" };

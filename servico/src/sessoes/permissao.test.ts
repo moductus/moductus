@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { METODOS, type Aprovacao, type NomeMetodo } from "@moductus/contrato";
-import { ClienteServico } from "@moductus/contrato/cliente";
+import { ClienteServico, RecusaDoServico } from "@moductus/contrato/cliente";
 import { afterEach, describe, expect, test } from "vitest";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "../api/servidor.ts";
 import { MENSAGEM_NEGADO, RepositorioAprovacoes, ServicoAprovacoes } from "../aprovacoes/aprovacoes.ts";
@@ -104,7 +104,7 @@ async function montar(opcoes: OpcoesPermissao = {}) {
       signal: sinal,
     });
 
-  return { dock, aviso, postar, receptor, aprovacoes };
+  return { db, dock, aviso, postar, receptor, aprovacoes };
 }
 
 describe("aprovar pelo dock", () => {
@@ -244,19 +244,81 @@ describe("aprovar pelo dock", () => {
     await expect(aprovacoes.esperar(id)).resolves.toMatchObject({ aprovacao: { estado: "expirada" } });
   });
 
-  test("a sessão seguiu (Stop ou novo pedido do usuário): o cartão pendente expira e a resposta sai vazia", async () => {
+  test("Stop sem tarefa em segundo plano: o pedido foi respondido no terminal, o cartão expira", async () => {
     const { aviso, postar } = await montar();
-    for (const seguiu of ["Stop", "UserPromptSubmit"]) {
+    for (const extra of [{}, { background_tasks: [] }]) {
       const pendente = aviso("pendente");
       const expirou = aviso("expirada");
       const resposta = postar(pedidoBash("pnpm test"));
       await pendente;
-      await postar(corpoHook(seguiu, { prompt: "deixa pra lá" }));
+      await postar(corpoHook("Stop", extra));
       await expirou;
-      expect(await (await resposta).json(), seguiu).toEqual({});
+      expect(await (await resposta).json(), JSON.stringify(extra)).toEqual({});
     }
   });
 
+  test("Stop com tarefa em segundo plano e novo pedido do usuário não expiram o cartão", async () => {
+    const { dock, aviso, postar } = await montar();
+    const pendente = aviso("pendente");
+    const resposta = postar(pedidoBash("pnpm test"));
+    const { id } = await pendente;
+    await postar(corpoHook("Stop", { background_tasks: [{ id: "tarefa-1", type: "subagent" }] }));
+    await postar(corpoHook("UserPromptSubmit", { prompt: "enquanto isso, olha o README" }));
+    expect((await dock.pedir("aprovacoes.pendentes")).map((a) => a.id)).toEqual([id]);
+    await dock.pedir("aprovacoes.decidir", { id, decisao: "permitir" });
+    expect(await (await resposta).json()).toEqual(respostaPermissao("permitir", null));
+  });
+
+  test("ferramenta de arquivo: o conteúdo não vai ao banco nem às janelas, só o caminho", async () => {
+    const { db, dock, aviso, postar } = await montar();
+    const avisos: Aprovacao[] = [];
+    dock.ouvir("aprovacoes.mudou", (a) => avisos.push(a));
+    const pedidos = [
+      { tool_name: "Write", tool_input: { file_path: "V:\\moductus\\.env", content: "SEGREDO_CONTEUDO=1" } },
+      {
+        tool_name: "Edit",
+        tool_input: { file_path: "V:\\moductus\\a.ts", old_string: "TEXTO_ANTIGO", new_string: "TEXTO_NOVO" },
+      },
+    ];
+    for (const pedido of pedidos) {
+      const pendente = aviso("pendente");
+      const resposta = postar(corpoHook("PermissionRequest", pedido));
+      const cartao = await pendente;
+      expect(cartao.acao.entrada).toEqual({ file_path: pedido.tool_input.file_path });
+      expect(cartao.admiteSempre).toBe(true);
+      await dock.pedir("aprovacoes.decidir", { id: cartao.id, decisao: "negar" });
+      await resposta;
+    }
+    const gravado = JSON.stringify(db.prepare("SELECT * FROM aprovacoes").all());
+    const transmitido = JSON.stringify([...avisos, ...(await dock.pedir("aprovacoes.pendentes"))]);
+    for (const conteudo of ["SEGREDO_CONTEUDO", "TEXTO_ANTIGO", "TEXTO_NOVO"]) {
+      expect(gravado).not.toContain(conteudo);
+      expect(transmitido).not.toContain(conteudo);
+    }
+    expect(gravado).toContain("a.ts");
+  });
+
+  test("pedido sem regra possível não oferece sempre; o serviço recusa com a mensagem dele", async () => {
+    const { dock, aviso, postar } = await montar();
+    const pendente = aviso("pendente");
+    const resposta = postar(
+      corpoHook("PermissionRequest", {
+        tool_name: "Read",
+        tool_input: { file_path: "C:\\Windows\\win.ini" },
+      }),
+    );
+    const cartao = await pendente;
+    expect(cartao.admiteSempre).toBe(false);
+    const recusa = await dock
+      .pedir("aprovacoes.decidir", { id: cartao.id, decisao: "permitir", sempre: "projeto" })
+      .catch((e: unknown) => e);
+    expect(recusa).toBeInstanceOf(RecusaDoServico);
+    expect((recusa as Error).message).toBe(
+      "o arquivo fica fora do projeto: não dá para criar a regra do projeto",
+    );
+    await dock.pedir("aprovacoes.decidir", { id: cartao.id, decisao: "permitir" });
+    expect(await (await resposta).json()).toEqual(respostaPermissao("permitir", null));
+  });
   test("pergunta ao usuário (AskUserQuestion, ExitPlanMode) e pedido sem ferramenta não viram cartão", async () => {
     const { dock, postar } = await montar();
     for (const tool_name of ["AskUserQuestion", "ExitPlanMode", undefined]) {

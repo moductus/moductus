@@ -27,6 +27,18 @@ export function ehDeArquivo(ferramenta: string): boolean {
 }
 
 /**
+ * O que um pedido guarda da entrada: das ferramentas de arquivo, só o caminho (o que o padrão e
+ * o cartão usam); o conteúdo (`old_string`, `content`, o texto inteiro) não vai ao banco nem às
+ * janelas. As outras ficam com a entrada como veio.
+ */
+export function entradaParaGuardar(ferramenta: string, entrada: unknown): unknown {
+  const campo = CAMPO_DO_CAMINHO[ferramenta];
+  if (campo === undefined) return entrada;
+  const campos = typeof entrada === "object" && entrada !== null ? (entrada as Record<string, unknown>) : {};
+  return Object.hasOwn(campos, campo) ? { [campo]: campos[campo] } : {};
+}
+
+/**
  * O padrão do pedido, ou `null` quando ele não tem o que comparar (comando ausente, caminho
  * relativo, endereço inválido): pedido assim não vira regra nem é coberto por uma.
  */

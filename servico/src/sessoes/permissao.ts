@@ -1,11 +1,12 @@
 import type { Decisao, FerramentaSessao } from "@moductus/contrato";
 import { MENSAGEM_NEGADO, type Desfecho, type ServicoAprovacoes } from "../aprovacoes/aprovacoes.ts";
 import type { EventoHook } from "./hooks.ts";
+import { ESPERA_PERMISSAO_S } from "./ligacao.ts";
 import type { AtenderHook } from "./receptor.ts";
 import type { ServicoSessoes } from "./sessoes.ts";
 
 /** Timeout do hook `PermissionRequest` gravado no `settings.json` pela ligação (spec §3, F2-22). */
-export const TIMEOUT_HOOK_PERMISSAO_MS = 600_000;
+export const TIMEOUT_HOOK_PERMISSAO_MS = ESPERA_PERMISSAO_S * 1000;
 
 /**
  * O endpoint responde sem decidir um pouco antes de o Claude Code desistir do hook: a resposta
@@ -23,10 +24,14 @@ export const MENSAGEM_REGRA_NEGA = "Negado por uma regra do Moductus neste proje
 const SO_NO_TERMINAL = new Set(["AskUserQuestion", "ExitPlanMode"]);
 
 /**
- * Eventos que só chegam depois de o pedido ter sido respondido no terminal: o turno acabou ou o
- * usuário já escreveu de novo. O que a sessão ainda pedia no dock não vale mais.
+ * O turno acabou sem nada rodando em segundo plano: o pedido que ainda estava no dock já foi
+ * respondido no terminal. Com tarefa em segundo plano (um subagente, um comando longo), ela pode
+ * estar justamente esperando a permissão, e o cartão continua. O `UserPromptSubmit` não conta:
+ * o usuário pode escrever enquanto um subagente espera.
  */
-const SESSAO_SEGUIU = new Set(["Stop", "UserPromptSubmit"]);
+function sessaoSeguiu(evento: EventoHook): boolean {
+  return evento.tipo === "Stop" && evento.emSegundoPlano === 0;
+}
 
 const DE_COMANDO = new Set(["Bash", "PowerShell"]);
 const DE_EDICAO = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
@@ -128,7 +133,7 @@ export function atenderHooks(
 ): AtenderHook {
   return (ferramenta, evento, conexao) => {
     const { sessao } = sessoes.registrar(ferramenta, evento);
-    if (sessao.encerradaEm || SESSAO_SEGUIU.has(evento.tipo)) aprovacoes.expirarDaSessao(sessao.id);
+    if (sessao.encerradaEm || sessaoSeguiu(evento)) aprovacoes.expirarDaSessao(sessao.id);
     if (evento.tipo !== "PermissionRequest") return undefined;
     return decidirPermissao(aprovacoes, ferramenta, sessao.id, evento, conexao, opcoes);
   };

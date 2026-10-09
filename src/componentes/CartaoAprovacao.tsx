@@ -1,7 +1,7 @@
 import type { Aprovacao, EstadoAprovacao, PedidoDecidir } from "@moductus/contrato";
 import { useId, useState, type ReactNode } from "react";
 import { Botao, type TamanhoBotao } from "./Botao.tsx";
-import { ServicoIndisponivel } from "@moductus/contrato/cliente";
+import { RecusaDoServico, ServicoIndisponivel } from "@moductus/contrato/cliente";
 import { Selo, type TomSelo } from "./Selo.tsx";
 import "./CartaoAprovacao.css";
 
@@ -14,6 +14,16 @@ export const SEMPRE_NESTE_PROJETO = "Sempre neste projeto";
 export const ERRO_SEM_SERVICO = "O serviço não está respondendo. Nada foi enviado; tente de novo.";
 /** Saiu e falhou no caminho: o serviço pode ter decidido. */
 export const ERRO_SEM_CONFIRMACAO = "Não consegui confirmar sua resposta. Confira o pedido de novo.";
+
+/**
+ * O que dizer quando a resposta não valeu: sem serviço, nada saiu; recusado, o serviço explica
+ * ("o arquivo fica fora do projeto"); a conexão caiu no meio, não dá para saber.
+ */
+function mensagemDeErro(erro: unknown): string {
+  if (erro instanceof ServicoIndisponivel) return ERRO_SEM_SERVICO;
+  if (erro instanceof RecusaDoServico) return erro.message;
+  return ERRO_SEM_CONFIRMACAO;
+}
 
 /** Depois da resposta, o cartão diz o que valeu em vez de mostrar os botões. */
 const DESFECHO: Record<Exclude<EstadoAprovacao, "pendente">, { texto: string; tom: TomSelo }> = {
@@ -44,7 +54,8 @@ interface PropsCartaoAprovacao {
  * Cartão de aprovação (DESIGN.md §5, Agentes.dc.html e Conversas.dc.html): cartão elevado com o
  * que vai acontecer, o tamanho e se dá para desfazer. O primário é verbo com objeto; o
  * secundário recusa sem culpa. Pedido de sessão do terminal ganha "Sempre neste projeto", que
- * vira regra de permissão daquele projeto.
+ * vira regra de permissão daquele projeto, quando o serviço diz que a regra é possível
+ * (`admiteSempre`).
  */
 export function CartaoAprovacao({
   aprovacao,
@@ -69,7 +80,7 @@ export function CartaoAprovacao({
     setRespondida(aprovacao.id);
     aoDecidir({ id: aprovacao.id, ...pedido }).catch((e: unknown) => {
       setRespondida(null);
-      setErro(e instanceof ServicoIndisponivel ? ERRO_SEM_SERVICO : ERRO_SEM_CONFIRMACAO);
+      setErro(mensagemDeErro(e));
     });
   };
 
@@ -110,7 +121,7 @@ export function CartaoAprovacao({
             {acao.rotuloRecusar ?? NEGAR}
           </Botao>
           {extra}
-          {doTerminal && (
+          {doTerminal && aprovacao.admiteSempre && (
             <Botao
               tamanho={tamanho}
               disabled={enviando}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { cobre, dentroDe, ehDeArquivo, padraoDe } from "./padrao.ts";
+import { cobre, dentroDe, ehDeArquivo, entradaParaGuardar, padraoDe } from "./padrao.ts";
 
 describe("padrão da regra", () => {
   test("comando de terminal vira o próprio comando, sem os espaços das pontas", () => {
@@ -49,5 +49,23 @@ describe("padrão da regra", () => {
     expect(dentroDe("V:\\moductus2\\a.ts", "V:\\moductus")).toBe(false);
     expect(dentroDe("V:\\qualquer\\a.ts", "V:\\")).toBe(true);
     expect(dentroDe("a.ts", "V:\\moductus")).toBe(false);
+  });
+});
+
+describe("entrada guardada no pedido", () => {
+  test("ferramenta de arquivo guarda só o caminho; as outras, a entrada como veio", () => {
+    expect(entradaParaGuardar("Edit", { file_path: "V:\\a.ts", old_string: "x", new_string: "y" })).toEqual({
+      file_path: "V:\\a.ts",
+    });
+    expect(entradaParaGuardar("Write", { file_path: "V:\\b.ts", content: "segredo" })).toEqual({
+      file_path: "V:\\b.ts",
+    });
+    expect(entradaParaGuardar("NotebookEdit", { notebook_path: "V:\\n.ipynb", new_source: "x" })).toEqual({
+      notebook_path: "V:\\n.ipynb",
+    });
+    expect(entradaParaGuardar("Write", { content: "sem caminho" })).toEqual({});
+    expect(entradaParaGuardar("Write", null)).toEqual({});
+    const bash = { command: "pnpm test", description: "Roda" };
+    expect(entradaParaGuardar("Bash", bash)).toBe(bash);
   });
 });

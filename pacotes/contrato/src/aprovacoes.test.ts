@@ -19,6 +19,7 @@ const doTerminal = {
   criadoEm: "2026-10-09T12:00:00.000Z",
   decididaEm: null,
   regraCriadaId: null,
+  admiteSempre: true,
 };
 
 describe("aprovação", () => {
@@ -74,6 +75,8 @@ describe("aprovação", () => {
     expect(Aprovacao.safeParse({ ...doTerminal, fonte: "cursor" }).success).toBe(false);
     expect(Aprovacao.safeParse({ ...doTerminal, acao: { ferramenta: "Bash" } }).success).toBe(false);
     expect(Aprovacao.safeParse({ ...doTerminal, descricao: "" }).success).toBe(false);
+    const { admiteSempre: _, ...semAdmiteSempre } = doTerminal;
+    expect(Aprovacao.safeParse(semAdmiteSempre).success).toBe(false);
   });
 
   test("decidir: permitir ou negar, com regra e mensagem opcionais", () => {

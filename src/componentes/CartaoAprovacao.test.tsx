@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import type { Aprovacao, PedidoDecidir } from "@moductus/contrato";
-import { ServicoIndisponivel } from "@moductus/contrato/cliente";
+import { RecusaDoServico, ServicoIndisponivel } from "@moductus/contrato/cliente";
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -53,6 +53,7 @@ const TERMINAL: Aprovacao = {
   criadoEm: "2026-10-09T14:31:00.000Z",
   decididaEm: null,
   regraCriadaId: null,
+  admiteSempre: true,
 };
 
 const AGENTE: Aprovacao = {
@@ -139,6 +140,28 @@ describe("Cartão de aprovação", () => {
     montar(<CartaoAprovacao aprovacao={AGENTE} aoDecidir={aoDecidir} />);
     await act(async () => botao("Mover 38 arquivos").click());
     expect(recipiente.querySelector('[role="alert"]')?.textContent).toBe(ERRO_SEM_SERVICO);
+    expect(botoes().every((b) => !b.disabled)).toBe(true);
+  });
+
+  it("pedido sem regra possível não oferece Sempre neste projeto", () => {
+    montar(
+      <CartaoAprovacao
+        aprovacao={{ ...TERMINAL, admiteSempre: false }}
+        aoDecidir={vi.fn(async () => undefined)}
+      />,
+    );
+    expect(botoes().map((b) => b.textContent)).toEqual([NEGAR, PERMITIR]);
+  });
+
+  it("o serviço recusou: o cartão mostra a explicação dele", async () => {
+    const aoDecidir = vi.fn(async () => {
+      throw new RecusaDoServico("o arquivo fica fora do projeto: não dá para criar a regra do projeto");
+    });
+    montar(<CartaoAprovacao aprovacao={TERMINAL} aoDecidir={aoDecidir} />);
+    await act(async () => botao(SEMPRE_NESTE_PROJETO).click());
+    expect(recipiente.querySelector('[role="alert"]')?.textContent).toBe(
+      "o arquivo fica fora do projeto: não dá para criar a regra do projeto",
+    );
     expect(botoes().every((b) => !b.disabled)).toBe(true);
   });
 

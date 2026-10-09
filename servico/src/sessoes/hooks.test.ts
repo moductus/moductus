@@ -28,9 +28,37 @@ describe("leitura do hook", () => {
       ferramenta: "Bash",
       resumo: "pnpm test",
       entrada: { command: "pnpm test" },
+      emSegundoPlano: 0,
       aviso: null,
       origem: null,
     });
+  });
+
+  test("entrada de ferramenta de arquivo guarda só o caminho; a de comando, inteira", () => {
+    expect(
+      evento({
+        hook_event_name: "PermissionRequest",
+        tool_name: "Write",
+        tool_input: { file_path: "V:\\moductus\\.env", content: "SEGREDO=1" },
+      }).entrada,
+    ).toEqual({ file_path: "V:\\moductus\\.env" });
+    expect(
+      evento({
+        hook_event_name: "PermissionRequest",
+        tool_name: "Bash",
+        tool_input: { command: "ls", timeout: 5 },
+      }).entrada,
+    ).toEqual({ command: "ls", timeout: 5 });
+    expect(evento({ hook_event_name: "Stop" }).entrada).toBeNull();
+  });
+
+  test("Stop conta as tarefas em segundo plano; sem o campo, nenhuma", () => {
+    expect(evento({ hook_event_name: "Stop" }).emSegundoPlano).toBe(0);
+    expect(evento({ hook_event_name: "Stop", background_tasks: [] }).emSegundoPlano).toBe(0);
+    expect(
+      evento({ hook_event_name: "Stop", background_tasks: [{ id: "b1" }, { id: "b2" }] }).emSegundoPlano,
+    ).toBe(2);
+    expect(evento({ hook_event_name: "Stop", background_tasks: "x" }).emSegundoPlano).toBe(0);
   });
 
   test("Edit resume pelo arquivo; Notification pela mensagem; comando longo é cortado", () => {
@@ -91,6 +119,7 @@ describe("estado depois do evento", () => {
     ferramenta: null,
     resumo: null,
     entrada: null,
+    emSegundoPlano: 0,
     aviso: null,
     origem: null,
     ...extra,

@@ -45,6 +45,12 @@ export const Aprovacao = z
     criadoEm: Instante,
     decididaEm: Instante.nullable(),
     regraCriadaId: Id.nullable(),
+    /**
+     * Dá para decidir com "sempre": o pedido tem comando, caminho ou endereço a comparar e, no
+     * terminal, a sessão tem projeto (e o arquivo fica dentro dele). Sem isso, o cartão não
+     * oferece "Sempre neste projeto". Calculado pelo serviço, não gravado.
+     */
+    admiteSempre: z.boolean(),
   })
   .superRefine((aprovacao, ctx) => {
     // Pedido de agente do Moductus diz o que o sim faz; "Permitir" fica para o terminal.

@@ -24,6 +24,7 @@ const cartao = (id: string, estado: Aprovacao["estado"] = "pendente"): Aprovacao
   criadoEm: "2026-10-09T14:31:00.000Z",
   decididaEm: null,
   regraCriadaId: null,
+  admiteSempre: true,
 });
 
 describe("detalhe do pedido", () => {

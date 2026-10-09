@@ -38,6 +38,17 @@ export class ServicoIndisponivel extends Error {
   }
 }
 
+/**
+ * O serviço recebeu o pedido e respondeu que não fez ("o arquivo fica fora do projeto"): a
+ * mensagem é dele e pode ir para a tela. Diferente de a conexão cair no meio, quando não se sabe.
+ */
+export class RecusaDoServico extends Error {
+  constructor(mensagem: string) {
+    super(mensagem);
+    this.name = "RecusaDoServico";
+  }
+}
+
 interface Pendente {
   metodo: NomeMetodo;
   resolver: (dados: unknown) => void;
@@ -176,7 +187,7 @@ export class ClienteServico {
     if (!pendente) return;
     this.pendentes.delete(m.id);
     if (!m.ok) {
-      pendente.rejeitar(new Error(m.erro));
+      pendente.rejeitar(new RecusaDoServico(m.erro));
       return;
     }
     const saida = METODOS[pendente.metodo].saida.safeParse(m.dados);

@@ -468,4 +468,31 @@ describe("expirar quando a situação muda", () => {
     expect(await servico.pendentes()).toEqual([b]);
     expect(servico.expirar(a.id)).toBeNull();
   });
+
+  test("admiteSempre segue o critério da regra: padrão, projeto da sessão e arquivo dentro dele", async () => {
+    const { db, servico } = montar();
+    sessaoEm(db, "moductus", "s1", "V:\\moductus");
+    const editar = (file_path: string) => doTerminalCom("s1", { ...ler(file_path), ferramenta: "Edit" });
+    const casos = {
+      comando: cartao(servico, doTerminal("s1")),
+      semComando: cartao(servico, { ...doTerminal("s1"), acao: { ...bash(""), entrada: {} } }),
+      semSessao: cartao(servico, { ...doTerminal("s1"), sessaoId: null }),
+      arquivoDentro: cartao(servico, editar("V:\\moductus\\src\\a.ts")),
+      arquivoFora: cartao(servico, editar("C:\\Windows\\win.ini")),
+      doAgente: cartao(servico, doNuno(12)),
+    };
+    const esperado = {
+      comando: true,
+      semComando: false,
+      semSessao: false,
+      arquivoDentro: true,
+      arquivoFora: false,
+      doAgente: true,
+    };
+    const doPedido = Object.fromEntries(Object.entries(casos).map(([k, a]) => [k, a.admiteSempre]));
+    expect(doPedido).toEqual(esperado);
+    // Relido do banco (depois de reabrir, pela lista), o cálculo é o mesmo.
+    const lidos = new Map((await servico.pendentes()).map((a) => [a.id, a.admiteSempre]));
+    expect(Object.fromEntries(Object.entries(casos).map(([k, a]) => [k, lidos.get(a.id)]))).toEqual(esperado);
+  });
 });
