@@ -4,7 +4,7 @@ import {
   PedidoMarcarVistas,
   PedidoPagina,
   PedidoRestaurarPreferencia,
-  PREFERENCIA_PADRAO,
+  preferenciaPadrao,
   TIPOS_QUE_PRECISAM,
   TipoNotificacao,
   type CanalNotificacao,
@@ -367,7 +367,7 @@ export class ServicoNotificacoes {
     for (const { id } of this.fontes.agentes()) {
       for (const tipo of TipoNotificacao.options) {
         const propria = achar(id, tipo);
-        const vale = propria ?? achar(null, tipo) ?? PREFERENCIA_PADRAO;
+        const vale = propria ?? achar(null, tipo) ?? preferenciaPadrao(id);
         preferencias.push({ agenteId: id, tipo, nivel: vale.nivel, canal: vale.canal, definida: !!propria });
       }
     }
@@ -411,7 +411,7 @@ export class ServicoNotificacoes {
   ): { nivel: NivelNotificacao; canal: CanalNotificacao } {
     const gravadas = this.repo.preferencias().filter((p) => p.tipo === tipo);
     const propria = agenteId === null ? undefined : gravadas.find((p) => p.do_agente_id === agenteId);
-    const vale = propria ?? gravadas.find((p) => p.do_agente_id === null) ?? PREFERENCIA_PADRAO;
+    const vale = propria ?? gravadas.find((p) => p.do_agente_id === null) ?? preferenciaPadrao(agenteId);
     return { nivel: vale.nivel, canal: vale.canal };
   }
 

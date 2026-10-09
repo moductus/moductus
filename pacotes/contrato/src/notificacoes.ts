@@ -27,6 +27,17 @@ export const PREFERENCIA_PADRAO = { nivel: "so_o_que_precisa", canal: "ambos" } 
 };
 
 /**
+ * O padrão de fábrica de um agente, abaixo da preferência dele e da geral (AreaNotificacoes.dc.html):
+ * o Nuno avisa tudo (sessões, CI, limites); os outros, só o que precisa de mim.
+ */
+export function preferenciaPadrao(agenteId: string | null): {
+  nivel: NivelNotificacao;
+  canal: CanalNotificacao;
+} {
+  return agenteId === "nuno" ? { nivel: "tudo", canal: "ambos" } : PREFERENCIA_PADRAO;
+}
+
+/**
  * A preferência que vale para um agente e um tipo: a do agente, a geral (de todos) ou o
  * padrão. `definida` diz se a do próprio agente está gravada.
  */

@@ -182,8 +182,8 @@ describe("avisar", () => {
 
   test('"só o que precisa de mim" registra o aviso comum sem avisar e avisa o erro', async () => {
     const { servico, casca } = montar();
-    const comum = await servico.avisar({ agenteId: "nuno", tipo: "aviso", titulo: "Contexto em 82%" });
-    const erro = await servico.avisar({ agenteId: "nuno", tipo: "erro", titulo: "CI quebrou em moductus" });
+    const comum = await servico.avisar({ agenteId: "tula", tipo: "aviso", titulo: "Orçamento em 82%" });
+    const erro = await servico.avisar({ agenteId: "tula", tipo: "erro", titulo: "Extrato não importou" });
     expect(comum.vistaEm).not.toBeNull();
     expect(casca.mostrados.map((m) => m.id)).toEqual([erro.id]);
     expect(servico.naoVistas().map((x) => x.id)).toEqual([erro.id]);
@@ -213,7 +213,9 @@ describe("avisar", () => {
     servico.restaurar({ agenteId: "nuno" });
     expect(servico.preferenciaDe("nuno", "aviso")).toMatchObject({ nivel: "tudo", canal: "dock" });
     servico.restaurar({ agenteId: null });
-    expect(servico.preferenciaDe("nuno", "aviso")).toEqual({ nivel: "so_o_que_precisa", canal: "ambos" });
+    // Sem nada gravado, cada um volta ao padrão de fábrica: o Nuno avisa tudo, a Alba só o que precisa.
+    expect(servico.preferenciaDe("nuno", "aviso")).toEqual({ nivel: "tudo", canal: "ambos" });
+    expect(servico.preferenciaDe("alba", "aviso")).toEqual({ nivel: "so_o_que_precisa", canal: "ambos" });
     expect(eventos.estados).toHaveLength(4);
   });
 
@@ -649,8 +651,9 @@ describe("aviso de contexto do Nuno", () => {
     expect(montado.linhas()).toHaveLength(2);
   });
 
-  test('no padrão ("só o que precisa de mim") o aviso comum fica só registrado', async () => {
+  test('com o Nuno em "só o que precisa de mim", o aviso de contexto fica só registrado', async () => {
     const montado = montar();
+    montado.servico.definir({ agenteId: "nuno", nivel: "so_o_que_precisa", canal: "ambos" });
     avisarContexto(montado.servico)(contexto("s2"));
     await assentar();
     expect(montado.linhas()).toEqual([
@@ -696,6 +699,23 @@ describe("aviso do vigia do Nuno", () => {
     expect(montado.casca.mostrados).toEqual([
       expect.objectContaining({ agente: "Nuno", titulo: doVigia.titulo }),
     ]);
+  });
+
+  test("sem preferência gravada, o padrão do Nuno é tudo: ponto no dock e aviso do Windows", async () => {
+    const montado = montar();
+    avisarDoVigia(montado.servico)(doVigia);
+    await assentar();
+    expect(carimbo(montado.db)).toEqual([expect.objectContaining({ canal: "ambos", vista_em: null })]);
+    expect(montado.servico.naoVistas()).toEqual([expect.objectContaining({ referencia: "vigia:nuno:e1" })]);
+    expect(montado.casca.mostrados).toEqual([
+      expect.objectContaining({ agente: "Nuno", titulo: doVigia.titulo }),
+    ]);
+    expect(
+      montado.servico
+        .obter()
+        .preferencias.filter((p) => p.agenteId === "nuno")
+        .map((p) => p.nivel),
+    ).toEqual(["tudo", "tudo", "tudo", "tudo", "tudo"]);
   });
 
   test('com "nada" para o Nuno, fica só no histórico: sem ponto e sem Windows', async () => {

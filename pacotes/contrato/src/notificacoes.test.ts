@@ -5,6 +5,7 @@ import {
   Notificacao,
   PedidoMarcarVistas,
   PREFERENCIA_PADRAO,
+  preferenciaPadrao,
   PreferenciaNotificacao,
   TIPOS_QUE_PRECISAM,
   TipoNotificacao,
@@ -27,6 +28,10 @@ describe("notificações", () => {
     expect(TipoNotificacao.options).toEqual(["aprovacao", "lembrete", "erro", "aviso", "rotina"]);
     expect(TIPOS_QUE_PRECISAM).toEqual(["aprovacao", "lembrete", "erro"]);
     expect(PREFERENCIA_PADRAO).toEqual({ nivel: "so_o_que_precisa", canal: "ambos" });
+    // O Nuno avisa tudo de fábrica (AreaNotificacoes.dc.html); os outros, só o que precisa.
+    expect(preferenciaPadrao("nuno")).toEqual({ nivel: "tudo", canal: "ambos" });
+    expect(preferenciaPadrao("alba")).toEqual(PREFERENCIA_PADRAO);
+    expect(preferenciaPadrao(null)).toEqual(PREFERENCIA_PADRAO);
   });
 
   test("aviso válido passa; sem título ou com canal desconhecido é recusado", () => {
