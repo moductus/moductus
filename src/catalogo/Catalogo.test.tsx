@@ -33,6 +33,11 @@ it("monta cada componente nos três temas, uma coluna por tema", () => {
       "contagem",
       "seletor",
       "marca",
+      "status",
+      "status-ponto",
+      "personagem-moldura",
+      "fala",
+      "aprovacao",
     ]) {
       expect(coluna.querySelector(`.${classe}`), `${coluna.dataset.tema}: ${classe}`).not.toBeNull();
     }

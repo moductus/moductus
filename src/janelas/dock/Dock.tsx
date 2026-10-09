@@ -5,6 +5,7 @@ import { Icone } from "../../componentes/Icone.tsx";
 import { Marca } from "../../componentes/Marca.tsx";
 import { AGENTES, DADOS_AGENTES } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
+import { CONVITE_MODELO, lerSituacao } from "../../componentes/personagem/situacao.ts";
 import { Contagem } from "../../componentes/Selo.tsx";
 import {
   useAwake,
@@ -15,13 +16,14 @@ import {
   useTelaCheia,
 } from "../../nativo/eventos.ts";
 import { useCanal } from "../../servico/conexao.ts";
+import { useSituacaoTime } from "../../servico/time.ts";
 import { AREAS_DOCK, DADOS_AREAS } from "../areas.ts";
 import { proximoIndice } from "./navegacao.ts";
 import { useRelogio } from "./relogio.ts";
 import "./Dock.css";
 
-/** Convite das cabeças do time enquanto nenhum modelo está conectado (fase 1). */
-export const CONVITE_AGENTES = "Conectar um modelo";
+/** Convite das cabeças do time enquanto nenhum modelo está conectado. */
+export const CONVITE_AGENTES = CONVITE_MODELO;
 
 /** Área aberta no painel lateral, para marcar o botão; `null` com o painel fechado. */
 function useAreaAberta(): string | null {
@@ -48,6 +50,7 @@ export function Dock() {
   const awake = useAwake();
   const servico = useServico();
   const canal = useCanal(servico);
+  const time = useSituacaoTime(canal);
   const config = useConfiguracaoDock();
   const aberta = useAreaAberta();
   const hora = useRelogio();
@@ -136,20 +139,26 @@ export function Dock() {
         aria-label="Time"
         data-ativo={aberta === "agentes" || undefined}
       >
-        {AGENTES.map((agente) => (
-          <button
-            key={agente}
-            type="button"
-            className="dock-agente"
-            data-agente={agente}
-            aria-label={`${DADOS_AGENTES[agente].nome}, dormindo. ${CONVITE_AGENTES}`}
-            aria-expanded={aberta === "agentes"}
-            title={`${DADOS_AGENTES[agente].nome} está dormindo. ${CONVITE_AGENTES}`}
-            onClick={() => void invoke("painel_abrir", { area: "agentes" })}
-          >
-            <Personagem agente={agente} modo="cabeca" tamanho="dock" estado="dormindo" moldura />
-          </button>
-        ))}
+        {AGENTES.map((agente) => {
+          // A cabeça segue o runtime: expressão e moldura do estado, e o status escrito no rótulo.
+          const { expressao, texto, dica } = lerSituacao(time[agente]);
+          const nome = DADOS_AGENTES[agente].nome;
+          const rotulo = dica ? `${nome}, ${texto}. ${dica}` : `${nome}, ${texto}`;
+          return (
+            <button
+              key={agente}
+              type="button"
+              className="dock-agente"
+              data-agente={agente}
+              aria-label={rotulo}
+              aria-expanded={aberta === "agentes"}
+              title={rotulo}
+              onClick={() => void invoke("painel_abrir", { area: "agentes" })}
+            >
+              <Personagem agente={agente} modo="cabeca" tamanho="dock" estado={expressao} moldura />
+            </button>
+          );
+        })}
       </div>
 
       <div className="dock-divisor" role="separator" />

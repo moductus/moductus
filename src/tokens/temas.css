@@ -56,6 +56,8 @@
   /* A janela flutuante tem 80 px (src-tauri/src/dock.rs): 8 de margem em volta dos 64 */
   --margem-dock-flutuante: 8px;
   --tamanho-ponto-estado: 6px;
+  /* Ponto do status nas linhas de sessão e de PR (Agentes.dc.html) */
+  --tamanho-ponto-status: 8px;
   /* O painel desenha o cartão afastado do dock, como no Main.dc.html */
   --margem-painel: 12px;
 
@@ -276,7 +278,8 @@
   --perigo: #b4443c;
   --capa: #d9d6cf;
 
-  --agente-alba: #9a6a1e;
+  /* Um tom abaixo do #9A6A1E do canvas: o nome da Alba na fala (12, sobre fundo-elevado) pede 4,5:1 */
+  --agente-alba: #96671d;
   --agente-tula: #2f7a52;
   --agente-faina: #a34e2e;
   --agente-nuno: #3f64a8;
@@ -328,7 +331,8 @@
 
   --agente-alba: #d9a55a;
   --agente-tula: #6fae8c;
-  --agente-faina: #d2805e;
+  /* Um tom acima do #D2805E do canvas: sobre o fundo-elevado do Vidro sólido pede 4,5:1 */
+  --agente-faina: #d48461;
   --agente-nuno: #7c9cd6;
 
   --raio-janela: 16px;

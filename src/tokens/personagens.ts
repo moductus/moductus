@@ -12,6 +12,8 @@ export const TAMANHO_PERSONAGEM = {
   vazio: 96,
   /** Cabeça nas missões dos Primeiros passos (Tutorial.dc.html). */
   missao: 26,
+  /** Cabeça na fala do agente (Conversas.dc.html). */
+  fala: 30,
   /** Corpo inteiro no time das boas-vindas (Uso1Boas.dc.html). */
   boasVindas: 116,
   /** Corpo inteiro na apresentação do time (Uso4Time.dc.html). */

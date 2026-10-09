@@ -1,0 +1,52 @@
+/* Status (Agentes.dc.html e Estados.dc.html): texto na cor do status, borda neutra. */
+.status {
+  --status-cor: var(--texto-3);
+  --status-ponto: var(--texto-3);
+
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--esp-6);
+  font-size: var(--tipo-11);
+  line-height: var(--altura-linha);
+  color: var(--status-cor);
+  white-space: nowrap;
+}
+
+.status[data-forma="selo"] {
+  padding: var(--esp-1) var(--esp-7);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-selo);
+}
+
+.status[data-forma="ponto"] {
+  font-size: var(--tipo-12);
+}
+
+.status-ponto {
+  flex: none;
+  width: var(--tamanho-ponto-status);
+  height: var(--tamanho-ponto-status);
+  border-radius: 50%;
+  background: var(--status-ponto);
+}
+
+/* Apagado (terminou, desligado): o ponto apaga; o texto fica no texto.3 para continuar legível. */
+.status[data-tom="apagado"] {
+  --status-ponto: var(--texto-apagado);
+}
+
+.status[data-tom="sucesso"] {
+  --status-cor: var(--sucesso);
+  --status-ponto: var(--sucesso);
+}
+
+.status[data-tom="aviso"] {
+  --status-cor: var(--aviso);
+  --status-ponto: var(--aviso);
+}
+
+.status[data-tom="perigo"] {
+  --status-cor: var(--perigo);
+  --status-ponto: var(--perigo);
+}

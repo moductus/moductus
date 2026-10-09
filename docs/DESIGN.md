@@ -25,7 +25,7 @@ Regras que valem para os três:
 - Elevação por borda de 1 px + uma sombra suave. Nunca sombras empilhadas.
 - Animação: entrada até 140 ms, saída até 90 ms, nada acima de 200 ms; duração zero quando o Windows pede menos animação.
 - Ícones de traço único, 1,6 px, no mesmo conjunto.
-- Texto com contraste mínimo de 4,5:1; status nunca só por cor (sempre acompanhado de texto ou forma). No Papel, `texto.3` e `aviso` ficaram um tom abaixo do canvas (`#6B6A64` e `#B5761A`) para passar sobre `fundo.ativo` e como texto de selo; `src/tokens/acessibilidade.test.ts` mede todos os pares.
+- Texto com contraste mínimo de 4,5:1; status nunca só por cor (sempre acompanhado de texto ou forma). No Papel, `texto.3` e `aviso` ficaram um tom abaixo do canvas (`#6B6A64` e `#B5761A`) para passar sobre `fundo.ativo` e como texto de selo; pelo mesmo motivo, o nome da Alba na fala do agente é `#96671D` no Papel (canvas `#9A6A1E`) e o da Faina é `#D48461` no Vidro (canvas `#D2805E`), para passar sobre `fundo.elevado`. `src/tokens/acessibilidade.test.ts` mede todos os pares.
 - Foco do teclado: anel de 2 px no token `--cor-foco` (o destaque do tema, 3:1 ou mais sobre todo fundo) em todo elemento interativo; no dock o anel fica por dentro do botão.
 - Alto contraste do Windows (`forced-colors`): cores do sistema; item atual, opção marcada e foco em `Highlight` (`src/tokens/alto-contraste.css`). Personagens e prévias de tema mantêm as próprias cores, como imagem.
 
