@@ -5,8 +5,9 @@
 //! morrer de repente, o Windows derruba o serviço também.
 //!
 //! Canal com o serviço pelo stdio, em linhas JSON: o serviço avisa `pronto` com a porta
-//! e pede credenciais (`{"tipo":"credencial","id",…}`) e variáveis do usuário
-//! (`{"tipo":"ambiente","id",…}`), respondidas no stdin.
+//! e pede credenciais (`{"tipo":"credencial","id",…}`), variáveis do usuário
+//! (`{"tipo":"ambiente","id",…}`) e avisos do Windows (`{"tipo":"notificacao","id",…}`),
+//! respondidos no stdin. Sem pedido, a casca manda no stdin o clique num aviso do Windows.
 
 use std::{
     io::{BufRead, BufReader, Write},
@@ -34,7 +35,7 @@ use windows::Win32::{
     },
 };
 
-use crate::{ambiente, credenciais};
+use crate::{ambiente, credenciais, notificacao};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "estado", rename_all = "lowercase")]
@@ -157,13 +158,23 @@ struct Mensagem {
     porta: Option<u16>,
 }
 
-fn responder(id: u64, resposta: serde_json::Value) {
-    let mut linha = resposta;
-    linha["id"] = id.into();
+fn escrever(linha: serde_json::Value) {
     if let Some(entrada) = ENTRADA.lock().unwrap().as_mut() {
         let _ = writeln!(entrada, "{linha}");
         let _ = entrada.flush();
     }
+}
+
+fn responder(id: u64, resposta: serde_json::Value) {
+    let mut linha = resposta;
+    linha["id"] = id.into();
+    escrever(linha);
+}
+
+/// Manda ao serviço um aviso que não responde a pedido (o clique num aviso do Windows). Sem o
+/// serviço de pé, o aviso se perde: o cartão continua no dock.
+pub fn avisar(aviso: serde_json::Value) {
+    escrever(aviso);
 }
 
 /// Lê o stdout do serviço até ele sair.
@@ -185,6 +196,13 @@ fn ouvir(app: &AppHandle, saida: std::process::ChildStdout, token: &str) {
             ("credencial", Some(id)) => {
                 let resposta = serde_json::from_str::<credenciais::Pedido>(&linha)
                     .map(credenciais::atender)
+                    .map(|r| serde_json::to_value(r).unwrap_or_default())
+                    .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
+                responder(id, resposta);
+            }
+            ("notificacao", Some(id)) => {
+                let resposta = serde_json::from_str::<notificacao::Pedido>(&linha)
+                    .map(notificacao::atender)
                     .map(|r| serde_json::to_value(r).unwrap_or_default())
                     .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
                 responder(id, resposta);

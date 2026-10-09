@@ -110,9 +110,6 @@ interface LinhaUso {
   fonte: FonteUso;
 }
 
-/** O agente que fala das sessões de IA; o aviso de contexto sai em nome dele. */
-const NUNO = "nuno";
-
 const paraProjeto = (l: LinhaProjeto): Projeto => ({
   id: l.id,
   nome: l.nome,
@@ -484,20 +481,6 @@ export class RepositorioSessoes {
     }));
   }
 
-  /**
-   * Guarda o aviso de contexto alto em `notificacoes` (migração 005), em nome do Nuno, com a
-   * sessão como referência. Quem entrega (aviso do Windows, ponto no dock) é a F2-20.
-   */
-  registrarAviso(aviso: AvisoContexto, agora: string): void {
-    this.db
-      .prepare(
-        `INSERT INTO notificacoes (id, do_agente_id, tipo, titulo, corpo, referencia, canal, criado_em,
-           atualizado_em, origem)
-         VALUES (?, ?, 'aviso', ?, ?, ?, 'dock', ?, ?, ?)`,
-      )
-      .run(novoId(), NUNO, aviso.titulo, aviso.corpo, `sessao:${aviso.sessaoId}`, agora, agora, ORIGEM);
-  }
-
   transacao<T>(fazer: () => T): T {
     this.db.exec("BEGIN");
     try {
@@ -520,7 +503,10 @@ export interface OpcoesSessoes {
    * vazio. O serviço passa `TRANSCRIPTS_DO_DISCO`.
    */
   transcripts?: Transcripts;
-  /** Recebe o aviso de contexto alto, depois de gravado. */
+  /**
+   * Recebe o aviso de contexto alto, uma vez por trecho, depois de gravar a leitura. Quem registra
+   * e entrega (ponto, aviso do Windows) é a área de notificações, em nome do Nuno.
+   */
   aoAvisarContexto?: (aviso: AvisoContexto) => void;
 }
 

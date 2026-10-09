@@ -261,23 +261,15 @@ describe("contexto e uso pelo transcript", () => {
         janelaTokens: DUZENTOS_K,
       },
     ]);
-    expect(avisosNoBanco(db)).toEqual([
-      {
-        do_agente_id: "nuno",
-        tipo: "aviso",
-        titulo: "Contexto em 80%",
-        corpo: avisos[0]?.corpo,
-        referencia: `sessao:${id}`,
-        canal: "dock",
-      },
-    ]);
+    // Quem registra e entrega o aviso é a área de notificações (main.ts), pela preferência do Nuno.
+    expect(avisosNoBanco(db)).toEqual([]);
 
     escrever(transcript, compactacao(12_000));
     await evento(depois, transcript, "SessionStart");
     expect(sessao(depois)?.contexto).toEqual({ usadoTokens: 12_000, janelaTokens: DUZENTOS_K });
     escrever(transcript, resposta("msg_5", 165_000));
     await evento(depois, transcript);
-    expect(avisosNoBanco(db)).toHaveLength(2);
+    expect(avisos).toHaveLength(2);
   });
 
   test("Opus 5.5 tem a janela de 1 milhão da tabela: 170 mil é 17%, sem aviso", async () => {

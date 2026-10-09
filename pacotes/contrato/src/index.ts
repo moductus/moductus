@@ -5,6 +5,7 @@ export * from "./comum.ts";
 export * from "./config.ts";
 export * from "./conversas.ts";
 export * from "./metodos.ts";
+export * from "./notificacoes.ts";
 export * from "./outro-pc.ts";
 export * from "./primeiro-uso.ts";
 export * from "./provedores.ts";

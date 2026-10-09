@@ -12,6 +12,7 @@ import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.t
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ambientePelaCasca } from "./casca/ambiente.ts";
+import { avisosPelaCasca, CLIQUE_NO_AVISO, lerClique } from "./casca/avisos.ts";
 import { CanalCasca } from "./casca/canal.ts";
 import { credenciaisPelaCasca } from "./casca/credenciais.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
@@ -22,6 +23,8 @@ import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
 import { abrirServidorMcp } from "./mcp/servidor.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
+import { avisarAprovacoes } from "./notificacoes/aprovacoes.ts";
+import { RepositorioNotificacoes, ServicoNotificacoes } from "./notificacoes/notificacoes.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
 import { fabricaClaudeCli, rotaPreToolUse, type AberturaMcp } from "./provedores/claude-cli/claude-cli.ts";
@@ -77,13 +80,58 @@ const outroPc = new ServicoOutroPc(config, banco, {
   versaoEsquema: MIGRACOES.length,
   pcOrigem: hostname(),
 });
+// Notificações (F2-20): preferência por agente e tipo, ponto no dock e aviso do Windows pela casca.
+const agentesDoTime = new RepositorioAgentes(banco);
+const notificacoes = new ServicoNotificacoes(
+  new RepositorioNotificacoes(banco),
+  {
+    agentes: () => agentesDoTime.agentes().map((a) => ({ id: a.id, nome: a.nome })),
+    silencio: () => config.obter().config.silencio,
+    windows: avisosPelaCasca(canal),
+  },
+  {
+    estado: (estado) => servidor?.emitir("notificacoes.mudou", estado),
+    nova: (notificacao) => servidor?.emitir("notificacoes.nova", notificacao),
+    naoVistas: (lista) => servidor?.emitir("notificacoes.naoVistas", lista),
+  },
+);
+const avisarAprovacao = avisarAprovacoes(
+  notificacoes,
+  (pedido) => aprovacoes.decidir(pedido),
+  (id) => agentesDoTime.agente(id)?.nome ?? null,
+);
+canal.aoReceber(CLIQUE_NO_AVISO, (aviso) => {
+  const clique = lerClique(aviso);
+  if (!clique) return;
+  notificacoes
+    .aoClicar(clique.id, clique.botao)
+    .catch((erro: unknown) => console.error(`notificações: clique no aviso falhou: ${String(erro)}`));
+});
 const sessoes = new ServicoSessoes(
   new RepositorioSessoes(banco),
   (mudanca) => servidor?.emitir("sessoes.mudou", mudanca),
-  { transcripts: TRANSCRIPTS_DO_DISCO },
+  {
+    transcripts: TRANSCRIPTS_DO_DISCO,
+    aoAvisarContexto: (aviso) =>
+      void notificacoes
+        .avisar({
+          agenteId: "nuno",
+          tipo: "aviso",
+          titulo: aviso.titulo,
+          corpo: aviso.corpo,
+          referencia: `sessao:${aviso.sessaoId}`,
+          origem: "conexao",
+        })
+        .catch((erro: unknown) => console.error(`notificações: aviso de contexto falhou: ${String(erro)}`)),
+  },
 );
 const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {
-  aprovacao: (aprovacao) => servidor?.emitir("aprovacoes.mudou", aprovacao),
+  aprovacao: (aprovacao) => {
+    servidor?.emitir("aprovacoes.mudou", aprovacao);
+    avisarAprovacao(aprovacao).catch((erro: unknown) =>
+      console.error(`notificações: aviso da aprovação falhou: ${String(erro)}`),
+    );
+  },
   regras: (regras) => servidor?.emitir("regras.mudou", regras),
 });
 // Quem segurava a resposta dos hooks do terminal era o serviço que caiu: esses cartões expiram.
@@ -211,6 +259,12 @@ servidor = await abrirServidorWs(token, {
   "conversas.mensagens": (pedido) => conversas.mensagens(pedido),
   "conversas.enviar": (pedido) => conversas.enviar(pedido),
   "conversas.arquivar": (pedido) => conversas.arquivar(pedido),
+  "notificacoes.obter": () => notificacoes.obter(),
+  "notificacoes.definir": (mudanca) => notificacoes.definir(mudanca),
+  "notificacoes.restaurar": (pedido) => notificacoes.restaurar(pedido),
+  "notificacoes.listar": (pedido) => notificacoes.listar(pedido),
+  "notificacoes.naoVistas": () => notificacoes.naoVistas(),
+  "notificacoes.marcarVistas": (pedido) => notificacoes.marcarVistas(pedido),
   // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
   ...semAtendente([
     "agentes.definir",

@@ -161,3 +161,73 @@
 .config-mudanca-de {
   color: var(--texto-3);
 }
+
+/* ---------- Notificações (AreaNotificacoes.dc.html) ---------- */
+.config-notificacao-controles {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--esp-6);
+}
+
+.config-horario {
+  display: flex;
+  gap: var(--esp-12);
+  padding: var(--esp-8) 0;
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+/* Prévia do aviso do Windows: o cartão do toast, sem ação. */
+.config-previa-aviso {
+  display: flex;
+  gap: var(--esp-12);
+  max-width: var(--largura-previa-aviso);
+  padding: var(--esp-12);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-elevado);
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.config-previa-aviso-textos {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-4);
+}
+
+.config-previa-aviso-cabeca {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.config-previa-aviso-titulo {
+  font-size: var(--tipo-13);
+  font-weight: var(--peso-forte);
+  color: var(--texto);
+}
+
+.config-previa-aviso-botoes {
+  display: flex;
+  gap: var(--esp-8);
+  margin-top: var(--esp-6);
+}
+
+.config-previa-aviso-botoes > span {
+  flex: 1;
+  padding: var(--esp-6) var(--esp-8);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-controle);
+  text-align: center;
+  color: var(--texto);
+}
+
+.config-previa-aviso-botoes > [data-primario] {
+  border-color: transparent;
+  background: var(--destaque);
+  color: var(--sobre-destaque);
+  font-weight: var(--peso-forte);
+}

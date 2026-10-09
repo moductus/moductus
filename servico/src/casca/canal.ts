@@ -3,7 +3,8 @@ import { createInterface } from "node:readline";
 /**
  * Canal com a casca pelo stdio do sidecar, em linhas JSON.
  * - serviço -> casca (stdout): avisos ({ tipo: "pronto", porta }) e pedidos com id;
- * - casca -> serviço (stdin): respostas com o mesmo id.
+ * - casca -> serviço (stdin): respostas com o mesmo id e avisos sem pedido, pelo `tipo`
+ *   (o clique num aviso do Windows).
  * O stdout é só do canal; log vai para o stderr.
  */
 export interface Saida {
@@ -13,6 +14,7 @@ export interface Saida {
 export class CanalCasca {
   private proximo = 1;
   private pendentes = new Map<number, (resposta: Record<string, unknown>) => void>();
+  private ouvintes = new Map<string, (aviso: Record<string, unknown>) => void>();
 
   constructor(private readonly saida: Saida) {}
 
@@ -35,7 +37,13 @@ export class CanalCasca {
     });
   }
 
-  /** Entrega uma linha recebida da casca ao pedido que espera por ela. */
+  /** Recebe os avisos da casca que não respondem a pedido, pelo `tipo`; devolve como parar. */
+  aoReceber(tipo: string, ouvinte: (aviso: Record<string, unknown>) => void): () => void {
+    this.ouvintes.set(tipo, ouvinte);
+    return () => this.ouvintes.delete(tipo);
+  }
+
+  /** Entrega uma linha recebida da casca ao pedido que espera por ela, ou a quem ouve o tipo. */
   receber(linha: string): void {
     let mensagem: Record<string, unknown>;
     try {
@@ -48,6 +56,10 @@ export class CanalCasca {
     if (resolver) {
       this.pendentes.delete(id);
       resolver(mensagem);
+      return;
+    }
+    if (typeof mensagem.tipo === "string" && mensagem.id === undefined) {
+      this.ouvintes.get(mensagem.tipo)?.(mensagem);
     }
   }
 
