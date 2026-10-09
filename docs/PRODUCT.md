@@ -2,7 +2,7 @@
 
 > Um sistema pessoal para o Windows: fica sempre à mão num dock lateral, e um time de agentes de IA — com o modelo que você escolher — cuida das suas demandas, finanças, código e memória.
 
-**Status:** pivô em desenho. A suíte de utilitários (`v0.4.0`) foi o produto até aqui; o registro dela está em [v0/](v0/). Este documento descreve o produto novo e é a fonte de verdade a partir de agora.
+**Status:** fase 1 concluída (`v0.5.0-alpha`, a casca); próxima: fase 2. A suíte de utilitários (`v0.4.0`) foi o produto até aqui; o registro dela está em [v0/](v0/). Este documento descreve o produto novo e é a fonte de verdade a partir de agora.
 **Última revisão:** outubro de 2026
 
 ---
@@ -248,10 +248,10 @@ Todos configuráveis, com detecção de conflito.
 
 ## 10. Roadmap
 
-### Fase 0 — Desenho
+### Fase 0 — Desenho ✓
 Este documento, [ARCHITECTURE.md](ARCHITECTURE.md), [AGENTS.md](AGENTS.md) e [DESIGN.md](DESIGN.md). Identidade visual nova, com três temas.
 
-### Fase 1 — A casca
+### Fase 1 — A casca ✓ (`v0.5.0-alpha`)
 Projeto Tauri, dock lateral com os três modos e detecção de tela cheia, Sistema com navegação vazia, banco e migrações, configurações, atalhos, bandeja, autostart. Mídia e os controles diretos (Mic, Awake) já entram aqui: são simples e tornam o dock útil desde o primeiro dia. Entram também a configuração do primeiro uso e exportar e importar configurações.
 
 ### Fase 2 — Os agentes começam a trabalhar
