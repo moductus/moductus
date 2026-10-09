@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import pacote from "../../package.json" with { type: "json" };
-import { atenderMensagem, ERRO_JSON_RPC, erroJsonRpc, type ExecucaoMcp } from "./protocolo.ts";
+import { atenderMensagem, ERRO_JSON_RPC, erroJsonRpc, VERSOES_MCP, type ExecucaoMcp } from "./protocolo.ts";
 
 /**
  * Servidor MCP do Moductus (AGENTS.md §3 e §4, ADR-0014): HTTP "streamable" dentro do serviço, em
@@ -112,6 +112,13 @@ export function abrirServidorMcp(porta = 0): Promise<ServidorMcp> {
     if (!execucao) {
       console.error("mcp: pedido sem acesso válido recusado");
       return recusar(res, 401, RECUSA_TOKEN_MCP);
+    }
+    // Depois do initialize o cliente diz a versão combinada; versão que este servidor não fala é
+    // 400 (especificação 2025-06-18). Sem o cabeçalho, vale 2025-03-26, que este servidor atende
+    // do mesmo jeito.
+    const versao = req.headers["mcp-protocol-version"];
+    if (versao !== undefined && !(VERSOES_MCP as readonly string[]).includes(String(versao))) {
+      return recusar(res, 400, "versão do protocolo MCP não suportada");
     }
 
     let texto: string | null;

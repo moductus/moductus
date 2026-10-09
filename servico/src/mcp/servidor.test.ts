@@ -177,6 +177,23 @@ describe("servidor MCP do Moductus", () => {
     expect(inicio.result?.protocolVersion).toBe(VERSOES_MCP[0]);
   });
 
+  test("cabeçalho MCP-Protocol-Version: versão desconhecida é 400; conhecida ou ausente, segue", async () => {
+    const s = await servidor();
+    const acesso = s.abrir(execucao([]));
+    const auth = { authorization: `Bearer ${acesso.token}` };
+    const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
+
+    const desconhecida = await postar(acesso.url, ping, { ...auth, "mcp-protocol-version": "2099-01-01" });
+    expect(desconhecida.status).toBe(400);
+    expect(await desconhecida.text()).toBe("versão do protocolo MCP não suportada");
+
+    for (const versao of VERSOES_MCP) {
+      expect((await postar(acesso.url, ping, { ...auth, "mcp-protocol-version": versao })).status).toBe(200);
+    }
+    // Sem o cabeçalho, é um cliente de 2025-03-26: atendido normalmente.
+    expect((await postar(acesso.url, ping, auth)).status).toBe(200);
+  });
+
   test("cada execução só enxerga e só roda as ferramentas dela", async () => {
     const s = await servidor();
     const doNuno = s.abrir(execucao(["sessoes.*"]));

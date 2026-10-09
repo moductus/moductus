@@ -96,6 +96,17 @@ export function montarPrompt(pedido: PedidoDoAgente): string {
   return `Conversa até aqui:\n${historico.join("\n")}\n\nMensagem nova:\n${novas.join("\n\n")}`;
 }
 
+/**
+ * O ambiente do processo do CLI: o do serviço sem nenhuma variável `MODUCTUS_*` (token do canal
+ * das janelas, pasta de dados...), porque hooks e plugins do usuário rodam dentro do CLI e as
+ * herdariam. Só entra o acesso ao MCP desta execução, quando houver.
+ */
+export function ambienteDoCli(base: NodeJS.ProcessEnv, acessoMcp: string | null): NodeJS.ProcessEnv {
+  const ambiente = Object.fromEntries(Object.entries(base).filter(([nome]) => !/^MODUCTUS_/i.test(nome)));
+  if (acessoMcp !== null) ambiente[VARIAVEL_ACESSO_MCP] = acessoMcp;
+  return ambiente;
+}
+
 /** `mcpUrl` é o endereço do acesso aberto para esta execução; sem ele, nenhuma ferramenta. */
 export function argumentosDoClaude(
   pedido: PedidoDoAgente,
@@ -204,7 +215,7 @@ export class ProvedorClaudeCli implements Provedor {
     const iniciar: IniciarProcesso = this.opcoes.iniciar ?? ((args, o) => spawn(comando, args, o));
     const processo = iniciar(argumentosDoClaude(pedido, this.config, acesso?.url ?? null), {
       cwd: this.opcoes.pasta,
-      env: acesso ? { ...process.env, [VARIAVEL_ACESSO_MCP]: acesso.token } : { ...process.env },
+      env: ambienteDoCli(process.env, acesso?.token ?? null),
       windowsHide: true,
     });
     const saida = new Promise<{ codigo: number | null; erro: Error | null }>((resolve) => {

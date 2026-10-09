@@ -16,8 +16,13 @@ process.stdin.on("data", (pedaco) => (entrada += pedaco));
 process.stdin.on("end", () => {
   // Do token do MCP só se anota se chegou; o valor nunca vai para o arquivo.
   const temAcessoMcp = process.env.MODUCTUS_MCP_ACESSO !== undefined;
+  // Das outras variáveis do Moductus (token do canal, pasta), só os nomes que chegaram.
+  const variaveisMoductus = Object.keys(process.env).filter((nome) => /^MODUCTUS_/i.test(nome));
   if (anotacao !== "-")
-    writeFileSync(anotacao, JSON.stringify({ argumentos, entrada, pasta: process.cwd(), temAcessoMcp }));
+    writeFileSync(
+      anotacao,
+      JSON.stringify({ argumentos, entrada, pasta: process.cwd(), temAcessoMcp, variaveisMoductus }),
+    );
   const linhas = saida === "-" ? [] : readFileSync(saida, "utf8").split(/\r?\n/).filter(Boolean);
   for (const linha of linhas) process.stdout.write(linha + "\n");
   if (modo === "pendurar") setInterval(() => {}, 60_000);

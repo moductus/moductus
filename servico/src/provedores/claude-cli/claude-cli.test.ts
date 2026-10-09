@@ -3,12 +3,13 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { ferramenta, oferecida } from "../../ferramentas/ferramenta.ts";
 import type { ConfigProvedor, EventoAgente, PedidoDoAgente } from "../provedor.ts";
 import { RegistroProvedores } from "../registro.ts";
 import {
+  ambienteDoCli,
   argumentosDoClaude,
   fabricaClaudeCli,
   type AberturaMcp,
@@ -68,6 +69,8 @@ interface Anotacao {
   entrada: string;
   pasta: string;
   temAcessoMcp: boolean;
+  /** Só os nomes das variáveis `MODUCTUS_*` que chegaram ao CLI, nunca os valores. */
+  variaveisMoductus: string[];
 }
 
 /**
@@ -166,6 +169,36 @@ describe("adaptador Claude Code CLI", () => {
     const semMcp = comCliFalso([gravada("sessao-com-ferramenta.jsonl")]);
     await coletar(semMcp.provedor.executar(pedido(), new AbortController().signal));
     expect(semMcp.anotado().temAcessoMcp).toBe(false);
+  });
+
+  test("o CLI não herda o token do canal nem outra variável MODUCTUS_*, só o acesso ao MCP", async () => {
+    vi.stubEnv("MODUCTUS_TOKEN", "token-do-canal-das-janelas");
+    vi.stubEnv("MODUCTUS_PASTA", pasta);
+    vi.stubEnv("MODUCTUS_PORTABLE", "1");
+    // Um acesso velho no ambiente do serviço também não passa.
+    vi.stubEnv("MODUCTUS_MCP_ACESSO", "acesso-velho");
+    try {
+      const mcp: AberturaMcp = {
+        abrir: () => ({ url: "http://127.0.0.1:47822/mcp", token: "acesso-novo", fechar: () => {} }),
+      };
+      const comMcp = comCliFalso([gravada("sessao-com-ferramenta.jsonl")], "normal", { mcp });
+      await coletar(comMcp.provedor.executar(pedido(), new AbortController().signal));
+      expect(comMcp.anotado().variaveisMoductus).toEqual(["MODUCTUS_MCP_ACESSO"]);
+
+      const semMcp = comCliFalso([gravada("sessao-com-ferramenta.jsonl")]);
+      await coletar(semMcp.provedor.executar(pedido(), new AbortController().signal));
+      expect(semMcp.anotado().variaveisMoductus).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("ambiente do CLI: tira MODUCTUS_* em qualquer caixa e põe o acesso desta execução", () => {
+    const ambiente = ambienteDoCli(
+      { PATH: "C:\\bin", Moductus_Token: "x", MODUCTUS_MCP_ACESSO: "velho", USERPROFILE: "C:\\u" },
+      "novo",
+    );
+    expect(ambiente).toEqual({ PATH: "C:\\bin", USERPROFILE: "C:\\u", MODUCTUS_MCP_ACESSO: "novo" });
   });
 
   test("sessão do --resume sumiu: recomeça sem --resume, com o histórico curto", async () => {
