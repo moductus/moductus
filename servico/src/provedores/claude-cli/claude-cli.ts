@@ -68,7 +68,7 @@ export interface OpcoesClaudeCli {
  * pedido, rodadas pelo `executarFerramenta` dele, com um token que vale até `fechar`.
  */
 export interface AberturaMcp {
-  abrir(execucao: Pick<PedidoDoAgente, "ferramentas" | "executarFerramenta">): {
+  abrir(execucao: Pick<PedidoDoAgente, "execucaoId" | "ferramentas" | "executarFerramenta">): {
     url: string;
     token: string;
     fechar(): void;

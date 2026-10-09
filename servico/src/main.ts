@@ -5,6 +5,7 @@ import { VERSAO_PROTOCOLO, type EstadoConfig } from "@moductus/contrato";
 import { RepositorioAgentes, ServicoAgentes } from "./agentes/agentes.ts";
 import { autorizarPorAprovacao } from "./agentes/autorizar.ts";
 import { RepositorioExecucoes, ServicoExecucoes } from "./agentes/execucoes.ts";
+import { aberturaMcpDoRuntime } from "./agentes/mcp.ts";
 import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
@@ -17,10 +18,11 @@ import { RepositorioConexoes, ServicoConexoes } from "./conexoes/conexoes.ts";
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
+import { abrirServidorMcp } from "./mcp/servidor.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
-import { fabricaClaudeCli } from "./provedores/claude-cli/claude-cli.ts";
+import { fabricaClaudeCli, type AberturaMcp } from "./provedores/claude-cli/claude-cli.ts";
 import { RegistroProvedores } from "./provedores/registro.ts";
 import { caminhoSettingsClaude, LigacaoClaudeCode } from "./sessoes/ligacao.ts";
 import { atenderHooks } from "./sessoes/permissao.ts";
@@ -104,17 +106,29 @@ const conexoes = new ServicoConexoes(
 
 /**
  * Os adaptadores de modelo que esta versão tem. O CLI roda numa pasta própria, para não herdar
- * CLAUDE.md nem `.claude/` de um projeto qualquer; o MCP do Moductus (F2-11) entra aqui, nas
- * opções do adaptador.
+ * CLAUDE.md nem `.claude/` de um projeto qualquer, e recebe as ferramentas do agente pelo MCP do
+ * Moductus. Sem o MCP, o agente ainda conversa, só sem ferramentas.
  */
-function registrarProvedores(): RegistroProvedores {
+function registrarProvedores(mcp: AberturaMcp | undefined): RegistroProvedores {
   const pastaDoClaudeCli = join(pastaDeDados(), "claude-cli");
   mkdirSync(pastaDoClaudeCli, { recursive: true });
-  return new RegistroProvedores().registrar("claude-cli", fabricaClaudeCli({ pasta: pastaDoClaudeCli }));
+  return new RegistroProvedores().registrar("claude-cli", fabricaClaudeCli({ pasta: pastaDoClaudeCli, mcp }));
 }
 
+// Servidor MCP do Moductus (F2-11): cada execução em CLI abre o próprio acesso, e as chamadas rodam
+// pelo executor da execução no runtime (escopo, cartão e registro).
+const servidorMcp = await abrirServidorMcp().catch((erro: unknown) => {
+  console.error(`MCP do Moductus fora do ar: ${String(erro)}`);
+  return null;
+});
+if (servidorMcp) console.error(`MCP do Moductus na porta ${servidorMcp.porta}`);
+
 // Runtime dos agentes (F2-15).
-const provedores = registrarProvedores();
+const provedores = registrarProvedores(
+  servidorMcp
+    ? aberturaMcpDoRuntime(servidorMcp, (execucaoId) => runtime.executorDaExecucao(execucaoId))
+    : undefined,
+);
 const catalogo = new Catalogo();
 const repositorioAgentes = new RepositorioAgentes(banco);
 const repositorioExecucoes = new RepositorioExecucoes(banco);
