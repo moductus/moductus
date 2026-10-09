@@ -9,6 +9,7 @@ import { aberturaMcpDoRuntime } from "./agentes/mcp.ts";
 import { classificadorPeloRuntime, Roteador } from "./agentes/roteador.ts";
 import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
 import { gravarAvisoDoNuno, VigiaNuno } from "./agentes/vigias/nuno.ts";
+import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
@@ -260,6 +261,21 @@ sessoes.vigiar();
 aprovacoes.vigiar();
 // GitHub pelo `gh` (F2-25): lê agora e a cada 15 min, se a conexão não estiver desligada.
 github.vigiar();
+// Agendador (F2-17): horário, intervalo e evento. As áreas avisam os eventos internos por
+// `agendador.emitir` (o tipo `EmitirEvento`). Na volta da suspensão (a casca avisa), depois do
+// prazo para a rede voltar, o que venceu dispara uma vez só e o GitHub é lido (AGENTS.md §6).
+const agendador = new Agendador({
+  agentes: repositorioAgentes,
+  disparos: new RepositorioDisparos(banco),
+  runtime,
+});
+agendador.vigiar();
+canal.aoAvisar("retomou", () => {
+  agendador
+    .retomar()
+    .then(() => github.atualizar("conexao"))
+    .catch((erro: unknown) => console.error(`github: leitura na retomada falhou: ${String(erro)}`));
+});
 tokenDosHooks(credenciaisPelaCasca(canal))
   .then((tokenHooks) => abrirReceptorHooks(tokenHooks, atenderHooks(sessoes, aprovacoes), portaDosHooks()))
   .then((receptor) => console.error(`hooks das sessões na porta ${receptor.porta}`))
