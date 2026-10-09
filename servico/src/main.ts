@@ -1,4 +1,5 @@
 import { hostname } from "node:os";
+import { join } from "node:path";
 import { VERSAO_PROTOCOLO, type EstadoConfig } from "@moductus/contrato";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
@@ -72,7 +73,11 @@ aprovacoes.expirarDoTerminal();
 const conexoes = new ServicoConexoes(
   new RepositorioConexoes(banco),
   {
-    ligacao: new LigacaoClaudeCode({ caminho: caminhoSettingsClaude(), porta: portaDosHooks() }),
+    ligacao: new LigacaoClaudeCode({
+      caminho: caminhoSettingsClaude(),
+      porta: portaDosHooks(),
+      memoria: join(pastaDeDados(), "ligacao-claude-code.json"),
+    }),
     ambiente: ambientePelaCasca(canal),
     token: () => tokenDosHooks(credenciaisPelaCasca(canal)),
   },

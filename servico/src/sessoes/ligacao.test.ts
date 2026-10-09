@@ -1,6 +1,18 @@
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { MudancaArquivo } from "@moductus/contrato";
 import { afterEach, describe, expect, test } from "vitest";
 import {
@@ -25,21 +37,29 @@ afterEach(() => {
   for (const p of pastas.splice(0)) rmSync(p, { recursive: true, force: true });
 });
 
-/** Um `settings.json` numa pasta temporária: nunca o do usuário desta máquina. */
-function montar(conteudo?: string) {
+/**
+ * Um `settings.json` numa pasta temporária: nunca o do usuário desta máquina. A memória de antes
+ * de ligar vai para outra pasta temporária, como a pasta de dados do Moductus; `semMemoria`
+ * simula a memória perdida. `relogioParado` faz todas as cópias caírem no mesmo milissegundo.
+ */
+function montar(conteudo?: string, opcoes: { semMemoria?: boolean; relogioParado?: boolean } = {}) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-ligacao-"));
   pastas.push(pasta);
   const caminho = join(pasta, "settings.json");
   if (conteudo !== undefined) writeFileSync(caminho, conteudo, "utf8");
   let agora = new Date("2026-10-09T12:00:00.000Z");
-  const ligacao = new LigacaoClaudeCode({
-    caminho,
-    porta: PORTA,
-    agora: () => (agora = new Date(agora.getTime() + 1000)),
-  });
+  const memoria = opcoes.semMemoria ? undefined : join(pasta, "dados-moductus", "ligacao-claude-code.json");
+  const nova = () =>
+    new LigacaoClaudeCode({
+      caminho,
+      porta: PORTA,
+      memoria,
+      agora: () => (opcoes.relogioParado ? agora : (agora = new Date(agora.getTime() + 1000))),
+    });
+  const ligacao = nova();
   const ler = () => readFileSync(caminho, "utf8");
   const copias = () => readdirSync(pasta).filter((f) => f.endsWith(".bak"));
-  return { pasta, caminho, ligacao, ler, copias };
+  return { pasta, caminho, ligacao, nova, ler, copias };
 }
 
 /** Hooks do próprio usuário, que o Moductus nunca pode tocar. */
@@ -132,8 +152,8 @@ describe("ligar e desligar o Claude Code no settings.json", () => {
     expect(copias()).toHaveLength(1);
   });
 
-  test("cópia de segurança antes de cada escrita, com o conteúdo de antes; ficam só as últimas", () => {
-    const { ligacao, ler, copias } = montar(ORIGINAL);
+  test("cópia de segurança antes de cada escrita, com o conteúdo de antes; ficam a primeira e as últimas", () => {
+    const { ligacao, ler, copias, pasta } = montar(ORIGINAL);
     const { copia } = ligacao.ligar();
     expect(copia).not.toBeNull();
     expect(readFileSync(copia ?? "", "utf8")).toBe(ORIGINAL);
@@ -144,21 +164,45 @@ describe("ligar e desligar o Claude Code no settings.json", () => {
       ligacao.ligar();
       ligacao.desligar();
     }
-    expect(copias()).toHaveLength(COPIAS_GUARDADAS);
+    const guardadas = copias().sort();
+    expect(guardadas).toHaveLength(COPIAS_GUARDADAS + 1);
     expect(
-      copias().every((f) => /^settings\.json\.moductus-2026-10-09T12-\d\d-\d\d-000Z\.bak$/.test(f)),
+      guardadas.every((f) => /^settings\.json\.moductus-2026-10-09T12-\d\d-\d\d-000Z\.bak$/.test(f)),
     ).toBe(true);
+    // A primeira é o arquivo de antes do Moductus, e não sai.
+    expect(guardadas[0]).toBe(basename(copia ?? ""));
+    expect(readFileSync(join(pasta, guardadas[0] ?? ""), "utf8")).toBe(ORIGINAL);
   });
 
-  test("sem settings.json, ligar cria o arquivo só com os hooks; sem cópia, que não havia o que copiar", () => {
-    const { ligacao, caminho, ler } = montar();
+  test("cópias no mesmo milissegundo: o sufixo conta como número, e a primeira fica", () => {
+    const { ligacao, copias } = montar(ORIGINAL, { relogioParado: true });
+    for (let i = 0; i < 6; i++) {
+      ligacao.ligar();
+      ligacao.desligar();
+    }
+    const base = "settings.json.moductus-2026-10-09T12-00-00-000Z";
+    expect(copias().sort()).toEqual(
+      [`${base}.bak`, ...[8, 9, 10, 11, 12].map((n) => `${base}-${n}.bak`)].sort(),
+    );
+  });
+
+  test("sem settings.json, ligar cria o arquivo só com os hooks; desligar apaga o que o Moductus criou", () => {
+    const { ligacao, caminho, ler, copias } = montar();
     expect(ligacao.previa().antes).toBeNull();
     expect(ligacao.ligar()).toEqual({ mudou: true, copia: null });
     expect(Object.keys(JSON.parse(ler()) as object)).toEqual(["hooks"]);
     expect(ler().endsWith("}\n")).toBe(true);
+    expect(ligacao.desligar()).toEqual({ mudou: true, copia: null });
+    expect(existsSync(caminho)).toBe(false);
+    expect(copias()).toHaveLength(0);
+  });
+
+  test("arquivo criado pelo Moductus que ganhou outra chave depois não é apagado ao desligar", () => {
+    const { ligacao, caminho, ler } = montar();
+    ligacao.ligar();
+    writeFileSync(caminho, trocarChaveRaiz(ler(), "model", "opus"), "utf8");
     ligacao.desligar();
-    expect(existsSync(caminho)).toBe(true);
-    expect(JSON.parse(ler())).toEqual({});
+    expect(JSON.parse(ler())).toEqual({ model: "opus" });
   });
 
   test("arquivo que não é JSON não é tocado: nem prévia, nem ligar, nem desligar", () => {
@@ -185,6 +229,99 @@ describe("ligar e desligar o Claude Code no settings.json", () => {
     expect(previa.depois).not.toContain("MINHA_CHAVE");
     expect(ler()).toBe(ORIGINAL);
     expect(copias()).toHaveLength(0);
+  });
+});
+
+describe("o bloco hooks volta como era", () => {
+  test("bloco compacto em arquivo recuado, escapes, 5.0, {} e lista vazia voltam idênticos", () => {
+    const originais = [
+      '{\n  "model": "opus",\n  "hooks": {"Stop":[{"hooks":[{"type":"command","command":"echo"}]}]}\n}\n',
+      '{\n  "hooks": {\n    "Stop": [{ "hooks": [{ "type": "command", "command": "caf\\u00e9", "timeout": 5.0 }] }]\n  }\n}',
+      '{"hooks": {}}',
+      '{"hooks": {"Stop": []}}',
+      '{\r\n\t"hooks": {\r\n\t\t"PreToolUse": [],\r\n\t\t"Stop": []\r\n\t},\r\n\t"x": 1\r\n}\r\n',
+    ];
+    for (const original of originais) {
+      const { ligacao, ler } = montar(original);
+      for (let volta = 0; volta < 2; volta++) {
+        ligacao.ligar();
+        expect(ligacao.situacao()).toBe("ligada");
+        ligacao.desligar();
+        expect(ler()).toBe(original);
+      }
+    }
+  });
+
+  test("a memória sobrevive a reinício do serviço e religar por troca de porta mantém a de antes", () => {
+    const original = '{"hooks": {"Stop": []}, "model": "opus"}';
+    const { ligacao, nova, caminho, ler } = montar(original);
+    ligacao.ligar();
+    new LigacaoClaudeCode({ caminho, porta: 50000 }).ligar(); // sem memória: não pode apagar a de antes
+    nova().ligar();
+    nova().desligar();
+    expect(ler()).toBe(original);
+  });
+
+  test("hooks do usuário mudados enquanto ligado: desligar tira só o do Moductus e guarda a mudança", () => {
+    const original = '{"hooks": {"Stop": []}}';
+    const { ligacao, caminho, ler } = montar(original);
+    ligacao.ligar();
+    const ligado = JSON.parse(ler()) as { hooks: Record<string, unknown[]> };
+    const meu = { hooks: [{ type: "command", command: "echo novo" }] };
+    ligado.hooks.Stop = [meu, ...(ligado.hooks.Stop ?? [])];
+    writeFileSync(caminho, JSON.stringify(ligado), "utf8");
+    ligacao.desligar();
+    expect(JSON.parse(ler())).toEqual({ hooks: { Stop: [meu] } });
+  });
+
+  test("sem a memória (só no processo, que reiniciou), desligar ainda tira só o do Moductus", () => {
+    const original = '{"hooks": {"Stop": []}, "model": "opus"}';
+    const { ligacao, nova, ler } = montar(original, { semMemoria: true });
+    ligacao.ligar();
+    nova().desligar();
+    expect(JSON.parse(ler())).toEqual({ model: "opus" });
+  });
+});
+
+describe("settings.json que é link", () => {
+  test("symlink continua link; o alvo recebe os hooks e volta igual ao desligar", () => {
+    const { pasta, caminho, ligacao, copias } = montar();
+    const repositorio = join(pasta, "dotfiles");
+    mkdirSync(repositorio);
+    const alvo = join(repositorio, "settings.json");
+    writeFileSync(alvo, ORIGINAL, "utf8");
+    symlinkSync(alvo, caminho, "file");
+
+    ligacao.ligar();
+    expect(lstatSync(caminho).isSymbolicLink()).toBe(true);
+    expect(
+      situacaoDosHooks((JSON.parse(readFileSync(alvo, "utf8")) as { hooks: unknown }).hooks, PORTA),
+    ).toBe("ligada");
+    // Cópia ao lado do link, com o conteúdo do alvo; nada de arquivo novo no repositório.
+    expect(readFileSync(join(pasta, copias()[0] ?? ""), "utf8")).toBe(ORIGINAL);
+    expect(readdirSync(repositorio)).toEqual(["settings.json"]);
+
+    ligacao.desligar();
+    expect(lstatSync(caminho).isSymbolicLink()).toBe(true);
+    expect(readFileSync(alvo, "utf8")).toBe(ORIGINAL);
+    expect(readdirSync(repositorio)).toEqual(["settings.json"]);
+  });
+
+  test("hardlink continua com os dois nomes no mesmo arquivo, ligado e desligado", () => {
+    const { pasta, caminho, ligacao } = montar();
+    const outroNome = join(pasta, "dotfiles-settings.json");
+    writeFileSync(outroNome, ORIGINAL, "utf8");
+    linkSync(outroNome, caminho);
+
+    ligacao.ligar();
+    expect(statSync(caminho).nlink).toBe(2);
+    expect(statSync(caminho).ino).toBe(statSync(outroNome).ino);
+    expect(readFileSync(outroNome, "utf8")).toBe(readFileSync(caminho, "utf8"));
+    expect(ligacao.situacao()).toBe("ligada");
+
+    ligacao.desligar();
+    expect(statSync(caminho).nlink).toBe(2);
+    expect(readFileSync(outroNome, "utf8")).toBe(ORIGINAL);
   });
 });
 

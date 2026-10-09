@@ -101,10 +101,14 @@ export class ServicoConexoes {
   async ligar(pedido: PedidoConexao): Promise<Conexao> {
     this.soClaudeCode(pedido.tipo);
     const agora = this.agora().toISOString();
+    let publicou = false;
+    let nadaNoArquivo = false;
     try {
       // Arquivo que o Moductus não sabe editar recusa antes de publicar qualquer coisa.
       this.deps.ligacao.previa();
+      nadaNoArquivo = this.deps.ligacao.situacao() === "desligada";
       await this.deps.ambiente.definir(VARIAVEL_TOKEN, await this.deps.token());
+      publicou = true;
       this.deps.ligacao.ligar();
       this.repositorio.gravar(
         "hooks-claude-code",
@@ -112,6 +116,9 @@ export class ServicoConexoes {
         agora,
       );
     } catch (erro) {
+      // A variável publicada agora, sem hook nenhum que a use, sai de novo (melhor esforço). Se os
+      // hooks já estavam lá, ela fica: é o que mantém a ligação de antes funcionando.
+      if (publicou && nadaNoArquivo) await this.deps.ambiente.apagar(VARIAVEL_TOKEN).catch(() => undefined);
       const atual = this.repositorio.obter("hooks-claude-code");
       this.repositorio.gravar(
         "hooks-claude-code",

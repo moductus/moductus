@@ -1,11 +1,14 @@
 import {
-  existsSync,
   copyFileSync,
+  existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -46,7 +49,10 @@ const COM_MATCHER = new Set<string>(["PreToolUse", "PostToolUse", "PermissionReq
 export const ESPERA_PERMISSAO_S = 600;
 export const ESPERA_EVENTO_S = 10;
 
-/** Cópias de segurança guardadas ao lado do `settings.json`; as mais antigas saem. */
+/**
+ * Cópias de segurança guardadas ao lado do `settings.json`: a primeira, que é o arquivo de antes
+ * do Moductus, e as últimas; as do meio saem.
+ */
 export const COPIAS_GUARDADAS = 5;
 
 /** A chave do `settings.json` que a ligação muda; o resto do arquivo nunca é reescrito. */
@@ -157,6 +163,19 @@ function canonico(valor: unknown): string {
   return JSON.stringify(valor);
 }
 
+/**
+ * Para comparar o bloco de antes de ligar com o que sobra ao desligar: evento com lista vazia e
+ * bloco ausente valem como nada, porque a retirada do Moductus não sabe deixá-los de volta.
+ */
+function semVazios(hooks: unknown): string {
+  if (hooks === undefined) return "{}";
+  if (!eObjeto(hooks)) return canonico(hooks);
+  const resto = Object.fromEntries(
+    Object.entries(hooks).filter(([, grupos]) => !(Array.isArray(grupos) && grupos.length === 0)),
+  );
+  return canonico(resto);
+}
+
 export type SituacaoLigacao = "ligada" | "desatualizada" | "desligada";
 
 /**
@@ -257,29 +276,29 @@ function recuoDe(texto: string): string {
   return /\n([ \t]+)\S/.exec(texto)?.[1] ?? "  ";
 }
 
-/**
- * O texto com a chave `chave` da raiz trocada por `valor` (`undefined` tira a chave). Chave nova
- * entra no fim do objeto; tirá-la apaga do fim do membro anterior ao fim dela, que é exatamente o
- * que a inserção acrescentou.
- */
-export function trocarChaveRaiz(texto: string, chave: string, valor: unknown): string {
+/** O novo valor da chave: um dado, serializado no estilo do arquivo, ou um texto já pronto. */
+type NovoValor = { valor: unknown } | { bruto: string } | undefined;
+
+function editarChaveRaiz(texto: string, chave: string, novoValor: NovoValor): string {
   const raiz = lerRaiz(texto);
   const eol = texto.includes("\r\n") ? "\r\n" : "\n";
   const recuo = recuoDe(texto);
   const primeiro = raiz.membros[0];
   const compacto = primeiro !== undefined && !texto.slice(raiz.abre, primeiro.inicioChave).includes("\n");
-  const serializar = (v: unknown) =>
-    compacto
-      ? JSON.stringify(v)
-      : JSON.stringify(v, null, recuo)
+  const serializar = (v: NonNullable<NovoValor>) => {
+    if ("bruto" in v) return v.bruto;
+    return compacto
+      ? JSON.stringify(v.valor)
+      : JSON.stringify(v.valor, null, recuo)
           .split("\n")
           .join(eol + recuo);
+  };
 
   const indice = raiz.membros.findIndex((m) => m.chave === chave);
   const membro = raiz.membros[indice];
   if (membro) {
-    if (valor !== undefined) {
-      return texto.slice(0, membro.inicioValor) + serializar(valor) + texto.slice(membro.fimValor);
+    if (novoValor !== undefined) {
+      return texto.slice(0, membro.inicioValor) + serializar(novoValor) + texto.slice(membro.fimValor);
     }
     const anterior = raiz.membros[indice - 1];
     const proximo = raiz.membros[indice + 1];
@@ -287,14 +306,29 @@ export function trocarChaveRaiz(texto: string, chave: string, valor: unknown): s
     if (proximo) return texto.slice(0, membro.inicioChave) + texto.slice(proximo.inicioChave);
     return texto.slice(0, raiz.abre + 1) + texto.slice(raiz.fecha);
   }
-  if (valor === undefined) return texto;
-  const novo = `${JSON.stringify(chave)}:${compacto ? "" : " "}${serializar(valor)}`;
+  if (novoValor === undefined) return texto;
+  const novo = `${JSON.stringify(chave)}:${compacto ? "" : " "}${serializar(novoValor)}`;
   const ultimo = raiz.membros.at(-1);
   if (ultimo) {
     const separador = compacto ? "," : `,${eol}${recuo}`;
     return texto.slice(0, ultimo.fimValor) + separador + novo + texto.slice(ultimo.fimValor);
   }
   return `${texto.slice(0, raiz.abre + 1)}${eol}${recuo}${novo}${eol}${texto.slice(raiz.fecha)}`;
+}
+
+/**
+ * O texto com a chave `chave` da raiz trocada por `valor` (`undefined` tira a chave). Chave nova
+ * entra no fim do objeto; tirá-la apaga do fim do membro anterior ao fim dela, que é exatamente o
+ * que a inserção acrescentou.
+ */
+export function trocarChaveRaiz(texto: string, chave: string, valor: unknown): string {
+  return editarChaveRaiz(texto, chave, valor === undefined ? undefined : { valor });
+}
+
+/** O texto do valor da chave da raiz, como está no arquivo; `null` quando a chave não existe. */
+export function textoDaChaveRaiz(texto: string, chave: string): string | null {
+  const membro = lerRaiz(texto).membros.find((m) => m.chave === chave);
+  return membro ? texto.slice(membro.inicioValor, membro.fimValor) : null;
 }
 
 /* ----------------------------------------------------------------------------------------------
@@ -308,11 +342,28 @@ interface Lido {
   hooks: unknown;
 }
 
+/**
+ * O que havia antes de ligar, para desligar devolver o bloco `hooks` como estava, byte a byte
+ * (escapes, números como `5.0`, bloco compacto, `{}` vazio), e apagar o arquivo que o Moductus
+ * criou. Vale só para o mesmo caminho e só se o que sobra sem o Moductus for o mesmo dado.
+ */
+export interface Memoria {
+  caminho: string;
+  criouArquivo: boolean;
+  /** O texto do valor de `hooks` antes de ligar; `null` quando a chave não existia. */
+  hooks: string | null;
+}
+
 export interface OpcoesLigacao {
   /** O `settings.json` do Claude Code (`caminhoSettingsClaude()`; nos testes, uma pasta temporária). */
   caminho: string;
   /** Porta do receptor (`portaDosHooks()`). */
   porta: number;
+  /**
+   * Arquivo onde a memória de antes de ligar sobrevive a reinícios (na pasta de dados do
+   * Moductus); sem ele, a memória fica só neste processo.
+   */
+  memoria?: string;
   agora?: () => Date;
 }
 
@@ -323,13 +374,22 @@ export interface ResultadoEscrita {
   copia: string | null;
 }
 
+/** `settings.json.moductus-2026-10-09T12-00-00-000Z.bak`, e `-2.bak`, `-3.bak` na colisão. */
+const COPIA = /\.moductus-(\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-\d{3}Z)(?:-(\d+))?\.bak$/;
+
 /**
  * Instala e desinstala a ligação no `settings.json`. Antes de escrever, guarda uma cópia do
- * arquivo ao lado dele; escreve num temporário e troca, para que uma queda no meio não deixe o
- * arquivo pela metade. Arquivo que não é JSON (ou cuja raiz não é objeto) não é tocado.
+ * arquivo ao lado dele. Arquivo que não é JSON (ou cuja raiz não é objeto) não é tocado.
+ *
+ * O `settings.json` pode ser link para um repositório de configuração: a escrita vai ao arquivo
+ * de verdade (`realpath`), por um temporário na pasta dele e troca de nome, para que uma queda no
+ * meio não deixe o arquivo pela metade. Com mais de um nome para o mesmo arquivo (hardlink), a
+ * troca de nome quebraria o vínculo: aí o conteúdo, já validado e com a cópia feita, é gravado
+ * por cima.
  */
 export class LigacaoClaudeCode {
   private readonly agora: () => Date;
+  private memoriaLocal: Memoria | null = null;
 
   constructor(private readonly opcoes: OpcoesLigacao) {
     this.agora = opcoes.agora ?? (() => new Date());
@@ -368,43 +428,152 @@ export class LigacaoClaudeCode {
     };
   }
 
+  /**
+   * Liga. Se ainda não havia nada do Moductus no arquivo, guarda a memória de antes; religar (por
+   * troca de porta, por exemplo) mantém a memória da primeira vez.
+   */
   ligar(): ResultadoEscrita {
     const lido = this.ler();
-    return this.escrever(lido, comOMoductus(lido.hooks, this.opcoes.porta));
+    const primeiraVez = situacaoDosHooks(lido.hooks, this.opcoes.porta) === "desligada";
+    const memoria: Memoria = {
+      caminho: this.caminho,
+      criouArquivo: !lido.existe,
+      hooks: lido.existe ? textoDaChaveRaiz(lido.texto, TRECHO) : null,
+    };
+    const resultado = this.escrever(
+      lido,
+      trocarChaveRaiz(lido.texto, TRECHO, comOMoductus(lido.hooks, this.opcoes.porta)),
+    );
+    if (primeiraVez && resultado.mudou) this.guardarMemoria(memoria);
+    return resultado;
   }
 
+  /**
+   * Desliga. Com a memória de antes de ligar e nada mudado no que é do usuário, o bloco volta
+   * como era, byte a byte, e o arquivo que o Moductus criou sai se ficou vazio. Sem memória (ou
+   * com o bloco mudado pelo usuário), só os hooks do Moductus saem.
+   */
   desligar(): ResultadoEscrita {
     const lido = this.ler();
-    return this.escrever(lido, semOMoductus(lido.hooks));
+    const sobra = semOMoductus(lido.hooks);
+    const memoria = this.lerMemoria();
+    let texto = trocarChaveRaiz(lido.texto, TRECHO, sobra);
+    if (memoria && this.mesmoDeAntes(memoria, sobra)) {
+      texto = editarChaveRaiz(
+        lido.texto,
+        TRECHO,
+        memoria.hooks === null ? undefined : { bruto: memoria.hooks },
+      );
+      if (memoria.criouArquivo && lerRaiz(texto).membros.length === 0 && this.apagarCriado()) {
+        this.guardarMemoria(null);
+        return { mudou: true, copia: null };
+      }
+    }
+    const resultado = this.escrever(lido, texto);
+    this.guardarMemoria(null);
+    return resultado;
   }
 
-  private escrever(lido: Lido, hooks: unknown): ResultadoEscrita {
-    const novo = trocarChaveRaiz(lido.texto, TRECHO, hooks);
+  private mesmoDeAntes(memoria: Memoria, sobra: unknown): boolean {
+    if (memoria.caminho !== this.caminho) return false;
+    try {
+      const antes: unknown = memoria.hooks === null ? undefined : JSON.parse(memoria.hooks);
+      return semVazios(antes) === semVazios(sobra);
+    } catch {
+      return false;
+    }
+  }
+
+  /** Só apaga o arquivo comum, de um nome só, que o próprio Moductus criou. */
+  private apagarCriado(): boolean {
+    const info = lstatSync(this.caminho);
+    if (!info.isFile() || info.nlink > 1) return false;
+    rmSync(this.caminho);
+    return true;
+  }
+
+  private lerMemoria(): Memoria | null {
+    const arquivo = this.opcoes.memoria;
+    if (!arquivo) return this.memoriaLocal;
+    try {
+      const dado = JSON.parse(readFileSync(arquivo, "utf8")) as Partial<Memoria>;
+      const valida =
+        typeof dado.caminho === "string" &&
+        typeof dado.criouArquivo === "boolean" &&
+        (dado.hooks === null || typeof dado.hooks === "string");
+      return valida ? (dado as Memoria) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private guardarMemoria(memoria: Memoria | null): void {
+    const arquivo = this.opcoes.memoria;
+    if (!arquivo) {
+      this.memoriaLocal = memoria;
+      return;
+    }
+    if (memoria === null) {
+      rmSync(arquivo, { force: true });
+      return;
+    }
+    mkdirSync(dirname(arquivo), { recursive: true });
+    writeFileSync(arquivo, JSON.stringify(memoria), "utf8");
+  }
+
+  private escrever(lido: Lido, novo: string): ResultadoEscrita {
     // Arquivo novo ganha a quebra de linha final, como o Claude Code grava.
     const final = lido.existe ? novo : `${novo}\n`;
     if (lido.existe && final === lido.texto) return { mudou: false, copia: null };
-    mkdirSync(dirname(this.caminho), { recursive: true });
-    const copia = lido.existe ? this.copiar() : null;
-    const temporario = `${this.caminho}.moductus-tmp`;
-    writeFileSync(temporario, final, "utf8");
-    renameSync(temporario, this.caminho);
+    // Nada sai daqui que o Claude Code não consiga ler.
+    if (!eObjeto(JSON.parse(final.replace(/^\uFEFF/, "")))) {
+      throw new SettingsInvalido("a edição do settings.json não deu um objeto JSON");
+    }
+    if (!lido.existe) {
+      mkdirSync(dirname(this.caminho), { recursive: true });
+      this.trocarPorTemporario(this.caminho, final);
+      return { mudou: true, copia: null };
+    }
+    const alvo = realpathSync(this.caminho);
+    const copia = this.copiar(alvo);
+    if (statSync(alvo).nlink > 1) writeFileSync(alvo, final, "utf8");
+    else this.trocarPorTemporario(alvo, final);
     return { mudou: true, copia };
   }
 
-  /** `settings.json.moductus-2026-10-09T12-00-00-000Z.bak`; das cópias do Moductus, ficam as últimas. */
-  private copiar(): string {
+  private trocarPorTemporario(alvo: string, conteudo: string): void {
+    const temporario = join(dirname(alvo), `${basename(alvo)}.moductus-tmp`);
+    writeFileSync(temporario, conteudo, "utf8");
+    renameSync(temporario, alvo);
+  }
+
+  /**
+   * Copia o conteúdo do arquivo de verdade para junto do `settings.json` (nunca para o
+   * repositório para onde um link aponta). Ficam a primeira cópia e as últimas.
+   */
+  private copiar(origem: string): string {
     const pasta = dirname(this.caminho);
     const nome = basename(this.caminho);
     const carimbo = this.agora().toISOString().replace(/[:.]/g, "-");
-    let copia = join(pasta, `${nome}.moductus-${carimbo}.bak`);
-    for (let n = 2; existsSync(copia); n++) copia = join(pasta, `${nome}.moductus-${carimbo}-${n}.bak`);
-    copyFileSync(this.caminho, copia);
-    const prefixo = `${nome}.moductus-`;
-    const copias = readdirSync(pasta)
-      .filter((f) => f.startsWith(prefixo) && f.endsWith(".bak"))
-      .sort();
-    for (const antiga of copias.slice(0, Math.max(0, copias.length - COPIAS_GUARDADAS))) {
-      rmSync(join(pasta, antiga), { force: true });
+    const lista = () =>
+      readdirSync(pasta)
+        .flatMap((f) => {
+          const achado = f.startsWith(`${nome}.moductus-`) ? COPIA.exec(f) : null;
+          return achado ? [{ f, carimbo: achado[1] ?? "", n: Number(achado[2] ?? "1") }] : [];
+        })
+        .sort((a, b) => (a.carimbo === b.carimbo ? a.n - b.n : a.carimbo < b.carimbo ? -1 : 1));
+    // Na colisão, o sufixo segue o maior do mesmo instante, nunca reaproveita um que saiu.
+    const maior = Math.max(
+      0,
+      ...lista()
+        .filter((c) => c.carimbo === carimbo)
+        .map((c) => c.n),
+    );
+    const copia = join(pasta, `${nome}.moductus-${carimbo}${maior === 0 ? "" : `-${maior + 1}`}.bak`);
+    copyFileSync(origem, copia);
+    const copias = lista();
+    for (const antiga of copias.slice(1, Math.max(1, copias.length - COPIAS_GUARDADAS))) {
+      rmSync(join(pasta, antiga.f), { force: true });
     }
     return copia;
   }

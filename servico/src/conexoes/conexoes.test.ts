@@ -58,7 +58,7 @@ function montar(conteudo: string | null = ORIGINAL, falhas: { ambiente?: string 
   const escrever = (texto: string) => writeFileSync(caminho, texto, "utf8");
   if (conteudo !== null) escrever(conteudo);
   const ler = () => readFileSync(caminho, "utf8");
-  return { db, servico, variaveis, avisos, ler, escrever, caminho };
+  return { db, servico, variaveis, avisos, ler, escrever, caminho, ligacao };
 }
 
 const CLAUDE = { tipo: "hooks-claude-code" } as const;
@@ -118,6 +118,23 @@ describe("conexão com o Claude Code", () => {
     expect(conexao.ultimoErro).toMatch(/não é um JSON válido/);
     expect(variaveis.size).toBe(0);
     expect(ler()).toBe(quebrado);
+  });
+
+  test("a escrita falha depois de publicar: a variável sai de novo, a não ser que a ligação já existisse", async () => {
+    const { servico, variaveis, ligacao, ler } = montar();
+    const ligarDeVerdade = ligacao.ligar.bind(ligacao);
+    ligacao.ligar = () => {
+      throw new Error("disco cheio");
+    };
+    expect(await servico.ligar(CLAUDE)).toMatchObject({ estado: "erro", ultimoErro: "disco cheio" });
+    expect(variaveis.has(VARIAVEL_TOKEN)).toBe(false);
+    expect(ler()).toBe(ORIGINAL);
+
+    // Já ligada (religar por troca de porta, por exemplo): a variável continua servindo aos hooks.
+    ligarDeVerdade();
+    variaveis.set(VARIAVEL_TOKEN, TOKEN);
+    expect((await servico.ligar(CLAUDE)).estado).toBe("erro");
+    expect(variaveis.get(VARIAVEL_TOKEN)).toBe(TOKEN);
   });
 
   test("a casca não grava a variável: o arquivo fica como estava e o erro aparece", async () => {
