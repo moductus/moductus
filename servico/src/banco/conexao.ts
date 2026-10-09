@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { MIGRACOES } from "../migracoes/index.ts";
+import { limparLixeira } from "./lixeira.ts";
 import { migrar } from "./migracoes.ts";
 
 /**
@@ -17,6 +18,7 @@ export function portable(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.MODUCTUS_PORTABLE === "1";
 }
 
+/** Abre o banco, aplica as migrações e esvazia da lixeira o que venceu: é a subida do dado. */
 export function abrirBanco(pasta: string): DatabaseSync {
   mkdirSync(pasta, { recursive: true });
   const db = new DatabaseSync(join(pasta, "moductus.db"));
@@ -25,5 +27,10 @@ export function abrirBanco(pasta: string): DatabaseSync {
   db.exec("PRAGMA busy_timeout = 3000");
   const { de, para } = migrar(db, MIGRACOES);
   if (de !== para) console.error(`banco migrado da versão ${de} para ${para}`);
+  const removidas = limparLixeira(db);
+  if (removidas.size > 0) {
+    const resumo = [...removidas].map(([tabela, n]) => `${tabela} ${n}`).join(", ");
+    console.error(`lixeira: apagado de vez o que passou de 30 dias (${resumo})`);
+  }
   return db;
 }
