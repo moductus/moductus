@@ -180,6 +180,7 @@ vigiaNuno = new VigiaNuno({
   executar: (pedido) => runtime.executar(pedido),
   githubConhecido: github.obter().itens,
   avisar: gravarAvisoDoNuno(banco),
+  detalhar: (alvo) => github.detalhe(alvo),
 });
 const execucoes = new ServicoExecucoes(repositorioExecucoes, catalogo, {
   mudou: (execucao) => servidor?.emitir("execucoes.mudou", execucao),

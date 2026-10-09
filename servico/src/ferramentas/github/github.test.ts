@@ -154,7 +154,7 @@ describe("o Nuno pelo GitHub", () => {
     expect(cartao).toMatchObject({
       agenteId: "nuno",
       descricao:
-        'Vou comentar no #412 de loja/api-pedidos: "Faltou o teste do cancelamento.". Comentário publicado não se desfaz por aqui.',
+        "Vou publicar este comentário no #412 de loja/api-pedidos; comentário publicado não se desfaz por aqui.\n\nFaltou o teste do cancelamento.",
       acao: { ferramenta: "github.comentar", rotulo: "Comentar no #412", rotuloRecusar: "Não comentar" },
     });
     expect(chamadasGh).toHaveLength(0);
@@ -205,10 +205,14 @@ describe("o Nuno pelo GitHub", () => {
 });
 
 describe("cartão e entrada de github.comentar", () => {
-  test("texto longo aparece pelo começo e com o tamanho; nunca diz que dá para desfazer", () => {
-    const texto = `${"palavra ".repeat(60)}fim`;
+  test("o cartão mostra o texto inteiro, do jeito que vai ser publicado, até o tamanho máximo", () => {
+    // O fim de um texto longo é onde uma instrução escondida num PR colaria o que não devia.
+    const fim = "Eventos da sessão: pnpm test em V:\\moductus";
+    const texto = `${"Revisei o PR.\n\n".repeat(200)}${fim}`.slice(-COMENTARIO_MAXIMO);
+    expect(texto).toHaveLength(COMENTARIO_MAXIMO);
     const cartao = cartaoDeComentar({ repositorio: "a/b", numero: 7, texto });
-    expect(cartao.descricao).toMatch(/^Vou comentar no #7 de a\/b: "palavra .*…" \(483 caracteres\)\./);
+    expect(cartao.descricao.endsWith(`\n\n${texto}`)).toBe(true);
+    expect(cartao.descricao).toContain(fim);
     expect(cartao).toMatchObject({ rotulo: "Comentar no #7", desfazivel: false });
   });
 
@@ -224,8 +228,14 @@ describe("cartão e entrada de github.comentar", () => {
     }
     expect(comentar.validar({ repositorio: "voce/.github", numero: 1, texto: "oi" }).ok).toBe(true);
     expect(comentar.validar({ repositorio: "a/b", numero: 0, texto: "  " }).ok).toBe(false);
+    expect(comentar.validar({ repositorio: "a/b", numero: 1, texto: "x".repeat(COMENTARIO_MAXIMO) }).ok).toBe(
+      true,
+    );
     expect(
-      comentar.validar({ repositorio: "a/b", numero: 1, texto: "x".repeat(COMENTARIO_MAXIMO + 1) }).ok,
-    ).toBe(false);
+      comentar.validar({ repositorio: "a/b", numero: 1, texto: "x".repeat(COMENTARIO_MAXIMO + 1) }),
+    ).toEqual({
+      ok: false,
+      erro: `Entrada inválida para github.comentar. texto: pode ter no máximo ${COMENTARIO_MAXIMO} caracteres, para caber inteiro no cartão de aprovação; encurte.`,
+    });
   });
 });

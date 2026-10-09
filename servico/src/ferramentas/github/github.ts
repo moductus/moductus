@@ -10,11 +10,11 @@ import { ferramenta, type Ferramenta, type TextoCartao } from "../ferramenta.ts"
  * minutos) ou do `gh` na hora; comentar sai do Moductus e só roda com o seu sim.
  */
 
-/** Tamanho do comentário: cabe com folga na linha de comando do Windows, que leva o texto ao `gh`. */
-export const COMENTARIO_MAXIMO = 10_000;
-
-/** Trecho do comentário mostrado inteiro no cartão; acima disso, o começo e o tamanho. */
-const TRECHO_NO_CARTAO = 280;
+/**
+ * Tamanho do comentário: o cartão mostra o texto inteiro, e o sim só vale para o que dá para ler
+ * nele. Acima disso, o modelo recebe o motivo e encurta.
+ */
+export const COMENTARIO_MAXIMO = 2000;
 
 const alvo = {
   repositorio: z
@@ -25,21 +25,19 @@ const alvo = {
 };
 
 /**
- * O cartão de comentar: o que vai ser publicado, onde, e que não volta por aqui. O texto aparece
- * inteiro quando é curto; longo, o começo e quantos caracteres, porque o sim é para ele todo.
+ * O cartão de comentar: onde, que não volta por aqui e o texto **inteiro**, do jeito que vai ser
+ * publicado. Nada escondido: um texto que o modelo montou a partir de um PR (que pode trazer
+ * instrução maliciosa) só sai com o usuário tendo lido cada linha.
  */
 export function cartaoDeComentar(entrada: {
   repositorio: string;
   numero: number;
   texto: string;
 }): TextoCartao {
-  const linha = entrada.texto.replace(/\s+/g, " ").trim();
-  const trecho =
-    linha.length <= TRECHO_NO_CARTAO
-      ? `"${linha}"`
-      : `"${linha.slice(0, TRECHO_NO_CARTAO - 1).trimEnd()}…" (${entrada.texto.length} caracteres)`;
   return {
-    descricao: `Vou comentar no #${entrada.numero} de ${entrada.repositorio}: ${trecho}. Comentário publicado não se desfaz por aqui.`,
+    descricao: `Vou publicar este comentário no #${entrada.numero} de ${entrada.repositorio}; comentário publicado não se desfaz por aqui.
+
+${entrada.texto}`,
     rotulo: `Comentar no #${entrada.numero}`,
     rotuloRecusar: "Não comentar",
     desfazivel: false,
@@ -106,7 +104,15 @@ export function ferramentasGithub(github: ServicoGithub): Ferramenta[] {
         "Comenta num PR ou numa issue do GitHub em nome do usuário. Sai do Moductus: só roda com o sim dele no cartão, e o comentário não se desfaz por aqui.",
       entrada: z.object({
         ...alvo,
-        texto: z.string().trim().min(1).max(COMENTARIO_MAXIMO).describe("O comentário, em Markdown"),
+        texto: z
+          .string()
+          .trim()
+          .min(1)
+          .max(
+            COMENTARIO_MAXIMO,
+            `pode ter no máximo ${COMENTARIO_MAXIMO} caracteres, para caber inteiro no cartão de aprovação; encurte`,
+          )
+          .describe(`O comentário, em Markdown, até ${COMENTARIO_MAXIMO} caracteres`),
       }),
       efeito: "externo",
       cartao: cartaoDeComentar,
