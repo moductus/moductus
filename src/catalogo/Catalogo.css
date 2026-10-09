@@ -77,6 +77,31 @@ html:has(.catalogo) body {
   color: var(--texto-3);
 }
 
+.catalogo-situacoes {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.catalogo-situacao {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  padding: var(--esp-6) 0;
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.catalogo-situacao > :last-child {
+  margin-left: auto;
+  font-size: var(--tipo-11);
+}
+
+.catalogo-situacao-nome {
+  font-weight: var(--peso-forte);
+}
+
 .catalogo-icones {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--largura-dock), 1fr));
