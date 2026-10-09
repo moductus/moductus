@@ -139,7 +139,7 @@ O `caminho` é único entre os projetos vivos, sem diferenciar maiúsculas (o Wi
 ### `sessoes_ia`
 `id`, `projeto_id`, `ferramenta` (`claude-code`, `codex`, `opencode`, `gemini`, `antigravity`), `id_externo` (session id da ferramenta), `modelo`, `estado` (`trabalhando`, `esperando`, `terminou`, `erro`, `parada`), `iniciada_em`, `ultimo_evento_em`, `encerrada_em`, `contexto_usado_tokens`, `contexto_janela_tokens`, `transcript_caminho`.
 `ferramenta` e `id_externo` juntos são únicos: é assim que o evento de um hook acha a sessão.
-A migração `007-transcript-lido` acrescenta a leitura incremental do transcript: `transcript_lido_bytes` (até onde o arquivo foi lido), `transcript_ultima_mensagem` (a última resposta cujo uso entrou em `uso_ia`, para não contar duas vezes) e `contexto_avisado_em` (quando saiu o aviso de 80% no trecho atual; volta a vazio na compactação). As duas primeiras são posições num arquivo deste PC e não vão para outro.
+A migração `007-transcript-lido` acrescenta a leitura incremental do transcript: `transcript_lido_bytes` (até onde o arquivo foi lido; posição num arquivo deste PC, não vai para outro) e `contexto_avisado_em` (quando saiu o aviso de 80% no trecho atual; volta a vazio na compactação). `contexto_janela_tokens` vem da janela que a ferramenta informa ou da tabela por modelo do serviço; modelo fora dela fica sem janela.
 
 ### `eventos_sessao`
 `id`, `sessao_id` (a única chave estrangeira desta migração, para `sessoes_ia`), `tipo` (nome do hook), `ferramenta_usada`, `entrada_resumo`. A data do evento é o `criado_em`.
@@ -148,6 +148,10 @@ Guarda o resumo, não o conteúdo inteiro; o conteúdo continua no transcript da
 ### `uso_ia`
 Gasto e limites, por dia, ferramenta, modelo e projeto. Uma linha por combinação dessas quatro (modelo e projeto vazios contam como valor).
 `id`, `dia` (`AAAA-MM-DD`), `ferramenta`, `modelo`, `projeto_id`, `tokens_entrada`, `tokens_saida`, `tokens_cache`, `custo_estimado_microdolares` (vazio quando não há número honesto), `fonte` (`ferramenta`, `estimativa`).
+
+### `uso_ia_mensagens`
+Migração `008-uso-respostas-contadas`. As respostas de modelo cujo uso já entrou em `uso_ia`, pela `chave` única (`message.id` + `requestId` do transcript), no PC inteiro: uma sessão que copia o histórico de outra (`--fork-session`) não conta o mesmo uso de novo. Linhas com mais de 90 dias são podadas. Controle deste PC: não vai para outro em nenhuma modalidade.
+`id`, `chave`.
 
 ### `github_itens`
 Cache do que o Nuno acompanha no GitHub. PR e issue dividem a numeração, então `repositorio` e `numero` são únicos.
@@ -221,7 +225,7 @@ O que foi avisado, para o histórico e para não repetir. Sem lixeira.
 
 | Vai em "só configurações" | Vai só em "configurações e dados" | Nunca vai |
 |---|---|---|
-| `config`, `agentes`, `provedores` (sem credencial), `conexoes` (sem credencial e sem estado), `notificacoes_preferencias`, `regras_permissao` (as que ainda valem), `perfis_importacao`, `regras_categoria`, `categorias`, `listas`, `etiquetas`, `rotinas`, `pastas_autorizadas` (como sugestão, reconfirmada no PC novo) | Todas as demais tabelas de dados, entre elas `execucoes`, `chamadas_ferramenta`, `aprovacoes`, `conversas`, `mensagens`, `projetos`, `sessoes_ia`, `eventos_sessao`, `uso_ia`, `github_itens`, `notificacoes` e `onboarding` | Credenciais, `transcript_caminho` e a posição da leitura dele (`transcript_lido_bytes`, `transcript_ultima_mensagem`), caminhos absolutos que não existem no PC novo, `operacoes_arquivo`, o que está na lixeira |
+| `config`, `agentes`, `provedores` (sem credencial), `conexoes` (sem credencial e sem estado), `notificacoes_preferencias`, `regras_permissao` (as que ainda valem), `perfis_importacao`, `regras_categoria`, `categorias`, `listas`, `etiquetas`, `rotinas`, `pastas_autorizadas` (como sugestão, reconfirmada no PC novo) | Todas as demais tabelas de dados, entre elas `execucoes`, `chamadas_ferramenta`, `aprovacoes`, `conversas`, `mensagens`, `projetos`, `sessoes_ia`, `eventos_sessao`, `uso_ia`, `github_itens`, `notificacoes` e `onboarding` | Credenciais, `transcript_caminho` e a posição da leitura dele (`transcript_lido_bytes`), `uso_ia_mensagens`, caminhos absolutos que não existem no PC novo, `operacoes_arquivo`, o que está na lixeira |
 
 A marcação de cada tabela mora em `servico/src/outro-pc/tabelas.ts`, e um teste reprova tabela nova sem marcação (na dúvida, é dado). O que "só configurações" tira, além das tabelas de dado:
 

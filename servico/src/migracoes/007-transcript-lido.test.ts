@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { migrar, versaoAtual } from "../banco/migracoes.ts";
 import { MIGRACOES } from "./index.ts";
 
-const NOVAS = ["transcript_lido_bytes", "transcript_ultima_mensagem", "contexto_avisado_em"];
+const NOVAS = ["transcript_lido_bytes", "contexto_avisado_em"];
 
 const colunas = (db: DatabaseSync) =>
   (db.prepare("PRAGMA table_info(sessoes_ia)").all() as { name: string }[]).map((c) => c.name);
@@ -19,13 +19,10 @@ describe("migração 007-transcript-lido", () => {
 
     expect(migrar(db, MIGRACOES)).toEqual({ de: 6, para: MIGRACOES.length });
     expect(versaoAtual(db)).toBe(MIGRACOES.length);
-    expect(
-      db
-        .prepare(
-          "SELECT transcript_lido_bytes, transcript_ultima_mensagem, contexto_avisado_em FROM sessoes_ia",
-        )
-        .get(),
-    ).toEqual({ transcript_lido_bytes: null, transcript_ultima_mensagem: null, contexto_avisado_em: null });
+    expect(db.prepare("SELECT transcript_lido_bytes, contexto_avisado_em FROM sessoes_ia").get()).toEqual({
+      transcript_lido_bytes: null,
+      contexto_avisado_em: null,
+    });
   });
 
   test("posição de leitura negativa é recusada", () => {

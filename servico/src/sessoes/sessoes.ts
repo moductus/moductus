@@ -22,6 +22,8 @@ import { estadoDepois, type EventoHook } from "./hooks.ts";
 export const LIMITE_PARADA_MS = 30 * 60_000;
 /** Sessões encerradas ou paradas continuam na lista por um dia depois do último evento. */
 const RECENTE_MS = 24 * 60 * 60_000;
+/** Por quanto tempo uma resposta contada em `uso_ia` é lembrada (contra cópia de histórico). */
+export const GUARDA_RESPOSTAS_MS = 90 * 24 * 60 * 60_000;
 const LIMITE_LISTA = 100;
 const LIMITE_EVENTOS = 50;
 
@@ -79,7 +81,6 @@ export interface LeituraGravada {
   projetoId: string | null;
   caminho: string | null;
   lidoAte: number;
-  ultimaMensagem: string | null;
   usado: number | null;
   janela: number | null;
   modelo: string | null;
@@ -91,7 +92,6 @@ interface LinhaLeitura {
   projeto_id: string | null;
   transcript_caminho: string | null;
   transcript_lido_bytes: number | null;
-  transcript_ultima_mensagem: string | null;
   contexto_usado_tokens: number | null;
   contexto_janela_tokens: number | null;
   modelo: string | null;
@@ -353,8 +353,7 @@ export class RepositorioSessoes {
   leituraTranscript(id: string): LeituraGravada | null {
     const l = this.db
       .prepare(
-        `SELECT ferramenta, projeto_id, transcript_caminho, transcript_lido_bytes, transcript_ultima_mensagem,
-                contexto_usado_tokens, contexto_janela_tokens, modelo, contexto_avisado_em
+        `SELECT ferramenta, projeto_id, transcript_caminho, transcript_lido_bytes, contexto_usado_tokens, contexto_janela_tokens, modelo, contexto_avisado_em
            FROM sessoes_ia WHERE id = ?`,
       )
       .get(id) as unknown as LinhaLeitura | undefined;
@@ -364,7 +363,6 @@ export class RepositorioSessoes {
       projetoId: l.projeto_id,
       caminho: l.transcript_caminho,
       lidoAte: l.transcript_lido_bytes ?? 0,
-      ultimaMensagem: l.transcript_ultima_mensagem,
       usado: l.contexto_usado_tokens,
       janela: l.contexto_janela_tokens,
       modelo: l.modelo,
@@ -381,7 +379,6 @@ export class RepositorioSessoes {
     g: {
       caminho: string;
       lidoAte: number;
-      ultimaMensagem: string | null;
       usado: number | null;
       janela: number | null;
       modelo: string | null;
@@ -392,13 +389,31 @@ export class RepositorioSessoes {
     const gravou = this.db
       .prepare(
         `UPDATE sessoes_ia
-            SET transcript_lido_bytes = ?, transcript_ultima_mensagem = ?, contexto_usado_tokens = ?,
-                contexto_janela_tokens = ?, modelo = coalesce(?, modelo), contexto_avisado_em = ?,
-                atualizado_em = ?
+            SET transcript_lido_bytes = ?, contexto_usado_tokens = ?, contexto_janela_tokens = ?,
+                modelo = coalesce(?, modelo), contexto_avisado_em = ?, atualizado_em = ?
           WHERE id = ? AND transcript_caminho = ?`,
       )
-      .run(g.lidoAte, g.ultimaMensagem, g.usado, g.janela, g.modelo, g.avisadoEm, g.agora, id, g.caminho);
+      .run(g.lidoAte, g.usado, g.janela, g.modelo, g.avisadoEm, g.agora, id, g.caminho);
     return Number(gravou.changes) > 0;
+  }
+
+  /**
+   * Marca a resposta (`message.id` + `requestId`) como contada no PC; `false` quando ela já tinha
+   * sido contada, por esta ou por outra sessão.
+   */
+  marcarRespostaContada(chave: string, agora: string): boolean {
+    const marcou = this.db
+      .prepare(
+        `INSERT INTO uso_ia_mensagens (id, chave, criado_em, atualizado_em, origem)
+         VALUES (?, ?, ?, ?, ?) ON CONFLICT (chave) DO NOTHING`,
+      )
+      .run(novoId(), chave, agora, agora, ORIGEM);
+    return Number(marcou.changes) > 0;
+  }
+
+  /** Esquece as respostas contadas antes de `antes`; devolve quantas. */
+  podarRespostasContadas(antes: string): number {
+    return Number(this.db.prepare("DELETE FROM uso_ia_mensagens WHERE criado_em < ?").run(antes).changes);
   }
 
   /**
@@ -613,13 +628,23 @@ export class ServicoSessoes {
   }
 
   /**
-   * Vigia sem token (AGENTS.md §6): confere as paradas a cada minuto. Não segura o processo
-   * aberto; devolve como parar.
+   * Esquece as respostas contadas há mais de {@link GUARDA_RESPOSTAS_MS}: uma cópia de histórico
+   * mais velha que isso voltaria a contar, e a tabela não cresce sem fim.
+   */
+  podarRespostasContadas(): number {
+    const antes = new Date(this.agora().getTime() - GUARDA_RESPOSTAS_MS).toISOString();
+    return this.repo.podarRespostasContadas(antes);
+  }
+
+  /**
+   * Vigia sem token (AGENTS.md §6): confere as paradas a cada minuto e poda as respostas contadas.
+   * Não segura o processo aberto; devolve como parar.
    */
   vigiar(intervaloMs = 60_000): () => void {
     const relogio = setInterval(() => {
       try {
         this.marcarParadas();
+        this.podarRespostasContadas();
       } catch (erro) {
         console.error(`sessões: conferência de paradas falhou: ${String(erro)}`);
       }

@@ -4,9 +4,10 @@ import { COLUNA_LIXEIRA } from "../banco/tabela.ts";
 /**
  * Configuração ou dado (DATA.md §8, ADR-0011): é o que separa "só configurações" de
  * "configurações e dados" no arquivo de levar para outro PC. Toda tabela do banco tem a sua
- * marcação aqui; a guarda em tabelas.test.ts reprova tabela nova sem marcação.
+ * marcação aqui; a guarda em tabelas.test.ts reprova tabela nova sem marcação. `deste_pc` é
+ * controle interno que não vai em nenhuma modalidade.
  */
-export type Exportacao = "configuracao" | "dado";
+export type Exportacao = "configuracao" | "dado" | "deste_pc";
 
 export const EXPORTACAO: Readonly<Record<string, Exportacao>> = {
   // 001 e 002
@@ -31,18 +32,19 @@ export const EXPORTACAO: Readonly<Record<string, Exportacao>> = {
   // 005-notificacoes
   notificacoes_preferencias: "configuracao",
   notificacoes: "dado",
+  // 008-uso-respostas-contadas: o que já entrou em `uso_ia` daqui; o PC novo conta o dele.
+  uso_ia_mensagens: "deste_pc",
 };
 
 /**
  * Colunas que nunca saem deste PC, em nenhuma modalidade: o nome da credencial (a chave não
  * está no banco, e no PC novo a conexão é refeita), o caminho do transcript e até onde ele já foi
- * lido (posições num arquivo daqui).
+ * lido (posição num arquivo daqui).
  */
 export const COLUNAS_QUE_NUNCA_VAO: readonly string[] = [
   "credencial",
   "transcript_caminho",
   "transcript_lido_bytes",
-  "transcript_ultima_mensagem",
 ];
 
 /**

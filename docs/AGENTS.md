@@ -316,7 +316,9 @@ Feito em 06/10/2026 com o Claude Code 2.1, hooks `http` apontando para um servid
 
 ### Consumo e limites
 
-O Claude Code não expõe uso nem limites por hook ou por arquivo local. Sessões de IA mostram o que dá para contar pelos eventos (sessões, turnos, ferramentas usadas) e o uso de limites fica fora até existir uma fonte estável. Codex, Gemini e Antigravity **(validar)**. Sem fonte confiável, a área não inventa número.
+- **Uso de tokens (Claude Code):** o hook informa o `transcript_path`, e o transcript registra o uso de cada resposta do modelo (`message.usage`: entrada, saída e cache). O Moductus lê o arquivo de forma incremental, só dentro da pasta `projects` do Claude Code, conta cada resposta uma vez no PC (cópias de histórico por `--fork-session` não contam de novo) e soma por dia, ferramenta, modelo e projeto em `uso_ia`, com `fonte` = `ferramenta`. Custo fica vazio na assinatura. As execuções dos próprios agentes do Moductus não entram por aqui: o CLI delas não recebe o token dos hooks.
+- **Contexto:** os tokens que a última resposta leu, e depois de uma compactação o tamanho que o Claude Code anotou nela. A janela vem da própria ferramenta quando ela informa no transcript; sem isso, de uma tabela por modelo versionada no serviço, conferida na documentação de modelos da Anthropic. Modelo fora da tabela fica sem janela: a área diz que não sabe e o aviso dos 80% não sai.
+- **Limites de uso** (janela de 5 horas, limite semanal): o Claude Code não expõe por hook nem por arquivo local, e ficam fora até existir uma fonte estável. Codex, Gemini e Antigravity **(validar)**. Sem fonte confiável, a área não inventa número.
 
 ---
 
