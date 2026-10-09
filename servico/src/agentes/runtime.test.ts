@@ -408,7 +408,7 @@ describe("runtime: registro em execucoes", () => {
     });
   });
 
-  test("falha do provedor fica registrada e diz até quando o agente dorme", async () => {
+  test("falha do provedor fica registrada e põe o agente para dormir até a volta", async () => {
     const { runtime, falsos, situacao } = montar();
     falsos["p-nuno"]!.roteirizar(
       roteiros.falha("limite", "2026-10-09T15:00:00.000Z"),
@@ -419,14 +419,22 @@ describe("runtime: registro em execucoes", () => {
     expect(r.execucao).toMatchObject({ estado: "erro", erro: "falha roteirizada: limite", resumo: null });
     expect(r.falha?.motivo).toBe("limite");
     expect(r.sono).toEqual({ motivo: "limite", ate: "2026-10-09T15:00:00.000Z" });
-    expect(situacao("nuno").atividade).toBe("erro");
+    expect(situacao("nuno")).toMatchObject({
+      estado: "dormindo",
+      motivoSono: "limite",
+      dormeAte: "2026-10-09T15:00:00.000Z",
+      atividade: "erro",
+    });
 
+    // Acordado (a configuração do provedor mudou), o próximo pedido roda e o erro sai do dock.
+    runtime.estados.acordar("nuno");
     await runtime.executar(pedir("nuno", "e agora?"));
-    expect(situacao("nuno").atividade).toBe("ocioso");
+    expect(situacao("nuno")).toMatchObject({ estado: "ativo", motivoSono: null, atividade: "ocioso" });
   });
 
-  test("agente sem modelo registra o erro sem chamar provedor e pede sono sem hora", async () => {
-    const { runtime } = montar();
+  test("agente sem modelo aparece dormindo e registra o erro na hora, sem chamar provedor", async () => {
+    const { runtime, situacao } = montar();
+    expect(situacao("tula")).toMatchObject({ estado: "dormindo", motivoSono: "sem_modelo", dormeAte: null });
     const r = await runtime.executar(pedir("tula", "quanto gastei?"));
     expect(r.execucao).toMatchObject({
       estado: "erro",

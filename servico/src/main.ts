@@ -159,7 +159,14 @@ const runtime = new Runtime(
     },
   },
 );
-const agentes = new ServicoAgentes(repositorioAgentes, catalogo, (agente) => runtime.situacao(agente));
+const agentes = new ServicoAgentes(
+  repositorioAgentes,
+  catalogo,
+  (agente) => runtime.situacao(agente),
+  runtime.estados,
+);
+// Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
+runtime.estados.vigiar();
 const execucoes = new ServicoExecucoes(repositorioExecucoes, catalogo, {
   mudou: (execucao) => servidor?.emitir("execucoes.mudou", execucao),
 });
@@ -204,6 +211,9 @@ servidor = await abrirServidorWs(token, {
   "agentes.listar": () => agentes.listar(),
   "agentes.obter": (pedido) => agentes.obter(pedido),
   "agentes.capacidades": (pedido) => agentes.capacidades(pedido),
+  "agentes.ligar": (pedido) => agentes.ligar(pedido),
+  "agentes.pausar": (pedido) => agentes.pausar(pedido),
+  "agentes.retomar": (pedido) => agentes.retomar(pedido),
   "execucoes.listar": (pedido) => execucoes.listar(pedido),
   "execucoes.obter": (pedido) => execucoes.obter(pedido),
   "execucoes.desfazer": (pedido) => execucoes.desfazer(pedido),
@@ -216,9 +226,6 @@ servidor = await abrirServidorWs(token, {
   ...semAtendente([
     "agentes.definir",
     "agentes.restaurarPadrao",
-    "agentes.ligar",
-    "agentes.pausar",
-    "agentes.retomar",
     "provedores.listar",
     "provedores.detectar",
     "provedores.criar",

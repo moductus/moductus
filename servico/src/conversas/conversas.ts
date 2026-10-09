@@ -14,6 +14,7 @@ import type {
 import { colunasDeOrigem, DO_USUARIO, type Carimbo } from "../banco/tabela.ts";
 import { novoId } from "../banco/ulid.ts";
 import type { RepositorioAgentes } from "../agentes/agentes.ts";
+import { MENSAGEM_DESLIGADO } from "../agentes/estado.ts";
 import { HISTORICO_CURTO } from "../agentes/pedido.ts";
 import { AGENTE_PADRAO, type AgenteRoteavel, type Destino, type Roteador } from "../agentes/roteador.ts";
 import type { Runtime } from "../agentes/runtime.ts";
@@ -373,6 +374,8 @@ export class ServicoConversas {
     if (conversa.agenteId !== null) {
       const agente = this.deps.agentes.agente(conversa.agenteId);
       if (!agente) throw new Error("agente não encontrado");
+      // Dormindo ou pausado, a resposta espera na fila dele; desligado, não viria nunca.
+      if (agente.estado === "desligado") throw new Error(MENSAGEM_DESLIGADO(agente.nome));
       return [agente];
     }
     const ligados = this.deps.agentes.agentes().filter((a) => a.estado !== "desligado");

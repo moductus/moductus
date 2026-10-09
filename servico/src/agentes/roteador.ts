@@ -244,8 +244,9 @@ export const PRAZO_CLASSIFICADOR_MS = 20_000;
 
 /**
  * O classificador pelo modelo do agente padrão, como uma execução dele: aparece no histórico com
- * tokens e custo, sem ferramentas e com o prompt curto no lugar das instruções. Agente sem modelo
- * ou desligado não classifica: a mensagem vai ao padrão sem uma execução a mais.
+ * tokens e custo, sem ferramentas e com o prompt curto no lugar das instruções. Agente sem modelo,
+ * dormindo, pausado ou desligado não classifica (não pode chamar o modelo agora): a mensagem vai
+ * ao padrão sem uma execução a mais.
  *
  * Roda fora da fila da Alba, para não esperar uma resposta longa dela nem atrasar a próxima, e com
  * prazo curto: estourou, a execução é cancelada e a mensagem vai ao padrão.
@@ -259,7 +260,7 @@ export function classificadorPeloRuntime(
   const prazoMs = opcoes.prazoMs ?? PRAZO_CLASSIFICADOR_MS;
   return async ({ texto, agentes: roteaveis, ultimoAResponder }) => {
     const quem = agentes.agente(agenteId);
-    if (!quem?.provedorId || quem.estado === "desligado") return [];
+    if (!quem?.provedorId || quem.estado !== "ativo") return [];
     const controle = new AbortController();
     let estourou!: () => void;
     const prazo = new Promise<null>((resolve) => (estourou = () => resolve(null)));

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { RepositorioAgentes } from "../agentes/agentes.ts";
 import { RepositorioExecucoes } from "../agentes/execucoes.ts";
 import { classificadorPeloRuntime, Roteador } from "../agentes/roteador.ts";
+import { MENSAGEM_DESLIGADO } from "../agentes/estado.ts";
 import { MENSAGEM_CANCELADA, MENSAGEM_SEM_MODELO, Runtime } from "../agentes/runtime.ts";
 import { abrirBanco } from "../banco/conexao.ts";
 import { limparLixeira } from "../banco/lixeira.ts";
@@ -75,7 +76,7 @@ function montar(opcoes: { prazoMs?: number; roteador?: (padrao: Roteador) => Rot
     },
     { agora },
   );
-  return { db, falsos, execucoes, eventos, repo, servico };
+  return { db, falsos, execucoes, eventos, repo, servico, runtime };
 }
 
 /** As mensagens da conversa na ordem em que foram ditas. */
@@ -310,6 +311,38 @@ describe("conversa com o time", () => {
     expect(conversaInteira(servico, time.id)).toHaveLength(2);
   });
 
+  test("dormindo, a resposta espera ele acordar; a Alba dormindo não classifica", async () => {
+    const { db, servico, falsos, runtime } = montar();
+    db.exec(`UPDATE agentes SET estado = 'dormindo', motivo_sono = 'limite', dorme_ate = '2026-10-09T18:00:00.000Z'
+             WHERE id IN ('alba', 'tula')`);
+    falsos.tula.roteirizar(roteiros.resposta("R$ 45 no mercado."));
+    falsos.alba.roteirizar(roteiros.resposta("Amanhã está livre."));
+    const time = servico.abrir({});
+
+    expect((await servico.enviar({ conversaId: time.id, conteudo: "Quanto foi, R$ 45?" })).agentes).toEqual([
+      "tula",
+    ]);
+    // Sem regra, o classificador seria o modelo da Alba, que dorme: vai a ela na hora, sem esperar
+    // o prazo do classificador na porta dela.
+    const inicio = Date.now();
+    expect((await servico.enviar({ conversaId: time.id, conteudo: "e amanhã?" })).agentes).toEqual(["alba"]);
+    expect(Date.now() - inicio).toBeLessThan(1_000);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(falsos.tula.pedidos).toHaveLength(0);
+    expect(falsos.alba.pedidos).toHaveLength(0);
+    expect(conversaInteira(servico, time.id)).toHaveLength(2);
+
+    runtime.estados.acordar("tula");
+    runtime.estados.acordar("alba");
+    await servico.ocioso();
+    expect(conversaInteira(servico, time.id).map((m) => m.conteudo)).toEqual([
+      "Quanto foi, R$ 45?",
+      "e amanhã?",
+      "R$ 45 no mercado.",
+      "Amanhã está livre.",
+    ]);
+  });
+
   test("agente desligado fica fora do roteamento", async () => {
     const { db, servico, falsos } = montar();
     db.exec("UPDATE agentes SET estado = 'desligado' WHERE id = 'tula'");
@@ -323,6 +356,16 @@ describe("conversa com o time", () => {
 });
 
 describe("conversa com um agente", () => {
+  test("desligado, a fala é recusada antes de ser gravada", async () => {
+    const { db, servico } = montar();
+    db.exec("UPDATE agentes SET estado = 'desligado' WHERE id = 'nuno'");
+    const nuno = servico.abrir({ agenteId: "nuno" });
+    await expect(servico.enviar({ conversaId: nuno.id, conteudo: "oi" })).rejects.toThrow(
+      MENSAGEM_DESLIGADO("Nuno"),
+    );
+    expect(conversaInteira(servico, nuno.id)).toHaveLength(0);
+  });
+
   test("só ele responde, e a próxima resposta continua a sessão que a anterior deixou", async () => {
     const { servico, falsos } = montar();
     falsos.nuno.roteirizar(
@@ -370,7 +413,8 @@ describe("conversa com um agente", () => {
         { tipo: "texto", texto: "R$ 512." },
         { tipo: "fim", continuacao: "sessao-tula" },
       ],
-      roteiros.falha("limite", "2026-10-09T18:00:00.000Z"),
+      // A volta já passou quando chega a próxima pergunta: a Tula acorda e responde.
+      roteiros.falha("limite", "2026-10-09T14:00:00.000Z"),
       roteiros.resposta("R$ 600."),
     );
     const tula = servico.abrir({ agenteId: "tula" });

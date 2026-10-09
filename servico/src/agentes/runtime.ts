@@ -21,6 +21,7 @@ import { estimarCusto, type CustoExecucao, type UsoDeChamada } from "../provedor
 import type { RegistroProvedores } from "../provedores/registro.ts";
 import type { AgenteGuardado, RepositorioAgentes } from "./agentes.ts";
 import type { AutorizarComCartao } from "./autorizar.ts";
+import { EstadosAgentes, type ConverterCusto } from "./estado.ts";
 import type { FimExecucao, RepositorioExecucoes } from "./execucoes.ts";
 import { FilaPorAgente } from "./fila.ts";
 import { historicoCurto, montarInstrucoes, resumir } from "./pedido.ts";
@@ -31,8 +32,9 @@ import { historicoCurto, montarInstrucoes, resumir } from "./pedido.ts";
  * escopo do agente e o histórico curto), espera a vez na fila do agente, roda pelo provedor
  * escolhido e registra a execução e cada ferramenta chamada. Agentes diferentes rodam em paralelo.
  *
- * Dormir, pausar e o provedor reserva são da F2-16: aqui a falha do provedor é registrada e volta
- * no resultado com o sono que ela pede.
+ * Na vez, o pedido ainda espera o agente poder chamar o modelo (estado.ts): dormindo ou pausado,
+ * fica na frente da fila até ele acordar ou retomar. A falha do provedor põe o agente para dormir,
+ * ou, com provedor reserva, manda o mesmo pedido à reserva.
  */
 
 export interface PedidoExecucao {
@@ -103,6 +105,10 @@ export interface OpcoesRuntime {
   gerarId?: () => string;
   /** Sem ele, a tabela de preços do serviço (provedores/precos.ts). */
   estimarCusto?: EstimarCusto;
+  /** O despertador de quem dorme ou está pausado; o teste troca pelo relógio falso. */
+  programar?: (fazer: () => void, ms: number) => () => void;
+  /** Câmbio do custo para a moeda do teto diário; sem ele, o teto não vale (estado.ts). */
+  emCentavos?: ConverterCusto;
 }
 
 export const MENSAGEM_SEM_MODELO = (nome: string) =>
@@ -136,6 +142,8 @@ interface Ativa {
 }
 
 export class Runtime {
+  /** Ativo, pausado, dormindo, desligado: quem decide se a vez do agente pode chamar o modelo. */
+  readonly estados: EstadosAgentes;
   private readonly fila: FilaPorAgente;
   private readonly agora: () => Date;
   private readonly gerarId: () => string;
@@ -154,12 +162,22 @@ export class Runtime {
     this.agora = opcoes.agora ?? (() => new Date());
     this.gerarId = opcoes.gerarId ?? novoId;
     this.estimarCusto = opcoes.estimarCusto ?? estimarCusto;
+    this.estados = new EstadosAgentes(
+      { agentes: deps.agentes, execucoes: deps.execucoes },
+      {
+        agora: this.agora,
+        aoMudar: (agenteId) => this.avisos.agente(agenteId),
+        ...(opcoes.programar ? { programar: opcoes.programar } : {}),
+        ...(opcoes.emCentavos ? { emCentavos: opcoes.emCentavos } : {}),
+      },
+    );
   }
 
   /**
    * Põe o pedido na fila do agente e devolve a execução registrada quando ela termina. Falha do
    * provedor, exceção e cancelamento durante a execução terminam registrados, sem lançar; só o
-   * agente que não existe e o cancelamento antes da vez lançam (não chegou a haver execução).
+   * agente que não existe ou está desligado e o cancelamento antes da vez lançam (não chegou a
+   * haver execução). Dormindo ou pausado, o pedido espera o agente acordar ou retomar.
    */
   async executar(pedido: PedidoExecucao): Promise<ResultadoExecucao> {
     if (!this.deps.agentes.agente(pedido.agenteId)) throw new Error("agente não encontrado");
@@ -170,15 +188,20 @@ export class Runtime {
     return this.fila.rodar(pedido.agenteId, () => this.rodar(pedido), pedido.sinal);
   }
 
-  /** O que o agente está fazendo agora, com o estado guardado no banco. */
+  /**
+   * O que o agente está fazendo agora, com o estado guardado no banco. Ligado e sem modelo, ele
+   * aparece dormindo sem hora, pelo motivo `sem_modelo`: não há o que acordá-lo além de escolher um.
+   * A fila conta também o pedido que espera na porta o sono ou a pausa acabar.
+   */
   situacao(agente: AgenteGuardado): SituacaoAgente {
+    const semModelo = agente.estado === "ativo" && agente.provedorId === null;
     return {
-      estado: agente.estado,
+      estado: semModelo ? "dormindo" : agente.estado,
       atividade: this.atividade(agente.id),
-      motivoSono: null,
+      motivoSono: semModelo ? "sem_modelo" : agente.estado === "dormindo" ? agente.motivoSono : null,
       dormeAte: agente.dormeAte,
-      pausadoAte: null,
-      fila: this.fila.esperandoDe(agente.id),
+      pausadoAte: agente.pausadoAte,
+      fila: this.fila.esperandoDe(agente.id) + this.estados.naPorta(agente.id),
     };
   }
 
@@ -199,11 +222,34 @@ export class Runtime {
   }
 
   private async rodar(pedido: PedidoExecucao): Promise<ResultadoExecucao> {
-    // Lido de novo na vez: configuração mudada enquanto esperava vale nesta execução.
-    const agente = this.deps.agentes.agente(pedido.agenteId);
-    if (!agente) throw new Error("agente não encontrado");
+    // Lido de novo na vez, depois do sono ou da pausa: configuração mudada enquanto esperava vale aqui.
+    const agente = await this.estados.esperarVez(pedido.agenteId, pedido.sinal);
+    const principal = agente.provedorId ? this.deps.agentes.provedor(agente.provedorId) : null;
+    const reserva =
+      principal && agente.provedorReservaId ? this.deps.agentes.provedor(agente.provedorReservaId) : null;
+    const naReserva = reserva !== null && this.estados.naReserva(agente.id);
+    let tentativa = await this.tentar(pedido, agente, naReserva ? reserva : principal);
+    // O principal falhou sem ter feito nada: o mesmo pedido vai à reserva, numa execução própria.
+    const sono = tentativa.resultado.sono;
+    if (!naReserva && reserva && sono && !tentativa.agiu && !pedido.sinal?.aborted) {
+      this.estados.principalFalhou(agente.id, sono);
+      tentativa = await this.tentar(pedido, agente, reserva);
+    }
+    const { resultado } = tentativa;
+    this.estados.depoisDaExecucao(agente.id, resultado.sono, resultado.execucao.estado === "ok");
+    return resultado;
+  }
+
+  /**
+   * Uma execução registrada pelo provedor dado. `agiu` diz se o provedor chegou a responder texto
+   * ou chamar ferramenta: só o que não agiu pode ser repetido na reserva.
+   */
+  private async tentar(
+    pedido: PedidoExecucao,
+    agente: AgenteGuardado,
+    config: ConfigProvedor | null,
+  ): Promise<{ resultado: ResultadoExecucao; agiu: boolean }> {
     const sinal = pedido.sinal ?? new AbortController().signal;
-    const config = agente.provedorId ? this.deps.agentes.provedor(agente.provedorId) : null;
     const id = this.gerarId();
     this.deps.execucoes.iniciar({
       id,
@@ -226,6 +272,7 @@ export class Runtime {
     );
 
     let texto = "";
+    let agiu = false;
     let tokens: { entrada: number; saida: number } | null = null;
     // Cada chamada ao modelo, para o custo sair pelo preço de cada uma (modelo, cache, faixa).
     const usos: UsoDeChamada[] = [];
@@ -260,6 +307,7 @@ export class Runtime {
           sinal,
         );
         for await (const evento of eventos) {
+          if (evento.tipo === "texto" || evento.tipo === "ferramenta") agiu = true;
           if (evento.tipo === "texto") texto += evento.texto;
           else if (evento.tipo === "uso") {
             tokens ??= { entrada: 0, saida: 0 };
@@ -295,7 +343,7 @@ export class Runtime {
       cobranca: custo?.cobranca ?? null,
     });
     const execucao = this.avisar(id, agente.id);
-    return { execucao, texto, continuacao, falha, sono };
+    return { resultado: { execucao, texto, continuacao, falha, sono }, agiu };
   }
 
   /**
