@@ -27,14 +27,51 @@ export interface ChamadaPedida {
   argumentos: string;
 }
 
+/**
+ * Um erro como as APIs o descrevem no corpo (`{"error": {...}}`): na recusa HTTP ou no meio do
+ * fluxo. `status` é o HTTP, ou o `code` numérico que o OpenRouter repete no corpo (0 sem nenhum).
+ */
+export interface ErroDaApi {
+  status: number;
+  mensagem: string;
+  /** `code` em texto (`credit_balance_exhausted`), ou o `metadata.error_type` do OpenRouter. */
+  codigo: string | null;
+  /** `type` (`insufficient_quota`, `rate_limit_error`). */
+  tipo: string | null;
+  /** A entrada foi barrada pela moderação (OpenRouter: `metadata.reasons`/`flagged_input`). */
+  moderacao: boolean;
+}
+
+/**
+ * O erro do corpo de uma resposta, nos formatos que as APIs usam: objeto `error` (OpenAI, OpenRouter,
+ * Ollama), `error` em texto ou só `message`. `null` quando o corpo não traz erro.
+ */
+export function erroDoCorpo(corpo: unknown, status = 0): ErroDaApi | null {
+  const raiz = objeto(corpo);
+  if (!raiz) return null;
+  if (typeof raiz.error === "string") {
+    return { status, mensagem: raiz.error, codigo: null, tipo: null, moderacao: false };
+  }
+  const erro = objeto(raiz.error);
+  if (!erro) {
+    const mensagem = texto(raiz.message);
+    return mensagem === null ? null : { status, mensagem, codigo: null, tipo: null, moderacao: false };
+  }
+  const metadados = objeto(erro.metadata);
+  const code = erro.code;
+  return {
+    status: status || (typeof code === "number" ? code : numero(erro.status)),
+    mensagem: texto(erro.message) ?? "",
+    codigo: texto(code) ?? texto(metadados?.error_type),
+    tipo: texto(erro.type),
+    moderacao: Array.isArray(metadados?.reasons) || typeof metadados?.flagged_input === "string",
+  };
+}
+
 /** O servidor mandou um erro no meio do fluxo (`{"error": {...}}`), depois do 200. */
 export class ErroNoFluxo extends Error {
-  constructor(
-    mensagem: string,
-    readonly status: number,
-    readonly codigo: string | null,
-  ) {
-    super(mensagem);
+  constructor(readonly erro: ErroDaApi) {
+    super(erro.mensagem || "erro sem mensagem");
   }
 }
 
@@ -54,6 +91,11 @@ export class LeitorChatCompletions {
   /** O modelo disse por que parou (`stop`, `tool_calls`, `length`): a resposta veio inteira. */
   get completa(): boolean {
     return this.fechou || this.motivoDoFim !== null;
+  }
+
+  /** `finish_reason: "error"`: o servidor parou a resposta por erro, mesmo sem mandar o objeto. */
+  get parouComErro(): boolean {
+    return this.motivoDoFim === "error";
   }
 
   /** O que o modelo escreveu nesta chamada, para voltar no histórico junto com as chamadas. */
@@ -118,15 +160,11 @@ export class LeitorChatCompletions {
     return [{ tipo: "texto", texto: fala }];
   }
 
+  /** Só o campo `error` conta aqui: num pedaço normal, `message` não é erro. */
   private lerErro(corpo: Objeto): void {
-    const erro = objeto(corpo.error) ?? (typeof corpo.error === "string" ? { message: corpo.error } : null);
-    if (!erro) return;
-    const codigo = erro.code;
-    throw new ErroNoFluxo(
-      texto(erro.message) ?? "erro sem mensagem",
-      typeof codigo === "number" ? codigo : numero(erro.status),
-      texto(codigo) ?? texto(erro.type),
-    );
+    if (corpo.error === undefined || corpo.error === null) return;
+    const erro = erroDoCorpo(corpo);
+    if (erro) throw new ErroNoFluxo(erro);
   }
 
   private lerComum(corpo: Objeto): void {

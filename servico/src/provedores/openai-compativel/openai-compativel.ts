@@ -9,7 +9,14 @@ import type {
   ResultadoDeFerramenta,
 } from "../provedor.ts";
 import type { FabricaProvedor } from "../registro.ts";
-import { dadosSse, ErroNoFluxo, LeitorChatCompletions, type ChamadaPedida } from "./leitor.ts";
+import {
+  dadosSse,
+  erroDoCorpo,
+  ErroNoFluxo,
+  LeitorChatCompletions,
+  type ChamadaPedida,
+  type ErroDaApi,
+} from "./leitor.ts";
 
 /**
  * Adaptador de API compatível com OpenAI (AGENTS.md §3): `POST {base_url}/chat/completions` com
@@ -20,25 +27,41 @@ import { dadosSse, ErroNoFluxo, LeitorChatCompletions, type ChamadaPedida } from
  *
  * A chave mora no Gerenciador de Credenciais e é lida pela casca a cada execução; só passa pela
  * memória, no cabeçalho. Sem chave configurada (Ollama, LM Studio), o pedido vai sem
- * `Authorization`.
+ * `Authorization`. Nenhuma mensagem de falha leva a chave nem o endereço inteiro.
  */
 
-/** O endereço da API da OpenAI, para o tipo `openai`, que não pede `base_url`. */
+/** O endereço da API da OpenAI: o tipo `openai` usa sempre este, com qualquer `base_url` guardada. */
 export const BASE_URL_OPENAI = "https://api.openai.com/v1";
 
 /**
- * Quantas voltas modelo → ferramentas → modelo uma execução pode dar. Um modelo que pede
- * ferramenta sem parar (comum em modelo local pequeno) não pode prender o agente para sempre.
+ * Quantas vezes uma execução chama o modelo. Um modelo que pede ferramenta sem parar (comum em
+ * modelo local pequeno) não pode prender o agente para sempre: a última chamada que ainda pede
+ * ferramenta encerra a execução sem rodar nada, porque o resultado não voltaria a ninguém.
  */
 export const LIMITE_VOLTAS = 25;
 
 /** Quanto do texto de erro do servidor entra na mensagem da falha. */
 const TAMANHO_DETALHE = 300;
 
+/**
+ * Códigos de conta sem crédito ou com teto de gasto atingido (OpenAI, conferidos em
+ * https://developers.openai.com/api/docs/guides/error-codes em 09/10/2026). Vêm com status 429,
+ * mas não passam esperando: só o usuário resolve, então é `credencial`, sem hora.
+ */
+const SEM_CREDITO = new Set([
+  "insufficient_quota",
+  "credit_balance_exhausted",
+  "organization_spend_limit_exceeded",
+  "project_spend_limit_exceeded",
+  "organization_usage_limit_exceeded",
+]);
+
 export interface OpcoesOpenAiCompativel {
   /** O Gerenciador de Credenciais pela casca; o adaptador só lê. */
   credenciais: Pick<Credenciais, "ler">;
   agora?: () => Date;
+  /** Quem faz o pedido HTTP; os testes trocam pela resposta gravada, sem rede. */
+  buscar?: typeof fetch;
 }
 
 /** Uma mensagem no formato da API. */
@@ -60,6 +83,13 @@ interface Destino {
   url: string;
   cabecalhos: Record<string, string>;
   modelo: string;
+  /** Para tirar a chave de qualquer texto que o servidor devolva. */
+  chave: string | null;
+}
+
+/** Uma recusa do servidor, como a classificação lê. */
+export interface Recusa extends ErroDaApi {
+  retryAfter: string | null;
 }
 
 /** O que vai ao modelo no começo: as instruções como prompt de sistema e o histórico curto. */
@@ -91,24 +121,33 @@ export function horaDoRetryAfter(valor: string | null, agora: Date): string | nu
 }
 
 /**
- * Qual falha do provedor uma recusa do servidor é, pelo status HTTP e pelo código de erro que as
- * APIs mandam no corpo. `null`: o erro é do pedido (contexto longo demais, ferramenta mal
- * descrita), não do provedor; a execução falha e o agente não dorme.
+ * Texto que veio de fora (corpo de erro, mensagem de rede) pronto para a mensagem da falha: sem a
+ * chave, sem endereço (que pode levar usuário e senha) e curto.
  */
-export function falhaDaRecusa(
-  recusa: { status: number; mensagem: string; codigo: string | null; retryAfter: string | null },
-  quem: string,
-  agora: Date,
-): FalhaProvedor | null {
-  const { status, codigo } = recusa;
-  const detalhe = recusa.mensagem ? `: ${recusa.mensagem.slice(0, TAMANHO_DETALHE)}` : ".";
-  if (codigo === "insufficient_quota") {
+export function limparDetalhe(texto: string, chave: string | null): string {
+  let limpo = chave ? texto.replaceAll(chave, "***") : texto;
+  limpo = limpo.replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, "(endereço)");
+  return limpo.trim().slice(0, TAMANHO_DETALHE);
+}
+
+/**
+ * Qual falha do provedor uma recusa do servidor é, pelo status HTTP e pelo código e tipo de erro
+ * que as APIs mandam no corpo. `null`: o erro é do pedido (contexto longo demais, ferramenta mal
+ * descrita, entrada barrada pela moderação), não do provedor; a execução falha e o agente não
+ * dorme. A mensagem da recusa já chega limpa ({@link limparDetalhe}).
+ */
+export function falhaDaRecusa(recusa: Recusa, quem: string, agora: Date): FalhaProvedor | null {
+  const { status, codigo, tipo } = recusa;
+  const detalhe = recusa.mensagem ? `: ${recusa.mensagem}` : ".";
+  // Moderação recusa este pedido, não o provedor: outro pedido passa.
+  if (recusa.moderacao) return null;
+  if (status === 402 || SEM_CREDITO.has(codigo ?? "") || tipo === "insufficient_quota") {
     return { motivo: "credencial", mensagem: `A conta d${quem} está sem crédito${detalhe}`, voltaEm: null };
   }
   if (status === 401 || status === 403 || codigo === "invalid_api_key") {
     return { motivo: "credencial", mensagem: `${maiuscula(quem)} recusou a chave${detalhe}`, voltaEm: null };
   }
-  if (status === 429 || /rate_limit/i.test(codigo ?? "")) {
+  if (status === 429 || /rate_limit/i.test(codigo ?? "") || /rate_limit/i.test(tipo ?? "")) {
     return {
       motivo: "limite",
       mensagem: `O limite de uso d${quem} acabou${detalhe}`,
@@ -158,7 +197,7 @@ export class ProvedorOpenAiCompativel implements Provedor {
       function: { name: f.nome, description: f.descricao, parameters: f.esquema },
     }));
 
-    for (let volta = 1; volta <= LIMITE_VOLTAS; volta++) {
+    for (let volta = 1; ; volta++) {
       const corpo = {
         model: destino.modelo,
         messages: mensagens,
@@ -180,6 +219,11 @@ export class ProvedorOpenAiCompativel implements Provedor {
         yield { tipo: "fim", continuacao: null };
         return;
       }
+      if (volta >= LIMITE_VOLTAS) {
+        throw new Error(
+          `O modelo pediu ferramentas ${LIMITE_VOLTAS} vezes seguidas sem chegar a uma resposta. Nada mais foi feito.`,
+        );
+      }
       const chamadas = pedidas.map((p, i) => ({ ...p, id: p.id ?? `chamada-${volta}-${i + 1}` }));
       mensagens.push({
         role: "assistant",
@@ -196,31 +240,38 @@ export class ProvedorOpenAiCompativel implements Provedor {
         mensagens.push({ role: "tool", tool_call_id: chamada.id, content: conteudoDoResultado(resultado) });
       }
     }
-    throw new Error(
-      `O modelo pediu ferramentas ${LIMITE_VOLTAS} vezes seguidas sem chegar a uma resposta. Nada mais foi feito.`,
-    );
   }
 
-  /** Para quem as mensagens de falha falam: o endereço, sem caminho nem credencial. */
+  /** Para quem as mensagens de falha falam: o host, sem caminho nem credencial. */
   private get quem(): string {
-    const base = this.baseUrl();
-    if (this.config.tipo === "openai" && base === BASE_URL_OPENAI) return "a OpenAI";
+    if (this.config.tipo === "openai") return "a OpenAI";
     try {
-      return base ? `o provedor em ${new URL(base).host}` : "o provedor";
+      return this.config.baseUrl ? `o provedor em ${new URL(this.config.baseUrl).host}` : "o provedor";
     } catch {
       return "o provedor";
     }
   }
 
-  private baseUrl(): string | null {
-    return this.config.baseUrl ?? (this.config.tipo === "openai" ? BASE_URL_OPENAI : null);
-  }
-
   /** Endereço, modelo e chave; o que faltar é falha que só o usuário resolve. */
   private async destino(): Promise<Destino | { falha: FalhaProvedor }> {
-    const base = this.baseUrl();
+    // A OpenAI tem endereço fixo: uma base_url guardada no tipo `openai` não desvia a chave dela.
+    const base = this.config.tipo === "openai" ? BASE_URL_OPENAI : this.config.baseUrl;
     if (!base) {
       return ausente("Falta o endereço (base_url) deste provedor. Informe em Configurações › Modelos.");
+    }
+    let endereco: URL;
+    try {
+      endereco = new URL(base);
+    } catch {
+      return ausente(
+        "O endereço (base_url) deste provedor não é válido. Corrija em Configurações › Modelos.",
+      );
+    }
+    if (endereco.username || endereco.password) {
+      // O endereço não entra na mensagem: ele mesmo carrega o segredo.
+      return ausente(
+        "O endereço (base_url) deste provedor tem usuário ou senha embutidos. Tire-os do endereço e informe a chave no campo próprio, em Configurações › Modelos.",
+      );
     }
     if (!this.config.modelo) {
       return ausente("Falta escolher o modelo deste provedor. Escolha em Configurações › Modelos.");
@@ -229,8 +280,9 @@ export class ProvedorOpenAiCompativel implements Provedor {
       "Content-Type": "application/json",
       Accept: "text/event-stream, application/json",
     };
+    let chave: string | null = null;
     if (this.config.credencial) {
-      const chave = await this.opcoes.credenciais.ler(this.config.credencial);
+      chave = await this.opcoes.credenciais.ler(this.config.credencial);
       if (!chave) {
         return {
           falha: {
@@ -251,7 +303,12 @@ export class ProvedorOpenAiCompativel implements Provedor {
         },
       };
     }
-    return { url: `${base.replace(/\/+$/, "")}/chat/completions`, cabecalhos, modelo: this.config.modelo };
+    return {
+      url: `${base.replace(/\/+$/, "")}/chat/completions`,
+      cabecalhos,
+      modelo: this.config.modelo,
+      chave,
+    };
   }
 
   /**
@@ -266,7 +323,7 @@ export class ProvedorOpenAiCompativel implements Provedor {
   ): AsyncGenerator<EventoAgente, FalhaProvedor | null> {
     let resposta: Response;
     try {
-      resposta = await fetch(destino.url, {
+      resposta = await (this.opcoes.buscar ?? fetch)(destino.url, {
         method: "POST",
         headers: destino.cabecalhos,
         body: JSON.stringify(corpo),
@@ -274,21 +331,22 @@ export class ProvedorOpenAiCompativel implements Provedor {
       });
     } catch (erro) {
       sinal.throwIfAborted();
-      return this.foraDoAr(`não respondeu (${causa(erro)})`);
+      return this.foraDoAr(`não respondeu (${this.causa(erro, destino)})`);
     }
 
     if (!resposta.ok) {
-      const { mensagem, codigo } = lerRecusa(await resposta.text().catch(() => ""));
-      const recusa = {
-        status: resposta.status,
-        mensagem,
-        codigo,
-        retryAfter: resposta.headers.get("retry-after"),
-      };
+      const texto = await resposta.text().catch(() => "");
+      // Cancelado enquanto lia a recusa: é cancelamento, não falha do provedor.
+      sinal.throwIfAborted();
+      const recusa = this.recusa(
+        lerRecusa(texto, resposta.status),
+        destino,
+        resposta.headers.get("retry-after"),
+      );
       const falha = falhaDaRecusa(recusa, this.quem, this.agora());
       if (falha) return falha;
       throw new Error(
-        `${maiuscula(this.quem)} recusou o pedido (HTTP ${resposta.status})${mensagem ? `: ${mensagem.slice(0, TAMANHO_DETALHE)}` : "."}`,
+        `${maiuscula(this.quem)} recusou o pedido (HTTP ${resposta.status})${recusa.mensagem ? `: ${recusa.mensagem}` : "."}`,
       );
     }
 
@@ -313,20 +371,40 @@ export class ProvedorOpenAiCompativel implements Provedor {
     } catch (erro) {
       sinal.throwIfAborted();
       if (erro instanceof ErroNoFluxo) {
-        const recusa = { status: erro.status, mensagem: erro.message, codigo: erro.codigo, retryAfter: null };
+        const recusa = this.recusa(erro.erro, destino, null);
         const falha = falhaDaRecusa(recusa, this.quem, this.agora());
         if (falha) return falha;
-        throw new Error(
-          `${maiuscula(this.quem)} parou a resposta com erro: ${erro.message.slice(0, TAMANHO_DETALHE)}`,
-          { cause: erro },
-        );
+        throw new Error(`${maiuscula(this.quem)} parou a resposta com erro: ${recusa.mensagem}`, {
+          cause: erro,
+        });
       }
       if (erro instanceof RespostaIlegivel) throw erro;
       // O resto é da conexão: o servidor caiu ou fechou no meio do corpo.
-      return this.foraDoAr(`caiu no meio da resposta (${causa(erro)})`);
+      return this.foraDoAr(`caiu no meio da resposta (${this.causa(erro, destino)})`);
     }
+    if (leitor.parouComErro) return this.foraDoAr("parou a resposta com erro, sem dizer qual");
     if (!leitor.completa) return this.foraDoAr("parou de responder no meio da resposta");
     return null;
+  }
+
+  private recusa(erro: ErroDaApi, destino: Destino, retryAfter: string | null): Recusa {
+    return { ...erro, mensagem: limparDetalhe(erro.mensagem, destino.chave), retryAfter };
+  }
+
+  /**
+   * O motivo técnico de uma falha de rede: o código (`ECONNREFUSED`, `UND_ERR_SOCKET`) quando
+   * houver; senão a mensagem, limpa, porque a do `fetch` pode trazer o endereço inteiro.
+   */
+  private causa(erro: unknown, destino: Destino): string {
+    const motivo = (erro as { cause?: { code?: unknown; message?: unknown } } | null)?.cause;
+    if (typeof motivo?.code === "string") return motivo.code;
+    const mensagem =
+      typeof motivo?.message === "string"
+        ? motivo.message
+        : erro instanceof Error
+          ? erro.message
+          : String(erro);
+    return limparDetalhe(mensagem, destino.chave) || "sem detalhe";
   }
 
   /**
@@ -373,30 +451,15 @@ function ausente(mensagem: string): { falha: FalhaProvedor } {
   return { falha: { motivo: "ausente", mensagem, voltaEm: null } };
 }
 
-/** A mensagem e o código de erro do corpo de uma recusa, nos formatos que as APIs usam. */
-function lerRecusa(corpo: string): { mensagem: string; codigo: string | null } {
+/** O erro do corpo de uma recusa; corpo que não é JSON (proxy, página de erro) vale como texto. */
+function lerRecusa(corpo: string, status: number): ErroDaApi {
   try {
-    const json = JSON.parse(corpo) as { error?: unknown; message?: unknown };
-    const erro = json.error;
-    if (typeof erro === "string") return { mensagem: erro, codigo: null };
-    if (typeof erro === "object" && erro !== null) {
-      const { message, code, type } = erro as Record<string, unknown>;
-      const codigo = typeof code === "string" ? code : typeof type === "string" ? type : null;
-      return { mensagem: typeof message === "string" ? message : "", codigo };
-    }
-    if (typeof json.message === "string") return { mensagem: json.message, codigo: null };
+    const erro = erroDoCorpo(JSON.parse(corpo), status);
+    if (erro) return erro;
   } catch {
-    // Corpo que não é JSON: vale o texto.
+    // Não é JSON: vale o texto.
   }
-  return { mensagem: corpo.trim(), codigo: null };
-}
-
-/** O motivo técnico de uma falha de rede (`ECONNREFUSED`, `terminated`), sem pilha. */
-function causa(erro: unknown): string {
-  const motivo = (erro as { cause?: { code?: unknown; message?: unknown } } | null)?.cause;
-  if (typeof motivo?.code === "string") return motivo.code;
-  if (typeof motivo?.message === "string") return motivo.message;
-  return erro instanceof Error ? erro.message : String(erro);
+  return { status, mensagem: corpo, codigo: null, tipo: null, moderacao: false };
 }
 
 function maiuscula(texto: string): string {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { dadosSse, ErroNoFluxo, LeitorChatCompletions } from "./leitor.ts";
+import { dadosSse, erroDoCorpo, ErroNoFluxo, LeitorChatCompletions } from "./leitor.ts";
 
 /** Um corpo que chega nos pedaços dados, cortados onde a rede quiser. */
 function corpo(...pedacos: string[]): ReadableStream<Uint8Array> {
@@ -76,7 +76,38 @@ describe("LeitorChatCompletions", () => {
       erro = e;
     }
     expect(erro).toBeInstanceOf(ErroNoFluxo);
-    expect(erro).toMatchObject({ status: 502, codigo: null, message: "Provider returned error" });
+    expect(erro).toMatchObject({
+      message: "Provider returned error",
+      erro: { status: 502, codigo: null, tipo: null, moderacao: false },
+    });
+  });
+
+  test("erro do corpo: code e type separados, error_type do OpenRouter e moderação", () => {
+    expect(
+      erroDoCorpo(
+        { error: { message: "sem crédito", type: "insufficient_quota", code: "credit_balance_exhausted" } },
+        429,
+      ),
+    ).toEqual({
+      status: 429,
+      mensagem: "sem crédito",
+      codigo: "credit_balance_exhausted",
+      tipo: "insufficient_quota",
+      moderacao: false,
+    });
+    expect(
+      erroDoCorpo({ error: { code: 429, message: "x", metadata: { error_type: "rate_limit_exceeded" } } }),
+    ).toMatchObject({ status: 429, codigo: "rate_limit_exceeded" });
+    expect(
+      erroDoCorpo({ error: { code: 403, message: "flagged", metadata: { reasons: ["violence"] } } }, 403),
+    ).toMatchObject({ moderacao: true });
+    expect(erroDoCorpo({ choices: [] })).toBeNull();
+  });
+
+  test("finish_reason error marca a resposta como parada por erro", () => {
+    const leitor = new LeitorChatCompletions();
+    leitor.lerPedaco(JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "error" }] }));
+    expect(leitor.parouComErro).toBe(true);
   });
 
   test("uso da Groq em x_groq também conta", () => {

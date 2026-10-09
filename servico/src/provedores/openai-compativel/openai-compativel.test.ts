@@ -9,7 +9,9 @@ import {
   falhaDaRecusa,
   horaDoRetryAfter,
   LIMITE_VOLTAS,
+  limparDetalhe,
   ProvedorOpenAiCompativel,
+  type Recusa,
 } from "./openai-compativel.ts";
 
 /** Um pedido recebido pelo servidor falso: os cabeçalhos e o corpo já lido como JSON. */
@@ -266,6 +268,45 @@ describe("chave pelo Gerenciador de Credenciais", () => {
     expect(falhaDe(await rodar(config({ baseUrl, modelo: null })))).toMatchObject({ motivo: "ausente" });
     expect(recebidos).toHaveLength(0);
   });
+
+  test("endereço com usuário e senha é recusado sem ecoar o endereço nem chamar a API", async () => {
+    const baseUrl = await servidorFalso();
+    const comSenha = baseUrl.replace("http://", "http://fulano:senha-secreta@");
+
+    const falha = falhaDe(await rodar(config({ baseUrl: comSenha })));
+
+    expect(falha).toMatchObject({ motivo: "ausente", voltaEm: null });
+    expect(falha.mensagem).toContain("usuário ou senha");
+    expect(falha.mensagem).not.toContain("senha-secreta");
+    expect(falha.mensagem).not.toContain("fulano");
+    expect(recebidos).toHaveLength(0);
+  });
+
+  test("OpenAI vai sempre a api.openai.com, mesmo com outra base_url guardada", async () => {
+    const urls: string[] = [];
+    const buscar: typeof fetch = (url) => {
+      urls.push(String(url));
+      return Promise.resolve(
+        new Response(`data: ${JSON.stringify(delta({ content: "oi" }, "stop"))}\n\ndata: [DONE]\n\n`, {
+          headers: { "Content-Type": "text/event-stream" },
+        }),
+      );
+    };
+    const openai = new ProvedorOpenAiCompativel(
+      config({
+        tipo: "openai",
+        modelo: "gpt-5-mini",
+        baseUrl: "http://127.0.0.1:9/v1",
+        credencial: "moductus/provedor/01JA",
+      }),
+      { credenciais, buscar },
+    );
+
+    const eventos = await coletar(openai.executar(pedido(), new AbortController().signal));
+
+    expect(urls).toEqual(["https://api.openai.com/v1/chat/completions"]);
+    expect(eventos.at(-1)).toEqual({ tipo: "fim", continuacao: null });
+  });
 });
 
 describe("ciclo de ferramentas no serviço", () => {
@@ -396,18 +437,25 @@ describe("ciclo de ferramentas no serviço", () => {
     expect(eventos.at(-1)).toEqual({ tipo: "fim", continuacao: null });
   });
 
-  test(`modelo que pede ferramenta sem parar é cortado em ${LIMITE_VOLTAS} voltas`, async () => {
+  test(`modelo que pede ferramenta sem parar é cortado em ${LIMITE_VOLTAS} chamadas, sem rodar a última`, async () => {
     const pedeDeNovo = sse([
       delta({ tool_calls: [{ index: 0, id: "c", function: { name: "sessoes__listar", arguments: "{}" } }] }),
       delta({}, "tool_calls"),
     ]);
     const baseUrl = await servidorFalso(...Array.from({ length: LIMITE_VOLTAS }, () => pedeDeNovo));
-    const executarFerramenta = () => Promise.resolve({ ok: true as const, valor: [] });
+    let execucoes = 0;
+    const executarFerramenta = () => {
+      execucoes++;
+      return Promise.resolve({ ok: true as const, valor: [] });
+    };
 
     await expect(rodar(config({ baseUrl }), pedido({ ferramentas, executarFerramenta }))).rejects.toThrow(
       `${LIMITE_VOLTAS} vezes seguidas`,
     );
     expect(recebidos).toHaveLength(LIMITE_VOLTAS);
+    // A ferramenta da última chamada não roda: o resultado não voltaria ao modelo.
+    expect(execucoes).toBe(LIMITE_VOLTAS - 1);
+    expect(execucoes).toBe(24);
   });
 });
 
@@ -422,6 +470,80 @@ describe("falhas do provedor", () => {
     expect(falha).toMatchObject({ motivo: "credencial", voltaEm: null });
     expect(falha.mensagem).toContain("Incorrect API key provided");
     expect(falha.mensagem).not.toContain(CHAVE);
+  });
+
+  test("chave e endereço que o servidor devolve no erro saem da mensagem", async () => {
+    const baseUrl = await servidorFalso(
+      recusa(401, {
+        error: { message: `Incorrect API key provided: ${CHAVE}. See https://u:p@exemplo.com/chaves` },
+      }),
+    );
+
+    const falha = falhaDe(await rodar(config({ baseUrl, credencial: "moductus/provedor/01JA" })));
+
+    expect(falha.mensagem).not.toContain(CHAVE);
+    expect(falha.mensagem).not.toContain("u:p@");
+    expect(falha.mensagem).toContain("Incorrect API key provided: ***. See (endereço)");
+  });
+
+  test("403 sem moderação é credencial", async () => {
+    const baseUrl = await servidorFalso(recusa(403, { error: { message: "IP not authorized" } }));
+
+    expect(falhaDe(await rodar(config({ baseUrl })))).toMatchObject({ motivo: "credencial" });
+  });
+
+  test("403 da moderação é erro do pedido: a execução falha e o agente não dorme", async () => {
+    const baseUrl = await servidorFalso(
+      recusa(403, {
+        error: {
+          code: 403,
+          message: 'openai/gpt-5 requires moderation on OpenRouter. Your input was flagged for "violence".',
+          metadata: {
+            reasons: ["violence"],
+            flagged_input: "...",
+            provider_name: "OpenAI",
+            model_slug: "openai/gpt-5",
+          },
+        },
+      }),
+    );
+
+    await expect(rodar(config({ baseUrl }))).rejects.toThrow("HTTP 403");
+  });
+
+  test("conta sem crédito na OpenAI (429, formato atual) é credencial, não limite", async () => {
+    const baseUrl = await servidorFalso(
+      recusa(
+        429,
+        {
+          error: {
+            message: "You have run out of credits.",
+            type: "insufficient_quota",
+            param: null,
+            code: "credit_balance_exhausted",
+          },
+        },
+        { "Retry-After": "20" },
+      ),
+    );
+
+    const falha = falhaDe(await rodar(config({ baseUrl })));
+
+    expect(falha).toMatchObject({ motivo: "credencial", voltaEm: null });
+    expect(falha.mensagem).toContain("sem crédito");
+  });
+
+  test("402 do OpenRouter (sem crédito) é credencial", async () => {
+    const baseUrl = await servidorFalso(
+      recusa(402, {
+        error: { code: 402, message: "Insufficient credits. Add more using https://openrouter.ai/credits" },
+      }),
+    );
+
+    const falha = falhaDe(await rodar(config({ baseUrl })));
+
+    expect(falha).toMatchObject({ motivo: "credencial", voltaEm: null });
+    expect(falha.mensagem).toContain("Insufficient credits. Add more using (endereço)");
   });
 
   test("429 é limite, com a hora de volta pelo Retry-After", async () => {
@@ -500,6 +622,30 @@ describe("falhas do provedor", () => {
 
     expect(falha.motivo).toBe("limite");
   });
+
+  test("402 no meio do fluxo (OpenRouter) é credencial", async () => {
+    const baseUrl = await servidorFalso(
+      sse([
+        delta({ content: "a" }),
+        {
+          object: "chat.completion.chunk",
+          error: { code: 402, message: "Insufficient credits", metadata: { error_type: "payment_required" } },
+          choices: [{ index: 0, delta: { content: "" }, finish_reason: "error" }],
+        },
+      ]),
+    );
+
+    expect(falhaDe(await rodar(config({ baseUrl })))).toMatchObject({ motivo: "credencial", voltaEm: null });
+  });
+
+  test("finish_reason error sem objeto de erro é fora do ar", async () => {
+    const baseUrl = await servidorFalso(sse([delta({ content: "a" }), delta({ content: "" }, "error")]));
+
+    const eventos = await rodar(config({ baseUrl }));
+
+    expect(falhaDe(eventos)).toMatchObject({ motivo: "fora_do_ar", voltaEm: null });
+    expect(eventos.some((e) => e.tipo === "fim")).toBe(false);
+  });
 });
 
 describe("cancelamento", () => {
@@ -525,6 +671,19 @@ describe("cancelamento", () => {
     await fechou;
     expect(eventos).toEqual([{ tipo: "texto", texto: "pensando" }]);
   });
+
+  test("cancelar enquanto lê uma recusa é cancelamento, não falha do provedor", async () => {
+    const controle = new AbortController();
+    const baseUrl = await servidorFalso((res) => {
+      res.writeHead(503, { "Content-Type": "application/json" });
+      res.write('{"error": {"message": "overlo');
+      setTimeout(() => controle.abort(), 30);
+    });
+
+    await expect(
+      coletar(provedor(config({ baseUrl })).executar(pedido(), controle.signal)),
+    ).rejects.toThrow();
+  });
 });
 
 describe("peças", () => {
@@ -535,22 +694,42 @@ describe("peças", () => {
     expect(horaDoRetryAfter(null, AGORA)).toBeNull();
   });
 
-  test("cota esgotada da OpenAI é credencial (o usuário resolve), não limite com hora", () => {
-    const falha = falhaDaRecusa(
-      {
-        status: 429,
-        mensagem: "You exceeded your current quota",
-        codigo: "insufficient_quota",
-        retryAfter: "10",
-      },
-      "a OpenAI",
-      AGORA,
-    );
-    expect(falha).toEqual({
+  const recusaDe = (mudanca: Partial<Recusa>): Recusa => ({
+    status: 429,
+    mensagem: "You exceeded your current quota",
+    codigo: null,
+    tipo: null,
+    moderacao: false,
+    retryAfter: "10",
+    ...mudanca,
+  });
+
+  test.each([
+    "credit_balance_exhausted",
+    "organization_spend_limit_exceeded",
+    "project_spend_limit_exceeded",
+    "organization_usage_limit_exceeded",
+    "insufficient_quota",
+  ])("conta sem crédito da OpenAI (code %s) é credencial, sem hora", (codigo) => {
+    expect(falhaDaRecusa(recusaDe({ codigo }), "a OpenAI", AGORA)).toEqual({
       motivo: "credencial",
       mensagem: "A conta da OpenAI está sem crédito: You exceeded your current quota",
       voltaEm: null,
     });
+  });
+
+  test("type insufficient_quota com outro code também é credencial; slow_down segue limite", () => {
+    expect(
+      falhaDaRecusa(recusaDe({ codigo: "novo_codigo", tipo: "insufficient_quota" }), "a OpenAI", AGORA),
+    ).toMatchObject({ motivo: "credencial" });
+    expect(
+      falhaDaRecusa(recusaDe({ codigo: "slow_down", tipo: "rate_limit_error" }), "a OpenAI", AGORA),
+    ).toMatchObject({ motivo: "limite", voltaEm: "2026-10-09T12:00:10.000Z" });
+  });
+
+  test("detalhe limpo: sem chave, sem endereço, curto", () => {
+    expect(limparDetalhe(`chave ${CHAVE} em http://u:p@h:1/v1/x`, CHAVE)).toBe("chave *** em (endereço)");
+    expect(limparDetalhe("x".repeat(500), null)).toHaveLength(300);
   });
 
   test("resultado em texto vai puro; o resto vai em JSON", () => {
