@@ -16,8 +16,10 @@ import {
   montarPrompt,
   ProvedorClaudeCli,
   type OpcoesClaudeCli,
+  PRAZO_CHAMADA_MCP_MS,
   VARIAVEL_ACESSO_MCP,
 } from "./claude-cli.ts";
+import { PRAZO_PRE_TOOL_USE_S } from "./pre-tool-use.ts";
 
 const CLI_FALSO = fileURLToPath(new URL("./fixtures/cli-falso.mjs", import.meta.url));
 const gravada = (nome: string) => fileURLToPath(new URL(`./fixtures/2.1.287/${nome}`, import.meta.url));
@@ -195,10 +197,26 @@ describe("adaptador Claude Code CLI", () => {
 
   test("ambiente do CLI: tira MODUCTUS_* em qualquer caixa e põe o acesso desta execução", () => {
     const ambiente = ambienteDoCli(
-      { PATH: "C:\\bin", Moductus_Token: "x", MODUCTUS_MCP_ACESSO: "velho", USERPROFILE: "C:\\u" },
+      {
+        PATH: "C:\\bin",
+        Moductus_Token: "x",
+        MODUCTUS_MCP_ACESSO: "velho",
+        MODUCTUS_HOOKS_TOKEN: "dos-hooks",
+        USERPROFILE: "C:\\u",
+        CLAUDE_CODE_PLUGIN_DIRS: "C:\\u\\mods",
+        CLAUDE_CODE_DISABLE_CLAUDE_MDS: "0",
+      },
       "novo",
     );
-    expect(ambiente).toEqual({ PATH: "C:\\bin", USERPROFILE: "C:\\u", MODUCTUS_MCP_ACESSO: "novo" });
+    expect(ambiente).toEqual({
+      PATH: "C:\\bin",
+      USERPROFILE: "C:\\u",
+      MODUCTUS_MCP_ACESSO: "novo",
+      // Nenhum CLAUDE.md nem memória automática do usuário: as instruções vêm só do Moductus.
+      CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1",
+      CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+    });
+    expect(ambienteDoCli({ PATH: "C:\\bin" }, null)).not.toHaveProperty(VARIAVEL_ACESSO_MCP);
   });
 
   test("sessão do --resume sumiu: recomeça sem --resume, com o histórico curto", async () => {
@@ -402,13 +420,45 @@ describe("argumentos e prompt", () => {
           type: "http",
           url: "http://127.0.0.1:47822/mcp",
           headers: { Authorization: "Bearer ${MODUCTUS_MCP_ACESSO}" },
+          // A chamada `externo` espera o cartão além dos 60 s que o CLI dá por pedido HTTP.
+          timeout: PRAZO_CHAMADA_MCP_MS,
         },
       },
     });
+    expect(PRAZO_CHAMADA_MCP_MS).toBeGreaterThan(60_000);
     // Nome neutro: nada de TOKEN, KEY, SECRET, PASSWORD ou AUTH.
     expect(VARIAVEL_ACESSO_MCP).not.toMatch(/token|key|secret|password|auth/i);
     expect(argumentos[argumentos.indexOf("--allowedTools") + 1]).toBe("mcp__moductus__sessoes_listar");
     expect(argumentos).toContain("--strict-mcp-config");
+  });
+
+  test("PreToolUse do Moductus por --settings, no mesmo acesso do MCP, e nenhum settings.json do usuário", () => {
+    const argumentos = argumentosDoClaude(pedido(), config(), "http://127.0.0.1:47822/mcp");
+    // O argumento vazio carrega nenhuma fonte: nem usuário, nem projeto, nem local.
+    expect(argumentos[argumentos.indexOf("--setting-sources") + 1]).toBe("");
+    const settings = JSON.parse(argumentos[argumentos.indexOf("--settings") + 1] ?? "{}");
+    expect(settings).toEqual({
+      hooks: {
+        PreToolUse: [
+          {
+            matcher: "*",
+            hooks: [
+              {
+                type: "http",
+                url: "http://127.0.0.1:47822/hooks/pre-tool-use",
+                timeout: PRAZO_PRE_TOOL_USE_S,
+                headers: { Authorization: "Bearer ${MODUCTUS_MCP_ACESSO}" },
+                allowedEnvVars: ["MODUCTUS_MCP_ACESSO"],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    // Sem MCP, o isolamento continua; só não há hook a quem perguntar (nem ferramenta a chamar).
+    const semMcp = argumentosDoClaude(pedido(), config());
+    expect(semMcp[semMcp.indexOf("--setting-sources") + 1]).toBe("");
+    expect(semMcp).not.toContain("--settings");
   });
 
   test("sem MCP ou sem ferramentas, nenhuma ferramenta é liberada", () => {
@@ -420,6 +470,7 @@ describe("argumentos e prompt", () => {
     );
     expect(semFerramentas).not.toContain("--mcp-config");
     expect(semFerramentas).not.toContain("--allowedTools");
+    expect(semFerramentas).not.toContain("--settings");
   });
 
   test("o --allowedTools usa o nome que o MCP publica: o do modelo, com `__`", () => {

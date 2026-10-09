@@ -7,6 +7,9 @@ import { createInterface } from "node:readline";
 import type { ConfigProvedor, EventoAgente, PedidoDoAgente, Provedor } from "../provedor.ts";
 import type { FabricaProvedor } from "../registro.ts";
 import { LeitorStreamJson } from "./leitor.ts";
+import { configuracaoDoHook, nomeNoCli, PREFIXO_MCP, ROTA_PRE_TOOL_USE } from "./pre-tool-use.ts";
+
+export { nomeNoCli } from "./pre-tool-use.ts";
 
 /**
  * Adaptador do Claude Code CLI (AGENTS.md §3): roda `claude -p` como subprocesso sem janela, com a
@@ -15,8 +18,6 @@ import { LeitorStreamJson } from "./leitor.ts";
  * No máximo um processo por agente: execuções do mesmo agente esperam em fila, agentes diferentes
  * rodam em paralelo.
  */
-
-const PREFIXO_MCP = "mcp__moductus__";
 
 /** Quanto esperar o CLI sair sozinho depois do `result` (ele grava a sessão do `--resume`). */
 const ESPERA_SAIDA_MS = 5000;
@@ -76,14 +77,6 @@ export interface AberturaMcp {
 }
 
 /**
- * O nome com que o CLI vê uma ferramenta oferecida. O nome já vem no formato do modelo
- * (`sessoes__listar`), que é o que o servidor MCP publica; o resto só protege o que o MCP não aceita.
- */
-export function nomeNoCli(nome: string): string {
-  return PREFIXO_MCP + nome.replace(/[^A-Za-z0-9_-]/g, "_");
-}
-
-/**
  * O que vai pela entrada padrão. Continuando a sessão, o CLI já tem o histórico e recebe só o que
  * chegou depois da última fala do agente; numa sessão nova, o histórico curto vai junto.
  */
@@ -97,12 +90,30 @@ export function montarPrompt(pedido: PedidoDoAgente): string {
 }
 
 /**
+ * Quanto o CLI espera uma chamada ao MCP do Moductus, em ms. Sem isso, cada pedido HTTP a um
+ * servidor MCP cai em 60 s, e uma ação `externo` espera o cartão de aprovação pelo tempo que o
+ * usuário levar para decidir. Um dia cobre a pessoa que só volta ao PC no dia seguinte.
+ */
+export const PRAZO_CHAMADA_MCP_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Variáveis que levariam ao CLI dos agentes o que é do usuário: os plugins de sessão de um Claude
+ * Code que tenha lançado o Moductus (no desenvolvimento, o serviço sobe de dentro de uma sessão).
+ */
+const VARIAVEIS_DO_USUARIO = /^(MODUCTUS_.*|CLAUDE_CODE_PLUGIN_DIRS)$/i;
+
+/**
  * O ambiente do processo do CLI: o do serviço sem nenhuma variável `MODUCTUS_*` (token do canal
- * das janelas, pasta de dados...), porque hooks e plugins do usuário rodam dentro do CLI e as
- * herdariam. Só entra o acesso ao MCP desta execução, quando houver.
+ * das janelas, pasta de dados, token dos hooks...) nem plugins herdados. Os `CLAUDE.md` e a
+ * memória automática do usuário ficam fora: o agente recebe as instruções dele pelo
+ * `--append-system-prompt` e mais nada. Só entra o acesso ao MCP desta execução, quando houver.
  */
 export function ambienteDoCli(base: NodeJS.ProcessEnv, acessoMcp: string | null): NodeJS.ProcessEnv {
-  const ambiente = Object.fromEntries(Object.entries(base).filter(([nome]) => !/^MODUCTUS_/i.test(nome)));
+  const ambiente = Object.fromEntries(
+    Object.entries(base).filter(([nome]) => !VARIAVEIS_DO_USUARIO.test(nome)),
+  );
+  ambiente.CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1";
+  ambiente.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
   if (acessoMcp !== null) ambiente[VARIAVEL_ACESSO_MCP] = acessoMcp;
   return ambiente;
 }
@@ -123,6 +134,10 @@ export function argumentosDoClaude(
     "--tools",
     "",
     "--strict-mcp-config",
+    // Nenhum settings.json (do usuário, do projeto ou local): sem hooks, plugins, permissões nem
+    // variáveis de quem usa o PC. Só vale o que o Moductus passa por --settings.
+    "--setting-sources",
+    "",
     // Sem isso o CLI reaproveita, no --resume, o prompt de sistema gravado na primeira chamada, e
     // instruções editadas do agente só valeriam depois de compactar a conversa (2.1.257+).
     "--system-prompt-snapshot",
@@ -136,9 +151,13 @@ export function argumentosDoClaude(
       type: "http",
       url: mcpUrl,
       headers: { Authorization: `Bearer \${${VARIAVEL_ACESSO_MCP}}` },
+      timeout: PRAZO_CHAMADA_MCP_MS,
     };
     argumentos.push("--mcp-config", JSON.stringify({ mcpServers: { moductus: servidor } }));
     argumentos.push("--allowedTools", pedido.ferramentas.map((f) => nomeNoCli(f.nome)).join(","));
+    // A porta de cada chamada (ADR-0017): o hook pergunta ao serviço, com o acesso desta execução.
+    const urlDoHook = new URL(ROTA_PRE_TOOL_USE, mcpUrl).href;
+    argumentos.push("--settings", configuracaoDoHook(urlDoHook, VARIAVEL_ACESSO_MCP));
   }
   return argumentos;
 }

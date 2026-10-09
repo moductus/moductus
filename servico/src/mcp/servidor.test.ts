@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { Catalogo } from "../ferramentas/catalogo.ts";
 import { ferramenta } from "../ferramentas/ferramenta.ts";
+import { ROTA_PRE_TOOL_USE, type RespostaPreToolUse } from "../provedores/claude-cli/pre-tool-use.ts";
 import type { PedidoDoAgente } from "../provedores/provedor.ts";
 import { VERSOES_MCP, type ExecucaoMcp } from "./protocolo.ts";
 import { abrirServidorMcp, RECUSA_TOKEN_MCP, type ServidorMcp } from "./servidor.ts";
@@ -308,5 +309,52 @@ describe("servidor MCP do Moductus", () => {
       (await postar(acesso.url, ping, { ...auth, origin: "https://site-qualquer.example" })).status,
     ).toBe(403);
     expect((await postar(acesso.url, "x".repeat(1024 * 1024 + 1), auth)).status).toBe(413);
+  });
+
+  test("PreToolUse: o acesso da execução decide; Bash e o que é de outro agente são negados", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const s = await servidor();
+    const doNuno = s.abrir(execucao(["sessoes.*", "github.*"]));
+    const daTula = s.abrir(execucao(["financas.*"]));
+    const rota = new URL(ROTA_PRE_TOOL_USE, s.url).href;
+    const evento = (tool_name: string) => ({
+      session_id: "s1",
+      hook_event_name: "PreToolUse",
+      tool_name,
+      tool_input: {},
+    });
+    const decidir = async (acesso: { token: string }, corpo: unknown) => {
+      const res = await postar(rota, corpo, { authorization: `Bearer ${acesso.token}` });
+      expect(res.status).toBe(200);
+      return ((await res.json()) as RespostaPreToolUse).hookSpecificOutput;
+    };
+
+    expect(await decidir(doNuno, evento("mcp__moductus__sessoes__listar"))).toMatchObject({
+      permissionDecision: "allow",
+    });
+    // `externo` passa pelo hook; quem espera o cartão é a chamada pelo MCP.
+    expect(await decidir(doNuno, evento("mcp__moductus__github__comentar"))).toMatchObject({
+      permissionDecision: "allow",
+    });
+    const bash = await decidir(doNuno, evento("Bash"));
+    expect(bash.permissionDecision).toBe("deny");
+    expect(bash.permissionDecisionReason).toMatch(/^"Bash" não é uma ferramenta deste agente\./);
+    // O mesmo nome, com o acesso de outra execução: a resposta é a da execução do token.
+    expect(await decidir(daTula, evento("mcp__moductus__sessoes__listar"))).toMatchObject({
+      permissionDecision: "deny",
+    });
+    expect(await decidir(daTula, evento("mcp__moductus__financas__lancar"))).toMatchObject({
+      permissionDecision: "allow",
+    });
+    // Corpo que não é JSON também volta como negação, com 200: erro HTTP deixaria a chamada seguir.
+    expect(await decidir(doNuno, "{quebrado")).toMatchObject({ permissionDecision: "deny" });
+
+    // Sem acesso válido, 401 antes de ler o corpo, como no MCP.
+    expect((await postar(rota, evento("Bash"))).status).toBe(401);
+    doNuno.fechar();
+    expect((await postar(rota, evento("Bash"), { authorization: `Bearer ${doNuno.token}` })).status).toBe(
+      401,
+    );
+    expect((await fetch(rota, { headers: { authorization: `Bearer ${daTula.token}` } })).status).toBe(405);
   });
 });
