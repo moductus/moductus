@@ -92,6 +92,14 @@ describe("Personagem", () => {
     act(() => raiz.render(<Personagem agente="nuno" estado="erro" moldura />));
     const moldura = palco.querySelector(".personagem-moldura") as HTMLElement;
     expect(moldura.dataset.estado).toBe("erro");
+    expect(moldura.dataset.tom).toBe("perigo");
     expect(moldura.querySelector('svg[role="img"]')).not.toBeNull();
+  });
+
+  it("o anel pode seguir o status em vez da expressão: teto é cara preocupada com anel de aviso", () => {
+    act(() => raiz.render(<Personagem agente="nuno" estado="erro" moldura="aviso" />));
+    const moldura = palco.querySelector(".personagem-moldura") as HTMLElement;
+    expect(moldura.dataset.estado).toBe("erro");
+    expect(moldura.dataset.tom).toBe("aviso");
   });
 });

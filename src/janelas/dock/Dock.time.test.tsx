@@ -116,9 +116,16 @@ describe("time do dock ligado ao estado do serviço", () => {
       { expressao: "esperando", rotulo: "Faina, esperando você" },
       { expressao: "erro", rotulo: "Nuno, parado. Chegou ao teto de hoje" },
     ]);
-    // A moldura acompanha a expressão (anel em sucesso, aviso, perigo).
+    // O anel segue o tom do status: teto tem cara preocupada, mas anel de aviso, não o vermelho.
     const molduras = [...recipiente.querySelectorAll<HTMLElement>(".personagem-moldura")];
-    expect(molduras.map((m) => m.dataset.estado)).toEqual(["ocioso", "trabalhando", "esperando", "erro"]);
+    expect(molduras.map((m) => m.dataset.tom)).toEqual(["nenhuma", "sucesso", "aviso", "aviso"]);
+  });
+
+  it("erro de provedor é o único anel vermelho", async () => {
+    canal.lista = async () => [agente("tula", { atividade: "erro" })];
+    await montar();
+    const tula = recipiente.querySelector<HTMLElement>('[data-agente="tula"] .personagem-moldura')!;
+    expect(tula.dataset.tom).toBe("perigo");
   });
 
   it("agentes.mudou troca só a cabeça de quem mudou", async () => {
@@ -166,6 +173,32 @@ describe("time do dock ligado ao estado do serviço", () => {
     canal.estado = "desconectado";
     await act(async () => raiz!.render(<Dock />));
     expect(cabecas().every((c) => c.expressao === "dormindo")).toBe(true);
+  });
+
+  it("ao reconectar sem resposta da lista, não volta a situação da conexão anterior", async () => {
+    canal.lista = async () => [agente("tula", { atividade: "trabalhando" })];
+    await montar();
+    expect(cabecas()[1]!.expressao).toBe("trabalhando");
+    canal.estado = "desconectado";
+    await act(async () => raiz!.render(<Dock />));
+    canal.lista = async () => {
+      throw new Error("conexão caiu");
+    };
+    canal.estado = "conectado";
+    await act(async () => raiz!.render(<Dock />));
+    expect(cabecas().every((c) => c.expressao === "dormindo")).toBe(true);
+  });
+
+  it("a lista falhando depois de uma mudança já recebida limpa o que se sabia", async () => {
+    let falhar!: (e: Error) => void;
+    canal.lista = () => new Promise<Agente[]>((_, rejeitar) => (falhar = rejeitar));
+    await montar();
+    await act(async () => {
+      ouvintes.get("agentes.mudou")?.forEach((fn) => fn(agente("nuno", { atividade: "trabalhando" })));
+    });
+    expect(cabecas()[3]!.expressao).toBe("trabalhando");
+    await act(async () => falhar(new Error("resposta fora do contrato em agentes.listar")));
+    expect(cabecas()[3]!.expressao).toBe("dormindo");
   });
 });
 

@@ -1,7 +1,8 @@
 import type { Aprovacao, EstadoAprovacao, PedidoDecidir } from "@moductus/contrato";
 import { useId, useState, type ReactNode } from "react";
 import { Botao, type TamanhoBotao } from "./Botao.tsx";
-import { Status, type TomStatus } from "./Status.tsx";
+import { ServicoIndisponivel } from "@moductus/contrato/cliente";
+import { Selo, type TomSelo } from "./Selo.tsx";
 import "./CartaoAprovacao.css";
 
 /** Botões genéricos, só para o pedido de uma sessão do terminal (DESIGN.md §5). */
@@ -9,10 +10,13 @@ export const PERMITIR = "Permitir";
 export const NEGAR = "Negar";
 export const SEMPRE_NESTE_PROJETO = "Sempre neste projeto";
 
-const ERRO_ENVIO = "Não consegui enviar sua resposta. Nada foi decidido; tente de novo.";
+/** O pedido nem saiu: aí, e só aí, dá para afirmar que nada foi decidido. */
+export const ERRO_SEM_SERVICO = "O serviço não está respondendo. Nada foi enviado; tente de novo.";
+/** Saiu e falhou no caminho: o serviço pode ter decidido. */
+export const ERRO_SEM_CONFIRMACAO = "Não consegui confirmar sua resposta. Confira o pedido de novo.";
 
 /** Depois da resposta, o cartão diz o que valeu em vez de mostrar os botões. */
-const DESFECHO: Record<Exclude<EstadoAprovacao, "pendente">, { texto: string; tom: TomStatus }> = {
+const DESFECHO: Record<Exclude<EstadoAprovacao, "pendente">, { texto: string; tom: TomSelo }> = {
   aprovada: { texto: "permitido", tom: "sucesso" },
   negada: { texto: "negado", tom: "neutro" },
   expirada: { texto: "expirou", tom: "apagado" },
@@ -29,7 +33,10 @@ interface PropsCartaoAprovacao {
   /** Ação a mais entre recusar e permitir ("Ver lista"). */
   extra?: ReactNode;
   tamanho?: TamanhoBotao;
-  /** Quem decide é o serviço (`aprovacoes.decidir`); o cartão só manda o pedido. */
+  /**
+   * Quem decide é o serviço (`aprovacoes.decidir`); o cartão só manda o pedido e trava até a
+   * `aprovacao` chegar decidida (pela resposta ou pelo `aprovacoes.mudou`).
+   */
   aoDecidir: (pedido: PedidoDecidir) => Promise<unknown>;
 }
 
@@ -49,17 +56,21 @@ export function CartaoAprovacao({
   aoDecidir,
 }: PropsCartaoAprovacao) {
   const idDescricao = useId();
-  const [enviando, setEnviando] = useState(false);
+  // Id do pedido já respondido: os botões ficam travados até o serviço mandar o pedido decidido,
+  // para um segundo clique não sair antes de a primeira resposta valer.
+  const [respondida, setRespondida] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const { acao, fonte, estado } = aprovacao;
   const doTerminal = fonte !== "moductus";
+  const enviando = respondida === aprovacao.id && estado === "pendente";
 
   const decidir = (pedido: Omit<PedidoDecidir, "id">) => {
     setErro(null);
-    setEnviando(true);
-    aoDecidir({ id: aprovacao.id, ...pedido })
-      .catch(() => setErro(ERRO_ENVIO))
-      .finally(() => setEnviando(false));
+    setRespondida(aprovacao.id);
+    aoDecidir({ id: aprovacao.id, ...pedido }).catch((e: unknown) => {
+      setRespondida(null);
+      setErro(e instanceof ServicoIndisponivel ? ERRO_SEM_SERVICO : ERRO_SEM_CONFIRMACAO);
+    });
   };
 
   const desfecho = estado === "pendente" ? null : DESFECHO[estado];
@@ -90,7 +101,7 @@ export function CartaoAprovacao({
       )}
       {desfecho ? (
         <div className="aprovacao-desfecho" role="status">
-          <Status tom={desfecho.tom}>{desfecho.texto}</Status>
+          <Selo tom={desfecho.tom}>{desfecho.texto}</Selo>
           {aprovacao.regraCriadaId && <span className="aprovacao-desfazer">vale para os próximos</span>}
         </div>
       ) : (

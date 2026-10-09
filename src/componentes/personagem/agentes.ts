@@ -67,6 +67,18 @@ export const ROTULO_ESTADO: Readonly<Record<EstadoPersonagem, string>> = {
   erro: "com erro",
 };
 
+/** Anel em volta da cabeça nas listas: sucesso, aviso, perigo (tracejado) ou nenhum. */
+export type TomMoldura = "nenhuma" | "sucesso" | "aviso" | "perigo";
+
+/** O anel de cada expressão quando ninguém diz outro (Time.dc.html). */
+export const MOLDURA_DA_EXPRESSAO: Readonly<Record<EstadoPersonagem, TomMoldura>> = {
+  dormindo: "nenhuma",
+  ocioso: "nenhuma",
+  trabalhando: "sucesso",
+  esperando: "aviso",
+  erro: "perigo",
+};
+
 export function eEstadoPersonagem(valor: unknown): valor is EstadoPersonagem {
   return (ESTADOS_PERSONAGEM as readonly unknown[]).includes(valor);
 }

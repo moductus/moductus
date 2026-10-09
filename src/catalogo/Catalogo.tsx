@@ -1,4 +1,5 @@
 import type { Aprovacao, PedidoDecidir, SituacaoAgente } from "@moductus/contrato";
+import { ServicoIndisponivel } from "@moductus/contrato/cliente";
 import { useState, type ReactNode } from "react";
 import { Atalho } from "../componentes/Atalho.tsx";
 import { Botao, type VarianteBotao } from "../componentes/Botao.tsx";
@@ -17,7 +18,6 @@ import { lerSituacao } from "../componentes/personagem/situacao.ts";
 import { Progresso } from "../componentes/Progresso.tsx";
 import { Seletor } from "../componentes/Seletor.tsx";
 import { Contagem, Selo } from "../componentes/Selo.tsx";
-import { Status } from "../componentes/Status.tsx";
 import type { TemaConcreto } from "../tokens/tema.ts";
 import "./Catalogo.css";
 
@@ -322,29 +322,29 @@ function Icones() {
   );
 }
 
-function StatusComTexto() {
+function SelosDeStatus() {
   return (
-    <Grupo titulo="Status com texto">
+    <Grupo titulo="Selo de status: pílula e ponto">
       <Linha rotulo="Selo (listas do time)">
-        <Status>ocioso</Status>
-        <Status tom="sucesso">trabalhando</Status>
-        <Status tom="aviso">esperando você</Status>
-        <Status tom="perigo">erro</Status>
-        <Status tom="apagado">desligado</Status>
+        <Selo>ocioso</Selo>
+        <Selo tom="sucesso">trabalhando</Selo>
+        <Selo tom="aviso">esperando você</Selo>
+        <Selo tom="perigo">erro</Selo>
+        <Selo tom="apagado">desligado</Selo>
       </Linha>
       <Linha rotulo="Ponto (sessões e PRs)">
-        <Status forma="ponto" tom="sucesso">
+        <Selo forma="ponto" tom="sucesso">
           trabalhando
-        </Status>
-        <Status forma="ponto" tom="aviso">
+        </Selo>
+        <Selo forma="ponto" tom="aviso">
           esperando você
-        </Status>
-        <Status forma="ponto" tom="perigo">
+        </Selo>
+        <Selo forma="ponto" tom="perigo">
           CI falhou
-        </Status>
-        <Status forma="ponto" tom="apagado">
+        </Selo>
+        <Selo forma="ponto" tom="apagado">
           terminou
-        </Status>
+        </Selo>
       </Linha>
     </Grupo>
   );
@@ -385,12 +385,12 @@ function Situacoes() {
     <Grupo titulo="Personagem e estado real">
       <ul className="catalogo-situacoes">
         {SITUACOES.map(({ agente, situacao, nota }) => {
-          const { expressao, texto, tom } = lerSituacao(situacao);
+          const { expressao, moldura, texto, tom } = lerSituacao(situacao);
           return (
             <li key={nota} className="catalogo-situacao">
-              <Personagem agente={agente} modo="cabeca" tamanho="dock" estado={expressao} moldura />
+              <Personagem agente={agente} modo="cabeca" tamanho="dock" estado={expressao} moldura={moldura} />
               <span className="catalogo-situacao-nome">{DADOS_AGENTES[agente].nome}</span>
-              <Status tom={tom}>{texto}</Status>
+              <Selo tom={tom}>{texto}</Selo>
               <span className="catalogo-apagado">{nota}</span>
             </li>
           );
@@ -479,9 +479,9 @@ function useAprovacaoDeMentira(inicial: Aprovacao) {
 function OrigemSessao() {
   return (
     <>
-      <Status forma="ponto" tom="aviso">
+      <Selo forma="ponto" tom="aviso">
         esperando você
-      </Status>
+      </Selo>
       <span className="catalogo-situacao-nome">api-pedidos</span>
       <span className="catalogo-apagado">Claude Code</span>
     </>
@@ -492,7 +492,7 @@ function Aprovacoes() {
   const terminal = useAprovacaoDeMentira(DO_TERMINAL);
   const faina = useAprovacaoDeMentira(DA_FAINA);
   const nunca = async () => {
-    throw new Error("serviço indisponível");
+    throw new ServicoIndisponivel();
   };
   return (
     <Grupo titulo="Cartão de aprovação">
@@ -565,7 +565,7 @@ function Coluna({ tema, nome }: { tema: TemaConcreto; nome: string }) {
       <Progressos />
       <Selos />
       <Seletores />
-      <StatusComTexto />
+      <SelosDeStatus />
       <Situacoes />
       <Falas />
       <Aprovacoes />

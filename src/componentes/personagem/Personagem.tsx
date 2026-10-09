@@ -7,11 +7,13 @@ import {
 } from "../../tokens/personagens.ts";
 import {
   DADOS_AGENTES,
+  MOLDURA_DA_EXPRESSAO,
   ROTULO_ESTADO,
   eAgente,
   eEstadoPersonagem,
   type Agente,
   type EstadoPersonagem,
+  type TomMoldura,
 } from "./agentes.ts";
 import "./personagem.css";
 
@@ -31,8 +33,12 @@ export interface PersonagemProps {
   estado?: EstadoPersonagem;
   /** Substitui o rótulo acessível padrão ("Alba, dormindo"). */
   rotulo?: string;
-  /** Anel de estado em volta da cabeça, como nas listas (Time.dc.html). */
-  moldura?: boolean;
+  /**
+   * Anel de estado em volta da cabeça, como nas listas (Time.dc.html). `true` usa o anel da
+   * expressão; um tom troca o anel quando o status diz outra coisa (teto: cara de preocupado,
+   * anel de aviso).
+   */
+  moldura?: boolean | TomMoldura;
 }
 
 /** Diferenças de desenho entre os quatro: braços e o quanto o rosto desce no corpo. */
@@ -294,8 +300,9 @@ export function Personagem({
   );
 
   if (!moldura) return desenho;
+  const tom = moldura === true ? MOLDURA_DA_EXPRESSAO[estado] : moldura;
   return (
-    <span className="personagem-moldura" data-estado={estado}>
+    <span className="personagem-moldura" data-estado={estado} data-tom={tom}>
       {desenho}
     </span>
   );

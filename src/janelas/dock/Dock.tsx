@@ -140,8 +140,8 @@ export function Dock() {
         data-ativo={aberta === "agentes" || undefined}
       >
         {AGENTES.map((agente) => {
-          // A cabeça segue o runtime: expressão e moldura do estado, e o status escrito no rótulo.
-          const { expressao, texto, dica } = lerSituacao(time[agente]);
+          // A cabeça segue o runtime: expressão, anel no tom do status e o status no rótulo.
+          const { expressao, moldura, texto, dica } = lerSituacao(time[agente]);
           const nome = DADOS_AGENTES[agente].nome;
           const rotulo = dica ? `${nome}, ${texto}. ${dica}` : `${nome}, ${texto}`;
           return (
@@ -155,7 +155,7 @@ export function Dock() {
               title={rotulo}
               onClick={() => void invoke("painel_abrir", { area: "agentes" })}
             >
-              <Personagem agente={agente} modo="cabeca" tamanho="dock" estado={expressao} moldura />
+              <Personagem agente={agente} modo="cabeca" tamanho="dock" estado={expressao} moldura={moldura} />
             </button>
           );
         })}

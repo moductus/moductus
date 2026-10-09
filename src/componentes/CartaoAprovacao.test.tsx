@@ -1,12 +1,19 @@
 // @vitest-environment happy-dom
 import type { Aprovacao, PedidoDecidir } from "@moductus/contrato";
+import { ServicoIndisponivel } from "@moductus/contrato/cliente";
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { auditar } from "../teste/acessibilidade.ts";
-import { CartaoAprovacao, NEGAR, PERMITIR, SEMPRE_NESTE_PROJETO } from "./CartaoAprovacao.tsx";
+import {
+  CartaoAprovacao,
+  ERRO_SEM_CONFIRMACAO,
+  ERRO_SEM_SERVICO,
+  NEGAR,
+  PERMITIR,
+  SEMPRE_NESTE_PROJETO,
+} from "./CartaoAprovacao.tsx";
 import { FalaAgente } from "./FalaAgente.tsx";
-import { Status } from "./Status.tsx";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -88,31 +95,63 @@ describe("Cartão de aprovação", () => {
     expect(recipiente.textContent).toContain("Não dá para desfazer.");
   });
 
-  it("cada botão manda o pedido certo ao serviço", async () => {
+  it.each([
+    [NEGAR, { id: "a1", decisao: "negar" }],
+    [SEMPRE_NESTE_PROJETO, { id: "a1", decisao: "permitir", sempre: "projeto" }],
+    [PERMITIR, { id: "a1", decisao: "permitir" }],
+  ] as const)("%s manda o pedido certo ao serviço", async (texto, pedido) => {
     const pedidos: PedidoDecidir[] = [];
-    const aoDecidir = async (p: PedidoDecidir) => {
-      pedidos.push(p);
-    };
-    montar(<CartaoAprovacao aprovacao={TERMINAL} aoDecidir={aoDecidir} />);
-    for (const texto of [NEGAR, SEMPRE_NESTE_PROJETO, PERMITIR]) {
-      await act(async () => botao(texto).click());
-    }
-    expect(pedidos).toEqual([
-      { id: "a1", decisao: "negar" },
-      { id: "a1", decisao: "permitir", sempre: "projeto" },
-      { id: "a1", decisao: "permitir" },
-    ]);
+    montar(
+      <CartaoAprovacao
+        aprovacao={TERMINAL}
+        aoDecidir={async (p) => {
+          pedidos.push(p);
+        }}
+      />,
+    );
+    await act(async () => botao(texto).click());
+    expect(pedidos).toEqual([pedido]);
   });
 
-  it("enquanto envia, os botões travam; se o serviço recusar, o erro aparece no cartão", async () => {
+  it("respondido, trava até o pedido chegar decidido: um segundo clique não sai", async () => {
+    const aoDecidir = vi.fn(async () => undefined);
+    montar(<CartaoAprovacao aprovacao={TERMINAL} aoDecidir={aoDecidir} />);
+    await act(async () => botao(PERMITIR).click());
+    // O serviço respondeu, mas a aprovação ainda não voltou decidida.
+    expect(botoes().every((b) => b.disabled)).toBe(true);
+    expect(recipiente.querySelector(".aprovacao")!.getAttribute("aria-busy")).toBe("true");
+    await act(async () => botao(NEGAR).click());
+    expect(aoDecidir).toHaveBeenCalledTimes(1);
+    act(() =>
+      raiz!.render(<CartaoAprovacao aprovacao={{ ...TERMINAL, estado: "aprovada" }} aoDecidir={aoDecidir} />),
+    );
+    expect(botoes()).toHaveLength(0);
+    expect(recipiente.querySelector('[role="status"] .selo')?.textContent).toBe("permitido");
+    // Outro pedido pendente no mesmo cartão volta a ter os botões livres.
+    act(() => raiz!.render(<CartaoAprovacao aprovacao={{ ...TERMINAL, id: "a9" }} aoDecidir={aoDecidir} />));
+    expect(botoes().every((b) => !b.disabled)).toBe(true);
+  });
+
+  it("serviço indisponível antes do envio: nada saiu, e o cartão diz isso", async () => {
+    const aoDecidir = vi.fn(async () => {
+      throw new ServicoIndisponivel();
+    });
+    montar(<CartaoAprovacao aprovacao={AGENTE} aoDecidir={aoDecidir} />);
+    await act(async () => botao("Mover 38 arquivos").click());
+    expect(recipiente.querySelector('[role="alert"]')?.textContent).toBe(ERRO_SEM_SERVICO);
+    expect(botoes().every((b) => !b.disabled)).toBe(true);
+  });
+
+  it("falha depois do envio: não afirma que nada foi decidido, pede para conferir", async () => {
     let falhar!: (e: Error) => void;
     const aoDecidir = vi.fn(() => new Promise<unknown>((_, rejeitar) => (falhar = rejeitar)));
     montar(<CartaoAprovacao aprovacao={AGENTE} aoDecidir={aoDecidir} />);
     act(() => botao("Mover 38 arquivos").click());
     expect(botoes().every((b) => b.disabled)).toBe(true);
-    expect(recipiente.querySelector(".aprovacao")!.getAttribute("aria-busy")).toBe("true");
-    await act(async () => falhar(new Error("serviço indisponível")));
-    expect(recipiente.querySelector('[role="alert"]')?.textContent).toMatch(/Nada foi decidido/);
+    await act(async () => falhar(new Error("conexão caiu")));
+    const alerta = recipiente.querySelector('[role="alert"]')?.textContent;
+    expect(alerta).toBe(ERRO_SEM_CONFIRMACAO);
+    expect(alerta).not.toMatch(/nada/i);
     expect(botoes().every((b) => !b.disabled)).toBe(true);
     expect(aoDecidir).toHaveBeenCalledTimes(1);
   });
@@ -124,7 +163,7 @@ describe("Cartão de aprovação", () => {
   ] as const)("%s: sem botões, o cartão diz o que valeu (%s)", (estado, texto) => {
     montar(<CartaoAprovacao aprovacao={{ ...TERMINAL, estado }} aoDecidir={vi.fn(async () => undefined)} />);
     expect(botoes()).toHaveLength(0);
-    expect(recipiente.querySelector('[role="status"] .status')?.textContent).toBe(texto);
+    expect(recipiente.querySelector('[role="status"] .selo')?.textContent).toBe(texto);
   });
 
   it("dentro da fala, a descrição não se repete na tela mas segue para o leitor de tela", () => {
@@ -155,24 +194,5 @@ describe("Fala do agente", () => {
     expect(document.getElementById(fala.getAttribute("aria-labelledby")!)).toBe(nome);
     expect(fala.querySelector(".fala-acao button")?.textContent).toBe("Compactar");
     expect(auditar(recipiente)).toEqual([]);
-  });
-});
-
-describe("Status com texto", () => {
-  it("o texto vem sempre; o ponto só na forma de ponto, escondido do leitor de tela", () => {
-    montar(
-      <>
-        <Status tom="aviso">esperando você</Status>
-        <Status tom="perigo" forma="ponto">
-          CI falhou
-        </Status>
-      </>,
-    );
-    const [selo, ponto] = [...recipiente.querySelectorAll<HTMLElement>(".status")];
-    expect(selo!.dataset.forma).toBe("selo");
-    expect(selo!.dataset.tom).toBe("aviso");
-    expect(selo!.querySelector(".status-ponto")).toBeNull();
-    expect(ponto!.querySelector(".status-ponto")?.getAttribute("aria-hidden")).toBe("true");
-    expect(ponto!.textContent).toBe("CI falhou");
   });
 });

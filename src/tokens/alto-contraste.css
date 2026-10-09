@@ -105,7 +105,7 @@
   /* ---------- traços que só existiam como fundo ---------- */
   .dock-divisor,
   .dock-estado-ponto,
-  .status-ponto {
+  .selo-ponto {
     forced-color-adjust: none;
     background: CanvasText;
   }

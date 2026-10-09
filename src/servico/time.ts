@@ -29,15 +29,19 @@ export function useSituacaoTime(canal: EstadoConexao): SituacaoTime {
   useEffect(() => {
     if (canal !== "conectado") return;
     let vivo = true;
-    // A lista nova substitui o que ficou de uma conexão anterior.
+    // A lista nova substitui o que ficou; sem resposta, não sobra situação de antes.
     servico
       .pedir("agentes.listar")
       .then((agentes) => {
         if (vivo) setTime(juntarSituacoes(SEM_NOTICIA, agentes));
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (vivo) setTime(SEM_NOTICIA);
+      });
     return () => {
+      // O canal saiu de "conectado": o que se sabia do runtime deixa de valer.
       vivo = false;
+      setTime(SEM_NOTICIA);
     };
   }, [canal]);
 
