@@ -85,6 +85,7 @@ function montar(pasta = mkdtempSync(join(tmpdir(), "moductus-runtime-"))) {
       descricao: "Anota um texto",
       entrada: z.object({ texto: z.string().min(1) }),
       efeito: "interno",
+      desfazer: () => {},
       executar: ({ texto }) => ({ anotado: texto }),
     }),
     ferramenta({
@@ -103,6 +104,7 @@ function montar(pasta = mkdtempSync(join(tmpdir(), "moductus-runtime-"))) {
       descricao: "Trabalha até a execução ser cancelada",
       entrada: z.object({}),
       efeito: "interno",
+      desfazer: () => {},
       executar: (_entrada, ctx) =>
         new Promise((_resolve, rejeitar) => {
           porta.esperando.add("demorar");
@@ -141,7 +143,7 @@ function montar(pasta = mkdtempSync(join(tmpdir(), "moductus-runtime-"))) {
     },
   );
   const situacao = (id: string) => runtime.situacao(agentes.agente(id)!);
-  const historico = new ServicoExecucoes(repositorioExecucoes);
+  const historico = new ServicoExecucoes(repositorioExecucoes, catalogo);
   return {
     pasta,
     db,

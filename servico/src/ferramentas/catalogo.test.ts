@@ -58,6 +58,7 @@ function montar() {
       descricao: "Cria uma tarefa",
       entrada: z.object({ titulo: z.string().min(1) }),
       efeito: "interno",
+      desfazer: () => {},
       executar: anotar("tarefas.criar"),
     }),
     ferramenta({
@@ -65,6 +66,7 @@ function montar() {
       descricao: "Manda uma tarefa para a lixeira",
       entrada: z.object({ id: z.string() }),
       efeito: "interno",
+      desfazer: () => {},
       executar: anotar("tarefas.apagar"),
     }),
     ferramenta({
@@ -72,6 +74,7 @@ function montar() {
       descricao: "Registra um gasto ou receita",
       entrada: z.object({ valorCentavos: z.number().int(), descricao: z.string().min(1) }),
       efeito: "interno",
+      desfazer: () => {},
       executar: anotar("financas.lancar"),
     }),
     ferramenta({
@@ -79,6 +82,7 @@ function montar() {
       descricao: "Sempre falha, como uma área com erro de regra",
       entrada: z.object({}),
       efeito: "interno",
+      desfazer: () => {},
       executar: () => {
         throw new Error("o mês 13 não existe");
       },

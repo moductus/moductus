@@ -1,5 +1,6 @@
 import type { Capacidade, Efeito } from "@moductus/contrato";
 import { z } from "zod";
+import type { Carimbo } from "../banco/tabela.ts";
 import type { FerramentaOferecida } from "../provedores/provedor.ts";
 
 /**
@@ -20,6 +21,24 @@ export interface ContextoFerramenta {
   execucaoId: string | null;
   /** Cancela junto com a execução. */
   sinal: AbortSignal;
+}
+
+/** De quem foi a ação que o usuário está desfazendo, e o carimbo do que a área gravar ao desfazer. */
+export interface ContextoDesfazer {
+  chamadaId: string;
+  /** Agente e execução que fizeram a ação; vazios quando quem chamou veio de fora do Moductus. */
+  agenteId: string | null;
+  execucaoId: string | null;
+  /** Quem desfaz é o usuário: o que a área gravar leva o carimbo dele, não o do agente. */
+  carimbo: Carimbo;
+}
+
+/**
+ * A recusa da área, com o motivo na voz do produto ("a tarefa já foi editada por você"): é a única
+ * mensagem da inversa que chega ao usuário. Qualquer outro erro vira texto genérico e vai ao log.
+ */
+export class RecusaDesfazer extends Error {
+  override readonly name = "RecusaDesfazer";
 }
 
 /**
@@ -47,6 +66,19 @@ export interface DefinicaoFerramenta<E extends z.ZodObject> {
    * tamanho, e um texto genérico pediria o sim sem dizer isso.
    */
   cartao?: (entrada: z.output<E>) => TextoCartao;
+  /**
+   * A função inversa, obrigatória em `interno` e proibida no resto (AGENTS.md §4): o que o agente
+   * faz dentro do Moductus aparece no histórico com desfazer.
+   *
+   * Recebe só o que `executar` devolveu, como ficou gravado em JSON: a área devolve ali o que
+   * precisa para voltar (o id do que criou, o valor que trocou). A entrada gravada é a que o modelo
+   * mandou, sem os padrões do schema, e o schema pode mudar entre versões.
+   *
+   * É síncrona e roda na mesma transação que marca a chamada como desfeita, no banco do serviço:
+   * se lançar, nada do que ela gravou fica. Não abre transação própria. Lança {@link RecusaDesfazer}
+   * quando não dá mais para desfazer (o usuário já mexeu no que o agente criou, por exemplo).
+   */
+  desfazer?: (resultado: unknown, ctx: ContextoDesfazer) => void;
 }
 
 export type Validacao = { ok: true; valor: unknown } | { ok: false; erro: string };
@@ -65,6 +97,10 @@ export interface Ferramenta {
   executar(entrada: unknown, ctx: ContextoFerramenta): Promise<unknown>;
   /** O texto do cartão para a entrada validada; `null` fora de `externo`. */
   cartao(entrada: unknown): TextoCartao | null;
+  /** Só `interno` tem função inversa. */
+  readonly desfazivel: boolean;
+  /** Roda a função inversa, síncrona, com o valor que `executar` devolveu. */
+  desfazer(resultado: unknown, ctx: ContextoDesfazer): void;
 }
 
 /**
@@ -93,6 +129,14 @@ export function ferramenta<E extends z.ZodObject>(definicao: DefinicaoFerramenta
   if (efeito === "externo" && !definicao.cartao) {
     throw new Error(`ferramenta "${nome}": ação externo precisa do texto do cartão de aprovação`);
   }
+  const { desfazer } = definicao;
+  if (efeito === "interno" && !desfazer) {
+    throw new Error(`ferramenta "${nome}": ação interno precisa da função que a desfaz`);
+  }
+  if (efeito !== "interno" && desfazer) {
+    // Leitura não muda nada, e o que saiu do Moductus não volta por uma função daqui.
+    throw new Error(`ferramenta "${nome}": só ação interno se desfaz pelo histórico`);
+  }
   const esquema = esquemaJson(nome, entrada);
 
   return {
@@ -110,6 +154,16 @@ export function ferramenta<E extends z.ZodObject>(definicao: DefinicaoFerramenta
     },
     cartao(valor) {
       return definicao.cartao?.(valor as z.output<E>) ?? null;
+    },
+    desfazivel: desfazer !== undefined,
+    desfazer(resultado, ctx) {
+      if (!desfazer) throw new Error(`${nome} não se desfaz`);
+      const volta: unknown = desfazer(resultado, ctx);
+      // Uma inversa assíncrona terminaria fora da transação: a promessa fica sem dono.
+      if (volta instanceof Promise) {
+        volta.catch(() => {});
+        throw new Error(`a inversa de ${nome} precisa ser síncrona`);
+      }
     },
   };
 }
