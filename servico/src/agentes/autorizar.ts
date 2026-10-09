@@ -1,7 +1,7 @@
 import type { Aprovacao } from "@moductus/contrato";
 import { MENSAGEM_NEGADO, type ServicoAprovacoes } from "../aprovacoes/aprovacoes.ts";
 import type { Autorizacao, PedidoAutorizacao } from "../ferramentas/catalogo.ts";
-import type { Ferramenta } from "../ferramentas/ferramenta.ts";
+import type { Ferramenta, TextoCartao } from "../ferramentas/ferramenta.ts";
 
 /**
  * O sim de uma ação `externo` de agente (AGENTS.md §4): passa pelas regras do usuário e, sem
@@ -61,15 +61,9 @@ export function autorizarPorAprovacao(aprovacoes: ServicoAprovacoes): AutorizarC
   };
 }
 
-/**
- * O texto que a ferramenta declarou ou, sem ele, um genérico que ainda diz o que vai acontecer e
- * tem botão com verbo e objeto, como o contrato exige do pedido de agente.
- */
-function textoDoCartao(ferramenta: Ferramenta, entrada: unknown) {
-  return (
-    ferramenta.cartao(entrada) ?? {
-      descricao: `${ferramenta.descricao.replace(/\.\s*$/, "")}. Isso age fora do Moductus e precisa do seu sim.`,
-      rotulo: `Permitir ${ferramenta.nome}`,
-    }
-  );
+/** O texto que a ferramenta declarou; `ferramenta()` não deixa declarar `externo` sem ele. */
+function textoDoCartao(ferramenta: Ferramenta, entrada: unknown): TextoCartao {
+  const texto = ferramenta.cartao(entrada);
+  if (!texto) throw new Error(`${ferramenta.nome} pede aprovação sem o texto do cartão`);
+  return texto;
 }

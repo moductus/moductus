@@ -6,6 +6,7 @@ import type {
   SituacaoAgente,
   TipoGatilho,
 } from "@moductus/contrato";
+import type { ServicoAprovacoes } from "../aprovacoes/aprovacoes.ts";
 import { novoId } from "../banco/ulid.ts";
 import type { Autorizar, Catalogo, EscopoAgente } from "../ferramentas/catalogo.ts";
 import type {
@@ -96,6 +97,23 @@ export const MENSAGEM_SEM_MODELO = (nome: string) =>
 
 export const MENSAGEM_CANCELADA = "Execução cancelada.";
 
+export const MENSAGEM_INTERROMPIDA = "O serviço parou no meio da execução. Nada mais foi feito.";
+
+/**
+ * Na subida: o que ficou `rodando` é de um serviço que parou no meio (caiu, o PC desligou). Ninguém
+ * mais vai terminar essas execuções, então fecham como erro, e os cartões que elas deixaram no dock
+ * expiram, porque não há quem rode a ação com o sim. Devolve os ids das execuções fechadas.
+ */
+export function encerrarInterrompidas(
+  execucoes: RepositorioExecucoes,
+  aprovacoes: Pick<ServicoAprovacoes, "expirar">,
+  agora: Date = new Date(),
+): string[] {
+  const interrompidas = execucoes.encerrarInterrompidas(agora.toISOString(), MENSAGEM_INTERROMPIDA);
+  for (const cartao of interrompidas.cartoes) aprovacoes.expirar(cartao);
+  return interrompidas.execucoes;
+}
+
 /** O executor de ferramentas de uma execução em andamento. */
 export type ExecutorDeFerramentas = (chamada: ChamadaDeFerramenta) => Promise<ResultadoDeFerramenta>;
 
@@ -113,8 +131,6 @@ export class Runtime {
   private readonly ativas = new Map<string, Ativa>();
   /** Cartões de cada agente esperando o usuário. */
   private readonly cartoes = new Map<string, number>();
-  /** Agentes cuja última execução falhou; sai na próxima que der certo. */
-  private readonly comErro = new Set<string>();
 
   constructor(
     private readonly deps: DependenciasRuntime,
@@ -160,7 +176,9 @@ export class Runtime {
   private atividade(agenteId: string): AtividadeAgente {
     if ((this.cartoes.get(agenteId) ?? 0) > 0) return "esperando";
     for (const ativa of this.ativas.values()) if (ativa.agenteId === agenteId) return "trabalhando";
-    return this.comErro.has(agenteId) ? "erro" : "ocioso";
+    // Pelo banco, para valer também depois de reiniciar. Cancelado pelo usuário não é erro do agente.
+    const ultima = this.deps.execucoes.ultimaTerminada(agenteId);
+    return ultima?.estado === "erro" && ultima.erro !== MENSAGEM_CANCELADA ? "erro" : "ocioso";
   }
 
   private async rodar(pedido: PedidoExecucao): Promise<ResultadoExecucao> {
@@ -180,8 +198,6 @@ export class Runtime {
 
     const escopo = this.deps.catalogo.doAgente(agente.ferramentas);
     const executar = this.executorRegistrando(agente.id, id, escopo, sinal);
-    this.ativas.set(id, { agenteId: agente.id, executar });
-    this.avisar(id, agente.id);
 
     let texto = "";
     let tokens: { entrada: number; saida: number } | null = null;
@@ -190,6 +206,9 @@ export class Runtime {
     let sono: SonoPedido | null = null;
     let fim: Omit<FimExecucao, "fim" | "tokensEntrada" | "tokensSaida" | "custoEstimadoMicrodolares">;
     try {
+      // Dentro do try: se avisar falhar, a execução ainda termina registrada e sai das ativas.
+      this.ativas.set(id, { agenteId: agente.id, executar });
+      this.avisar(id, agente.id);
       if (!config) {
         sono = { motivo: "sem_modelo", ate: null };
         fim = { estado: "erro", erro: MENSAGEM_SEM_MODELO(agente.nome), resumo: null };
@@ -225,12 +244,7 @@ export class Runtime {
         }
       }
     } catch (erro) {
-      const mensagem = sinal.aborted
-        ? MENSAGEM_CANCELADA
-        : erro instanceof Error
-          ? erro.message
-          : String(erro);
-      fim = { estado: "erro", erro: mensagem, resumo: resumir(texto) };
+      fim = { estado: "erro", erro: mensagemDe(erro, sinal), resumo: resumir(texto) };
     } finally {
       this.ativas.delete(id);
     }
@@ -246,9 +260,6 @@ export class Runtime {
       tokensSaida: tokens?.saida ?? null,
       custoEstimadoMicrodolares: custo,
     });
-    // Cancelado pelo usuário não é erro do agente.
-    if (fim.estado === "ok" || sinal.aborted) this.comErro.delete(agente.id);
-    else this.comErro.add(agente.id);
     const execucao = this.avisar(id, agente.id);
     return { execucao, texto, continuacao, falha, sono };
   }
@@ -266,6 +277,11 @@ export class Runtime {
   ): ExecutorDeFerramentas {
     const contexto = { agenteId, execucaoId, sinal };
     return async (chamada) => {
+      // A data da chamada é a de quando o modelo pediu, não a de quando a área terminou.
+      const instante = this.agora().toISOString();
+      const ferramenta = escopo.obter(chamada.nome);
+      // Cancelada antes de começar, não houve chamada: o executor lança sem rodar nada.
+      const comecou = !sinal.aborted;
       let aprovacaoId: string | null = null;
       const autorizarComCartao = this.deps.autorizar;
       const autorizar: Autorizar | undefined =
@@ -282,9 +298,8 @@ export class Runtime {
             if (esperando) this.contarCartao(agenteId, -1);
           }
         });
-      const resultado = await escopo.executor(contexto, autorizar)(chamada);
-      const ferramenta = escopo.obter(chamada.nome);
-      if (ferramenta) {
+      const registrar = (resultado: ResultadoDeFerramenta) => {
+        if (!ferramenta) return;
         this.deps.execucoes.registrarChamada({
           id: this.gerarId(),
           execucaoId,
@@ -294,9 +309,18 @@ export class Runtime {
           entrada: chamada.entrada,
           resultado,
           aprovacaoId,
-          agora: this.agora().toISOString(),
+          agora: instante,
         });
+      };
+      let resultado: ResultadoDeFerramenta;
+      try {
+        resultado = await escopo.executor(contexto, autorizar)(chamada);
+      } catch (erro) {
+        // Cancelada no meio (esperando o cartão ou dentro da área): fica no histórico o que começou.
+        if (comecou) registrar({ ok: false, erro: mensagemDe(erro, sinal) });
+        throw erro;
       }
+      registrar(resultado);
       return resultado;
     };
   }
@@ -315,6 +339,12 @@ export class Runtime {
     this.avisos.agente(agenteId);
     return execucao;
   }
+}
+
+/** O que fica registrado de uma exceção; cancelamento diz que foi cancelado, não o motivo técnico. */
+function mensagemDe(erro: unknown, sinal: AbortSignal): string {
+  if (sinal.aborted) return MENSAGEM_CANCELADA;
+  return erro instanceof Error ? erro.message : String(erro);
 }
 
 /** O streaming é de quem pediu: um erro dele não derruba a execução. */

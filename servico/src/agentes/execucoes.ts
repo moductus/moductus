@@ -182,6 +182,45 @@ export class RepositorioExecucoes {
       );
   }
 
+  /**
+   * Fecha como erro as execuções que ficaram `rodando` porque o serviço parou no meio, e devolve
+   * os cartões do Moductus que elas deixaram pendentes, para expirar.
+   */
+  encerrarInterrompidas(agora: string, erro: string): { execucoes: string[]; cartoes: string[] } {
+    const ids = (
+      this.db.prepare("SELECT id FROM execucoes WHERE estado = 'rodando' ORDER BY id").all() as unknown as {
+        id: string;
+      }[]
+    ).map((l) => l.id);
+    if (ids.length === 0) return { execucoes: [], cartoes: [] };
+    const cartoes = (
+      this.db
+        .prepare(
+          `SELECT a.id FROM aprovacoes a JOIN execucoes e ON e.id = a.da_execucao_id
+            WHERE a.estado = 'pendente' AND a.fonte = 'moductus' AND e.estado = 'rodando'
+            ORDER BY a.criado_em, a.id`,
+        )
+        .all() as unknown as { id: string }[]
+    ).map((l) => l.id);
+    this.db
+      .prepare(
+        "UPDATE execucoes SET estado = 'erro', erro = ?, fim = ?, atualizado_em = ? WHERE estado = 'rodando'",
+      )
+      .run(erro, agora, agora);
+    return { execucoes: ids, cartoes };
+  }
+
+  /** Como terminou a última execução do agente que já terminou; `null` se nenhuma terminou. */
+  ultimaTerminada(agenteId: string): { estado: EstadoExecucao; erro: string | null } | null {
+    const linha = this.db
+      .prepare(
+        `SELECT estado, erro FROM execucoes WHERE do_agente_id = ? AND estado IN ('ok', 'erro')
+          ORDER BY id DESC LIMIT 1`,
+      )
+      .get(agenteId) as unknown as { estado: EstadoExecucao; erro: string | null } | undefined;
+    return linha ?? null;
+  }
+
   execucao(id: string): Execucao | null {
     const linha = this.db
       .prepare(`SELECT ${COLUNAS_EXECUCAO} FROM execucoes WHERE id = ?`)
@@ -242,10 +281,28 @@ function carimboDa(agenteId: string, execucaoId: string): Carimbo {
   return { origem: "agente", agenteId, execucaoId };
 }
 
-/** Entrada e resultado vêm do modelo e da área: o que não vira JSON fica registrado como texto. */
-function emJson(valor: unknown): string {
+/** O que fica no lugar de um objeto que contém a si mesmo. */
+export const MARCA_CIRCULAR = "[circular]";
+
+/**
+ * Entrada e resultado vêm do modelo e da área, e o registro não pode derrubar a execução: bigint
+ * vira texto, referência circular vira {@link MARCA_CIRCULAR} e o que ainda assim não serializa
+ * (um `toJSON` que lança) fica como texto.
+ */
+export function emJson(valor: unknown): string {
+  // Os objetos do caminho até o valor atual: o `this` do replacer é o pai do que está sendo lido.
+  const caminho: object[] = [];
   try {
-    return JSON.stringify(valor) ?? "null";
+    return (
+      JSON.stringify(valor, function (this: unknown, _chave, v: unknown) {
+        if (typeof v === "bigint") return v.toString();
+        if (typeof v !== "object" || v === null) return v;
+        while (caminho.length > 0 && caminho.at(-1) !== this) caminho.pop();
+        if (caminho.includes(v)) return MARCA_CIRCULAR;
+        caminho.push(v);
+        return v;
+      }) ?? "null"
+    );
   } catch {
     return JSON.stringify(String(valor));
   }

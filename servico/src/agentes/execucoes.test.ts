@@ -5,7 +5,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { PaginaExecucoes } from "@moductus/contrato";
 import { afterEach, describe, expect, test } from "vitest";
 import { abrirBanco } from "../banco/conexao.ts";
-import { RepositorioExecucoes, ServicoExecucoes } from "./execucoes.ts";
+import { emJson, MARCA_CIRCULAR, RepositorioExecucoes, ServicoExecucoes } from "./execucoes.ts";
 
 const pastas: string[] = [];
 const bancos: DatabaseSync[] = [];
@@ -47,7 +47,7 @@ describe("histórico de execuções", () => {
     expect(servico.listar({ agenteId: "alba" }).itens.map((e) => e.id)).toEqual(["01C", "01A"]);
   });
 
-  test("a execução e as chamadas carimbam o agente; resultado que não vira JSON fica como texto", () => {
+  test("a execução e as chamadas carimbam o agente; bigint do resultado vira texto", () => {
     const { db, repo, servico } = montar();
     repo.iniciar({
       id: "E1",
@@ -84,8 +84,24 @@ describe("histórico de execuções", () => {
     expect(servico.obter({ id: "E1" })).toMatchObject({
       estado: "ok",
       fim: "2026-10-09T12:00:02.000Z",
-      chamadas: [{ id: "C1", entrada: null, resultado: "[object Object]", desfazerAte: null }],
+      chamadas: [{ id: "C1", entrada: null, resultado: { ok: true, valor: "1" }, desfazerAte: null }],
     });
     expect(() => servico.obter({ id: "nada" })).toThrow("execução não encontrada");
+  });
+
+  test("registro em JSON: circular marcada, objeto repetido inteiro, o que não serializa vira texto", () => {
+    const circular: Record<string, unknown> = { nome: "a" };
+    circular.eu = circular;
+    expect(JSON.parse(emJson({ valor: circular }))).toEqual({ valor: { nome: "a", eu: MARCA_CIRCULAR } });
+    const repetido = { x: 1 };
+    expect(JSON.parse(emJson([repetido, repetido]))).toEqual([{ x: 1 }, { x: 1 }]);
+    expect(emJson(undefined)).toBe("null");
+    const quebrado = {
+      toJSON: () => {
+        throw new Error("não");
+      },
+      toString: () => "quebrado",
+    };
+    expect(JSON.parse(emJson(quebrado))).toBe("quebrado");
   });
 });

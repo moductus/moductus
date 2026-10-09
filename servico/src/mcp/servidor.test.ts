@@ -44,6 +44,7 @@ const catalogo = new Catalogo([
     entrada: z.object({ texto: z.string() }),
     efeito: "externo",
     executar: () => "comentado",
+    cartao: () => ({ descricao: "Vou comentar no PR.", rotulo: "Comentar no PR" }),
   }),
 ]);
 

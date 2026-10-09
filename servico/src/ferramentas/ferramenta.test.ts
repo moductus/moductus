@@ -17,7 +17,19 @@ const lancar = ferramenta({
 });
 
 describe("ferramenta()", () => {
-  test("o texto do cartão sai da entrada validada; sem cartão declarado, null", () => {
+  test("ação externo sem o texto do cartão falha na declaração", () => {
+    expect(() =>
+      ferramenta({
+        nome: "github.comentar",
+        descricao: "Comenta num PR",
+        entrada: z.object({}),
+        efeito: "externo",
+        executar: () => null,
+      }),
+    ).toThrow('ferramenta "github.comentar": ação externo precisa do texto do cartão de aprovação');
+  });
+
+  test("o texto do cartão sai da entrada validada; fora de externo, null", () => {
     const comentar = ferramenta({
       nome: "github.comentar",
       descricao: "Comenta num PR",

@@ -42,7 +42,10 @@ export interface DefinicaoFerramenta<E extends z.ZodObject> {
   efeito: Efeito;
   /** Chamada só com a entrada já validada; erro lançado volta ao modelo como texto. */
   executar: (entrada: z.output<E>, ctx: ContextoFerramenta) => unknown;
-  /** O cartão de aprovação, para `externo`; sem ele, a aprovação monta um texto genérico. */
+  /**
+   * O cartão de aprovação, obrigatório em `externo`: só a área sabe dizer o que vai acontecer e o
+   * tamanho, e um texto genérico pediria o sim sem dizer isso.
+   */
   cartao?: (entrada: z.output<E>) => TextoCartao;
 }
 
@@ -60,7 +63,7 @@ export interface Ferramenta {
   validar(entrada: unknown): Validacao;
   /** Roda a função da área; `entrada` tem de ter passado por {@link validar}. */
   executar(entrada: unknown, ctx: ContextoFerramenta): Promise<unknown>;
-  /** O texto do cartão para a entrada validada, se a ferramenta declarou um. */
+  /** O texto do cartão para a entrada validada; `null` fora de `externo`. */
   cartao(entrada: unknown): TextoCartao | null;
 }
 
@@ -87,6 +90,9 @@ export function ferramenta<E extends z.ZodObject>(definicao: DefinicaoFerramenta
   if (!NOME_MODELO.test(nomeModelo))
     throw new Error(`ferramenta "${nome}": nome longo demais para os modelos`);
   if (descricao.trim() === "") throw new Error(`ferramenta "${nome}": falta a descrição`);
+  if (efeito === "externo" && !definicao.cartao) {
+    throw new Error(`ferramenta "${nome}": ação externo precisa do texto do cartão de aprovação`);
+  }
   const esquema = esquemaJson(nome, entrada);
 
   return {

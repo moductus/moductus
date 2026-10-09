@@ -13,10 +13,17 @@ import { ProvedorFalso, roteiros } from "../provedores/falso.ts";
 import type { EventoAgente, MensagemModelo } from "../provedores/provedor.ts";
 import { RegistroProvedores } from "../provedores/registro.ts";
 import { RepositorioAgentes } from "./agentes.ts";
-import { autorizarPorAprovacao } from "./autorizar.ts";
+import { autorizarPorAprovacao, MENSAGEM_EXPIRADA, MENSAGEM_REGRA_NEGA } from "./autorizar.ts";
 import { RepositorioExecucoes, ServicoExecucoes } from "./execucoes.ts";
 import { HISTORICO_CURTO, VOZ_DA_FAMILIA } from "./pedido.ts";
-import { MENSAGEM_CANCELADA, MENSAGEM_SEM_MODELO, Runtime, type PedidoExecucao } from "./runtime.ts";
+import {
+  encerrarInterrompidas,
+  MENSAGEM_CANCELADA,
+  MENSAGEM_INTERROMPIDA,
+  MENSAGEM_SEM_MODELO,
+  Runtime,
+  type PedidoExecucao,
+} from "./runtime.ts";
 
 const pastas: string[] = [];
 const bancos: DatabaseSync[] = [];
@@ -46,13 +53,12 @@ function portoes() {
  * Banco migrado de verdade, Alba e Nuno com um provedor falso cada (Tula sem modelo), um catálogo
  * de teste e o relógio andando um segundo por leitura, para a ordem das datas ser estrita.
  */
-function montar() {
-  const pasta = mkdtempSync(join(tmpdir(), "moductus-runtime-"));
-  pastas.push(pasta);
+function montar(pasta = mkdtempSync(join(tmpdir(), "moductus-runtime-"))) {
+  if (!pastas.includes(pasta)) pastas.push(pasta);
   const db = abrirBanco(pasta);
   bancos.push(db);
   db.exec(`
-    INSERT INTO provedores (id, tipo, nome) VALUES ('p-alba', 'claude-cli', 'Falso da Alba'), ('p-nuno', 'claude-cli', 'Falso do Nuno');
+    INSERT OR IGNORE INTO provedores (id, tipo, nome) VALUES ('p-alba', 'claude-cli', 'Falso da Alba'), ('p-nuno', 'claude-cli', 'Falso do Nuno');
     UPDATE agentes SET provedor_id = 'p-' || id, ferramentas = '["teste.*"]' WHERE id IN ('alba', 'nuno');
   `);
   const falsos: Record<string, ProvedorFalso> = {
@@ -93,6 +99,17 @@ function montar() {
       cartao: ({ alvo }) => ({ descricao: `Vou publicar em ${alvo}.`, rotulo: `Publicar em ${alvo}` }),
     }),
     ferramenta({
+      nome: "teste.demorar",
+      descricao: "Trabalha até a execução ser cancelada",
+      entrada: z.object({}),
+      efeito: "interno",
+      executar: (_entrada, ctx) =>
+        new Promise((_resolve, rejeitar) => {
+          porta.esperando.add("demorar");
+          ctx.sinal.addEventListener("abort", () => rejeitar(new Error("parou no meio")), { once: true });
+        }),
+    }),
+    ferramenta({
       nome: "outro.coisa",
       descricao: "Fora do escopo de todos",
       entrada: z.object({}),
@@ -126,6 +143,7 @@ function montar() {
   const situacao = (id: string) => runtime.situacao(agentes.agente(id)!);
   const historico = new ServicoExecucoes(repositorioExecucoes);
   return {
+    pasta,
     db,
     runtime,
     falsos,
@@ -246,6 +264,7 @@ describe("runtime: pedido ao modelo", () => {
     expect(enviado.instrucoes).toBe(`Você é a Alba e cuida do dia.\n\n${VOZ_DA_FAMILIA}`);
     expect(enviado.ferramentas.map((f) => f.nome)).toEqual([
       "teste__anotar",
+      "teste__demorar",
       "teste__esperar",
       "teste__publicar",
     ]);
@@ -484,8 +503,8 @@ describe("runtime: chamadas de ferramenta", () => {
     });
   });
 
-  test("execução cancelada com cartão pendente tira o cartão do dock", async () => {
-    const { runtime, falsos, repositorioAprovacoes } = montar();
+  test("execução cancelada com cartão pendente tira o cartão do dock e registra a chamada com ele", async () => {
+    const { runtime, falsos, repositorioAprovacoes, historico } = montar();
     falsos["p-nuno"]!.roteirizar([
       { tipo: "ferramenta", nome: "teste__publicar", entrada: { alvo: "#1" } },
       ...roteiros.resposta("não chega"),
@@ -495,7 +514,144 @@ describe("runtime: chamadas de ferramenta", () => {
     await vi.waitFor(() => expect(repositorioAprovacoes.pendentes()).toHaveLength(1));
     const id = repositorioAprovacoes.pendentes()[0]!.id;
     cancelar.abort();
-    expect((await execucao).execucao.erro).toBe(MENSAGEM_CANCELADA);
+    const r = await execucao;
+    expect(r.execucao.erro).toBe(MENSAGEM_CANCELADA);
     expect(repositorioAprovacoes.aprovacao(id)?.estado).toBe("expirada");
+    expect(historico.obter({ id: r.execucao.id }).chamadas).toEqual([
+      expect.objectContaining({
+        ferramenta: "teste.publicar",
+        aprovacaoId: id,
+        resultado: { ok: false, erro: MENSAGEM_CANCELADA },
+      }),
+    ]);
+  });
+
+  test("ferramenta interrompida pelo cancelamento fica no histórico com o erro, na hora em que foi chamada", async () => {
+    const { runtime, falsos, porta, historico } = montar();
+    falsos["p-alba"]!.roteirizar([
+      { tipo: "ferramenta", nome: "teste__demorar", entrada: {} },
+      ...roteiros.resposta("não chega"),
+    ]);
+    const cancelar = new AbortController();
+    const execucao = runtime.executar(pedir("alba", "demora", { sinal: cancelar.signal }));
+    await vi.waitFor(() => expect(porta.esperando.has("demorar")).toBe(true));
+    cancelar.abort();
+    const r = await execucao;
+    const [chamada] = historico.obter({ id: r.execucao.id }).chamadas;
+    expect(chamada).toMatchObject({
+      ferramenta: "teste.demorar",
+      efeito: "interno",
+      resultado: { ok: false, erro: MENSAGEM_CANCELADA },
+    });
+    // O relógio anda um segundo por leitura: início (0), chamada (1), fim (2).
+    expect(chamada!.criadoEm).toBe("2026-10-09T12:00:01.000Z");
+    expect(r.execucao.fim).toBe("2026-10-09T12:00:02.000Z");
+  });
+
+  test("chamada que chega depois do cancelamento não roda nem entra no histórico", async () => {
+    const { runtime, falsos, porta, avisosExecucao, historico } = montar();
+    falsos["p-alba"]!.roteirizar([
+      { tipo: "ferramenta", nome: "teste__esperar", entrada: { chave: "a" } },
+      ...roteiros.resposta("não chega"),
+    ]);
+    const cancelar = new AbortController();
+    const execucao = runtime.executar(pedir("alba", "oi", { sinal: cancelar.signal }));
+    await vi.waitFor(() => expect(porta.esperando.has("a")).toBe(true));
+    const id = avisosExecucao[0]!.id;
+    const executor = runtime.executorDaExecucao(id)!;
+    cancelar.abort();
+    await expect(executor({ id: "tarde", nome: "teste__anotar", entrada: { texto: "x" } })).rejects.toThrow();
+    porta.abrir("a");
+    await execucao;
+    expect(historico.obter({ id }).chamadas.map((c) => c.ferramenta)).toEqual(["teste.esperar"]);
+  });
+
+  test("regra do usuário decide sem cartão: a que permite roda, a que nega volta o motivo", async () => {
+    const { runtime, falsos, publicados, aprovacoes, repositorioAprovacoes, historico } = montar();
+    const publicar = (alvo: string) => [
+      { tipo: "ferramenta" as const, nome: "teste__publicar", entrada: { alvo } },
+      ...roteiros.resposta("ok"),
+    ];
+    falsos["p-nuno"]!.roteirizar(publicar("#1"), publicar("#2"), publicar("#1"), publicar("#2"));
+
+    // "Sempre para este agente" no #1 (permitir) e no #2 (negar).
+    const primeiro = runtime.executar(pedir("nuno", "publica no #1"));
+    await vi.waitFor(() => expect(repositorioAprovacoes.pendentes()).toHaveLength(1));
+    await aprovacoes.decidir({
+      id: repositorioAprovacoes.pendentes()[0]!.id,
+      decisao: "permitir",
+      sempre: "agente",
+    });
+    await primeiro;
+    const segundo = runtime.executar(pedir("nuno", "publica no #2"));
+    await vi.waitFor(() => expect(repositorioAprovacoes.pendentes()).toHaveLength(1));
+    await aprovacoes.decidir({
+      id: repositorioAprovacoes.pendentes()[0]!.id,
+      decisao: "negar",
+      sempre: "agente",
+    });
+    await segundo;
+    expect(publicados).toEqual(["#1"]);
+
+    const porRegraSim = await runtime.executar(pedir("nuno", "de novo no #1"));
+    const porRegraNao = await runtime.executar(pedir("nuno", "de novo no #2"));
+    expect(repositorioAprovacoes.pendentes()).toEqual([]);
+    expect(publicados).toEqual(["#1", "#1"]);
+    expect(historico.obter({ id: porRegraSim.execucao.id }).chamadas[0]).toMatchObject({
+      aprovacaoId: null,
+      resultado: { ok: true, valor: { publicado: "#1" } },
+    });
+    expect(historico.obter({ id: porRegraNao.execucao.id }).chamadas[0]).toMatchObject({
+      aprovacaoId: null,
+      resultado: { ok: false, erro: MENSAGEM_REGRA_NEGA },
+    });
+  });
+
+  test("cartão que expira sem decisão não roda e o modelo sabe que nada foi feito", async () => {
+    const { runtime, falsos, publicados, aprovacoes, repositorioAprovacoes, historico } = montar();
+    falsos["p-nuno"]!.roteirizar([
+      { tipo: "ferramenta", nome: "teste__publicar", entrada: { alvo: "#3" } },
+      ...roteiros.resposta("Entendido."),
+    ]);
+    const execucao = runtime.executar(pedir("nuno", "publica no #3"));
+    await vi.waitFor(() => expect(repositorioAprovacoes.pendentes()).toHaveLength(1));
+    aprovacoes.expirar(repositorioAprovacoes.pendentes()[0]!.id);
+    const r = await execucao;
+    expect(r.execucao.estado).toBe("ok");
+    expect(publicados).toEqual([]);
+    expect(historico.obter({ id: r.execucao.id }).chamadas[0]?.resultado).toEqual({
+      ok: false,
+      erro: MENSAGEM_EXPIRADA,
+    });
+  });
+});
+
+describe("runtime: subida depois de parar no meio", () => {
+  test("execução que ficou rodando fecha como erro e o cartão dela expira", async () => {
+    const primeiro = montar();
+    primeiro.falsos["p-nuno"]!.roteirizar([
+      { tipo: "ferramenta", nome: "teste__publicar", entrada: { alvo: "#5" } },
+      ...roteiros.resposta("não chega"),
+    ]);
+    // O serviço "cai" com a execução esperando o cartão: nada termina, o banco fecha.
+    void primeiro.runtime.executar(pedir("nuno", "publica no #5"));
+    await vi.waitFor(() => expect(primeiro.repositorioAprovacoes.pendentes()).toHaveLength(1));
+    const cartao = primeiro.repositorioAprovacoes.pendentes()[0]!;
+    primeiro.db.close();
+
+    const depois = montar(primeiro.pasta);
+    const subida = new Date("2026-10-10T08:00:00.000Z");
+    const fechadas = encerrarInterrompidas(new RepositorioExecucoes(depois.db), depois.aprovacoes, subida);
+    expect(fechadas).toEqual([cartao.execucaoId]);
+    expect(depois.historico.obter({ id: cartao.execucaoId! })).toMatchObject({
+      estado: "erro",
+      erro: MENSAGEM_INTERROMPIDA,
+      fim: subida.toISOString(),
+    });
+    expect(depois.repositorioAprovacoes.aprovacao(cartao.id)?.estado).toBe("expirada");
+    // O erro vem do banco: vale depois de reiniciar, sem a memória do runtime anterior.
+    expect(depois.situacao("nuno").atividade).toBe("erro");
+    // Na próxima subida não há nada a fechar.
+    expect(encerrarInterrompidas(new RepositorioExecucoes(depois.db), depois.aprovacoes, subida)).toEqual([]);
   });
 });

@@ -51,6 +51,7 @@ function montar() {
       entrada: z.object({ pr: z.number().int().positive(), texto: z.string().min(1) }),
       efeito: "externo",
       executar: anotar("github.comentar"),
+      cartao: ({ pr }) => ({ descricao: `Vou comentar no #${pr}.`, rotulo: `Comentar no #${pr}` }),
     }),
     ferramenta({
       nome: "tarefas.criar",

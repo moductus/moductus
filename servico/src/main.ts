@@ -5,7 +5,7 @@ import { VERSAO_PROTOCOLO, type EstadoConfig } from "@moductus/contrato";
 import { RepositorioAgentes, ServicoAgentes } from "./agentes/agentes.ts";
 import { autorizarPorAprovacao } from "./agentes/autorizar.ts";
 import { RepositorioExecucoes, ServicoExecucoes } from "./agentes/execucoes.ts";
-import { Runtime } from "./agentes/runtime.ts";
+import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
@@ -118,6 +118,10 @@ const provedores = registrarProvedores();
 const catalogo = new Catalogo();
 const repositorioAgentes = new RepositorioAgentes(banco);
 const repositorioExecucoes = new RepositorioExecucoes(banco);
+// Quem rodava essas execuções era o serviço que parou: fecham como erro e os cartões delas expiram.
+const interrompidas = encerrarInterrompidas(repositorioExecucoes, aprovacoes);
+if (interrompidas.length > 0)
+  console.error(`execuções interrompidas na última subida: ${interrompidas.length}`);
 const runtime = new Runtime(
   {
     agentes: repositorioAgentes,
