@@ -13,6 +13,7 @@ const lancar = ferramenta({
     itens: z.array(z.object({ nome: z.string(), valorCentavos: z.number() })).optional(),
   }),
   efeito: "interno",
+  desfazer: () => {},
   executar: (entrada) => ({ gravado: entrada }),
 });
 
@@ -27,6 +28,54 @@ describe("ferramenta()", () => {
         executar: () => null,
       }),
     ).toThrow('ferramenta "github.comentar": ação externo precisa do texto do cartão de aprovação');
+  });
+
+  test("ação interno sem a função inversa falha na declaração; leitura e externo não aceitam uma", () => {
+    const base = { descricao: "x", entrada: z.object({}), executar: () => null };
+    expect(() => ferramenta({ ...base, nome: "tarefas.criar", efeito: "interno" })).toThrow(
+      'ferramenta "tarefas.criar": ação interno precisa da função que a desfaz',
+    );
+    expect(() =>
+      ferramenta({ ...base, nome: "tarefas.listar", efeito: "leitura", desfazer: () => null }),
+    ).toThrow('ferramenta "tarefas.listar": só ação interno se desfaz pelo histórico');
+    expect(() =>
+      ferramenta({
+        ...base,
+        nome: "github.comentar",
+        efeito: "externo",
+        cartao: () => ({ descricao: "Vou comentar.", rotulo: "Comentar" }),
+        desfazer: () => null,
+      }),
+    ).toThrow(/só ação interno se desfaz/);
+  });
+
+  test("a inversa recebe a entrada validada, o resultado e de quem foi a ação", async () => {
+    const recebido: unknown[] = [];
+    const criar = ferramenta({
+      nome: "tarefas.criar",
+      descricao: "Cria uma tarefa",
+      entrada: z.object({ titulo: z.string(), lista: z.string().default("entrada") }),
+      efeito: "interno",
+      executar: () => ({ id: "t1" }),
+      desfazer: (entrada, resultado, ctx) => {
+        recebido.push(entrada, resultado, ctx);
+      },
+    });
+    const ler = ferramenta({
+      nome: "tarefas.listar",
+      descricao: "Lista",
+      entrada: z.object({}),
+      efeito: "leitura",
+      executar: () => [],
+    });
+    expect([criar.desfazivel, ler.desfazivel]).toEqual([true, false]);
+
+    const ctx = { chamadaId: "c1", agenteId: "alba", execucaoId: "e1" };
+    const entrada = criar.validar({ titulo: "Pão" });
+    if (!entrada.ok) throw new Error(entrada.erro);
+    await criar.desfazer(entrada.valor, { id: "t1" }, ctx);
+    expect(recebido).toEqual([{ titulo: "Pão", lista: "entrada" }, { id: "t1" }, ctx]);
+    await expect(ler.desfazer({}, null, ctx)).rejects.toThrow("tarefas.listar não se desfaz");
   });
 
   test("o texto do cartão sai da entrada validada; fora de externo, null", () => {
@@ -127,6 +176,7 @@ describe("ferramenta()", () => {
         prioridade: z.number().int().min(1).lt(5),
       }),
       efeito: "interno",
+      desfazer: () => {},
       executar: () => null,
     });
     const curto = limites.validar({ titulo: "a", etiquetas: [], prioridade: 0 });

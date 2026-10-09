@@ -23,6 +23,17 @@ export interface ContextoFerramenta {
 }
 
 /**
+ * De quem foi a ação que o usuário está desfazendo. Quem desfaz é o usuário: o que a área gravar
+ * ao desfazer leva o carimbo dele (`DO_USUARIO`), não o do agente.
+ */
+export interface ContextoDesfazer {
+  chamadaId: string;
+  /** Agente e execução que fizeram a ação; vazios quando quem chamou veio de fora do Moductus. */
+  agenteId: string | null;
+  execucaoId: string | null;
+}
+
+/**
  * O texto do cartão de uma ação `externo`, na voz do agente: o que vai acontecer, o tamanho e se
  * dá para desfazer; o botão é verbo com objeto ("Comentar no #142"), nunca "OK".
  */
@@ -47,6 +58,13 @@ export interface DefinicaoFerramenta<E extends z.ZodObject> {
    * tamanho, e um texto genérico pediria o sim sem dizer isso.
    */
   cartao?: (entrada: z.output<E>) => TextoCartao;
+  /**
+   * A função inversa, obrigatória em `interno` e proibida no resto (AGENTS.md §4): o que o agente
+   * faz dentro do Moductus aparece no histórico com desfazer. Recebe a entrada da chamada e o que
+   * `executar` devolveu, como ficaram gravados. Lança, com a explicação, quando não dá mais para
+   * desfazer (o usuário já mexeu no que o agente criou, por exemplo).
+   */
+  desfazer?: (entrada: z.output<E>, resultado: unknown, ctx: ContextoDesfazer) => unknown;
 }
 
 export type Validacao = { ok: true; valor: unknown } | { ok: false; erro: string };
@@ -65,6 +83,10 @@ export interface Ferramenta {
   executar(entrada: unknown, ctx: ContextoFerramenta): Promise<unknown>;
   /** O texto do cartão para a entrada validada; `null` fora de `externo`. */
   cartao(entrada: unknown): TextoCartao | null;
+  /** Só `interno` tem função inversa. */
+  readonly desfazivel: boolean;
+  /** Roda a função inversa; `entrada` tem de ter passado por {@link validar}. */
+  desfazer(entrada: unknown, resultado: unknown, ctx: ContextoDesfazer): Promise<void>;
 }
 
 /**
@@ -93,6 +115,14 @@ export function ferramenta<E extends z.ZodObject>(definicao: DefinicaoFerramenta
   if (efeito === "externo" && !definicao.cartao) {
     throw new Error(`ferramenta "${nome}": ação externo precisa do texto do cartão de aprovação`);
   }
+  const { desfazer } = definicao;
+  if (efeito === "interno" && !desfazer) {
+    throw new Error(`ferramenta "${nome}": ação interno precisa da função que a desfaz`);
+  }
+  if (efeito !== "interno" && desfazer) {
+    // Leitura não muda nada, e o que saiu do Moductus não volta por uma função daqui.
+    throw new Error(`ferramenta "${nome}": só ação interno se desfaz pelo histórico`);
+  }
   const esquema = esquemaJson(nome, entrada);
 
   return {
@@ -110,6 +140,11 @@ export function ferramenta<E extends z.ZodObject>(definicao: DefinicaoFerramenta
     },
     cartao(valor) {
       return definicao.cartao?.(valor as z.output<E>) ?? null;
+    },
+    desfazivel: desfazer !== undefined,
+    async desfazer(valor, resultado, ctx) {
+      if (!desfazer) throw new Error(`${nome} não se desfaz`);
+      await desfazer(valor as z.output<E>, resultado, ctx);
     },
   };
 }

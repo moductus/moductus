@@ -156,7 +156,9 @@ const runtime = new Runtime(
   },
 );
 const agentes = new ServicoAgentes(repositorioAgentes, catalogo, (agente) => runtime.situacao(agente));
-const execucoes = new ServicoExecucoes(repositorioExecucoes);
+const execucoes = new ServicoExecucoes(repositorioExecucoes, catalogo, {
+  mudou: (execucao) => servidor?.emitir("execucoes.mudou", execucao),
+});
 
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
@@ -186,6 +188,7 @@ servidor = await abrirServidorWs(token, {
   "agentes.capacidades": (pedido) => agentes.capacidades(pedido),
   "execucoes.listar": (pedido) => execucoes.listar(pedido),
   "execucoes.obter": (pedido) => execucoes.obter(pedido),
+  "execucoes.desfazer": (pedido) => execucoes.desfazer(pedido),
   // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
   ...semAtendente([
     "agentes.definir",
@@ -193,7 +196,6 @@ servidor = await abrirServidorWs(token, {
     "agentes.ligar",
     "agentes.pausar",
     "agentes.retomar",
-    "execucoes.desfazer",
     "provedores.listar",
     "provedores.detectar",
     "provedores.criar",
