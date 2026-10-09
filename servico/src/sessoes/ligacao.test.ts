@@ -232,6 +232,38 @@ describe("ligar e desligar o Claude Code no settings.json", () => {
   });
 });
 
+describe("desligar sem nada do Moductus não escreve", () => {
+  test("bloco compacto do usuário em arquivo recuado fica intocado, sem cópia", () => {
+    const original =
+      '{\n  "model": "opus",\n  "hooks": {"Stop":[{"hooks":[{"type":"command","command":"echo"}]}]}\n}\n';
+    const { ligacao, ler, copias } = montar(original);
+    expect(ligacao.desligar()).toEqual({ mudou: false, copia: null });
+    expect(ler()).toBe(original);
+    expect(copias()).toHaveLength(0);
+
+    ligacao.ligar();
+    ligacao.desligar();
+    const depois = copias().length;
+    expect(ligacao.desligar()).toEqual({ mudou: false, copia: null });
+    expect(ler()).toBe(original);
+    expect(copias()).toHaveLength(depois);
+  });
+
+  test("a memória de uma ligação desfeita à mão é esquecida", () => {
+    const original = '{"hooks": {"Stop": []}, "model": "opus"}';
+    const { ligacao, caminho, ler } = montar(original);
+    ligacao.ligar();
+    writeFileSync(caminho, original, "utf8"); // o usuário tirou os hooks à mão
+    expect(ligacao.desligar().mudou).toBe(false);
+    // Ligar de novo guarda a memória de agora; desligar devolve o de agora.
+    const mudado = '{"hooks": {"Stop": []}, "model": "sonnet"}';
+    writeFileSync(caminho, mudado, "utf8");
+    ligacao.ligar();
+    ligacao.desligar();
+    expect(ler()).toBe(mudado);
+  });
+});
+
 describe("o bloco hooks volta como era", () => {
   test("bloco compacto em arquivo recuado, escapes, 5.0, {} e lista vazia voltam idênticos", () => {
     const originais = [
@@ -239,6 +271,8 @@ describe("o bloco hooks volta como era", () => {
       '{\n  "hooks": {\n    "Stop": [{ "hooks": [{ "type": "command", "command": "caf\\u00e9", "timeout": 5.0 }] }]\n  }\n}',
       '{"hooks": {}}',
       '{"hooks": {"Stop": []}}',
+      "{\n}\n",
+      "{}",
       '{\r\n\t"hooks": {\r\n\t\t"PreToolUse": [],\r\n\t\t"Stop": []\r\n\t},\r\n\t"x": 1\r\n}\r\n',
     ];
     for (const original of originais) {
@@ -284,6 +318,68 @@ describe("o bloco hooks volta como era", () => {
 });
 
 describe("settings.json que é link", () => {
+  test("pasta do settings.json que é junção: as cópias vão para a pasta de dados, não para o repositório", () => {
+    const pasta = mkdtempSync(join(tmpdir(), "moductus-ligacao-"));
+    pastas.push(pasta);
+    const repositorio = join(pasta, "dotfiles");
+    mkdirSync(repositorio);
+    writeFileSync(join(repositorio, "settings.json"), ORIGINAL, "utf8");
+    const juncao = join(pasta, "claude");
+    symlinkSync(repositorio, juncao, "junction");
+    const reserva = join(pasta, "dados", "copias");
+    const ligacao = new LigacaoClaudeCode({
+      caminho: join(juncao, "settings.json"),
+      porta: PORTA,
+      copiasForaDoLink: reserva,
+    });
+
+    ligacao.ligar();
+    expect(ligacao.situacao()).toBe("ligada");
+    ligacao.desligar();
+    expect(readFileSync(join(repositorio, "settings.json"), "utf8")).toBe(ORIGINAL);
+    expect(readdirSync(repositorio)).toEqual(["settings.json"]);
+    const copias = readdirSync(reserva);
+    expect(copias).toHaveLength(2);
+    expect(readFileSync(join(reserva, copias.sort()[0] ?? ""), "utf8")).toBe(ORIGINAL);
+  });
+
+  test("pasta comum com reserva configurada: as cópias continuam ao lado do settings.json", () => {
+    const { pasta, caminho } = montar(ORIGINAL);
+    const reserva = join(pasta, "dados", "copias");
+    new LigacaoClaudeCode({ caminho, porta: PORTA, copiasForaDoLink: reserva }).ligar();
+    expect(readdirSync(pasta).filter((f) => f.endsWith(".bak"))).toHaveLength(1);
+    expect(existsSync(reserva)).toBe(false);
+  });
+
+  test("hardlink: escrita que falha no meio devolve o conteúdo de antes, e o vínculo continua", () => {
+    const { pasta, caminho } = montar();
+    const outroNome = join(pasta, "dotfiles-settings.json");
+    writeFileSync(outroNome, ORIGINAL, "utf8");
+    linkSync(outroNome, caminho);
+    let falhou = false;
+    const ligacao = new LigacaoClaudeCode({
+      caminho,
+      porta: PORTA,
+      gravar: (destino, conteudo) => {
+        if (!falhou && !destino.endsWith(".moductus-tmp")) {
+          falhou = true;
+          writeFileSync(destino, String(conteudo).slice(0, 20));
+          throw new Error("disco cheio");
+        }
+        writeFileSync(destino, conteudo);
+      },
+    });
+
+    expect(() => ligacao.ligar()).toThrow("disco cheio");
+    expect(readFileSync(outroNome, "utf8")).toBe(ORIGINAL);
+    expect(statSync(caminho).nlink).toBe(2);
+    expect(readdirSync(pasta).some((f) => f.endsWith(".moductus-tmp"))).toBe(false);
+    // Na segunda tentativa, o disco tem espaço: liga normalmente.
+    ligacao.ligar();
+    expect(ligacao.situacao()).toBe("ligada");
+    expect(statSync(outroNome).nlink).toBe(2);
+  });
+
   test("symlink continua link; o alvo recebe os hooks e volta igual ao desligar", () => {
     const { pasta, caminho, ligacao, copias } = montar();
     const repositorio = join(pasta, "dotfiles");

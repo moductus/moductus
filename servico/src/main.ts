@@ -77,6 +77,7 @@ const conexoes = new ServicoConexoes(
       caminho: caminhoSettingsClaude(),
       porta: portaDosHooks(),
       memoria: join(pastaDeDados(), "ligacao-claude-code.json"),
+      copiasForaDoLink: join(pastaDeDados(), "copias", "claude-code"),
     }),
     ambiente: ambientePelaCasca(canal),
     token: () => tokenDosHooks(credenciaisPelaCasca(canal)),

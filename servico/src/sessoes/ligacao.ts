@@ -12,7 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import type { MudancaArquivo } from "@moductus/contrato";
 import { ROTAS_HOOKS } from "./receptor.ts";
 
@@ -352,7 +352,15 @@ export interface Memoria {
   criouArquivo: boolean;
   /** O texto do valor de `hooks` antes de ligar; `null` quando a chave não existia. */
   hooks: string | null;
+  /**
+   * O arquivo inteiro, só quando a raiz era um objeto vazio (`{}`, `{\n}`): não há o que
+   * esconder nele, e é o único jeito de devolver o espaço entre as chaves como era.
+   */
+  vazio: string | null;
 }
+
+/** Escreve um arquivo; os testes trocam para simular disco cheio no meio da escrita. */
+export type Gravar = (caminho: string, conteudo: string | Buffer) => void;
 
 export interface OpcoesLigacao {
   /** O `settings.json` do Claude Code (`caminhoSettingsClaude()`; nos testes, uma pasta temporária). */
@@ -364,6 +372,13 @@ export interface OpcoesLigacao {
    * Moductus); sem ele, a memória fica só neste processo.
    */
   memoria?: string;
+  /**
+   * Pasta das cópias de segurança quando a pasta do `settings.json` é junção ou link para outro
+   * lugar (um repositório de configuração, que não deve ganhar `.bak`): a pasta de dados do
+   * Moductus. Sem ela, as cópias ficam na pasta declarada mesmo assim.
+   */
+  copiasForaDoLink?: string;
+  gravar?: Gravar;
   agora?: () => Date;
 }
 
@@ -385,14 +400,17 @@ const COPIA = /\.moductus-(\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-\d{3}Z)(?:-(\d+))?\.ba
  * de verdade (`realpath`), por um temporário na pasta dele e troca de nome, para que uma queda no
  * meio não deixe o arquivo pela metade. Com mais de um nome para o mesmo arquivo (hardlink), a
  * troca de nome quebraria o vínculo: aí o conteúdo, já validado e com a cópia feita, é gravado
- * por cima.
+ * por cima, depois de um temporário provar que cabe no disco; se a escrita falhar no meio, o
+ * conteúdo de antes volta.
  */
 export class LigacaoClaudeCode {
   private readonly agora: () => Date;
+  private readonly gravar: Gravar;
   private memoriaLocal: Memoria | null = null;
 
   constructor(private readonly opcoes: OpcoesLigacao) {
     this.agora = opcoes.agora ?? (() => new Date());
+    this.gravar = opcoes.gravar ?? ((caminho, conteudo) => writeFileSync(caminho, conteudo));
   }
 
   get caminho(): string {
@@ -439,6 +457,7 @@ export class LigacaoClaudeCode {
       caminho: this.caminho,
       criouArquivo: !lido.existe,
       hooks: lido.existe ? textoDaChaveRaiz(lido.texto, TRECHO) : null,
+      vazio: lido.existe && lerRaiz(lido.texto).membros.length === 0 ? lido.texto : null,
     };
     const resultado = this.escrever(
       lido,
@@ -455,8 +474,13 @@ export class LigacaoClaudeCode {
    */
   desligar(): ResultadoEscrita {
     const lido = this.ler();
-    const sobra = semOMoductus(lido.hooks);
     const memoria = this.lerMemoria();
+    // Nada do Moductus no arquivo: nada a desfazer, e o bloco do usuário não é reescrito.
+    if (situacaoDosHooks(lido.hooks, this.opcoes.porta) === "desligada") {
+      this.guardarMemoria(null);
+      return { mudou: false, copia: null };
+    }
+    const sobra = semOMoductus(lido.hooks);
     let texto = trocarChaveRaiz(lido.texto, TRECHO, sobra);
     if (memoria && this.mesmoDeAntes(memoria, sobra)) {
       texto = editarChaveRaiz(
@@ -464,10 +488,12 @@ export class LigacaoClaudeCode {
         TRECHO,
         memoria.hooks === null ? undefined : { bruto: memoria.hooks },
       );
-      if (memoria.criouArquivo && lerRaiz(texto).membros.length === 0 && this.apagarCriado()) {
+      const vazia = lerRaiz(texto).membros.length === 0;
+      if (vazia && memoria.criouArquivo && this.apagarCriado()) {
         this.guardarMemoria(null);
         return { mudou: true, copia: null };
       }
+      if (vazia && memoria.vazio !== null) texto = memoria.vazio;
     }
     const resultado = this.escrever(lido, texto);
     this.guardarMemoria(null);
@@ -501,7 +527,8 @@ export class LigacaoClaudeCode {
         typeof dado.caminho === "string" &&
         typeof dado.criouArquivo === "boolean" &&
         (dado.hooks === null || typeof dado.hooks === "string");
-      return valida ? (dado as Memoria) : null;
+      if (!valida) return null;
+      return { ...(dado as Memoria), vazio: typeof dado.vazio === "string" ? dado.vazio : null };
     } catch {
       return null;
     }
@@ -536,23 +563,58 @@ export class LigacaoClaudeCode {
     }
     const alvo = realpathSync(this.caminho);
     const copia = this.copiar(alvo);
-    if (statSync(alvo).nlink > 1) writeFileSync(alvo, final, "utf8");
+    if (statSync(alvo).nlink > 1) this.gravarNoLugar(alvo, final);
     else this.trocarPorTemporario(alvo, final);
     return { mudou: true, copia };
   }
 
+  private temporario(alvo: string): string {
+    return join(dirname(alvo), `${basename(alvo)}.moductus-tmp`);
+  }
+
   private trocarPorTemporario(alvo: string, conteudo: string): void {
-    const temporario = join(dirname(alvo), `${basename(alvo)}.moductus-tmp`);
-    writeFileSync(temporario, conteudo, "utf8");
+    const temporario = this.temporario(alvo);
+    this.gravar(temporario, conteudo);
     renameSync(temporario, alvo);
   }
 
   /**
-   * Copia o conteúdo do arquivo de verdade para junto do `settings.json` (nunca para o
-   * repositório para onde um link aponta). Ficam a primeira cópia e as últimas.
+   * Hardlink: o temporário só prova que o conteúdo cabe no disco e sai; a escrita é no próprio
+   * arquivo, para os outros nomes verem a mudança. Falha no meio devolve os bytes de antes.
    */
+  private gravarNoLugar(alvo: string, conteudo: string): void {
+    const temporario = this.temporario(alvo);
+    try {
+      this.gravar(temporario, conteudo);
+    } finally {
+      rmSync(temporario, { force: true });
+    }
+    const antes = readFileSync(alvo);
+    try {
+      this.gravar(alvo, conteudo);
+    } catch (erro) {
+      this.gravar(alvo, antes);
+      throw erro;
+    }
+  }
+
+  /**
+   * Onde ficam as cópias: junto do `settings.json`, a não ser que a própria pasta seja junção ou
+   * link para outro lugar; aí na pasta de dados do Moductus, para não sujar o repositório.
+   */
+  private pastaDasCopias(): string {
+    const declarada = dirname(this.caminho);
+    const reserva = this.opcoes.copiasForaDoLink;
+    if (!reserva) return declarada;
+    const igual = (a: string, b: string) => resolve(a).toLowerCase() === resolve(b).toLowerCase();
+    if (igual(realpathSync.native(declarada), declarada)) return declarada;
+    mkdirSync(reserva, { recursive: true });
+    return reserva;
+  }
+
+  /** Copia o conteúdo do arquivo de verdade (nunca o link). Ficam a primeira cópia e as últimas. */
   private copiar(origem: string): string {
-    const pasta = dirname(this.caminho);
+    const pasta = this.pastaDasCopias();
     const nome = basename(this.caminho);
     const carimbo = this.agora().toISOString().replace(/[:.]/g, "-");
     const lista = () =>
