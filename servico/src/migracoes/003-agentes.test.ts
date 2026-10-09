@@ -121,7 +121,7 @@ describe("migração 003-agentes", () => {
 
   test("sobe do zero com as tabelas e o time de fábrica", () => {
     const db = new DatabaseSync(":memory:");
-    expect(migrar(db, MIGRACOES)).toEqual({ de: 0, para: 3 });
+    expect(migrar(db, MIGRACOES)).toEqual({ de: 0, para: MIGRACOES.length });
     expect(tabelas(db)).toEqual(TABELAS);
     conferirTime(db);
     expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
