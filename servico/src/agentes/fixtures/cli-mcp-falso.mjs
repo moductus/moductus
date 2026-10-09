@@ -3,12 +3,16 @@
 // hook `PreToolUse` do `--settings` (como o CLI faz), chama a ferramenta se o hook deixar e devolve
 // um `result` de stream-json. Só fala com o 127.0.0.1 do teste; nenhum modelo.
 //
-// Uso: node cli-mcp-falso.mjs <entrada.json> [ferramenta] -- <argumentos do claude...>
-//   ferramenta: o nome como o CLI o vê (`Bash`, `mcp__moductus__x__y`); sem ela, a primeira do
-//   `--allowedTools`.
+// Uso: node cli-mcp-falso.mjs <entrada.json> [ferramenta] [cair-quando] -- <argumentos do claude...>
+//   ferramenta: o nome como o CLI o vê (`Bash`, `mcp__moductus__x__y`); vazia ou ausente, a
+//   primeira do `--allowedTools`.
+//   cair-quando: um arquivo; com a chamada ao MCP em andamento, o falso sai com erro assim que ele
+//   existir, sem esperar a resposta (o CLI que cai ou desiste no meio da chamada).
+import { existsSync } from "node:fs";
+
 const separador = process.argv.indexOf("--");
 if (separador < 0) throw new Error("uso: cli-mcp-falso.mjs <entrada> [ferramenta] -- <argumentos>");
-const [entradaJson, ferramentaPedida] = process.argv.slice(2, separador);
+const [entradaJson, ferramentaPedida, cairQuando] = process.argv.slice(2, separador);
 const argumentos = process.argv.slice(separador + 1);
 const valorDe = (flag) => argumentos[argumentos.indexOf(flag) + 1];
 
@@ -36,7 +40,7 @@ function responder(texto) {
 process.stdin.resume();
 process.stdin.on("end", async () => {
   const servidor = JSON.parse(valorDe("--mcp-config")).mcpServers.moductus;
-  const nomeNoCli = ferramentaPedida ?? valorDe("--allowedTools").split(",")[0];
+  const nomeNoCli = ferramentaPedida || valorDe("--allowedTools").split(",")[0];
   const entrada = JSON.parse(entradaJson);
 
   // O PreToolUse do --settings, quando houver: o CLI pergunta antes de cada ferramenta.
@@ -68,6 +72,11 @@ process.stdin.on("end", async () => {
 
   // Ferramenta que não é do MCP do Moductus: o CLI de verdade a rodaria por conta própria.
   if (!nomeNoCli.startsWith("mcp__moductus__")) return responder(`rodou ${nomeNoCli} fora do Moductus`);
+  if (cairQuando) {
+    setInterval(() => {
+      if (existsSync(cairQuando)) process.exit(1);
+    }, 20);
+  }
   const resposta = await fetch(servidor.url, {
     method: "POST",
     headers: {

@@ -85,6 +85,16 @@ export function decidirPreToolUse(
 }
 
 /**
+ * A rota do hook para o servidor do MCP (`abrirServidorMcp(porta, [rotaPreToolUse])`): decide com
+ * as ferramentas da execução dona do token.
+ */
+export const rotaPreToolUse = {
+  caminho: ROTA_PRE_TOOL_USE,
+  atender: (corpo: unknown, execucao: { ferramentas: readonly FerramentaOferecida[] }) =>
+    decidirPreToolUse(corpo, execucao.ferramentas),
+};
+
+/**
  * O `--settings` de uma execução: só o hook `PreToolUse` do Moductus, para toda ferramenta. O
  * token vai pelo ambiente (`variavel`), que o CLI expande no cabeçalho; nunca literal.
  */

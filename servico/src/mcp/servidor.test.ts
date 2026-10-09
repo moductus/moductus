@@ -2,10 +2,14 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { Catalogo } from "../ferramentas/catalogo.ts";
 import { ferramenta } from "../ferramentas/ferramenta.ts";
-import { ROTA_PRE_TOOL_USE, type RespostaPreToolUse } from "../provedores/claude-cli/pre-tool-use.ts";
+import {
+  ROTA_PRE_TOOL_USE,
+  rotaPreToolUse,
+  type RespostaPreToolUse,
+} from "../provedores/claude-cli/pre-tool-use.ts";
 import type { PedidoDoAgente } from "../provedores/provedor.ts";
 import { VERSOES_MCP, type ExecucaoMcp } from "./protocolo.ts";
-import { abrirServidorMcp, RECUSA_TOKEN_MCP, type ServidorMcp } from "./servidor.ts";
+import { abrirServidorMcp, RECUSA_TOKEN_MCP, type RotaDaExecucao, type ServidorMcp } from "./servidor.ts";
 
 const abertos: ServidorMcp[] = [];
 afterEach(async () => {
@@ -13,8 +17,8 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-async function servidor(): Promise<ServidorMcp> {
-  const s = await abrirServidorMcp();
+async function servidor(rotas: readonly RotaDaExecucao[] = []): Promise<ServidorMcp> {
+  const s = await abrirServidorMcp(0, rotas);
   abertos.push(s);
   return s;
 }
@@ -314,7 +318,22 @@ describe("servidor MCP do Moductus", () => {
 
   test("PreToolUse: o acesso da execução decide; Bash e o que é de outro agente são negados", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const s = await servidor();
+    // Sem a rota injetada, o servidor não conhece o hook.
+    const semRota = await servidor();
+    const acessoSemRota = semRota.abrir(execucao(["sessoes.*"]));
+    expect(
+      (
+        await postar(
+          new URL(ROTA_PRE_TOOL_USE, semRota.url).href,
+          {},
+          {
+            authorization: `Bearer ${acessoSemRota.token}`,
+          },
+        )
+      ).status,
+    ).toBe(404);
+
+    const s = await servidor([rotaPreToolUse]);
     const doNuno = s.abrir(execucao(["sessoes.*", "github.*"]));
     const daTula = s.abrir(execucao(["financas.*"]));
     const rota = new URL(ROTA_PRE_TOOL_USE, s.url).href;

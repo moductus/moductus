@@ -1,7 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import pacote from "../../package.json" with { type: "json" };
-import { decidirPreToolUse, ROTA_PRE_TOOL_USE } from "../provedores/claude-cli/pre-tool-use.ts";
 import { atenderMensagem, ERRO_JSON_RPC, erroJsonRpc, VERSOES_MCP, type ExecucaoMcp } from "./protocolo.ts";
 
 /**
@@ -11,12 +10,22 @@ import { atenderMensagem, ERRO_JSON_RPC, erroJsonRpc, VERSOES_MCP, type Execucao
  * CLI recebe o token pelo ambiente e o manda em `Authorization: Bearer`; sem ele, 401 antes de ler
  * o corpo. O token nunca vai para o log.
  *
- * O mesmo acesso atende o hook `PreToolUse` do Claude Code daquela execução (ADR-0017), em
- * `ROTA_PRE_TOOL_USE`: o serviço decide cada chamada sabendo de qual execução ela é.
+ * O mesmo acesso atende as rotas da execução que quem sobe o servidor passar, como o hook
+ * `PreToolUse` do Claude Code (ADR-0017): o serviço decide cada chamada sabendo de qual execução
+ * ela é.
  */
 
-/** A única rota: o `--mcp-config` de cada execução aponta para ela. */
+/** A rota do MCP: o `--mcp-config` de cada execução aponta para ela. */
 export const ROTA_MCP = "/mcp";
+
+/**
+ * Uma rota além do MCP, atendida com o acesso da execução (o `PreToolUse` do Claude Code). Responde
+ * sempre 200 com o JSON que `atender` devolver; corpo ilegível ou grande demais chega como `null`.
+ */
+export interface RotaDaExecucao {
+  caminho: string;
+  atender(corpo: unknown, execucao: ExecucaoMcp): unknown;
+}
 
 /** Uma chamada de ferramenta é pequena; corpo maior que isto é recusado sem ser guardado. */
 export const CORPO_MAXIMO_MCP = 1024 * 1024;
@@ -90,10 +99,11 @@ function lerCorpo(req: IncomingMessage, limite: number): Promise<string | null> 
 }
 
 /**
- * Responde o `PreToolUse` sempre com 200 e uma decisão: o Claude Code só bloqueia pelo JSON (erro
- * HTTP deixa a chamada seguir), então corpo ilegível ou grande demais também volta como negação.
+ * Atende uma rota da execução sempre com 200: o hook do Claude Code só bloqueia pelo JSON (erro
+ * HTTP deixa a chamada seguir), então quem atende decide também o corpo ilegível.
  */
-async function atenderPreToolUse(
+async function atenderRota(
+  rota: RotaDaExecucao,
   req: IncomingMessage,
   res: ServerResponse,
   execucao: ExecucaoMcp,
@@ -103,16 +113,16 @@ async function atenderPreToolUse(
     const texto = await lerCorpo(req, CORPO_MAXIMO_MCP);
     corpo = texto === null ? null : JSON.parse(texto);
   } catch {
-    // Corpo interrompido ou fora do JSON: `decidirPreToolUse` nega o que não entende.
+    // Corpo interrompido ou fora do JSON: chega como `null`.
   }
-  responderJson(res, 200, decidirPreToolUse(corpo, execucao.ferramentas));
+  responderJson(res, 200, rota.atender(corpo, execucao));
 }
 
 /**
  * Sobe o servidor. A porta padrão é 0 (o sistema escolhe): o `--mcp-config` é gerado a cada
- * execução, então não precisa de endereço estável.
+ * execução, então não precisa de endereço estável. `rotas` são as da execução além do MCP.
  */
-export function abrirServidorMcp(porta = 0): Promise<ServidorMcp> {
+export function abrirServidorMcp(porta = 0, rotas: readonly RotaDaExecucao[] = []): Promise<ServidorMcp> {
   const execucoes = new Map<string, ExecucaoMcp>();
 
   // Nenhuma falha no atendimento pode virar rejeição solta: o Node derrubaria o serviço inteiro.
@@ -126,7 +136,8 @@ export function abrirServidorMcp(porta = 0): Promise<ServidorMcp> {
 
   async function tratar(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const caminho = caminhoDe(req.url);
-    if (caminho !== ROTA_MCP && caminho !== ROTA_PRE_TOOL_USE) return recusar(res, 404, "rota desconhecida");
+    const rota = rotas.find((r) => r.caminho === caminho);
+    if (caminho !== ROTA_MCP && !rota) return recusar(res, 404, "rota desconhecida");
     // Sem fluxo SSE do servidor (GET) nem sessão para encerrar (DELETE): o MCP responde 405.
     if (req.method !== "POST") return recusar(res, 405, "use POST", { allow: "POST" });
     // Navegador sempre manda Origin; o CLI não. Barra página web tentando falar com o 127.0.0.1.
@@ -137,7 +148,7 @@ export function abrirServidorMcp(porta = 0): Promise<ServidorMcp> {
       console.error("mcp: pedido sem acesso válido recusado");
       return recusar(res, 401, RECUSA_TOKEN_MCP);
     }
-    if (caminho === ROTA_PRE_TOOL_USE) return atenderPreToolUse(req, res, execucao);
+    if (rota) return atenderRota(rota, req, res, execucao);
     // Depois do initialize o cliente diz a versão combinada; versão que este servidor não fala é
     // 400 (especificação 2025-06-18). Sem o cabeçalho, vale 2025-03-26, que este servidor atende
     // do mesmo jeito.

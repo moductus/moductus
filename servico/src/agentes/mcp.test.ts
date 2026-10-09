@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
@@ -12,13 +12,13 @@ import { Catalogo } from "../ferramentas/catalogo.ts";
 import { ferramenta, type Ferramenta } from "../ferramentas/ferramenta.ts";
 import type { ExecucaoMcp } from "../mcp/protocolo.ts";
 import { abrirServidorMcp, type ServidorMcp } from "../mcp/servidor.ts";
-import { fabricaClaudeCli } from "../provedores/claude-cli/claude-cli.ts";
+import { fabricaClaudeCli, rotaPreToolUse } from "../provedores/claude-cli/claude-cli.ts";
 import { RegistroProvedores } from "../provedores/registro.ts";
 import { RepositorioAgentes } from "./agentes.ts";
 import { autorizarPorAprovacao } from "./autorizar.ts";
 import { RepositorioExecucoes, ServicoExecucoes } from "./execucoes.ts";
 import { aberturaMcpDoRuntime, MENSAGEM_EXECUCAO_ENCERRADA } from "./mcp.ts";
-import { Runtime } from "./runtime.ts";
+import { MENSAGEM_CANCELADA, Runtime } from "./runtime.ts";
 
 const CLI_MCP_FALSO = fileURLToPath(new URL("./fixtures/cli-mcp-falso.mjs", import.meta.url));
 
@@ -40,6 +40,22 @@ const anotar = ferramenta({
   executar: ({ texto }) => ({ anotado: texto }),
 });
 
+/** O que a ferramenta `externo` do teste publicou fora do Moductus. */
+const publicados: string[] = [];
+afterEach(() => void publicados.splice(0));
+
+const publicar = ferramenta({
+  nome: "teste.publicar",
+  descricao: "Publica fora do Moductus",
+  entrada: z.object({ alvo: z.string() }),
+  efeito: "externo",
+  executar: ({ alvo }) => {
+    publicados.push(alvo);
+    return { publicado: alvo };
+  },
+  cartao: ({ alvo }) => ({ descricao: `Vou publicar em ${alvo}.`, rotulo: `Publicar em ${alvo}` }),
+});
+
 /**
  * O runtime com a Alba num CLI falso que fala com o MCP e o hook de verdade, e com o cartão de
  * aprovação de verdade. `falso` são os argumentos do falso antes do `--`.
@@ -53,7 +69,7 @@ async function montarComCli(ferramentas: Ferramenta[], falso: string[]) {
     INSERT INTO provedores (id, tipo, nome) VALUES ('p-cli', 'claude-cli', 'Claude Code');
     UPDATE agentes SET provedor_id = 'p-cli', ferramentas = '["teste.*"]' WHERE id = 'alba';
   `);
-  const servidor = await abrirServidorMcp();
+  const servidor = await abrirServidorMcp(0, [rotaPreToolUse]);
   servidores.push(servidor);
   const repositorioAprovacoes = new RepositorioAprovacoes(db);
   const aprovacoes = new ServicoAprovacoes(repositorioAprovacoes, { aprovacao: () => {}, regras: () => {} });
@@ -77,7 +93,8 @@ async function montarComCli(ferramentas: Ferramenta[], falso: string[]) {
     },
     { execucao: () => {}, agente: () => {} },
   );
-  return { runtime, aprovacoes, repositorioAprovacoes, historico: new ServicoExecucoes(execucoes) };
+  const historico = new ServicoExecucoes(execucoes, new Catalogo(ferramentas));
+  return { runtime, aprovacoes, repositorioAprovacoes, historico };
 }
 
 describe("runtime pelo MCP do Moductus", () => {
@@ -138,18 +155,6 @@ describe("runtime pelo MCP do Moductus", () => {
   }, 20_000);
 
   test("externo pelo CLI: o PreToolUse deixa passar e a chamada espera o cartão do dock", async () => {
-    const publicados: string[] = [];
-    const publicar = ferramenta({
-      nome: "teste.publicar",
-      descricao: "Publica fora do Moductus",
-      entrada: z.object({ alvo: z.string() }),
-      efeito: "externo",
-      executar: ({ alvo }) => {
-        publicados.push(alvo);
-        return { publicado: alvo };
-      },
-      cartao: ({ alvo }) => ({ descricao: `Vou publicar em ${alvo}.`, rotulo: `Publicar em ${alvo}` }),
-    });
     const { runtime, aprovacoes, repositorioAprovacoes, historico } = await montarComCli(
       [publicar],
       [JSON.stringify({ alvo: "#7" })],
@@ -172,6 +177,45 @@ describe("runtime pelo MCP do Moductus", () => {
     expect(historico.obter({ id: r.execucao.id }).chamadas).toEqual([
       expect.objectContaining({ ferramenta: "teste.publicar", efeito: "externo", aprovacaoId: cartao.id }),
     ]);
+  }, 20_000);
+
+  test("CLI cai com o cartão pendente: a execução fecha, o cartão expira e o sim depois não roda nada", async () => {
+    const gatilhos = mkdtempSync(join(tmpdir(), "moductus-cli-cai-"));
+    pastas.push(gatilhos);
+    const cair = join(gatilhos, "cair");
+    const { runtime, aprovacoes, repositorioAprovacoes, historico } = await montarComCli(
+      [publicar],
+      [JSON.stringify({ alvo: "#8" }), "", cair],
+    );
+
+    const execucao = runtime.executar({
+      agenteId: "alba",
+      gatilho: "mensagem",
+      mensagens: [{ papel: "usuario", texto: "publica no #8" }],
+    });
+    await vi.waitFor(() => expect(repositorioAprovacoes.pendentes()).toHaveLength(1));
+    const cartao = repositorioAprovacoes.pendentes()[0]!;
+    // O CLI cai no meio da chamada, sem esperar a resposta do MCP.
+    writeFileSync(cair, "");
+    const r = await execucao;
+    expect(r.execucao.estado).toBe("erro");
+    await vi.waitFor(() => expect(repositorioAprovacoes.aprovacao(cartao.id)?.estado).toBe("expirada"));
+
+    // O sim que chega depois encontra o cartão expirado e não roda nada.
+    expect(await aprovacoes.decidir({ id: cartao.id, decisao: "permitir" })).toMatchObject({
+      estado: "expirada",
+    });
+    await new Promise((pronto) => setTimeout(pronto, 50));
+    expect(publicados).toEqual([]);
+    await vi.waitFor(() =>
+      expect(historico.obter({ id: r.execucao.id }).chamadas).toEqual([
+        expect.objectContaining({
+          ferramenta: "teste.publicar",
+          aprovacaoId: cartao.id,
+          resultado: { ok: false, erro: MENSAGEM_CANCELADA },
+        }),
+      ]),
+    );
   }, 20_000);
 
   test("Bash pedido pelo CLI é negado pelo PreToolUse com o motivo, e nada roda", async () => {

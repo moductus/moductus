@@ -197,7 +197,16 @@ export class Runtime {
     });
 
     const escopo = this.deps.catalogo.doAgente(agente.ferramentas);
-    const executar = this.executorRegistrando(agente.id, id, escopo, sinal);
+    // As ferramentas param também quando a execução termina: uma chamada que o provedor largou no
+    // meio (o CLI caiu ou desistiu esperando o cartão) não pode rodar com um sim dado depois. O
+    // cartão dela expira.
+    const encerramento = new AbortController();
+    const executar = this.executorRegistrando(
+      agente.id,
+      id,
+      escopo,
+      AbortSignal.any([sinal, encerramento.signal]),
+    );
 
     let texto = "";
     let tokens: { entrada: number; saida: number } | null = null;
@@ -247,6 +256,7 @@ export class Runtime {
       fim = { estado: "erro", erro: mensagemDe(erro, sinal), resumo: resumir(texto) };
     } finally {
       this.ativas.delete(id);
+      encerramento.abort(new Error("A execução terminou."));
     }
 
     const custo =

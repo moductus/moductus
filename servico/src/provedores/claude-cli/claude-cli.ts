@@ -9,7 +9,7 @@ import type { FabricaProvedor } from "../registro.ts";
 import { LeitorStreamJson } from "./leitor.ts";
 import { configuracaoDoHook, nomeNoCli, PREFIXO_MCP, ROTA_PRE_TOOL_USE } from "./pre-tool-use.ts";
 
-export { nomeNoCli } from "./pre-tool-use.ts";
+export { nomeNoCli, rotaPreToolUse } from "./pre-tool-use.ts";
 
 /**
  * Adaptador do Claude Code CLI (AGENTS.md §3): roda `claude -p` como subprocesso sem janela, com a

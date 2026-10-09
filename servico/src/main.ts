@@ -22,7 +22,7 @@ import { abrirServidorMcp } from "./mcp/servidor.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
-import { fabricaClaudeCli, type AberturaMcp } from "./provedores/claude-cli/claude-cli.ts";
+import { fabricaClaudeCli, rotaPreToolUse, type AberturaMcp } from "./provedores/claude-cli/claude-cli.ts";
 import { RegistroProvedores } from "./provedores/registro.ts";
 import { TRANSCRIPTS_DO_DISCO } from "./sessoes/contexto.ts";
 import { caminhoSettingsClaude, LigacaoClaudeCode } from "./sessoes/ligacao.ts";
@@ -119,8 +119,9 @@ function registrarProvedores(mcp: AberturaMcp | undefined): RegistroProvedores {
 }
 
 // Servidor MCP do Moductus (F2-11): cada execução em CLI abre o próprio acesso, e as chamadas rodam
-// pelo executor da execução no runtime (escopo, cartão e registro).
-const servidorMcp = await abrirServidorMcp().catch((erro: unknown) => {
+// pelo executor da execução no runtime (escopo, cartão e registro). O mesmo acesso atende o
+// PreToolUse do CLI (F2-12).
+const servidorMcp = await abrirServidorMcp(0, [rotaPreToolUse]).catch((erro: unknown) => {
   console.error(`MCP do Moductus fora do ar: ${String(erro)}`);
   return null;
 });
