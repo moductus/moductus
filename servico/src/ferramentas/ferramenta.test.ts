@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { z } from "zod";
+import { DO_USUARIO } from "../banco/tabela.ts";
 import { capacidade, ferramenta, nomeParaModelo, oferecida } from "./ferramenta.ts";
 
 const lancar = ferramenta({
@@ -49,16 +50,16 @@ describe("ferramenta()", () => {
     ).toThrow(/só ação interno se desfaz/);
   });
 
-  test("a inversa recebe a entrada validada, o resultado e de quem foi a ação", async () => {
+  test("a inversa recebe o resultado e o contexto, e precisa ser síncrona", () => {
     const recebido: unknown[] = [];
     const criar = ferramenta({
       nome: "tarefas.criar",
       descricao: "Cria uma tarefa",
-      entrada: z.object({ titulo: z.string(), lista: z.string().default("entrada") }),
+      entrada: z.object({ titulo: z.string() }),
       efeito: "interno",
       executar: () => ({ id: "t1" }),
-      desfazer: (entrada, resultado, ctx) => {
-        recebido.push(entrada, resultado, ctx);
+      desfazer: (resultado, ctx) => {
+        recebido.push(resultado, ctx);
       },
     });
     const ler = ferramenta({
@@ -68,14 +69,22 @@ describe("ferramenta()", () => {
       efeito: "leitura",
       executar: () => [],
     });
+    const assincrona = ferramenta({
+      nome: "tarefas.mover",
+      descricao: "Move",
+      entrada: z.object({}),
+      efeito: "interno",
+      executar: () => null,
+      desfazer: async () => {},
+    });
     expect([criar.desfazivel, ler.desfazivel]).toEqual([true, false]);
 
-    const ctx = { chamadaId: "c1", agenteId: "alba", execucaoId: "e1" };
-    const entrada = criar.validar({ titulo: "Pão" });
-    if (!entrada.ok) throw new Error(entrada.erro);
-    await criar.desfazer(entrada.valor, { id: "t1" }, ctx);
-    expect(recebido).toEqual([{ titulo: "Pão", lista: "entrada" }, { id: "t1" }, ctx]);
-    await expect(ler.desfazer({}, null, ctx)).rejects.toThrow("tarefas.listar não se desfaz");
+    const ctx = { chamadaId: "c1", agenteId: "alba", execucaoId: "e1", carimbo: DO_USUARIO };
+    criar.desfazer({ id: "t1" }, ctx);
+    expect(recebido).toEqual([{ id: "t1" }, ctx]);
+    expect(() => ler.desfazer(null, ctx)).toThrow("tarefas.listar não se desfaz");
+    // Terminaria fora da transação do histórico.
+    expect(() => assincrona.desfazer(null, ctx)).toThrow("a inversa de tarefas.mover precisa ser síncrona");
   });
 
   test("o texto do cartão sai da entrada validada; fora de externo, null", () => {

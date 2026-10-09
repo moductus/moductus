@@ -13,7 +13,8 @@ import type {
 } from "@moductus/contrato";
 import { colunasDeOrigem, DO_USUARIO, type Carimbo } from "../banco/tabela.ts";
 import type { Catalogo } from "../ferramentas/catalogo.ts";
-import type { Ferramenta } from "../ferramentas/ferramenta.ts";
+import { RecusaDesfazer, type Ferramenta } from "../ferramentas/ferramenta.ts";
+import { MENSAGEM_CANCELADA } from "./runtime.ts";
 
 /**
  * O histórico do que os agentes fizeram (AGENTS.md §6 "Agendador e execuções"; DATA.md §6
@@ -296,6 +297,19 @@ export class RepositorioExecucoes {
       .run(agora, agora, origem.origem, origem.agente_id, origem.execucao_id, id);
     return r.changes > 0;
   }
+
+  /** A inversa e a marca de desfeita entram juntas ou nenhuma entra. */
+  transacao<T>(fazer: () => T): T {
+    this.db.exec("BEGIN");
+    try {
+      const resultado = fazer();
+      this.db.exec("COMMIT");
+      return resultado;
+    } catch (erro) {
+      this.db.exec("ROLLBACK");
+      throw erro;
+    }
+  }
 }
 
 /**
@@ -309,13 +323,15 @@ export const MENSAGENS_DESFAZER = {
   leitura: "Uma leitura não muda nada: não há o que desfazer.",
   externo: "Ação fora do Moductus não se desfaz pelo histórico.",
   falhou: "A chamada não deu certo e não mudou nada: não há o que desfazer.",
-  emAndamento: "Essa chamada já está sendo desfeita.",
+  cancelada: "A execução foi cancelada no meio; confira o que ficou.",
+  rodando: "O agente ainda está trabalhando nisso. Dá para desfazer quando ele terminar.",
   jaDesfeita: (quando: string) => `Já foi desfeita em ${quando}.`,
   semFerramenta: (nome: string) => `${nome} não existe mais nesta versão do Moductus: não dá para desfazer.`,
-  ferramentaMudou: (nome: string) => `${nome} mudou desde a chamada: não dá para desfazer.`,
+  ferramentaMudou: (nome: string) => `${nome} mudou desde a chamada e não se desfaz mais pelo histórico.`,
   foraDoPrazo: (quando: string) =>
     `O prazo para desfazer é de ${PRAZO_DESFAZER_MS / 3_600_000} horas e acabou em ${quando}.`,
   areaRecusou: (motivo: string) => `Não deu para desfazer: ${motivo}`,
+  falhaInterna: "Não deu para desfazer por um erro interno. Nada mudou.",
 } as const;
 
 export interface OpcoesExecucoes {
@@ -334,8 +350,6 @@ export interface OpcoesExecucoes {
 export class ServicoExecucoes {
   private readonly agora: () => Date;
   private readonly fuso: string | undefined;
-  /** Chamadas com a função inversa rodando agora: dois cliques não desfazem duas vezes. */
-  private readonly desfazendo = new Set<string>();
 
   constructor(
     private readonly repo: RepositorioExecucoes,
@@ -356,32 +370,40 @@ export class ServicoExecucoes {
     return { ...execucao, chamadas: this.repo.chamadas(execucao.id).map((c) => this.comPrazo(c)) };
   }
 
-  async desfazer(pedido: PedidoDesfazer): Promise<ChamadaFerramenta> {
+  /**
+   * Síncrono de ponta a ponta: a inversa e a marca de desfeita rodam numa transação só, e dois
+   * pedidos para a mesma chamada não se cruzam (o segundo encontra a chamada já desfeita).
+   */
+  desfazer(pedido: PedidoDesfazer): ChamadaFerramenta {
     const guardada = this.repo.chamada(pedido.chamadaId);
     if (!guardada) throw new Error(MENSAGENS_DESFAZER.naoEncontrada);
     const { chamada, agenteId } = guardada;
-    if (this.desfazendo.has(chamada.id)) throw new Error(MENSAGENS_DESFAZER.emAndamento);
     const ferramenta = this.conferir(chamada);
-    const entrada = ferramenta.validar(chamada.entrada);
-    if (!entrada.ok) throw new Error(MENSAGENS_DESFAZER.ferramentaMudou(chamada.ferramenta));
 
-    this.desfazendo.add(chamada.id);
-    try {
+    this.repo.transacao(() => {
       try {
-        await ferramenta.desfazer(entrada.valor, valorDoResultado(chamada.resultado), {
+        ferramenta.desfazer(valorDoResultado(chamada.resultado), {
           chamadaId: chamada.id,
           agenteId,
           execucaoId: chamada.execucaoId,
+          carimbo: DO_USUARIO,
         });
       } catch (erro) {
-        throw new Error(MENSAGENS_DESFAZER.areaRecusou(erro instanceof Error ? erro.message : String(erro)), {
-          cause: erro,
-        });
+        if (erro instanceof RecusaDesfazer) {
+          throw new Error(MENSAGENS_DESFAZER.areaRecusou(erro.message), { cause: erro });
+        }
+        console.error(`a inversa de ${chamada.ferramenta} falhou na chamada ${chamada.id}: ${String(erro)}`);
+        throw new Error(MENSAGENS_DESFAZER.falhaInterna, { cause: erro });
       }
-      this.repo.marcarDesfeita(chamada.id, this.agora().toISOString());
-    } finally {
-      this.desfazendo.delete(chamada.id);
-    }
+      if (!this.repo.marcarDesfeita(chamada.id, this.agora().toISOString())) {
+        // Conferida há pouco e já desfeita: a inversa rodou duas vezes e volta inteira.
+        console.error(`a chamada ${chamada.id} já estava desfeita ao marcar; a inversa voltou`);
+        const em = this.repo.chamada(chamada.id)?.chamada.desfeitaEm;
+        throw new Error(
+          em ? MENSAGENS_DESFAZER.jaDesfeita(this.quando(em)) : MENSAGENS_DESFAZER.naoEncontrada,
+        );
+      }
+    });
 
     const desfeita = this.repo.chamada(chamada.id);
     if (!desfeita) throw new Error(MENSAGENS_DESFAZER.naoEncontrada);
@@ -395,9 +417,15 @@ export class ServicoExecucoes {
     if (chamada.desfeitaEm) throw new Error(MENSAGENS_DESFAZER.jaDesfeita(this.quando(chamada.desfeitaEm)));
     if (chamada.efeito === "leitura") throw new Error(MENSAGENS_DESFAZER.leitura);
     if (chamada.efeito === "externo") throw new Error(MENSAGENS_DESFAZER.externo);
+    // Cancelada no meio da área, não dá para dizer o que ficou nem desfazer pela metade.
+    if (foiCancelada(chamada.resultado)) throw new Error(MENSAGENS_DESFAZER.cancelada);
     if (!deuCerto(chamada.resultado)) throw new Error(MENSAGENS_DESFAZER.falhou);
     const ferramenta = this.catalogo.obter(chamada.ferramenta);
-    if (!ferramenta?.desfazivel) throw new Error(MENSAGENS_DESFAZER.semFerramenta(chamada.ferramenta));
+    if (!ferramenta) throw new Error(MENSAGENS_DESFAZER.semFerramenta(chamada.ferramenta));
+    if (!ferramenta.desfazivel) throw new Error(MENSAGENS_DESFAZER.ferramentaMudou(chamada.ferramenta));
+    // O agente pode ainda usar o que criou nesta execução: desfazer agora mudaria o chão dele.
+    const execucao = chamada.execucaoId ? this.repo.execucao(chamada.execucaoId) : null;
+    if (execucao?.estado === "rodando") throw new Error(MENSAGENS_DESFAZER.rodando);
     const ate = prazoDe(chamada);
     if (this.agora().getTime() > Date.parse(ate))
       throw new Error(MENSAGENS_DESFAZER.foraDoPrazo(this.quando(ate)));
@@ -439,6 +467,13 @@ function prazoDe(chamada: ChamadaFerramenta): string {
 /** O resultado gravado é o `ResultadoDeFerramenta` que voltou ao modelo. */
 function deuCerto(resultado: unknown): boolean {
   return typeof resultado === "object" && resultado !== null && (resultado as { ok?: unknown }).ok === true;
+}
+
+/** O runtime grava assim a chamada que a execução cancelou enquanto a área trabalhava. */
+function foiCancelada(resultado: unknown): boolean {
+  if (typeof resultado !== "object" || resultado === null) return false;
+  const r = resultado as { ok?: unknown; erro?: unknown };
+  return r.ok === false && r.erro === MENSAGEM_CANCELADA;
 }
 
 function valorDoResultado(resultado: unknown): unknown {

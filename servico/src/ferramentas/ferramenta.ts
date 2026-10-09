@@ -1,5 +1,6 @@
 import type { Capacidade, Efeito } from "@moductus/contrato";
 import { z } from "zod";
+import type { Carimbo } from "../banco/tabela.ts";
 import type { FerramentaOferecida } from "../provedores/provedor.ts";
 
 /**
@@ -22,15 +23,22 @@ export interface ContextoFerramenta {
   sinal: AbortSignal;
 }
 
-/**
- * De quem foi a ação que o usuário está desfazendo. Quem desfaz é o usuário: o que a área gravar
- * ao desfazer leva o carimbo dele (`DO_USUARIO`), não o do agente.
- */
+/** De quem foi a ação que o usuário está desfazendo, e o carimbo do que a área gravar ao desfazer. */
 export interface ContextoDesfazer {
   chamadaId: string;
   /** Agente e execução que fizeram a ação; vazios quando quem chamou veio de fora do Moductus. */
   agenteId: string | null;
   execucaoId: string | null;
+  /** Quem desfaz é o usuário: o que a área gravar leva o carimbo dele, não o do agente. */
+  carimbo: Carimbo;
+}
+
+/**
+ * A recusa da área, com o motivo na voz do produto ("a tarefa já foi editada por você"): é a única
+ * mensagem da inversa que chega ao usuário. Qualquer outro erro vira texto genérico e vai ao log.
+ */
+export class RecusaDesfazer extends Error {
+  override readonly name = "RecusaDesfazer";
 }
 
 /**
@@ -60,11 +68,17 @@ export interface DefinicaoFerramenta<E extends z.ZodObject> {
   cartao?: (entrada: z.output<E>) => TextoCartao;
   /**
    * A função inversa, obrigatória em `interno` e proibida no resto (AGENTS.md §4): o que o agente
-   * faz dentro do Moductus aparece no histórico com desfazer. Recebe a entrada da chamada e o que
-   * `executar` devolveu, como ficaram gravados. Lança, com a explicação, quando não dá mais para
-   * desfazer (o usuário já mexeu no que o agente criou, por exemplo).
+   * faz dentro do Moductus aparece no histórico com desfazer.
+   *
+   * Recebe só o que `executar` devolveu, como ficou gravado em JSON: a área devolve ali o que
+   * precisa para voltar (o id do que criou, o valor que trocou). A entrada gravada é a que o modelo
+   * mandou, sem os padrões do schema, e o schema pode mudar entre versões.
+   *
+   * É síncrona e roda na mesma transação que marca a chamada como desfeita, no banco do serviço:
+   * se lançar, nada do que ela gravou fica. Não abre transação própria. Lança {@link RecusaDesfazer}
+   * quando não dá mais para desfazer (o usuário já mexeu no que o agente criou, por exemplo).
    */
-  desfazer?: (entrada: z.output<E>, resultado: unknown, ctx: ContextoDesfazer) => unknown;
+  desfazer?: (resultado: unknown, ctx: ContextoDesfazer) => void;
 }
 
 export type Validacao = { ok: true; valor: unknown } | { ok: false; erro: string };
@@ -85,8 +99,8 @@ export interface Ferramenta {
   cartao(entrada: unknown): TextoCartao | null;
   /** Só `interno` tem função inversa. */
   readonly desfazivel: boolean;
-  /** Roda a função inversa; `entrada` tem de ter passado por {@link validar}. */
-  desfazer(entrada: unknown, resultado: unknown, ctx: ContextoDesfazer): Promise<void>;
+  /** Roda a função inversa, síncrona, com o valor que `executar` devolveu. */
+  desfazer(resultado: unknown, ctx: ContextoDesfazer): void;
 }
 
 /**
@@ -142,9 +156,14 @@ export function ferramenta<E extends z.ZodObject>(definicao: DefinicaoFerramenta
       return definicao.cartao?.(valor as z.output<E>) ?? null;
     },
     desfazivel: desfazer !== undefined,
-    async desfazer(valor, resultado, ctx) {
+    desfazer(resultado, ctx) {
       if (!desfazer) throw new Error(`${nome} não se desfaz`);
-      await desfazer(valor as z.output<E>, resultado, ctx);
+      const volta: unknown = desfazer(resultado, ctx);
+      // Uma inversa assíncrona terminaria fora da transação: a promessa fica sem dono.
+      if (volta instanceof Promise) {
+        volta.catch(() => {});
+        throw new Error(`a inversa de ${nome} precisa ser síncrona`);
+      }
     },
   };
 }
