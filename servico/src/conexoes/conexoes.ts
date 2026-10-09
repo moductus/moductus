@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { Conexao, EstadoLigacao, PedidoConexao, PreviaConexao, TipoConexao } from "@moductus/contrato";
+import type { Origem } from "../banco/tabela.ts";
 import { novoId } from "../banco/ulid.ts";
 import type { AmbienteDoUsuario } from "../casca/ambiente.ts";
 import { VARIAVEL_TOKEN, type LigacaoClaudeCode } from "../sessoes/ligacao.ts";
@@ -15,7 +16,14 @@ interface LinhaConexao {
   conta: string | null;
   ultimo_erro: string | null;
   conectada_em: string | null;
+  lida_em: string | null;
 }
+
+/**
+ * Quem mudou a linha (DATA.md §1): `usuario` quando foi um clique dele (ligar, desligar),
+ * `conexao` quando foi a própria conexão trabalhando sozinha (o vigia do GitHub).
+ */
+export type OrigemConexao = Exclude<Origem, "agente">;
 
 /** A linha viva de cada tipo em `conexoes` (DATA.md §7); a apagada fica na lixeira. */
 export class RepositorioConexoes {
@@ -24,7 +32,7 @@ export class RepositorioConexoes {
   obter(tipo: TipoConexao): LinhaConexao | null {
     const linha = this.db
       .prepare(
-        `SELECT id, estado, conta, ultimo_erro, conectada_em FROM conexoes
+        `SELECT id, estado, conta, ultimo_erro, conectada_em, lida_em FROM conexoes
           WHERE tipo = ? AND apagado_em IS NULL ORDER BY id DESC LIMIT 1`,
       )
       .get(tipo) as LinhaConexao | undefined;
@@ -40,24 +48,39 @@ export class RepositorioConexoes {
       credencial: string | null;
       /** Usuário da conta conectada (o login do GitHub); vazio quando não há. */
       conta?: string | null;
+      /** Última leitura que deu certo; ausente mantém a de antes, `null` apaga. */
+      lidaEm?: string | null;
     },
     agora: string,
+    origem: OrigemConexao = "usuario",
   ): void {
     const atual = this.obter(tipo);
     const conta = dados.conta ?? null;
+    const lidaEm = dados.lidaEm === undefined ? (atual?.lida_em ?? null) : dados.lidaEm;
     if (atual) {
       this.db
         .prepare(
           `UPDATE conexoes SET estado = ?, ultimo_erro = ?, conectada_em = ?, credencial = ?, conta = ?,
-                  origem = 'usuario', atualizado_em = ? WHERE id = ?`,
+                  lida_em = ?, origem = ?, atualizado_em = ? WHERE id = ?`,
         )
-        .run(dados.estado, dados.ultimoErro, dados.conectadaEm, dados.credencial, conta, agora, atual.id);
+        .run(
+          dados.estado,
+          dados.ultimoErro,
+          dados.conectadaEm,
+          dados.credencial,
+          conta,
+          lidaEm,
+          origem,
+          agora,
+          atual.id,
+        );
       return;
     }
     this.db
       .prepare(
-        `INSERT INTO conexoes (id, tipo, conta, credencial, estado, ultimo_erro, conectada_em, criado_em, atualizado_em)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO conexoes (id, tipo, conta, credencial, estado, ultimo_erro, conectada_em, lida_em,
+           origem, criado_em, atualizado_em)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         novoId(),
@@ -67,6 +90,8 @@ export class RepositorioConexoes {
         dados.estado,
         dados.ultimoErro,
         dados.conectadaEm,
+        lidaEm,
+        origem,
         agora,
         agora,
       );

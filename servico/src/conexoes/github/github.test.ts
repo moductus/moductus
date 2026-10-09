@@ -124,12 +124,13 @@ describe("conexão com o GitHub", () => {
     expect(SituacaoGithub.parse(situacao)).toEqual(situacao);
     expect(situacao.atualizadoEm).toBe("2026-10-09T12:00:00.000Z");
     expect(situacao.itens.map((i) => [`${i.repositorio}#${i.numero}`, i.precisaDeMim])).toEqual([
-      ["loja/relatorios#388", true],
       ["loja/api-pedidos#409", true],
       ["loja/api-pedidos#412", true],
       ["voce/site#57", true],
       ["voce/moductus#31", true],
       ["voce/moductus#12", false],
+      // Review pedido só ao time: na lista, sem precisar de você.
+      ["loja/relatorios#388", false],
     ]);
     expect(avisos.github).toEqual([situacao]);
     expect(db.prepare("SELECT tipo, conta, credencial, estado FROM conexoes").all()).toEqual([
@@ -158,6 +159,36 @@ describe("conexão com o GitHub", () => {
     // Leitura que deu certo de novo não repete o aviso da conexão.
     expect(avisos.conexao).toHaveLength(1);
     expect(avisos.github).toHaveLength(2);
+  });
+
+  test("leitura sem item nenhum ainda é uma leitura: o cache esvazia e a data é a de agora", async () => {
+    const vazia = resposta();
+    vazia.data.revisar.nodes = [];
+    vazia.data.meus.nodes = [];
+    vazia.data.atribuidas.nodes = [];
+    const { servico, passar } = montar([OK(), OK(vazia)]);
+    await servico.ligar();
+    passar(INTERVALO_GITHUB_MS);
+    expect(await servico.atualizar()).toEqual({ itens: [], atualizadoEm: "2026-10-09T12:15:00.000Z" });
+    expect(servico.obter().atualizadoEm).toBe("2026-10-09T12:15:00.000Z");
+  });
+
+  test("a origem da linha da conexão diz quem mexeu: usuário ao ligar e desligar, a conexão no vigia", async () => {
+    vi.useFakeTimers();
+    const { servico, db, roteiro } = montar([OK()]);
+    const origem = () => db.prepare("SELECT origem FROM conexoes WHERE tipo = 'github'").get();
+    await servico.ligar();
+    expect(origem()).toEqual({ origem: "usuario" });
+    const parar = servico.vigiar();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(origem()).toEqual({ origem: "conexao" });
+    // Erro achado pelo vigia também é da conexão.
+    roteiro.splice(0, roteiro.length, SEM_REDE);
+    await vi.advanceTimersByTimeAsync(INTERVALO_GITHUB_MS);
+    expect(origem()).toEqual({ origem: "conexao" });
+    parar();
+    await servico.desligar();
+    expect(origem()).toEqual({ origem: "usuario" });
   });
 
   test("sem rede numa leitura: o cache fica como estava e a Conexão diz que tenta de novo", async () => {

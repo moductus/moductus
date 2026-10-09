@@ -41,10 +41,10 @@ export const COLUNAS_QUE_NUNCA_VAO: readonly string[] = ["credencial", "transcri
 
 /**
  * Colunas que descrevem a situação neste PC, não a configuração. A conexão vai sem credencial, então
- * chega desligada no PC novo: estado, último erro e data de conexão daqui não valem lá.
+ * chega desligada no PC novo: estado, último erro, data de conexão e de leitura daqui não valem lá.
  */
 const SITUACAO_DESTE_PC: Readonly<Record<string, readonly string[]>> = {
-  conexoes: ["estado", "ultimo_erro", "conectada_em"],
+  conexoes: ["estado", "ultimo_erro", "conectada_em", "lida_em"],
 };
 
 /** Linhas que não viajam: regra que já expirou não autoriza mais nada, aqui nem lá. */

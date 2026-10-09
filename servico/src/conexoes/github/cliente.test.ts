@@ -19,9 +19,10 @@ describe("itens da resposta", () => {
     expect(conta).toBe("voce");
     const resumo = itens.map((i) => [`${i.repositorio}#${i.numero}`, i.meuPapel, i.precisaDeMim, i.ciEstado]);
     expect(resumo).toEqual([
-      // Review pedido precisa de você, com CI quebrado ou sem CI nenhum.
+      // Review pedido a você pelo nome precisa de você (o login vem com outra caixa); pedido só
+      // ao seu time aparece na lista, sem pedir nada.
       ["loja/api-pedidos#412", "revisor", true, "falhou"],
-      ["loja/relatorios#388", "revisor", true, null],
+      ["loja/relatorios#388", "revisor", false, null],
       // Seu PR aprovado e verde não precisa; mudanças pedidas ou CI quebrado (ERROR conta), sim.
       ["voce/moductus#12", "autor", false, "passou"],
       ["loja/api-pedidos#409", "autor", true, "rodando"],
@@ -44,6 +45,24 @@ describe("itens da resposta", () => {
     });
     expect(itens[1]?.autor).toBeNull();
     expect(itens[5]?.tipo).toBe("issue");
+  });
+
+  test("review pedido ao time e a você: só o pedido a você precisa de você", () => {
+    const resposta = JSON.parse(RESPOSTA) as { data: { revisar: { nodes: Record<string, unknown>[] } } };
+    const [aVoce, aoTime] = resposta.data.revisar.nodes;
+    if (!aVoce || !aoTime) throw new Error("fixture mudou");
+    aoTime.reviewRequests = {
+      nodes: [{ requestedReviewer: { login: "colega" } }, { requestedReviewer: {} }],
+    };
+    aVoce.reviewRequests = { nodes: [{ requestedReviewer: { login: "voce" } }] };
+    const semPedidos = { ...aVoce, number: 500, reviewRequests: null };
+    resposta.data.revisar.nodes.push(semPedidos);
+    const { itens } = itensDaResposta(resposta);
+    const precisa = (n: number) => itens.find((i) => i.numero === n)?.precisaDeMim;
+    expect(precisa(412)).toBe(true);
+    expect(precisa(388)).toBe(false);
+    expect(precisa(500)).toBe(false);
+    expect(CONSULTA).toContain("reviewRequests");
   });
 
   test("o mesmo item em duas buscas aparece uma vez, com o primeiro papel", () => {

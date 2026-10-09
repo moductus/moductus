@@ -32,6 +32,7 @@ export const CONSULTA = `
   fragment pr on PullRequest {
     ${CAMPOS_COMUNS}
     reviewDecision
+    reviewRequests(first: 50) { nodes { requestedReviewer { ... on User { login } } } }
     commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
   }
   fragment issue on Issue { ${CAMPOS_COMUNS} }
@@ -94,17 +95,27 @@ function ciDo(no: Objeto): EstadoCi | null {
   return estado ? (CI[estado] ?? null) : null;
 }
 
+/** O review foi pedido a você pelo nome, não a um time de que você faz parte. */
+function pedidoAVoce(no: Objeto, conta: string): boolean {
+  const pedidos = objeto(no.reviewRequests)?.nodes;
+  if (!Array.isArray(pedidos)) return false;
+  return pedidos.some(
+    (p) => texto(objeto(objeto(p)?.requestedReviewer)?.login)?.toLowerCase() === conta.toLowerCase(),
+  );
+}
+
 /**
- * Quando o item precisa de você: review pedido e issue atribuída sempre; seu PR quando alguém
- * pediu mudanças ou o CI quebrou.
+ * Quando o item precisa de você: review pedido a você pelo nome (pedido a um time só aparece na
+ * lista) e issue atribuída sempre; seu PR quando alguém pediu mudanças ou o CI quebrou.
  */
-function precisaDeMim(papel: PapelGithub, no: Objeto, ci: EstadoCi | null): boolean {
-  if (papel !== "autor") return true;
+function precisaDeMim(papel: PapelGithub, no: Objeto, ci: EstadoCi | null, conta: string): boolean {
+  if (papel === "revisor") return pedidoAVoce(no, conta);
+  if (papel === "atribuido") return true;
   return no.reviewDecision === "CHANGES_REQUESTED" || ci === "falhou";
 }
 
 /** Um nó da busca; `null` quando falta o que identifica o item (repositório, número, URL). */
-function lerNo(valor: unknown, papel: PapelGithub, tipo: TipoItemGithub): ItemLido | null {
+function lerNo(valor: unknown, papel: PapelGithub, tipo: TipoItemGithub, conta: string): ItemLido | null {
   const no = objeto(valor);
   if (!no) return null;
   const repositorio = texto(objeto(no.repository)?.nameWithOwner);
@@ -121,7 +132,7 @@ function lerNo(valor: unknown, papel: PapelGithub, tipo: TipoItemGithub): ItemLi
     autor: texto(objeto(no.author)?.login),
     estado: ESTADOS[String(no.state)] ?? "aberto",
     meuPapel: papel,
-    precisaDeMim: precisaDeMim(papel, no, ci),
+    precisaDeMim: precisaDeMim(papel, no, ci, conta),
     ciEstado: ci,
     atualizadoNoGithub: instante(no.updatedAt),
     url,
@@ -147,7 +158,7 @@ export function itensDaResposta(resposta: unknown): { conta: string; itens: Item
     const nos = objeto(dados[chave])?.nodes;
     if (!Array.isArray(nos)) throw new Error("a resposta do GitHub veio incompleta");
     for (const no of nos) {
-      const item = lerNo(no, papel, tipo);
+      const item = lerNo(no, papel, tipo, conta);
       const id = item && `${item.repositorio.toLowerCase()}#${item.numero}`;
       if (item && id && !porChave.has(id)) porChave.set(id, item);
     }

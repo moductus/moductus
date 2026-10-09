@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { Conexao, EstadoCi, EstadoItemGithub, ItemGithub, SituacaoGithub } from "@moductus/contrato";
 import { novoId } from "../../banco/ulid.ts";
-import type { RepositorioConexoes } from "../conexoes.ts";
+import type { OrigemConexao, RepositorioConexoes } from "../conexoes.ts";
 import { lerGithub, type ItemLido, type LeituraGithub } from "./cliente.ts";
 import type { ExecutorGh } from "./gh.ts";
 
@@ -70,17 +70,10 @@ export class RepositorioGithub {
     return linhas.map(paraItem);
   }
 
-  /** Quando o cache foi gravado pela última vez; `null` quando está vazio. */
-  gravadoEm(): string | null {
-    const linha = this.db.prepare("SELECT max(atualizado_em) AS em FROM github_itens").get() as {
-      em: string | null;
-    };
-    return linha.em;
-  }
-
   /**
-   * Troca o cache pelo que a leitura trouxe, numa transação: o item que continua guarda o id, o
-   * novo ganha um, e o que saiu das buscas (fechado, review feito, desatribuído) sai do cache.
+   * Troca o cache pelo que a leitura trouxe: o item que continua guarda o id, o novo ganha um, e o
+   * que saiu das buscas (fechado, review feito, desatribuído) sai do cache. Roda dentro da
+   * {@link transacao} que também marca a leitura na conexão.
    */
   substituir(itens: readonly ItemLido[], agora: string): void {
     const gravar = this.db.prepare(
@@ -94,38 +87,43 @@ export class RepositorioGithub {
          atualizado_no_github = excluded.atualizado_no_github, url = excluded.url,
          atualizado_em = excluded.atualizado_em, origem = excluded.origem`,
     );
-    this.db.exec("BEGIN");
-    try {
-      for (const i of itens) {
-        gravar.run(
-          novoId(),
-          i.repositorio,
-          i.numero,
-          i.tipo,
-          i.titulo,
-          i.autor,
-          i.estado,
-          i.meuPapel,
-          i.precisaDeMim ? 1 : 0,
-          i.ciEstado,
-          i.atualizadoNoGithub,
-          i.url,
-          agora,
-          agora,
-          ORIGEM,
-        );
-      }
-      // Tudo o que a leitura trouxe ficou com este `atualizado_em`; o resto saiu do GitHub.
-      this.db.prepare("DELETE FROM github_itens WHERE atualizado_em <> ?").run(agora);
-      this.db.exec("COMMIT");
-    } catch (erro) {
-      this.db.exec("ROLLBACK");
-      throw erro;
+    for (const i of itens) {
+      gravar.run(
+        novoId(),
+        i.repositorio,
+        i.numero,
+        i.tipo,
+        i.titulo,
+        i.autor,
+        i.estado,
+        i.meuPapel,
+        i.precisaDeMim ? 1 : 0,
+        i.ciEstado,
+        i.atualizadoNoGithub,
+        i.url,
+        agora,
+        agora,
+        ORIGEM,
+      );
     }
+    // Tudo o que a leitura trouxe ficou com este `atualizado_em`; o resto saiu do GitHub.
+    this.db.prepare("DELETE FROM github_itens WHERE atualizado_em <> ?").run(agora);
   }
 
   limpar(): void {
     this.db.exec("DELETE FROM github_itens");
+  }
+
+  transacao<T>(fazer: () => T): T {
+    this.db.exec("BEGIN");
+    try {
+      const resultado = fazer();
+      this.db.exec("COMMIT");
+      return resultado;
+    } catch (erro) {
+      this.db.exec("ROLLBACK");
+      throw erro;
+    }
   }
 }
 
@@ -161,8 +159,9 @@ export class ServicoGithub {
     this.agora = opcoes.agora ?? (() => new Date());
   }
 
+  /** O cache e a última leitura que deu certo, mesmo quando ela não trouxe item nenhum. */
   obter(): SituacaoGithub {
-    return { itens: this.repo.itens(), atualizadoEm: this.repo.gravadoEm() };
+    return { itens: this.repo.itens(), atualizadoEm: this.conexoes.obter("github")?.lida_em ?? null };
   }
 
   conexao(): Conexao {
@@ -182,7 +181,7 @@ export class ServicoGithub {
 
   /** Conectar é ler agora; o resultado diz se ficou ligada ou o que falta. */
   async ligar(): Promise<Conexao> {
-    await this.ler();
+    await this.ler("usuario");
     return this.conexao();
   }
 
@@ -191,26 +190,34 @@ export class ServicoGithub {
     this.geracao++;
     this.emAndamento = null;
     const antes = this.conexao();
-    this.gravar({ estado: "desligada", ultimoErro: null, conectadaEm: null, conta: null });
-    this.repo.limpar();
+    this.repo.transacao(() => {
+      this.gravar(
+        { estado: "desligada", ultimoErro: null, conectadaEm: null, conta: null, lidaEm: null },
+        "usuario",
+      );
+      this.repo.limpar();
+    });
     this.avisos.github(this.obter());
     const depois = this.conexao();
     if (!mesma(antes, depois)) this.avisos.conexao(depois);
     return depois;
   }
 
-  /** Lê o GitHub agora, se a conexão não está desligada; desligada, devolve o cache (vazio). */
-  atualizar(): Promise<SituacaoGithub> {
+  /**
+   * Lê o GitHub agora, se a conexão não está desligada; desligada, devolve o cache (vazio). O
+   * botão "atualizar" é do usuário; o vigia lê como `conexao`.
+   */
+  atualizar(origem: OrigemConexao = "usuario"): Promise<SituacaoGithub> {
     if (this.conexao().estado === "desligada") return Promise.resolve(this.obter());
-    return this.ler();
+    return this.ler(origem);
   }
 
   /** Duas chamadas juntas (o vigia e o botão "atualizar") viram uma leitura só. */
-  private ler(): Promise<SituacaoGithub> {
+  private ler(origem: OrigemConexao): Promise<SituacaoGithub> {
     if (this.emAndamento) return this.emAndamento;
     const geracao = this.geracao;
     const leitura: Promise<SituacaoGithub> = lerGithub(this.gh)
-      .then((lida) => (geracao === this.geracao ? this.aplicar(lida) : this.obter()))
+      .then((lida) => (geracao === this.geracao ? this.aplicar(lida, origem) : this.obter()))
       .finally(() => {
         if (this.emAndamento === leitura) this.emAndamento = null;
       });
@@ -224,7 +231,9 @@ export class ServicoGithub {
    */
   vigiar(intervaloMs = INTERVALO_GITHUB_MS): () => void {
     const ler = () => {
-      this.atualizar().catch((erro: unknown) => console.error(`github: leitura falhou: ${String(erro)}`));
+      this.atualizar("conexao").catch((erro: unknown) =>
+        console.error(`github: leitura falhou: ${String(erro)}`),
+      );
     };
     ler();
     const relogio = setInterval(ler, intervaloMs);
@@ -232,16 +241,23 @@ export class ServicoGithub {
     return () => clearInterval(relogio);
   }
 
-  private aplicar(leitura: LeituraGithub): SituacaoGithub {
+  private aplicar(leitura: LeituraGithub, origem: OrigemConexao): SituacaoGithub {
     const antes = this.conexao();
     const agora = this.agora().toISOString();
     if (leitura.tipo === "ok") {
-      this.repo.substituir(leitura.itens, agora);
-      this.gravar({
-        estado: "ligada",
-        ultimoErro: null,
-        conectadaEm: antes.conectadaEm ?? agora,
-        conta: leitura.conta,
+      // Cache e data da leitura juntos: uma leitura sem item nenhum também conta como feita.
+      this.repo.transacao(() => {
+        this.repo.substituir(leitura.itens, agora);
+        this.gravar(
+          {
+            estado: "ligada",
+            ultimoErro: null,
+            conectadaEm: antes.conectadaEm ?? agora,
+            conta: leitura.conta,
+            lidaEm: agora,
+          },
+          origem,
+        );
       });
     } else {
       // O cache fica como estava: o `atualizadoEm` antigo já diz que ele envelheceu.
@@ -251,7 +267,7 @@ export class ServicoGithub {
           : leitura.tipo === "sem-login"
             ? AVISO_SEM_LOGIN
             : avisoFalhou(leitura.motivo);
-      this.gravar({ estado: "erro", ultimoErro, conectadaEm: antes.conectadaEm, conta: antes.conta });
+      this.gravar({ estado: "erro", ultimoErro, conectadaEm: antes.conectadaEm, conta: antes.conta }, origem);
     }
     const situacao = this.obter();
     if (leitura.tipo === "ok") this.avisos.github(situacao);
@@ -261,12 +277,16 @@ export class ServicoGithub {
   }
 
   /** O `gh` guarda a própria autenticação: a conexão não tem credencial do Moductus. */
-  private gravar(dados: {
-    estado: Conexao["estado"];
-    ultimoErro: string | null;
-    conectadaEm: string | null;
-    conta: string | null;
-  }): void {
-    this.conexoes.gravar("github", { ...dados, credencial: null }, this.agora().toISOString());
+  private gravar(
+    dados: {
+      estado: Conexao["estado"];
+      ultimoErro: string | null;
+      conectadaEm: string | null;
+      conta: string | null;
+      lidaEm?: string | null;
+    },
+    origem: OrigemConexao,
+  ): void {
+    this.conexoes.gravar("github", { ...dados, credencial: null }, this.agora().toISOString(), origem);
   }
 }

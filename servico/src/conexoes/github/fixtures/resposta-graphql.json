@@ -13,6 +13,9 @@
           "author": { "login": "colega" },
           "repository": { "nameWithOwner": "loja/api-pedidos" },
           "reviewDecision": "REVIEW_REQUIRED",
+          "reviewRequests": {
+            "nodes": [{ "requestedReviewer": {} }, { "requestedReviewer": { "login": "Voce" } }]
+          },
           "commits": { "nodes": [{ "commit": { "statusCheckRollup": { "state": "FAILURE" } } }] }
         },
         {
@@ -25,6 +28,7 @@
           "author": null,
           "repository": { "nameWithOwner": "loja/relatorios" },
           "reviewDecision": null,
+          "reviewRequests": { "nodes": [{ "requestedReviewer": {} }] },
           "commits": { "nodes": [{ "commit": { "statusCheckRollup": null } }] }
         }
       ]
