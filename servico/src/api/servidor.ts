@@ -3,8 +3,10 @@ import { createServer, type Server } from "node:http";
 import {
   EVENTOS,
   METODOS,
+  PARAMETRO_PROTOCOLO,
   PARAMETRO_TOKEN,
   Pedido,
+  VERSAO_PROTOCOLO,
   type DadosDe,
   type EntradaDe,
   type NomeEvento,
@@ -28,6 +30,35 @@ function tokenConfere(recebido: string | null, esperado: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/** Versão que a janela diz falar; sem o parâmetro, é uma janela da versão 1, que não o mandava. */
+function protocoloDaJanela(url: URL): string {
+  const valor = url.searchParams.get(PARAMETRO_PROTOCOLO) ?? "1";
+  // Volta no texto do erro e no log: só número passa como veio.
+  return /^\d{1,6}$/.test(valor) ? valor : "desconhecida";
+}
+
+/** O que a janela de outra versão recebe em cada pedido, em vez de uma resposta fora de forma. */
+function erroDeProtocolo(daJanela: string): string {
+  return (
+    `protocolo incompatível: a janela fala a versão ${daJanela} e o serviço, a ${VERSAO_PROTOCOLO}. ` +
+    "Feche e abra o Moductus de novo."
+  );
+}
+
+/**
+ * Atende, com um erro claro, os métodos que o contrato já tem e o serviço ainda não implementa.
+ * Cada tarefa que implementa um deles o tira da lista; o tipo de `Atendentes` cobra o resto.
+ */
+export function semAtendente<M extends NomeMetodo>(nomes: readonly M[]): Pick<Atendentes, M> {
+  const naoDisponivel = (nome: string) => () => {
+    throw new Error(`${nome} ainda não está disponível nesta versão do serviço`);
+  };
+  const atendentes: Record<string, () => never> = Object.fromEntries(
+    nomes.map((nome) => [nome, naoDisponivel(nome)]),
+  );
+  return atendentes as unknown as Pick<Atendentes, M>;
+}
+
 /**
  * Canal WebSocket com as janelas, em 127.0.0.1 numa porta aleatória. Conexão sem o
  * token certo é recusada com 401 antes do upgrade. Cada pedido é validado pelo schema do
@@ -47,15 +78,23 @@ export function abrirServidorWs(token: string, atendentes: Atendentes, porta = 0
       console.error("canal: conexão sem token válido recusada");
       return;
     }
-    wss.handleUpgrade(req, socket, cabeca, (ws) => wss.emit("connection", ws));
+    const protocolo = protocoloDaJanela(url);
+    if (protocolo !== String(VERSAO_PROTOCOLO)) {
+      console.error(`canal: janela no protocolo ${protocolo}, serviço no ${VERSAO_PROTOCOLO}`);
+    }
+    wss.handleUpgrade(req, socket, cabeca, (ws) => wss.emit("connection", ws, protocolo));
   });
 
-  wss.on("connection", (ws: WebSocket) => {
-    ws.on("message", (bruto) => void atender(ws, String(bruto)));
-    ws.send(JSON.stringify({ tipo: "evento", nome: "sistema.ola", dados: { protocolo: 1 } }));
+  /**
+   * Janela de outra versão continua conectada (recusar só a faria reconectar sem parar), mas cada
+   * pedido dela, menos o `sistema.ping`, volta com o erro de versão.
+   */
+  wss.on("connection", (ws: WebSocket, protocolo: string) => {
+    ws.on("message", (bruto) => void atender(ws, String(bruto), protocolo));
+    ws.send(JSON.stringify({ tipo: "evento", nome: "sistema.ola", dados: { protocolo: VERSAO_PROTOCOLO } }));
   });
 
-  async function atender(ws: WebSocket, texto: string): Promise<void> {
+  async function atender(ws: WebSocket, texto: string, protocolo: string): Promise<void> {
     let json: unknown;
     try {
       json = JSON.parse(texto);
@@ -66,6 +105,10 @@ export function abrirServidorWs(token: string, atendentes: Atendentes, porta = 0
     if (!pedido.success) return;
     const { id, metodo, dados } = pedido.data;
     const responder = (r: object) => ws.send(JSON.stringify({ tipo: "resposta", id, ...r }));
+    if (protocolo !== String(VERSAO_PROTOCOLO) && metodo !== "sistema.ping") {
+      responder({ ok: false, erro: erroDeProtocolo(protocolo) });
+      return;
+    }
     if (!(metodo in METODOS)) {
       responder({ ok: false, erro: `método desconhecido: ${metodo}` });
       return;

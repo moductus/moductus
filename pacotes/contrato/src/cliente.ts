@@ -1,4 +1,10 @@
-import { MensagemDoServico, PARAMETRO_TOKEN, type Pedido } from "./canal.ts";
+import {
+  MensagemDoServico,
+  PARAMETRO_PROTOCOLO,
+  PARAMETRO_TOKEN,
+  VERSAO_PROTOCOLO,
+  type Pedido,
+} from "./canal.ts";
 import {
   EVENTOS,
   METODOS,
@@ -114,7 +120,8 @@ export class ClienteServico {
     if (!this.endereco || this.encerrado) return;
     const { porta, token } = this.endereco;
     this.definirEstado("conectando");
-    const ws = new WebSocket(`ws://127.0.0.1:${porta}/?${PARAMETRO_TOKEN}=${encodeURIComponent(token)}`);
+    const consulta = `${PARAMETRO_TOKEN}=${encodeURIComponent(token)}&${PARAMETRO_PROTOCOLO}=${VERSAO_PROTOCOLO}`;
+    const ws = new WebSocket(`ws://127.0.0.1:${porta}/?${consulta}`);
     this.ws = ws;
     ws.onopen = () => {
       this.tentativa = 0;

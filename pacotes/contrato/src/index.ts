@@ -1,8 +1,11 @@
-/** Versão do protocolo entre interface e serviço; sobe quando uma mensagem muda de forma. */
-export const VERSAO_PROTOCOLO = 1;
-
+export * from "./agentes.ts";
+export * from "./aprovacoes.ts";
 export * from "./canal.ts";
+export * from "./comum.ts";
 export * from "./config.ts";
+export * from "./conversas.ts";
 export * from "./metodos.ts";
 export * from "./outro-pc.ts";
 export * from "./primeiro-uso.ts";
+export * from "./provedores.ts";
+export * from "./sessoes.ts";

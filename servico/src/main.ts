@@ -1,6 +1,6 @@
 import { hostname } from "node:os";
 import { VERSAO_PROTOCOLO, type EstadoConfig } from "@moductus/contrato";
-import { abrirServidorWs, type ServidorWs } from "./api/servidor.ts";
+import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { CanalCasca } from "./casca/canal.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
@@ -63,6 +63,44 @@ servidor = await abrirServidorWs(token, {
   "primeiroUso.obter": () => primeiroUso.obter(),
   "primeiroUso.concluir": (pedido) => primeiroUso.concluir(pedido),
   "primeiroUso.marcar": (pedido) => primeiroUso.marcar(pedido),
+  // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
+  ...semAtendente([
+    "agentes.listar",
+    "agentes.obter",
+    "agentes.definir",
+    "agentes.restaurarPadrao",
+    "agentes.ligar",
+    "agentes.pausar",
+    "agentes.retomar",
+    "agentes.capacidades",
+    "execucoes.listar",
+    "execucoes.obter",
+    "execucoes.desfazer",
+    "provedores.listar",
+    "provedores.detectar",
+    "provedores.criar",
+    "provedores.definir",
+    "provedores.remover",
+    "provedores.testar",
+    "conversas.listar",
+    "conversas.abrir",
+    "conversas.mensagens",
+    "conversas.enviar",
+    "conversas.arquivar",
+    "aprovacoes.pendentes",
+    "aprovacoes.decidir",
+    "regras.listar",
+    "regras.remover",
+    "sessoes.listar",
+    "sessoes.eventos",
+    "sessoes.uso",
+    "github.obter",
+    "github.atualizar",
+    "conexoes.listar",
+    "conexoes.previa",
+    "conexoes.ligar",
+    "conexoes.desligar",
+  ]),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
 canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });

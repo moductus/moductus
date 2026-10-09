@@ -35,5 +35,17 @@ export function metodo<E extends z.ZodType, S extends z.ZodType>(entrada: E, sai
   return { entrada, saida };
 }
 
+/**
+ * Versão do protocolo entre interface e serviço; sobe quando uma mensagem muda de forma.
+ * 2: agentes, provedores, execuções, conversas, aprovações, sessões, GitHub e conexões (fase 2).
+ */
+export const VERSAO_PROTOCOLO = 2;
+
 /** Nome do parâmetro de URL que leva o token: o WebSocket do navegador não manda cabeçalho. */
 export const PARAMETRO_TOKEN = "token";
+
+/**
+ * Parâmetro de URL com a versão do protocolo de quem conecta. Sem ele, é uma janela da versão 1,
+ * que ainda não o mandava.
+ */
+export const PARAMETRO_PROTOCOLO = "protocolo";
