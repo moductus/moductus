@@ -1,16 +1,19 @@
 name: release
 
-# Dispara com tag: git tag v0.1.0 && git push origin v0.1.0
+# Dispara com tag: git tag v0.5.0-alpha && git push origin v0.5.0-alpha
 #
-# Dois canais, por decisão registrada em docs/PRODUCT.md:
-#   portable  — self-contained, extrai e roda, ~60-70 MB
-#   framework — depende do .NET Desktop Runtime, ~10-15 MB, para winget e scoop
+# Dois artefatos, por decisão registrada em docs/ARCHITECTURE.md:
+#   setup    — instalador NSIS, dados em %APPDATA%\Moductus
+#   portable — zip com portable.txt, dados ao lado do executável
 #
-# Este workflow só funciona depois que src/Moductus.App existir.
+# Sem atualização automática nesta fase: o plugin updater ainda não está no projeto.
+# Quando entrar, chega desligado e o opt-in fica nas configurações.
+#
+# workflow_dispatch gera e atesta os artefatos sem criar release (ficam na execução).
 
 on:
   push:
-    tags: ['v*']
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -18,51 +21,60 @@ permissions:
   id-token: write
   attestations: write
 
-env:
-  PROJETO: src/Moductus.App/Moductus.App.csproj
-
 jobs:
-  publish:
+  release:
     runs-on: windows-latest
-
-    strategy:
-      matrix:
-        include:
-          - canal: portable
-            self_contained: 'true'
-            args: '-p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true'
-          - canal: framework
-            self_contained: 'false'
-            args: ''
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Instala o .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
+      - uses: pnpm/action-setup@v4
 
-      - name: Publish
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Dependências
+        run: pnpm install --frozen-lockfile
+
+      # A versão do instalador vem do tauri.conf.json; tag diferente publicaria um
+      # pacote com versão errada por dentro.
+      - name: Versão
         shell: pwsh
         run: |
-          dotnet publish $env:PROJETO `
-            --configuration Release `
-            --runtime win-x64 `
-            --self-contained ${{ matrix.self_contained }} `
-            -p:DebugType=none `
-            ${{ matrix.args }} `
-            --output publish/${{ matrix.canal }}
+          $conf = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $versao = $env:GITHUB_REF_NAME
+            if ($versao -ne "v$conf") {
+              Write-Host "::error::A tag $versao não bate com a versão v$conf do tauri.conf.json"
+              exit 1
+            }
+          } else {
+            $versao = "v$conf-$($env:GITHUB_SHA.Substring(0, 7))"
+          }
+          "VERSAO=$versao" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # O beforeBuildCommand (pnpm build) gera o servico.mjs e copia o node.exe como sidecar.
+      - name: Build (NSIS)
+        run: pnpm tauri build
 
       - name: Empacota
         shell: pwsh
         run: |
-          $versao = "${{ github.ref_name }}"
-          $nome = "moductus-$versao-win-x64-${{ matrix.canal }}.zip"
-          Compress-Archive -Path publish/${{ matrix.canal }}/* -DestinationPath $nome
-          "ARTEFATO=$nome" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "{0:N1} MB" -f ((Get-Item $nome).Length / 1MB) | ForEach-Object {
-            Write-Host "::notice::$nome = $_"
+          New-Item -ItemType Directory -Force -Path artefatos | Out-Null
+          $setup = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe
+          if (@($setup).Count -ne 1) { throw "Esperava um instalador NSIS, achei $(@($setup).Count)" }
+          Copy-Item $setup.FullName "artefatos/moductus-$env:VERSAO-win-x64-setup.exe"
+          ./scripts/empacotar-portable.ps1 -Versao $env:VERSAO -Destino artefatos | Out-Null
+          Get-ChildItem artefatos | ForEach-Object {
+            Write-Host ("::notice::{0} = {1:N1} MB" -f $_.Name, ($_.Length / 1MB))
           }
 
       # Permite a qualquer pessoa verificar que o binário veio deste commit.
@@ -70,11 +82,25 @@ jobs:
       - name: Attestation
         uses: actions/attest-build-provenance@v2
         with:
-          subject-path: ${{ env.ARTEFATO }}
+          subject-path: |
+            artefatos/*-setup.exe
+            artefatos/*-portable.zip
+
+      - name: Guarda na execução
+        uses: actions/upload-artifact@v4
+        with:
+          name: moductus-${{ env.VERSAO }}-win-x64
+          path: artefatos/
+          if-no-files-found: error
 
       - name: Anexa ao release
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.ARTEFATO }}
+          files: |
+            artefatos/*-setup.exe
+            artefatos/*-portable.zip
           draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
+          fail_on_unmatched_files: true

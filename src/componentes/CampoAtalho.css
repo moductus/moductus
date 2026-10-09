@@ -1,0 +1,33 @@
+/* Campo de atalho: o chip atual dentro de um botão; gravando, o contorno vira destaque. */
+.campo-atalho {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--largura-campo-atalho);
+  height: var(--altura-botao);
+  padding: 0 var(--esp-10);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-botao);
+  background: transparent;
+  color: var(--texto);
+  font-family: var(--fonte-interface);
+  font-size: var(--tipo-12);
+  cursor: pointer;
+}
+
+.campo-atalho:hover:not(:disabled) {
+  background: var(--fundo-chip);
+}
+
+.campo-atalho:disabled {
+  opacity: var(--opacidade-desativado);
+  cursor: default;
+}
+
+.campo-atalho[data-gravando] {
+  border-color: var(--destaque);
+}
+
+.campo-atalho-espera {
+  color: var(--texto-2);
+}

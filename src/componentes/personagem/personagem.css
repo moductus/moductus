@@ -1,0 +1,118 @@
+/* Personagem: cores dos tokens (não mudam com o tema), tamanho pela prop, movimento do canvas. */
+
+.personagem {
+  display: block;
+  flex: none;
+  width: var(--personagem-largura);
+  height: var(--personagem-altura);
+}
+
+.personagem[data-agente="alba"] {
+  --p-corpo: var(--alba-corpo);
+  --p-sombra: var(--alba-sombra);
+  --p-acessorio: var(--alba-acessorio);
+}
+.personagem[data-agente="tula"] {
+  --p-corpo: var(--tula-corpo);
+  --p-sombra: var(--tula-sombra);
+  --p-acessorio: var(--tula-acessorio);
+}
+.personagem[data-agente="faina"] {
+  --p-corpo: var(--faina-corpo);
+  --p-sombra: var(--faina-sombra);
+  --p-acessorio: var(--faina-acessorio);
+}
+.personagem[data-agente="nuno"] {
+  --p-corpo: var(--nuno-corpo);
+  --p-sombra: var(--nuno-sombra);
+  --p-acessorio: var(--nuno-acessorio);
+}
+
+.personagem-cor-corpo {
+  fill: var(--p-corpo);
+}
+.personagem-cor-sombra {
+  fill: var(--p-sombra);
+}
+.personagem-cor-acessorio {
+  fill: var(--p-acessorio);
+}
+.personagem-cor-rosto {
+  fill: var(--rosto-traco);
+}
+.personagem-cor-bochecha {
+  fill: var(--rosto-bochecha);
+}
+.personagem-tinta-acessorio {
+  stroke: var(--p-acessorio);
+}
+.personagem-tinta-sombra {
+  stroke: var(--p-sombra);
+}
+.personagem-tinta-rosto {
+  stroke: var(--rosto-traco);
+}
+
+/* Respira pela base dos pés e pisca de vez em quando; nada além disso (DESIGN.md §6). */
+@keyframes personagem-respirar {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(var(--escala-respirar));
+  }
+}
+
+@keyframes personagem-piscar {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(var(--escala-piscar));
+  }
+}
+
+.personagem-corpo {
+  transform-box: view-box;
+  transform-origin: var(--origem-respirar);
+  animation: personagem-respirar var(--dur-respirar) ease-in-out infinite;
+}
+
+.personagem-olho {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: personagem-piscar var(--dur-piscar) ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .personagem-corpo,
+  .personagem-olho {
+    animation: none;
+  }
+}
+
+/* Moldura de estado das listas: anel em sucesso, aviso ou perigo tracejado; dormindo esmaece. */
+.personagem-moldura {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: var(--espessura-moldura) solid transparent;
+  border-radius: 50%;
+}
+.personagem-moldura[data-estado="trabalhando"] {
+  border-color: var(--sucesso);
+}
+.personagem-moldura[data-estado="esperando"] {
+  border-color: var(--aviso);
+}
+.personagem-moldura[data-estado="erro"] {
+  border-style: dashed;
+  border-color: var(--perigo);
+}
+.personagem-moldura[data-estado="dormindo"] {
+  opacity: var(--opacidade-dormindo);
+}

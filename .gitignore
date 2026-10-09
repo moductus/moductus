@@ -45,3 +45,15 @@ target/
 dist/
 gen/
 *.db
+
+## Store do pnpm (fica no projeto quando a raiz do drive não aceita escrita)
+.pnpm-store/
+
+## Sidecar copiado no build (scripts/preparar-sidecar.mjs)
+src-tauri/binaries/
+
+## Artefatos de release (scripts/empacotar-portable.ps1)
+artefatos/
+
+## Worktrees dos agentes do Claude Code
+.claude/worktrees/

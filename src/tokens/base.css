@@ -1,0 +1,87 @@
+/* Base mínima sobre os tokens: cada janela já nasce com a pele do tema. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--fundo-janela);
+  color: var(--texto);
+  font-family: var(--fonte-interface);
+  font-size: var(--tipo-13);
+  font-weight: var(--peso-normal);
+  line-height: var(--altura-linha);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* O dock (colado ou flutuante) e o painel desenham o próprio fundo; a janela em volta fica
+   transparente. */
+:root[data-janela="dock"] body,
+:root[data-janela="painel"] body {
+  background: transparent;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+code,
+kbd,
+samp {
+  font-family: var(--fonte-mono);
+}
+
+/* Todo elemento interativo mostra o foco do teclado com o mesmo anel (token do tema). */
+:focus-visible {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco);
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Windows pedindo menos animação: zero, não só mais curto. As durações já vão a zero nos
+   tokens; isto cobre o que roda por keyframes (respirar e piscar) e qualquer transição que
+   escape do token. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+:root[data-movimento="reduzido"] *,
+:root[data-movimento="reduzido"] *::before,
+:root[data-movimento="reduzido"] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+
+/* Some da tela e fica para o leitor de tela. */
+.so-leitor {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

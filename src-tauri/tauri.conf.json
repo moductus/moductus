@@ -1,0 +1,81 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Moductus",
+  "version": "0.5.0-alpha",
+  "identifier": "io.moductus.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "dock",
+        "title": "Moductus dock",
+        "width": 64,
+        "height": 600,
+        "decorations": false,
+        "resizable": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "focus": false,
+        "shadow": false,
+        "transparent": true,
+        "visible": true
+      },
+      {
+        "label": "painel",
+        "create": false,
+        "title": "Moductus painel",
+        "width": 372,
+        "height": 600,
+        "decorations": false,
+        "resizable": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "focus": false,
+        "transparent": true,
+        "visible": false
+      },
+      {
+        "label": "sistema",
+        "create": false,
+        "title": "Moductus",
+        "width": 1200,
+        "height": 780,
+        "minWidth": 800,
+        "minHeight": 520,
+        "decorations": false,
+        "center": true,
+        "transparent": true,
+        "visible": false
+      },
+      {
+        "label": "captura",
+        "create": false,
+        "title": "Moductus captura",
+        "width": 640,
+        "height": 72,
+        "decorations": false,
+        "resizable": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "center": true,
+        "transparent": true,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:*; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "externalBin": ["binaries/node"],
+    "resources": { "../servico/dist/servico.mjs": "servico/servico.mjs" },
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"]
+  }
+}

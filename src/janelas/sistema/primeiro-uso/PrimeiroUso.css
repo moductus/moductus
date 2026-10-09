@@ -1,0 +1,430 @@
+/* Primeiro uso (Uso1Boas…Uso5Conexoes.dc.html): lateral de 248 com os passos, conteúdo e rodapé de 72. */
+.uso {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.uso-rotulo {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+/* ---------- Lateral ---------- */
+.uso-lateral {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--esp-4);
+  width: var(--largura-lateral-uso);
+  padding: var(--espaco-pagina) var(--espaco-cabecalho);
+  border-right: var(--espessura-borda) solid var(--borda);
+  background: var(--fundo-lateral);
+  overflow-y: auto;
+}
+
+.uso-lateral > .uso-rotulo {
+  padding-bottom: var(--esp-6);
+}
+
+.uso-rotulo--depois {
+  padding-top: var(--esp-14);
+}
+
+.uso-lateral-pe {
+  margin-top: auto;
+}
+
+.uso-passos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.uso-passo {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  height: var(--altura-passo-uso);
+  font-size: var(--tipo-13);
+  color: var(--texto-3);
+}
+
+.uso-passo-marca {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--tamanho-marca-passo);
+  height: var(--tamanho-marca-passo);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: 50%;
+  font-size: var(--tipo-11);
+  font-weight: var(--peso-forte);
+}
+
+.uso-passo[data-estado="atual"] {
+  font-weight: var(--peso-forte);
+  color: var(--texto);
+}
+
+.uso-passo[data-estado="atual"] .uso-passo-marca {
+  border-color: var(--destaque);
+  background: var(--destaque);
+  color: var(--sobre-destaque);
+}
+
+.uso-passo[data-estado="feito"] {
+  color: var(--texto-2);
+}
+
+.uso-passo[data-estado="feito"] .uso-passo-marca {
+  border-color: transparent;
+  background: var(--fundo-chip);
+  color: var(--texto-2);
+}
+
+.uso-passo[data-estado="depois"] .uso-passo-marca {
+  border-style: dashed;
+}
+
+/* ---------- Conteúdo ---------- */
+.uso-conteudo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.uso-corpo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--espaco-cabecalho);
+  min-height: 0;
+  padding: var(--espaco-uso-vertical) var(--espaco-uso-lateral) var(--esp-24);
+  overflow-y: auto;
+}
+
+.uso-cabecalho {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+}
+
+.uso-titulo {
+  margin: 0;
+  font-size: var(--tipo-26);
+  font-weight: var(--peso-forte);
+  letter-spacing: var(--tracado-titulo);
+}
+
+.uso-texto {
+  max-width: var(--largura-texto-uso);
+  margin: 0;
+  color: var(--texto-2);
+  text-wrap: pretty;
+}
+
+.uso-erro {
+  margin: 0;
+  color: var(--perigo);
+}
+
+.uso-rodape {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--esp-10);
+  height: var(--altura-rodape-uso);
+  padding: 0 var(--espaco-uso-lateral);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.uso-espaco {
+  flex: 1;
+}
+
+/* ---------- Opções (rádios em cartão) ---------- */
+.uso-opcoes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--esp-14);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.uso-opcoes--temas {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--esp-12);
+}
+
+.uso-opcao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+  padding: var(--esp-18);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-cartao);
+  cursor: pointer;
+}
+
+.uso-opcoes--temas .uso-opcao {
+  padding: var(--esp-10);
+}
+
+/* Marcada: borda de 2 no destaque, sem mexer no tamanho (a sombra interna completa a borda). */
+.uso-opcao[data-marcada="true"] {
+  border-color: var(--destaque);
+  box-shadow: var(--sombra-opcao-marcada) var(--destaque);
+  background: var(--fundo-elevado);
+}
+
+.uso-opcao:has(input:focus-visible) {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco);
+}
+
+.uso-opcao:has(input:disabled) {
+  cursor: default;
+  opacity: var(--opacidade-desativado);
+}
+
+.uso-opcao-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+}
+
+.uso-opcao-linha input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--destaque);
+}
+
+/* O anel de foco fica no cartão inteiro. */
+.uso-opcao-linha input:focus-visible {
+  outline: 0;
+}
+
+.uso-opcao-titulo {
+  font-weight: var(--peso-forte);
+}
+
+.uso-opcao-texto {
+  color: var(--texto-2);
+}
+
+.uso-opcoes--temas .uso-opcao-texto {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.uso-codigo {
+  padding: var(--esp-1) var(--esp-4);
+  border-radius: var(--raio-caixa);
+  background: var(--fundo-chip);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+}
+
+.uso-aviso {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+/* ---------- 1. Boas-vindas ---------- */
+.uso-boas-vindas {
+  display: flex;
+  flex: none;
+  align-items: flex-end;
+  gap: var(--esp-14);
+  height: var(--altura-boas-vindas);
+}
+
+/* ---------- 2. Tema e dock ---------- */
+.uso-previa {
+  display: flex;
+  height: var(--altura-previa-tema);
+  border-radius: var(--raio-controle);
+  overflow: hidden;
+}
+
+.uso-previa-tela {
+  display: flex;
+  flex: 1;
+  gap: var(--esp-6);
+  padding: var(--esp-8);
+  background: var(--fundo-elevado);
+}
+
+.uso-previa-dock {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--esp-5);
+  width: var(--largura-previa-dock);
+  padding-top: var(--esp-6);
+  border-radius: var(--raio-caixa);
+  background: var(--fundo-dock);
+}
+
+.uso-previa-ponto {
+  width: var(--tamanho-ponto-previa);
+  height: var(--tamanho-ponto-previa);
+  border-radius: 50%;
+  background: var(--borda-forte);
+}
+
+.uso-previa-ponto--ativo {
+  background: var(--destaque);
+}
+
+.uso-previa-painel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-5);
+  padding: var(--esp-8);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-caixa);
+  background: var(--fundo-janela);
+}
+
+.uso-previa-linha {
+  height: var(--altura-linha-previa);
+  border-radius: var(--raio-progresso);
+  background: var(--fundo-trilho);
+}
+
+.uso-previa-linha--forte {
+  width: 60%;
+  background: var(--destaque);
+}
+
+.uso-ajustes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--esp-24);
+}
+
+.uso-ajuste {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-8);
+}
+
+/* ---------- Listas (modelo e conexões) ---------- */
+.uso-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.uso-item,
+.uso-nota {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-14);
+  padding: var(--esp-12) var(--esp-16);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-cartao);
+}
+
+.uso-nota {
+  background: var(--fundo-elevado);
+}
+
+.uso-item-texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-2);
+  min-width: 0;
+}
+
+.uso-item-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.uso-item-nome {
+  font-weight: var(--peso-forte);
+}
+
+.uso-item-descricao {
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+/* ---------- 4. Conhecer o time ---------- */
+.uso-time {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--esp-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.uso-membro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--esp-10);
+  padding: var(--esp-18) var(--esp-14);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-cartao);
+  text-align: center;
+}
+
+.uso-membro-nomes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+}
+
+.uso-membro-nome {
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+}
+
+.uso-membro-nome[data-agente="alba"] {
+  color: var(--agente-alba);
+}
+
+.uso-membro-nome[data-agente="tula"] {
+  color: var(--agente-tula);
+}
+
+.uso-membro-nome[data-agente="faina"] {
+  color: var(--agente-faina);
+}
+
+.uso-membro-nome[data-agente="nuno"] {
+  color: var(--agente-nuno);
+}
+
+.uso-membro-fala {
+  margin: 0;
+  color: var(--texto-2);
+  text-wrap: pretty;
+}

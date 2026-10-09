@@ -1,0 +1,163 @@
+.config {
+  display: flex;
+  flex: 1;
+  gap: var(--esp-32);
+  min-height: 0;
+}
+
+.config-navegacao {
+  flex: none;
+  width: var(--largura-subnav);
+}
+
+.config-conteudo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.config-secao {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-16);
+}
+
+.config-secao-titulo {
+  margin: 0;
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+}
+
+.config-intro,
+.config-carregando {
+  margin: 0;
+  font-size: var(--tipo-13);
+  color: var(--texto-2);
+}
+
+/* Grupo de opções: subtítulo e as linhas abaixo, separadas por borda fina. */
+.config-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+}
+
+.config-grupo-titulo {
+  margin: 0;
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-forte);
+  color: var(--texto-3);
+}
+
+.config-opcao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-16);
+  padding: var(--esp-10) 0;
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.config-opcao-textos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  min-width: 0;
+}
+
+.config-opcao-titulo {
+  font-size: var(--tipo-13);
+  font-weight: var(--peso-forte);
+}
+
+.config-opcao-descricao {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.config-opcao-controle {
+  flex: none;
+}
+
+.config-atalho {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+}
+
+/* Recusa com o motivo: borda e ícone de aviso, o texto na cor normal (contraste). */
+.config-aviso {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--esp-8);
+  margin: 0;
+  padding: var(--esp-8) var(--esp-12);
+  border: var(--espessura-borda) solid var(--aviso);
+  border-radius: var(--raio-controle);
+  font-size: var(--tipo-12);
+  color: var(--texto);
+}
+
+.config-aviso > svg {
+  flex: none;
+  color: var(--aviso);
+}
+
+.config-feito {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.config-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+}
+
+.config-nota {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--esp-6);
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.config-nota > svg {
+  flex: none;
+}
+
+.config-rodape {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--esp-8);
+}
+
+.config-mudancas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.config-mudanca {
+  display: flex;
+  align-items: baseline;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+}
+
+.config-mudanca-chave {
+  min-width: var(--largura-rotulo-mudanca);
+  font-weight: var(--peso-forte);
+}
+
+.config-mudanca-de {
+  color: var(--texto-3);
+}

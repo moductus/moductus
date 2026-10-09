@@ -1,0 +1,358 @@
+/*
+ * Tokens do Moductus: o único lugar com valor visual literal (regra em scripts/lint-visual.mjs).
+ * Valores de docs/DESIGN.md §3 e §6. Componentes leem só as variáveis; o tema é o atributo
+ * data-tema na raiz, trocado por src/tokens/tema.ts sem recarregar a janela. Os temas valem
+ * também por escopo: qualquer contêiner com data-tema próprio (o catálogo mostra os três lado
+ * a lado) redefine as variáveis só para os descendentes.
+ */
+
+/* ---------- Comum aos três temas ---------- */
+:root {
+  /* Espaço, grade de 4 */
+  --esp-4: 4px;
+  --esp-6: 6px;
+  --esp-8: 8px;
+  --esp-10: 10px;
+  --esp-12: 12px;
+  --esp-14: 14px;
+  --esp-16: 16px;
+  --esp-18: 18px;
+  --esp-20: 20px;
+  --esp-24: 24px;
+  --esp-32: 32px;
+
+  /* Tipo: 11 meta e atalho, 12 rótulo, 13 corpo, 17–22 título de painel,
+     26 título do Sistema, 30–36 número grande (mono) */
+  --tipo-11: 11px;
+  --tipo-12: 12px;
+  --tipo-13: 13px;
+  --tipo-17: 17px;
+  --tipo-20: 20px;
+  --tipo-22: 22px;
+  --tipo-26: 26px;
+  --tipo-30: 30px;
+  --tipo-36: 36px;
+  --altura-linha: 1.4;
+
+  /* Dois pesos, nunca outros */
+  --peso-normal: 400;
+  --peso-forte: 600;
+
+  /* Medidas fixas da estrutura (as mesmas da casca em src-tauri) */
+  --largura-dock: 64px;
+  --largura-painel: 372px;
+  --largura-lateral-sistema: 232px;
+  --tamanho-botao-dock: 44px;
+  --tamanho-badge: 16px;
+
+  /* Dock (Dock.dc.html): botões de 44, agentes a 42 de altura, controles a 40, capa de 30 */
+  --altura-agente-dock: 42px;
+  --altura-controle-dock: 40px;
+  --raio-botao-dock: 10px;
+  --raio-grupo-dock: 12px;
+  --tamanho-capa: 30px;
+  --raio-capa: 7px;
+  --largura-divisor-dock: 24px;
+  /* A janela flutuante tem 80 px (src-tauri/src/dock.rs): 8 de margem em volta dos 64 */
+  --margem-dock-flutuante: 8px;
+  --tamanho-ponto-estado: 6px;
+  /* O painel desenha o cartão afastado do dock, como no Main.dc.html */
+  --margem-painel: 12px;
+
+  /* Traços: elevação por borda de 1 px, ícones de 1,6 px, foco de 2 px */
+  --espessura-borda: 1px;
+  --espessura-icone: 1.6px;
+  --espessura-foco: 2px;
+  --recuo-foco: 2px;
+  /* Anel por dentro do botão, onde o vizinho colado ou a borda da janela cortaria o de fora */
+  --recuo-foco-interno: -2px;
+
+  /* Animação: entrada até 140 ms, saída até 90 ms (zero quando o Windows pede menos) */
+  --dur-entrada: 140ms;
+  --dur-saida: 90ms;
+
+  /* Personagens: as cores não mudam com o tema (DESIGN.md §6) */
+  --alba-corpo: #e2b26a;
+  --alba-sombra: #c9974d;
+  --alba-acessorio: #a9762a;
+  --tula-corpo: #86bc9c;
+  --tula-sombra: #6ca283;
+  --tula-acessorio: #3f7f5c;
+  --faina-corpo: #de9070;
+  --faina-sombra: #c67757;
+  --faina-acessorio: #a24f37;
+  --nuno-corpo: #8faade;
+  --nuno-sombra: #7590c6;
+  --nuno-acessorio: #46639f;
+  --rosto-traco: #1c1d20;
+  --rosto-bochecha: rgba(255, 255, 255, 0.22);
+  --opacidade-dormindo: 0.55;
+  /* Respirar e piscar (Personagem.dc.html); a origem está em unidades do desenho 100 × 120. */
+  --dur-respirar: 4.2s;
+  --dur-piscar: 5.5s;
+  --escala-respirar: 1.018;
+  --escala-piscar: 0.1;
+  --origem-respirar: 50px 108px;
+  /* Moldura de estado em volta da cabeça nas listas (Time.dc.html: 2 px em volta de 40) */
+  --espessura-moldura: 2px;
+
+  /* Espaços finos dos controles (chip, selo, segmento) */
+  --esp-1: 1px;
+  --esp-2: 2px;
+  --esp-3: 3px;
+  --esp-5: 5px;
+  --esp-7: 7px;
+
+  /* Componentes base (DESIGN.md §6, quadros de componentes) */
+  --altura-botao: 32px;
+  --altura-botao-pequeno: 26px;
+  --altura-campo: 34px;
+  --altura-item: 34px;
+  --altura-segmento: 28px;
+  --altura-progresso: 4px;
+  --tamanho-caixa: 16px;
+  --tamanho-visto: 10px;
+  --espessura-caixa: 1.5px;
+  --espessura-visto: 3px;
+  --largura-interruptor: 32px;
+  --altura-interruptor: 18px;
+  --tamanho-pino: 12px;
+  --deslocamento-pino: 14px;
+  --raio-atalho: 4px;
+  --raio-segmento: 6px;
+  --raio-selo: 10px;
+  --raio-contagem: 8px;
+  --raio-progresso: 2px;
+  --raio-interruptor: 9px;
+  --raio-pino: 6px;
+  --sombra-segmento: 0 1px 2px rgba(0, 0, 0, 0.12);
+  --opacidade-hover: 0.92;
+  --opacidade-pressionado: 0.84;
+  --opacidade-desativado: 0.45;
+
+  /* Ícones: caixa 24 com traço 1,6 (a busca usa 1,8); tamanhos de uso */
+  --espessura-icone-busca: 1.8px;
+  --icone-12: 12px;
+  --icone-14: 14px;
+  --icone-16: 16px;
+  --icone-18: 18px;
+  --icone-20: 20px;
+  --icone-24: 24px;
+  --icone-26: 26px;
+  --icone-32: 32px;
+  --icone-48: 48px;
+
+  /* Sistema (Sistema.dc.html): barra de título, botões de janela, navegação e página */
+  --altura-barra-titulo: 40px;
+  --largura-botao-janela: 40px;
+  --altura-botao-janela: 30px;
+  --altura-item-nav: 32px;
+  --largura-subnav: 220px;
+  --largura-texto-vazio: 420px;
+  --espaco-pagina: 28px;
+  --espaco-cabecalho: 22px;
+  --tracado-titulo: -0.02em;
+  /* Configurações: campo que grava atalho e coluna do nome na prévia da importação */
+  --largura-campo-atalho: 132px;
+  --largura-rotulo-mudanca: 148px;
+  /* Fechar no padrão do Windows 11: vermelho do sistema, igual nos três temas */
+  --fundo-fechar: #c42b1c;
+  --texto-fechar: #ffffff;
+
+  /* Primeiro uso (Uso1Boas…Uso5Conexoes.dc.html) e Primeiros passos (Tutorial.dc.html) */
+  --largura-lateral-uso: 248px;
+  --altura-rodape-uso: 72px;
+  --espaco-uso-vertical: 40px;
+  --espaco-uso-lateral: 48px;
+  --largura-texto-uso: 560px;
+  --altura-passo-uso: 34px;
+  --tamanho-marca-passo: 22px;
+  --altura-previa-tema: 120px;
+  --largura-previa-dock: 18px;
+  --tamanho-ponto-previa: 6px;
+  --altura-linha-previa: 6px;
+  --altura-boas-vindas: 150px;
+  --largura-cartao-treino: 380px;
+  --largura-progresso-tutorial: 120px;
+  /* Segunda volta de borda da opção marcada (a cor vem junto, do tema): 2 sem mudar o tamanho */
+  --sombra-opcao-marcada: inset 0 0 0 1px;
+}
+
+/* Menos animação no Windows: pela mídia do WebView ou pelo "Efeitos de animação" que a casca
+   lê (SPI_GETCLIENTAREAANIMATION) e marca em data-movimento. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-entrada: 0ms;
+    --dur-saida: 0ms;
+    --dur-respirar: 0ms;
+    --dur-piscar: 0ms;
+  }
+}
+
+:root[data-movimento="reduzido"] {
+  --dur-entrada: 0ms;
+  --dur-saida: 0ms;
+  --dur-respirar: 0ms;
+  --dur-piscar: 0ms;
+}
+
+/* ---------- Grafite: escuro, sólido, dock colado ---------- */
+:root,
+[data-tema="grafite"] {
+  color-scheme: dark;
+
+  --fundo-dock: #0d0e10;
+  --fundo-janela: #131417;
+  --fundo-lateral: #0d0e10;
+  --fundo-cartao: #16181b;
+  --fundo-elevado: #1a1c20;
+  --fundo-campo: #0f1012;
+  --fundo-chip: rgba(255, 255, 255, 0.06);
+  --fundo-ativo: rgba(255, 255, 255, 0.08);
+  --fundo-trilho: rgba(255, 255, 255, 0.08);
+  --borda: rgba(255, 255, 255, 0.07);
+  --borda-forte: rgba(255, 255, 255, 0.14);
+  --texto: #e8e9eb;
+  --texto-2: #b5b8bd;
+  --texto-3: #8c9097;
+  --texto-apagado: #6f737a;
+  --destaque: #e8e9eb;
+  --sobre-destaque: #0d0e10;
+  /* Anel de foco: o destaque, com 3:1 ou mais sobre todo fundo do tema (contraste.test.ts) */
+  --cor-foco: var(--destaque);
+  --sucesso: #7fb89e;
+  --aviso: #e3b262;
+  --perigo: #e5787a;
+  --capa: #2b2f35;
+
+  --agente-alba: #d9a55a;
+  --agente-tula: #6fae8c;
+  --agente-faina: #d2805e;
+  --agente-nuno: #7c9cd6;
+
+  --raio-janela: 10px;
+  --raio-painel: 12px;
+  --raio-cartao: 10px;
+  --raio-controle: 8px;
+  --raio-botao: 8px;
+  --raio-caixa: 4px;
+  --raio-dock: 0px;
+
+  --sombra-janela: 0 24px 64px rgba(0, 0, 0, 0.45);
+  --sombra-painel: 0 24px 48px rgba(0, 0, 0, 0.45);
+  --sombra-dock: none;
+  --desfoque: none;
+
+  --fonte-interface: "Geist", "Segoe UI", system-ui, sans-serif;
+  --fonte-mono: "Geist Mono", Consolas, monospace;
+}
+
+/* ---------- Papel: claro, sólido, dock flutuante ---------- */
+[data-tema="papel"] {
+  color-scheme: light;
+
+  --fundo-dock: #fbfaf8;
+  --fundo-janela: #ffffff;
+  --fundo-lateral: #f6f5f2;
+  --fundo-cartao: #ffffff;
+  --fundo-elevado: #f6f5f2;
+  --fundo-campo: #ffffff;
+  --fundo-chip: #efeeea;
+  --fundo-ativo: #eae8e3;
+  --fundo-trilho: #e6e4df;
+  --borda: rgba(20, 20, 19, 0.08);
+  --borda-forte: rgba(20, 20, 19, 0.16);
+  --texto: #1a1a18;
+  --texto-2: #3e3d39;
+  /* Um tom abaixo do #6B6A64 do canvas: o atalho do item ativo (fundo-ativo) pede 4,5:1 */
+  --texto-3: #686761;
+  --texto-apagado: #8a8983;
+  --destaque: #1a1a18;
+  --sobre-destaque: #fbfaf8;
+  --cor-foco: var(--destaque);
+  --sucesso: #2f7a52;
+  /* Escurecido do #B5761A do canvas: o selo "aviso" é texto de 11 e precisa de 4,5:1 */
+  --aviso: #96600f;
+  --perigo: #b4443c;
+  --capa: #d9d6cf;
+
+  --agente-alba: #9a6a1e;
+  --agente-tula: #2f7a52;
+  --agente-faina: #a34e2e;
+  --agente-nuno: #3f64a8;
+
+  --raio-janela: 14px;
+  --raio-painel: 16px;
+  --raio-cartao: 14px;
+  --raio-controle: 10px;
+  --raio-botao: 17px;
+  --raio-caixa: 8px;
+  --raio-dock: 18px;
+
+  --sombra-janela: 0 24px 64px rgba(40, 36, 28, 0.16);
+  --sombra-painel: 0 16px 40px rgba(40, 36, 28, 0.12);
+  --sombra-dock: 0 8px 24px rgba(40, 36, 28, 0.08);
+  --desfoque: none;
+
+  --fonte-interface: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --fonte-mono: "JetBrains Mono", Consolas, monospace;
+}
+
+/* ---------- Vidro: escuro, Acrylic nativo do Windows 11, dock flutuante ---------- */
+[data-tema="vidro"] {
+  color-scheme: dark;
+
+  --fundo-solido-vidro: #1b1f2b;
+  --fundo-dock: rgba(20, 23, 31, 0.55);
+  --fundo-janela: rgba(18, 21, 29, 0.62);
+  --fundo-lateral: rgba(0, 0, 0, 0.16);
+  --fundo-cartao: rgba(255, 255, 255, 0.05);
+  --fundo-elevado: rgba(255, 255, 255, 0.07);
+  --fundo-campo: rgba(0, 0, 0, 0.18);
+  --fundo-chip: rgba(255, 255, 255, 0.08);
+  --fundo-ativo: rgba(255, 255, 255, 0.1);
+  --fundo-trilho: rgba(255, 255, 255, 0.1);
+  --borda: rgba(255, 255, 255, 0.09);
+  --borda-forte: rgba(255, 255, 255, 0.18);
+  --texto: #eef0f6;
+  --texto-2: #c4c9d4;
+  --texto-3: #9aa1b1;
+  --texto-apagado: #7c8394;
+  --destaque: #a3b5ff;
+  --sobre-destaque: #10131c;
+  --cor-foco: var(--destaque);
+  --sucesso: #7ccba2;
+  --aviso: #e8b86a;
+  --perigo: #f08a8a;
+  --capa: #4a5578;
+
+  --agente-alba: #d9a55a;
+  --agente-tula: #6fae8c;
+  --agente-faina: #d2805e;
+  --agente-nuno: #7c9cd6;
+
+  --raio-janela: 16px;
+  --raio-painel: 18px;
+  --raio-cartao: 14px;
+  --raio-controle: 10px;
+  --raio-botao: 10px;
+  --raio-caixa: 5px;
+  --raio-dock: 20px;
+
+  --sombra-janela: 0 24px 64px rgba(0, 0, 0, 0.35);
+  --sombra-painel: none;
+  --sombra-dock: none;
+  /* O desfoque de verdade é o Acrylic da janela; este vale para camadas dentro dela. */
+  --desfoque: blur(32px) saturate(140%);
+
+  --fonte-interface: "Onest", "Segoe UI", system-ui, sans-serif;
+  --fonte-mono: "IBM Plex Mono", Consolas, monospace;
+}
+
+/* Sem Acrylic (Windows 10, transparência desligada, economia de bateria, falha ou ainda
+   sem resposta da casca): o Vidro vira sólido e mantém texto e destaque. */
+[data-tema="vidro"]:not([data-material="acrylic"]) {
+  --fundo-dock: var(--fundo-solido-vidro);
+  --fundo-janela: var(--fundo-solido-vidro);
+  --desfoque: none;
+}

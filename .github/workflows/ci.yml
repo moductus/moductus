@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Dependências
+        run: pnpm install --frozen-lockfile
+
+      - name: Formatação
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm -r lint
+
+      - name: Tipos
+        run: pnpm -r typecheck
+
+      - name: Testes (Vitest)
+        run: pnpm -r test
+
+      # O build do front gera o dist/ que o tauri::generate_context! embute.
+      - name: Build da interface
+        run: pnpm build
+
+      - name: Fumaça do serviço (o bundle sobe e fica pronto)
+        run: pnpm --filter @moductus/servico fumaca
+
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Testes (Rust)
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Build da casca, sem pacote
+        run: pnpm tauri build --no-bundle
