@@ -9,7 +9,7 @@ import type { EventoAgente, PedidoDoAgente, Provedor } from "./provedor.ts";
 export type PassoRoteiro =
   | { tipo: "texto"; texto: string }
   | { tipo: "ferramenta"; nome: string; entrada: unknown; id?: string }
-  | { tipo: "uso"; tokensEntrada: number; tokensSaida: number }
+  | Extract<EventoAgente, { tipo: "uso" }>
   | { tipo: "fim"; continuacao?: string | null }
   | { tipo: "erro"; falha: FalhaProvedor }
   | { tipo: "pausa"; ms: number }

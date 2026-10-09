@@ -103,14 +103,46 @@ export const PRAZO_CHAMADA_MCP_MS = 24 * 60 * 60 * 1000;
 const VARIAVEIS_DO_USUARIO = /^(MODUCTUS_.*|CLAUDE_CODE_PLUGIN_DIRS)$/i;
 
 /**
+ * Variáveis que trocariam a assinatura do usuário por cobrança por token (AGENTS.md §3; F2-09):
+ * chave ou token de API, gateway, perfil e federação da Anthropic, e os provedores de nuvem
+ * (Bedrock, Mantle, Vertex, Foundry, Claude Platform on AWS) com as credenciais deles. Com
+ * qualquer uma, o `claude -p` cobraria por token, e a execução que grava `assinatura` mentiria.
+ * Lista conferida em https://code.claude.com/docs/en/env-vars em 09/10/2026 (no `-p`, a
+ * `ANTHROPIC_API_KEY` vale sempre que existe, mesmo com login). O login da assinatura
+ * (`CLAUDE_CODE_OAUTH_TOKEN`, do `claude setup-token`) continua passando.
+ */
+const VARIAVEIS_DE_COBRANCA_POR_TOKEN = new RegExp(
+  "^(" +
+    [
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_AUTH_TOKEN",
+      "ANTHROPIC_BASE_URL",
+      "ANTHROPIC_PROFILE",
+      "ANTHROPIC_FEDERATION_RULE_ID",
+      "ANTHROPIC_ORGANIZATION_ID",
+      "ANTHROPIC_WORKSPACE_ID",
+      "ANTHROPIC_AWS_API_KEY",
+      "ANTHROPIC_FOUNDRY_API_KEY",
+      "ANTHROPIC_FOUNDRY_AUTH_TOKEN",
+      "AWS_BEARER_TOKEN_BEDROCK",
+      "CLAUDE_CODE_USE_(BEDROCK|MANTLE|VERTEX|FOUNDRY|ANTHROPIC_AWS)",
+    ].join("|") +
+    ")$",
+  "i",
+);
+
+/**
  * O ambiente do processo do CLI: o do serviço sem nenhuma variável `MODUCTUS_*` (token do canal
- * das janelas, pasta de dados, token dos hooks...) nem plugins herdados. Os `CLAUDE.md` e a
+ * das janelas, pasta de dados, token dos hooks...), sem plugins herdados e sem o que faria o CLI
+ * cobrar por token em vez de usar a assinatura. Os `CLAUDE.md` e a
  * memória automática do usuário ficam fora: o agente recebe as instruções dele pelo
  * `--append-system-prompt` e mais nada. Só entra o acesso ao MCP desta execução, quando houver.
  */
 export function ambienteDoCli(base: NodeJS.ProcessEnv, acessoMcp: string | null): NodeJS.ProcessEnv {
   const ambiente = Object.fromEntries(
-    Object.entries(base).filter(([nome]) => !VARIAVEIS_DO_USUARIO.test(nome)),
+    Object.entries(base).filter(
+      ([nome]) => !VARIAVEIS_DO_USUARIO.test(nome) && !VARIAVEIS_DE_COBRANCA_POR_TOKEN.test(nome),
+    ),
   );
   ambiente.CLAUDE_CODE_DISABLE_CLAUDE_MDS = "1";
   ambiente.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";

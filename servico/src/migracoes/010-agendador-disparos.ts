@@ -18,8 +18,8 @@ const disparos = criarTabela(
   { lixeira: false, restricoes: ["UNIQUE (do_agente_id, gatilho)"] },
 );
 
-export const m009: Migracao = {
-  versao: 9,
+export const m010: Migracao = {
+  versao: 10,
   nome: "agendador-disparos",
   sql: disparos,
 };

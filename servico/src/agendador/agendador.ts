@@ -34,7 +34,7 @@ export const TOLERANCIA_ATRASO_MS = 2 * 60_000;
 /** Espera depois da suspensão, para a rede e o provedor voltarem antes dos disparos atrasados. */
 export const PRAZO_RETOMADA_MS = 20_000;
 
-/** Até onde um gatilho de horário ou intervalo foi contado (migração 009). */
+/** Até onde um gatilho de horário ou intervalo foi contado (migração 010). */
 export interface ReferenciaGuardada {
   /** Horário: a ocorrência que disparou, ou quando o gatilho apareceu. Intervalo: de onde conta. */
   referencia: string;

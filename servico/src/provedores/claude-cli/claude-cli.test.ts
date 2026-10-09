@@ -73,6 +73,8 @@ interface Anotacao {
   temAcessoMcp: boolean;
   /** Só os nomes das variáveis `MODUCTUS_*` que chegaram ao CLI, nunca os valores. */
   variaveisMoductus: string[];
+  /** Só os nomes das variáveis de autenticação (`ANTHROPIC_*`, `CLAUDE_CODE_USE_*`...) que chegaram. */
+  variaveisDeAutenticacao: string[];
 }
 
 /**
@@ -193,6 +195,47 @@ describe("adaptador Claude Code CLI", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  test("o CLI roda com a assinatura: chave de API, gateway e nuvem não chegam, o login por OAuth chega", async () => {
+    const cobrariamPorToken = [
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_AUTH_TOKEN",
+      "ANTHROPIC_BASE_URL",
+      "ANTHROPIC_PROFILE",
+      "ANTHROPIC_FEDERATION_RULE_ID",
+      "ANTHROPIC_ORGANIZATION_ID",
+      "ANTHROPIC_WORKSPACE_ID",
+      "ANTHROPIC_AWS_API_KEY",
+      "ANTHROPIC_FOUNDRY_API_KEY",
+      "ANTHROPIC_FOUNDRY_AUTH_TOKEN",
+      "AWS_BEARER_TOKEN_BEDROCK",
+      "CLAUDE_CODE_USE_BEDROCK",
+      "CLAUDE_CODE_USE_MANTLE",
+      "CLAUDE_CODE_USE_VERTEX",
+      "CLAUDE_CODE_USE_FOUNDRY",
+      "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+    ];
+    for (const nome of cobrariamPorToken) vi.stubEnv(nome, "valor-falso");
+    vi.stubEnv("CLAUDE_CODE_OAUTH_TOKEN", "login-falso-da-assinatura");
+    try {
+      const { provedor, anotado } = comCliFalso([gravada("sessao-com-ferramenta.jsonl")]);
+      await coletar(provedor.executar(pedido(), new AbortController().signal));
+      // Outras do PC de quem roda o teste (ANTHROPIC_MODEL...) podem chegar; estas não.
+      const chegaram = anotado().variaveisDeAutenticacao.map((nome) => nome.toUpperCase());
+      expect(chegaram).toContain("CLAUDE_CODE_OAUTH_TOKEN");
+      expect(chegaram.filter((nome) => cobrariamPorToken.includes(nome))).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    // Em qualquer caixa: no Windows o nome da variável não diferencia.
+    expect(
+      ambienteDoCli({ PATH: "C:\\bin", Anthropic_Api_Key: "x", claude_code_use_vertex: "1" }, null),
+    ).toEqual({
+      PATH: "C:\\bin",
+      CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1",
+      CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+    });
   });
 
   test("ambiente do CLI: tira MODUCTUS_* em qualquer caixa e põe o acesso desta execução", () => {
