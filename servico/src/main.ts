@@ -64,6 +64,8 @@ const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {
   aprovacao: (aprovacao) => servidor?.emitir("aprovacoes.mudou", aprovacao),
   regras: (regras) => servidor?.emitir("regras.mudou", regras),
 });
+// Quem segurava a resposta dos hooks do terminal era o serviço que caiu: esses cartões expiram.
+aprovacoes.expirarDoTerminal();
 
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),

@@ -13,7 +13,7 @@ import {
 } from "@moductus/contrato";
 import { colunasDeOrigem, DO_USUARIO, type Carimbo } from "../banco/tabela.ts";
 import { novoId } from "../banco/ulid.ts";
-import { cobre, padraoDe } from "./padrao.ts";
+import { cobre, dentroDe, ehDeArquivo, padraoDe } from "./padrao.ts";
 
 /** O que volta a quem pediu quando o usuário nega sem escrever nada (contrato, `PedidoDecidir`). */
 export const MENSAGEM_NEGADO = "Negado pelo dock do Moductus";
@@ -99,6 +99,16 @@ export class RepositorioAprovacoes {
     return linhas.map(paraAprovacao);
   }
 
+  /** Pendentes vindos de sessões do terminal, de qualquer ferramenta. */
+  pendentesDoTerminal(): string[] {
+    const linhas = this.db
+      .prepare(
+        "SELECT id FROM aprovacoes WHERE estado = 'pendente' AND fonte <> 'moductus' ORDER BY criado_em, id",
+      )
+      .all() as unknown as { id: string }[];
+    return linhas.map((l) => l.id);
+  }
+
   pendentesDaSessao(sessaoId: string): string[] {
     const linhas = this.db
       .prepare("SELECT id FROM aprovacoes WHERE estado = 'pendente' AND sessao_id = ? ORDER BY criado_em, id")
@@ -169,6 +179,14 @@ export class RepositorioAprovacoes {
       .prepare("SELECT projeto_id FROM sessoes_ia WHERE id = ?")
       .get(sessaoId) as unknown as { projeto_id: string | null } | undefined;
     return linha?.projeto_id ?? null;
+  }
+
+  /** A pasta de um projeto vivo. */
+  caminhoDoProjeto(id: string): string | null {
+    const linha = this.db
+      .prepare("SELECT caminho FROM projetos WHERE id = ? AND apagado_em IS NULL")
+      .get(id) as unknown as { caminho: string } | undefined;
+    return linha?.caminho ?? null;
   }
 
   /** Regras que valem agora para a ferramenta, no projeto ou para o agente do pedido. */
@@ -388,7 +406,7 @@ export class ServicoAprovacoes {
     const atual = this.repo.aprovacao(pedido.id);
     if (!atual) throw new Error("aprovação não encontrada");
     if (atual.estado !== "pendente") return atual;
-    if (!(await this.vale(atual))) return this.expirar(atual.id) ?? atual;
+    if (!(await this.vale(atual))) return this.expirar(atual.id) ?? this.repo.aprovacao(atual.id) ?? atual;
 
     const agora = this.agora().toISOString();
     const estado = pedido.decisao === "permitir" ? "aprovada" : "negada";
@@ -419,6 +437,17 @@ export class ServicoAprovacoes {
     this.avisos.aprovacao(expirada);
     this.liberar(expirada, null);
     return expirada;
+  }
+
+  /**
+   * Na subida do serviço: o pedido de uma sessão do terminal só vale enquanto o hook segura a
+   * resposta, e o serviço que segurava caiu. Os do Moductus continuam esperando o usuário.
+   */
+  expirarDoTerminal(): Aprovacao[] {
+    return this.repo
+      .pendentesDoTerminal()
+      .map((id) => this.expirar(id))
+      .filter((a): a is Aprovacao => a !== null);
   }
 
   /** A sessão do terminal terminou: o que ela pedia não tem mais a quem responder. */
@@ -471,7 +500,10 @@ export class ServicoAprovacoes {
     return regras;
   }
 
-  /** Negar ganha de permitir: com as duas cobrindo o pedido, vale a mais cuidadosa. */
+  /**
+   * Negar ganha de permitir: com as duas cobrindo o pedido, vale a mais cuidadosa. Regra de
+   * arquivo no escopo do projeto só cobre caminho dentro da pasta dele.
+   */
   private regraQueDecide(
     acao: AcaoAprovacao,
     projetoId: string | null,
@@ -479,9 +511,11 @@ export class ServicoAprovacoes {
     agora: string,
   ): RegraPermissao | null {
     const padrao = padraoDe(acao.ferramenta, acao.entrada);
+    if (padrao === null) return null;
+    const dentroDoProjeto = this.dentroDoProjeto(acao.ferramenta, padrao, projetoId);
     const cobrem = this.repo
       .regrasPara(acao.ferramenta, projetoId, agenteId, agora)
-      .filter((r) => cobre(r.padrao, padrao));
+      .filter((r) => cobre(acao.ferramenta, r.padrao, padrao) && (r.escopo !== "projeto" || dentroDoProjeto));
     return cobrem.find((r) => r.decisao === "negar") ?? cobrem[0] ?? null;
   }
 
@@ -492,7 +526,9 @@ export class ServicoAprovacoes {
     agora: string,
   ): RegraPermissao {
     const padrao = padraoDe(aprovacao.acao.ferramenta, aprovacao.acao.entrada);
-    if (padrao === null) throw new Error("este pedido não tem comando: não dá para criar a regra");
+    if (padrao === null) {
+      throw new Error("este pedido não tem comando, caminho ou endereço: não dá para criar a regra");
+    }
     const base = {
       id: novoId(),
       ferramenta: aprovacao.acao.ferramenta,
@@ -504,11 +540,21 @@ export class ServicoAprovacoes {
     if (sempre === "projeto") {
       const projetoId = aprovacao.sessaoId ? this.repo.projetoDaSessao(aprovacao.sessaoId) : null;
       if (!projetoId) throw new Error("este pedido não tem projeto: não dá para criar a regra do projeto");
+      if (!this.dentroDoProjeto(aprovacao.acao.ferramenta, padrao, projetoId)) {
+        throw new Error("o arquivo fica fora do projeto: não dá para criar a regra do projeto");
+      }
       return { ...base, escopo: "projeto", projetoId, agenteId: null };
     }
     if (!aprovacao.agenteId)
       throw new Error("este pedido não vem de um agente: não dá para criar a regra do agente");
     return { ...base, escopo: "agente", projetoId: null, agenteId: aprovacao.agenteId };
+  }
+
+  /** Ferramenta que não é de arquivo não tem caminho a conferir; a de arquivo, só dentro da pasta. */
+  private dentroDoProjeto(ferramenta: string, padrao: string, projetoId: string | null): boolean {
+    if (!ehDeArquivo(ferramenta)) return true;
+    const caminho = projetoId ? this.repo.caminhoDoProjeto(projetoId) : null;
+    return caminho !== null && dentroDe(padrao, caminho);
   }
 
   /** Situação que falha ao conferir não derruba o cartão: na dúvida, o usuário decide. */

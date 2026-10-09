@@ -66,6 +66,24 @@ const doTerminal = (sessaoId: string, command = "pnpm test"): NovoPedido => ({
   acao: bash(command),
 });
 
+const ler = (file_path: string): AcaoAprovacao => ({
+  ferramenta: "Read",
+  entrada: { file_path },
+  rotulo: null,
+  rotuloRecusar: null,
+  desfazivel: false,
+});
+
+const doTerminalCom = (
+  sessaoId: string,
+  acao: Pick<AcaoAprovacao, "ferramenta" | "entrada">,
+): NovoPedido => ({
+  fonte: "claude-code",
+  sessaoId,
+  descricao: `O Claude Code quer usar ${acao.ferramenta}.`,
+  acao: { rotulo: null, rotuloRecusar: null, desfazivel: false, ...acao },
+});
+
 const doNuno = (numero: number, agenteId = "nuno"): NovoPedido => ({
   fonte: "moductus",
   agenteId,
@@ -120,15 +138,20 @@ describe("cartões de aprovação", () => {
     sessaoEm(antes.db, "moductus", "s1");
     const a = cartao(antes.servico, doTerminal("s1"));
     const b = cartao(antes.servico, doNuno(12));
+    const c = cartao(antes.servico, doNuno(13));
     antes.db.close();
 
+    // Na subida, o do terminal expira (ninguém mais segura a resposta do hook); os do Moductus ficam.
     const depois = montar(antes.pasta);
-    expect(await depois.servico.pendentes()).toEqual([a, b]);
+    expect(await depois.servico.pendentes()).toEqual([a, b, c]);
+    expect(depois.servico.expirarDoTerminal().map((x) => [x.id, x.estado])).toEqual([[a.id, "expirada"]]);
+    expect(await depois.servico.pendentes()).toEqual([b, c]);
+
     const espera = depois.servico.esperar(b.id);
     const decidida = await depois.servico.decidir({ id: b.id, decisao: "permitir" });
     expect(decidida).toMatchObject({ estado: "aprovada", decididaEm: AGORA });
     expect(await espera).toEqual({ aprovacao: decidida, mensagem: null });
-    expect(await depois.servico.pendentes()).toEqual([a]);
+    expect(await depois.servico.pendentes()).toEqual([c]);
   });
 
   test("decidir libera quem espera; negar devolve a mensagem escrita ou a padrão", async () => {
@@ -240,7 +263,7 @@ describe("regras de permissão", () => {
     expect(servico.pedir(doTerminal("s3")).tipo).toBe("cartao");
   });
 
-  test("sempre para este agente: a regra cobre a ferramenta para aquele agente, não para os outros", async () => {
+  test("sempre para este agente: a regra cobre o mesmo pedido daquele agente, não outro PR nem outro agente", async () => {
     const { servico } = montar();
     const a = cartao(servico, doNuno(12));
     const decidida = await servico.decidir({ id: a.id, decisao: "permitir", sempre: "agente" });
@@ -251,11 +274,75 @@ describe("regras de permissão", () => {
         agenteId: "nuno",
         projetoId: null,
         ferramenta: "github.comentar",
-        padrao: "*",
+        padrao: '{"numero":12,"repositorio":"gustavo/moductus","texto":"CI verde de novo."}',
       }),
     ]);
-    expect(servico.pedir(doNuno(13))).toMatchObject({ tipo: "regra", decisao: "permitir" });
-    expect(servico.pedir(doNuno(13, "alba")).tipo).toBe("cartao");
+    expect(servico.pedir(doNuno(12))).toMatchObject({ tipo: "regra", decisao: "permitir" });
+    expect(servico.pedir(doNuno(13)).tipo).toBe("cartao");
+    expect(servico.pedir(doNuno(12, "alba")).tipo).toBe("cartao");
+  });
+
+  test("arquivo: a regra do projeto cobre o mesmo caminho dentro da pasta do projeto, e nada fora dela", async () => {
+    const { db, servico } = montar();
+    sessaoEm(db, "moductus", "s1", "V:\\moductus");
+    const editar = (file_path: string) => doTerminalCom("s1", { ...ler(file_path), ferramenta: "Edit" });
+    const a = cartao(servico, editar("V:\\moductus\\src\\a.ts"));
+    await servico.decidir({ id: a.id, decisao: "permitir", sempre: "projeto" });
+    expect(servico.regras()).toEqual([expect.objectContaining({ padrao: "V:\\moductus\\src\\a.ts" })]);
+
+    // O mesmo arquivo escrito de outro jeito passa; outro arquivo ou `..` para fora pede cartão.
+    expect(servico.pedir(editar("v:/moductus/src/a.ts")).tipo).toBe("regra");
+    expect(servico.pedir(editar("V:\\moductus\\src\\x\\..\\a.ts")).tipo).toBe("regra");
+    expect(servico.pedir(editar("V:\\moductus\\src\\b.ts")).tipo).toBe("cartao");
+    expect(servico.pedir(editar("V:\\moductus\\..\\outro\\src\\a.ts")).tipo).toBe("cartao");
+    expect(servico.pedir(editar("src\\a.ts")).tipo).toBe("cartao");
+
+    // Fora do projeto não vira regra do projeto, nem uma regra gravada assim cobre o pedido.
+    const fora = cartao(servico, editar("V:\\moductus2\\a.ts"));
+    await expect(servico.decidir({ id: fora.id, decisao: "permitir", sempre: "projeto" })).rejects.toThrow(
+      "fora do projeto",
+    );
+    new RepositorioAprovacoes(db).inserirRegra({
+      id: "01K79Z6N7Q4W3J5XG2B8C1D0ER",
+      escopo: "projeto",
+      projetoId: "moductus",
+      agenteId: null,
+      ferramenta: "Edit",
+      padrao: "V:\\moductus2\\a.ts",
+      decisao: "permitir",
+      criadoEm: AGORA,
+      expiraEm: null,
+    });
+    expect(servico.pedir(editar("V:\\moductus2\\a.ts")).tipo).toBe("cartao");
+  });
+
+  test("busca na web: a regra cobre o mesmo domínio", async () => {
+    const { db, servico } = montar();
+    sessaoEm(db, "moductus", "s1");
+    const buscar = (url: string) =>
+      doTerminalCom("s1", { ferramenta: "WebFetch", entrada: { url, prompt: "resuma" } });
+    const a = cartao(servico, buscar("https://docs.anthropic.com/hooks"));
+    await servico.decidir({ id: a.id, decisao: "permitir", sempre: "projeto" });
+    expect(servico.regras()).toEqual([expect.objectContaining({ padrao: "docs.anthropic.com" })]);
+    expect(servico.pedir(buscar("https://DOCS.anthropic.com/outra")).tipo).toBe("regra");
+    expect(servico.pedir(buscar("https://exemplo.com/docs.anthropic.com")).tipo).toBe("cartao");
+    expect(servico.pedir(buscar("não é endereço")).tipo).toBe("cartao");
+  });
+
+  test("ferramenta de MCP: a regra cobre a mesma entrada, em qualquer ordem de chaves", async () => {
+    const { db, servico } = montar();
+    sessaoEm(db, "moductus", "s1");
+    const issue = (entrada: object) =>
+      doTerminalCom("s1", { ferramenta: "mcp__github__create_issue", entrada });
+    const a = cartao(servico, issue({ title: "Falha no CI", body: "Logs", labels: ["ci", "bug"] }));
+    await servico.decidir({ id: a.id, decisao: "permitir", sempre: "projeto" });
+    expect(servico.pedir(issue({ labels: ["ci", "bug"], body: "Logs", title: "Falha no CI" })).tipo).toBe(
+      "regra",
+    );
+    expect(servico.pedir(issue({ title: "Outra", body: "Logs", labels: ["ci", "bug"] })).tipo).toBe("cartao");
+    expect(servico.pedir(issue({ title: "Falha no CI", body: "Logs", labels: ["bug", "ci"] })).tipo).toBe(
+      "cartao",
+    );
   });
 
   test("negar com sempre cria regra que nega; com as duas cobrindo, negar ganha", async () => {
@@ -265,23 +352,20 @@ describe("regras de permissão", () => {
     await servico.decidir({ id: a.id, decisao: "negar", sempre: "projeto" });
     expect(servico.pedir(doTerminal("s1", "git push"))).toMatchObject({ tipo: "regra", decisao: "negar" });
 
-    // Uma regra da ferramenta inteira que permite não passa por cima da que nega.
+    // Uma regra que permite o mesmo comando não passa por cima da que nega.
     new RepositorioAprovacoes(db).inserirRegra({
       id: "01K79Z6N7Q4W3J5XG2B8C1D0EP",
       escopo: "projeto",
       projetoId: "moductus",
       agenteId: null,
       ferramenta: "Bash",
-      padrao: "*",
+      padrao: "git push",
       decisao: "permitir",
       criadoEm: AGORA,
       expiraEm: null,
     });
     expect(servico.pedir(doTerminal("s1", "git push"))).toMatchObject({ tipo: "regra", decisao: "negar" });
-    expect(servico.pedir(doTerminal("s1", "git status"))).toMatchObject({
-      tipo: "regra",
-      decisao: "permitir",
-    });
+    expect(servico.pedir(doTerminal("s1", "git status")).tipo).toBe("cartao");
   });
 
   test("regra removida ou vencida não decide mais", async () => {
