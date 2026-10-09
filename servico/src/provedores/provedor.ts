@@ -46,6 +46,11 @@ export interface PedidoDoAgente {
   executarFerramenta(chamada: ChamadaDeFerramenta): Promise<ResultadoDeFerramenta>;
   /** Sessão anterior do provedor a continuar (`--resume` no Claude Code); `null` começa outra. */
   continuarDe: string | null;
+  /**
+   * Em que fila o adaptador põe o pedido quando tem fila própria (um processo por vez no CLI);
+   * sem ela, a do agente.
+   */
+  fila?: string;
 }
 
 /**

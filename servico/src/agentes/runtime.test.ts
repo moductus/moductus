@@ -275,6 +275,32 @@ describe("runtime: pedido ao modelo", () => {
     expect(enviado.continuarDe).toBe("sessao-7");
   });
 
+  test("instruções e ferramentas do pedido valem no lugar das do agente; fora da fila não espera a vez", async () => {
+    const { runtime, falsos, porta } = montar();
+    falsos["p-alba"]!.roteirizar(
+      [{ tipo: "ferramenta", nome: "teste__esperar", entrada: { chave: "a" } }, ...roteiros.resposta("um")],
+      roteiros.resposta("[]"),
+    );
+    const ocupada = runtime.executar(pedir("alba", "uma resposta longa"));
+    await vi.waitFor(() => expect(porta.esperando.has("a")).toBe(true));
+
+    const curta = await runtime.executar(
+      pedir("alba", "classifica", { instrucoes: "Só classifique.", semFerramentas: true, foraDaFila: true }),
+    );
+    expect(curta.execucao.estado).toBe("ok");
+    const [normal, classificador] = falsos["p-alba"]!.pedidos;
+    expect(normal!.ferramentas.length).toBeGreaterThan(0);
+    expect(normal!.instrucoes).toContain(VOZ_DA_FAMILIA);
+    expect(normal!.fila).toBeUndefined();
+    expect(classificador!.ferramentas).toEqual([]);
+    expect(classificador!.instrucoes).toBe("Só classifique.");
+    // No adaptador, a execução é a própria fila: não espera o processo da Alba.
+    expect(classificador!.fila).toBe(curta.execucao.id);
+
+    porta.abrir("a");
+    expect((await ocupada).texto).toBe("um");
+  });
+
   test("configuração mudada enquanto o pedido esperava vale na vez dele", async () => {
     const { runtime, falsos, porta, db } = montar();
     falsos["p-alba"]!.roteirizar(

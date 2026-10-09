@@ -372,6 +372,24 @@ describe("adaptador Claude Code CLI", () => {
     expect(processos).toHaveLength(3);
   });
 
+  test("pedido com fila própria não espera o processo do agente", async () => {
+    const { provedor } = comCliFalso([gravadaSemResult()], "pendurar");
+    const primeiro = new AbortController();
+    const doNuno = provedor.executar(pedido(), primeiro.signal)[Symbol.asyncIterator]();
+    await doNuno.next();
+
+    const proprio = new AbortController();
+    const classificador = provedor
+      .executar(pedido({ execucaoId: "exec-2", fila: "exec-2" }), proprio.signal)
+      [Symbol.asyncIterator]();
+    expect((await classificador.next()).value).toMatchObject({ tipo: "ferramenta" });
+    expect(processos).toHaveLength(2);
+    primeiro.abort(new Error("fim"));
+    proprio.abort(new Error("fim"));
+    await expect(drenar(doNuno)).rejects.toThrow("fim");
+    await expect(drenar(classificador)).rejects.toThrow("fim");
+  });
+
   test("pedido cancelado enquanto espera na fila sai sem iniciar processo", async () => {
     const { provedor } = comCliFalso([gravadaSemResult()], "pendurar");
     const primeiro = new AbortController();

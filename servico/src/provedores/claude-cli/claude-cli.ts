@@ -176,7 +176,7 @@ export class ProvedorClaudeCli implements Provedor {
 
   async *executar(pedido: PedidoDoAgente, sinal: AbortSignal): AsyncIterable<EventoAgente> {
     sinal.throwIfAborted();
-    const liberar = await this.entrarNaFila(pedido.agenteId, sinal);
+    const liberar = await this.entrarNaFila(pedido.fila ?? pedido.agenteId, sinal);
     try {
       try {
         yield* this.rodar(pedido, sinal);
