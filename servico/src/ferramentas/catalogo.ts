@@ -107,6 +107,8 @@ export class EscopoAgente {
     autorizar?: Autorizar,
   ): (chamada: ChamadaDeFerramenta) => Promise<ResultadoDeFerramenta> {
     return async (chamada) => {
+      // Execução já cancelada não roda nada nem pede aprovação.
+      contexto.sinal.throwIfAborted();
       const f = this.obter(chamada.nome);
       if (!f) {
         // A mesma resposta para o que não existe e para o que é de outro agente.

@@ -212,6 +212,34 @@ describe("execução pelo catálogo", () => {
     await expect(executar({ id: "c1", nome: "financas__quebrar", entrada: {} })).rejects.toThrow("cancelada");
   });
 
+  test("execução já cancelada não roda a ferramenta, nem a que daria certo", async () => {
+    const { catalogo, rodou } = montar();
+    const controle = new AbortController();
+    const executar = catalogo.doAgente(["tarefas.*"]).executor(contexto("alba", controle.signal));
+    controle.abort(new Error("cancelada"));
+    await expect(
+      executar({ id: "c1", nome: "tarefas__criar", entrada: { titulo: "Pagar luz" } }),
+    ).rejects.toThrow("cancelada");
+    expect(rodou).toEqual([]);
+  });
+
+  test("externo com a execução cancelada não pede aprovação", async () => {
+    const { catalogo, rodou } = montar();
+    const controle = new AbortController();
+    let pedidos = 0;
+    const autorizar: Autorizar = () => {
+      pedidos++;
+      return Promise.resolve({ permitida: true });
+    };
+    const executar = catalogo.doAgente(["github.*"]).executor(contexto("nuno", controle.signal), autorizar);
+    controle.abort(new Error("cancelada"));
+    await expect(
+      executar({ id: "c1", nome: "github__comentar", entrada: { pr: 7, texto: "Pronto" } }),
+    ).rejects.toThrow("cancelada");
+    expect(pedidos).toBe(0);
+    expect(rodou).toEqual([]);
+  });
+
   test("externo sem quem autorize é recusado e não roda", async () => {
     const { catalogo, rodou } = montar();
     const executar = catalogo.doAgente(["github.*"]).executor(contexto("nuno"));

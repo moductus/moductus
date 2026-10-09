@@ -84,9 +84,34 @@ describe("ferramenta()", () => {
     expect(r.erro).toMatch(/^Entrada inválida para financas\.lancar\. /);
     expect(r.erro).toContain("valorCentavos: esperava um número, recebeu um texto");
     expect(r.erro).toContain("descricao: campo obrigatório");
-    expect(r.erro).toMatch(/parcelas: [^;]*> 0/);
+    expect(r.erro).toContain("parcelas: precisa ser maior que 0");
     expect(r.erro).toContain("itens[0].valorCentavos: esperava um número");
     expect(r.erro).not.toContain("undefined");
+  });
+
+  test("limites saem em português do Brasil, com o tamanho certo", () => {
+    const limites = ferramenta({
+      nome: "notas.criar",
+      descricao: "Cria uma nota",
+      entrada: z.object({
+        titulo: z.string().min(2).max(3),
+        etiquetas: z.array(z.string()).min(1),
+        prioridade: z.number().int().min(1).lt(5),
+      }),
+      efeito: "interno",
+      executar: () => null,
+    });
+    const curto = limites.validar({ titulo: "a", etiquetas: [], prioridade: 0 });
+    const longo = limites.validar({ titulo: "abcd", etiquetas: ["x"], prioridade: 5 });
+    expect(curto).toEqual({
+      ok: false,
+      erro: "Entrada inválida para notas.criar. titulo: precisa ter pelo menos 2 caracteres; etiquetas: precisa ter pelo menos 1 item; prioridade: precisa ser pelo menos 1.",
+    });
+    expect(longo).toEqual({
+      ok: false,
+      erro: "Entrada inválida para notas.criar. titulo: pode ter no máximo 3 caracteres; prioridade: precisa ser menor que 5.",
+    });
+    expect(JSON.stringify([curto, longo])).not.toContain("Demasiado");
   });
 
   test("entrada que nem é objeto também explica", () => {

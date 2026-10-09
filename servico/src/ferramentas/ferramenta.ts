@@ -49,8 +49,10 @@ export interface Ferramenta {
 }
 
 /**
- * O ponto não é aceito em nome de ferramenta pelas APIs (OpenAI, Anthropic, Gemini) nem pelo
- * Claude Code no MCP. Como nenhum nome do catálogo tem `__`, a troca tem volta.
+ * OpenAI e Anthropic não aceitam ponto em nome de ferramenta, e o Claude Code troca o ponto por
+ * `_` no MCP, o que perde a volta (`arquivos_ler_texto` não diz onde termina o domínio). Gemini e
+ * a especificação MCP aceitam ponto, mas um nome só para todos é mais simples. Como nenhum nome
+ * do catálogo tem `__`, `dominio__acao` volta sem ambiguidade.
  */
 export function nomeParaModelo(nome: string): string {
   return nome.replace(".", "__");
@@ -114,11 +116,40 @@ function esquemaJson(nome: string, entrada: z.ZodObject): Record<string, unknown
 
 const pt = z.locales.pt().localeError;
 
-/** Mensagens em português; campo que faltou diz isso, em vez de "recebeu undefined". */
+/**
+ * Mensagens em português do Brasil: o locale `pt` do Zod cobre quase tudo, mas fala "Demasiado
+ * pequeno" nos limites, que são reescritos aqui. Campo que faltou diz isso, em vez de "recebeu
+ * undefined".
+ */
 const mapaDeErros: z.core.$ZodErrorMap = (issue) => {
   if (issue.code === "invalid_type" && issue.input === undefined) return "campo obrigatório";
+  if (issue.code === "too_small" || issue.code === "too_big") return limite(issue) ?? pt(issue);
   return pt(issue);
 };
+
+type IssueDeLimite = z.core.$ZodRawIssue<z.core.$ZodIssueTooSmall | z.core.$ZodIssueTooBig>;
+
+/** "precisa ser maior que 0", "pode ter no máximo 3 caracteres"; outra origem fica com o locale. */
+function limite(issue: IssueDeLimite): string | null {
+  const minimo = issue.code === "too_small";
+  const valor = Number(minimo ? issue.minimum : issue.maximum);
+  const inclusivo = issue.inclusive ?? true;
+  const plural = (um: string, varios: string) => `${valor} ${valor === 1 ? um : varios}`;
+  switch (issue.origin) {
+    case "number":
+    case "int":
+    case "bigint":
+      if (minimo) return `precisa ser ${inclusivo ? "pelo menos" : "maior que"} ${valor}`;
+      return `precisa ser ${inclusivo ? "no máximo" : "menor que"} ${valor}`;
+    case "string":
+      return `${minimo ? "precisa ter pelo menos" : "pode ter no máximo"} ${plural("caractere", "caracteres")}`;
+    case "array":
+    case "set":
+      return `${minimo ? "precisa ter pelo menos" : "pode ter no máximo"} ${plural("item", "itens")}`;
+    default:
+      return null;
+  }
+}
 
 /**
  * O que volta ao modelo quando a entrada não confere: cada problema com o campo, numa linha só,
