@@ -1,4 +1,5 @@
 import type {
+  Agente,
   EstadoSessao,
   ItemGithub,
   MudancaSessao,
@@ -182,6 +183,11 @@ export class VigiaNuno {
   private ultimoDespertar: number | null = null;
   private ultimoFalhou = false;
   private parado = false;
+  /**
+   * O Nuno estava ativo na última mudança dele, para ver a volta a ativo; `null` até a primeira
+   * (ele pode ter subido pausado, e a retomada é a primeira mudança que chega).
+   */
+  private nunoAtivo: boolean | null = null;
 
   constructor(
     private readonly deps: DependenciasVigiaNuno,
@@ -262,6 +268,23 @@ export class VigiaNuno {
     this.agendar();
   }
 
+  /**
+   * Cada mudança de agente. Quando o Nuno volta a ativo (retomou a pausa, acordou), o que ficou na
+   * pauta enquanto ele não podia chamar o modelo é conferido de novo, sem esperar outro evento.
+   */
+  aoMudarAgente(agente: Pick<Agente, "id" | "situacao">): void {
+    if (agente.id !== NUNO) return;
+    const ativo = agente.situacao.estado === "ativo";
+    const voltou = ativo && this.nunoAtivo !== true;
+    this.nunoAtivo = ativo;
+    if (voltou) this.aoRetomar();
+  }
+
+  /** O Nuno pode chamar o modelo de novo: confere a pauta. */
+  aoRetomar(): void {
+    this.agendar();
+  }
+
   /** Para os relógios; um despertar em andamento termina, mas não agenda outro. */
   parar(): void {
     this.parado = true;
@@ -331,6 +354,7 @@ export class VigiaNuno {
       this.pendente = true;
       return;
     }
+    const anterior = this.ultimoDespertar;
     this.ultimoDespertar = agora;
     const blocos = await this.blocos(prontos);
     // O prazo conta a espera na fila também: um despertar que não sai em tempo larga o vigia.
@@ -349,6 +373,14 @@ export class VigiaNuno {
         sinal: prazo.signal,
       });
     } catch (erro) {
+      if (prazo.signal.aborted) {
+        // O prazo passou antes da vez (o Nuno pausado, dormindo ou ocupado): o modelo nem foi
+        // chamado. Não é falha nem gasta o intervalo; a retomada (aoMudarAgente) ou o próximo evento
+        // tenta de novo.
+        this.ultimoDespertar = anterior;
+        console.error("vigia do Nuno: despertar não saiu: o Nuno não ficou livre no prazo");
+        return;
+      }
       this.ultimoFalhou = true;
       console.error(`vigia do Nuno: despertar falhou: ${String(erro)}`);
       return;

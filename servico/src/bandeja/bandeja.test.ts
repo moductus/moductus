@@ -61,10 +61,12 @@ describe("textos do menu", () => {
     expect(fimDaPausa("amanha", agora)).toBe(local(10, 0).toISOString());
   });
 
-  test("até quando: hora no mesmo dia, meia-noite pelo nome, data quando passa de um dia", () => {
+  test("até quando: a próxima meia-noite pelo nome, só a hora no mesmo dia, outro dia com a data", () => {
     const agora = local(9, 23, 30);
-    expect(ateQuando(local(10, 0, 30).toISOString(), agora)).toBe("até 00:30");
+    expect(ateQuando(local(9, 23, 45).toISOString(), agora)).toBe("até 23:45");
     expect(ateQuando(local(10, 0).toISOString(), agora)).toBe("até meia-noite");
+    expect(ateQuando(local(10, 0, 30).toISOString(), agora)).toBe("até 10/10, 00:30");
+    expect(ateQuando(local(11, 0).toISOString(), agora)).toBe("até 11/10, 00:00");
     expect(ateQuando(local(12, 9, 5).toISOString(), agora)).toBe("até 12/10, 09:05");
   });
 
@@ -232,8 +234,9 @@ function montar() {
   const agentes = new ServicoAgentes(repo, catalogo, (a) => runtime.situacao(a), runtime.estados);
   const linhas: string[] = [];
   const canal = new CanalCasca({ write: (linha) => linhas.push(linha) });
-  bandeja = ligarBandeja({ agentes, canal, agora: tempo.agora });
-  bandeja.atualizar();
+  const ligada = ligarBandeja({ agentes, canal, agora: tempo.agora });
+  bandeja = ligada;
+  ligada.atualizar();
   /** O último menu que a casca recebeu. */
   const menu = () => {
     const ultimo = JSON.parse(linhas.at(-1)!) as MenuBandeja & { tipo: string };
@@ -241,7 +244,7 @@ function montar() {
     return ultimo;
   };
   const clicar = (id: string) => canal.receber(JSON.stringify({ tipo: CLIQUE_NA_BANDEJA, item: id }));
-  return { db, runtime, falsos, tempo, linhas, menu, clicar };
+  return { db, runtime, falsos, tempo, linhas, menu, clicar, bandeja: ligada };
 }
 
 /** O que o pedido devolveu até agora, sem esperar: `null` enquanto ele espera a vez. */
@@ -323,8 +326,11 @@ describe("pausar pela bandeja", () => {
   });
 
   test("o menu só vai à casca quando muda; clique que falha não derruba nada e refaz o menu", () => {
-    const { db, linhas, clicar, menu } = montar();
+    const { db, linhas, clicar, menu, bandeja } = montar();
     const antes = linhas.length;
+    bandeja.atualizar();
+    bandeja.atualizar();
+    expect(linhas).toHaveLength(antes);
     clicar("agente:alba");
     clicar("pausar:*:2h");
     expect(linhas).toHaveLength(antes);

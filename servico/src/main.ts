@@ -231,6 +231,8 @@ const runtime = new Runtime(
     agente: (agenteId) => {
       const agente = agentes.procurar(agenteId);
       if (agente) servidor?.emitir("agentes.mudou", agente);
+      // O Nuno retomou ou acordou: o vigia confere o que anotou enquanto ele não podia chamar o modelo.
+      if (agente) vigiaNuno?.aoMudarAgente(agente);
       bandeja.atualizar();
     },
   },

@@ -61,18 +61,19 @@ export function fimDaPausa(por: DuracaoPausa, agora: Date): string {
 
 const doisDigitos = (n: number) => String(n).padStart(2, "0");
 
+const mesmoDia = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
 /**
  * Até quando, no relógio local, sem palavra relativa ("amanhã" ficaria errado depois da
- * meia-noite, e o menu só muda quando o estado muda): meia-noite pelo nome, menos de um dia pela
- * hora, mais longe com a data.
+ * meia-noite, e o menu só muda quando o estado muda): a próxima meia-noite pelo nome, no mesmo dia
+ * só a hora, em outro dia com a data.
  */
 export function ateQuando(ate: string, agora: Date): string {
   const fim = new Date(ate);
-  if (fim.getHours() === 0 && fim.getMinutes() === 0) {
-    if (fim.getTime() - agora.getTime() <= 24 * 3_600_000) return "até meia-noite";
-  }
+  if (fim.getTime() === inicioDoDiaSeguinte(agora).getTime()) return "até meia-noite";
   const hora = `${doisDigitos(fim.getHours())}:${doisDigitos(fim.getMinutes())}`;
-  if (fim.getTime() - agora.getTime() < 24 * 3_600_000) return `até ${hora}`;
+  if (mesmoDia(fim, agora)) return `até ${hora}`;
   return `até ${doisDigitos(fim.getDate())}/${doisDigitos(fim.getMonth() + 1)}, ${hora}`;
 }
 
