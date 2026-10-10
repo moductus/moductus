@@ -115,8 +115,9 @@ describe("histórico", () => {
       "O limite de uso acabou",
     );
     expect(textoDaExecucao(execucao("e1", { gatilho: "horario" }))).toBe("Trabalhou no horário marcado");
-    expect(textoDaExecucao(execucao("e1", { estado: "rodando" }))).toBe(
-      "Respondeu na conversa: trabalhando agora",
+    expect(textoDaExecucao(execucao("e1", { estado: "rodando" }))).toBe("Respondendo na conversa");
+    expect(textoDaExecucao(execucao("e1", { estado: "rodando", gatilho: "intervalo" }))).toBe(
+      "Conferindo no intervalo marcado",
     );
   });
 });
@@ -181,6 +182,21 @@ describe("o que o agente está fazendo", () => {
     expect(
       agoraDoAgente({ ...ATIVO, atividade: "trabalhando" }, execucao("e1", { estado: "rodando" }), agora),
     ).toBe("Agora: respondendo na conversa");
+    // Cada gatilho no gerúndio, não só o da conversa.
+    expect(
+      agoraDoAgente(
+        { ...ATIVO, atividade: "trabalhando" },
+        execucao("e1", { estado: "rodando", gatilho: "horario" }),
+        agora,
+      ),
+    ).toBe("Agora: trabalhando no horário marcado");
+    expect(
+      agoraDoAgente(
+        { ...ATIVO, atividade: "trabalhando" },
+        execucao("e1", { estado: "rodando", gatilho: "evento" }),
+        agora,
+      ),
+    ).toBe("Agora: atendendo um aviso");
     expect(agoraDoAgente({ ...ATIVO, atividade: "esperando" }, null, agora)).toBe(
       "Agora: esperando sua resposta num pedido",
     );

@@ -79,9 +79,17 @@ const ROTULO_GATILHO: Record<TipoGatilho, string> = {
   evento: "Atendeu um aviso",
 };
 
+/** O mesmo, enquanto acontece. */
+const ROTULO_EM_ANDAMENTO: Record<TipoGatilho, string> = {
+  mensagem: "Respondendo na conversa",
+  horario: "Trabalhando no horário marcado",
+  intervalo: "Conferindo no intervalo marcado",
+  evento: "Atendendo um aviso",
+};
+
 /** A linha do histórico: o resumo, o erro ou, sem os dois, o que disparou. */
 export function textoDaExecucao(execucao: Execucao): string {
-  if (execucao.estado === "rodando") return `${ROTULO_GATILHO[execucao.gatilho]}: trabalhando agora`;
+  if (execucao.estado === "rodando") return ROTULO_EM_ANDAMENTO[execucao.gatilho];
   if (execucao.estado === "adiada") return "Ficou para quando o modelo voltar";
   if (execucao.estado === "erro") return execucao.erro ?? "Não deu certo";
   return execucao.resumo ?? ROTULO_GATILHO[execucao.gatilho];
@@ -180,8 +188,8 @@ export function agoraDoAgente(
     case "ativo":
       if (situacao.atividade === "esperando") return `Agora: esperando sua resposta num pedido${fila}`;
       if (situacao.atividade === "trabalhando" || rodando) {
-        const oQue = rodando ? ROTULO_GATILHO[rodando.gatilho].toLowerCase() : "trabalhando";
-        return `Agora: ${oQue.replace(/^respondeu na conversa$/, "respondendo na conversa")}${fila}`;
+        const oQue = rodando ? ROTULO_EM_ANDAMENTO[rodando.gatilho].toLowerCase() : "trabalhando";
+        return `Agora: ${oQue}${fila}`;
       }
       if (situacao.atividade === "erro") return `A última execução deu erro${fila}`;
       return situacao.fila > 0 ? `${situacao.fila} na fila` : "Sem nada em andamento.";

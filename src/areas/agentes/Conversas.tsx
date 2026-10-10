@@ -1,6 +1,6 @@
 import type { Aprovacao, FalaParcial, Mensagem } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
-import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { CartaoAprovacao } from "../../componentes/CartaoAprovacao.tsx";
 import { FalaAgente } from "../../componentes/FalaAgente.tsx";
@@ -44,7 +44,6 @@ const nomeDe = (com: Interlocutor) => (com === null ? NOME_TIME : DADOS_AGENTES[
 export function Conversas({ canal, com, aoEscolher, aoAbrirPagina, aoAbrirMemoria }: PropsConversas) {
   const conversas = useConversas(canal, com);
   const time = useSituacaoTime(canal);
-  const [apagando, setApagando] = useState(false);
   const { conectado, aberta } = conversas;
 
   return (
@@ -76,47 +75,14 @@ export function Conversas({ canal, com, aoEscolher, aoAbrirPagina, aoAbrirMemori
       </div>
 
       <section className="conversa" aria-label={`Conversa com ${com === null ? "o time" : comArtigo(com)}`}>
-        <header className="conversa-cabecalho">
-          <div className="conversa-quem">
-            <h2 className="conversa-nome">{nomeDe(com)}</h2>
-            <span className="conversa-sobre">{com === null ? SOBRE_TIME : DADOS_AGENTES[com].funcao}</span>
-          </div>
-          {apagando ? (
-            <div className="conversa-confirmar" role="group" aria-label="Apagar a conversa">
-              <span>Apagar esta conversa? Ela fica 30 dias na lixeira.</span>
-              <Botao tamanho="pequeno" onClick={() => setApagando(false)}>
-                Manter
-              </Botao>
-              <Botao
-                variante="primario"
-                tamanho="pequeno"
-                onClick={() => void conversas.apagar().then(() => setApagando(false))}
-              >
-                Apagar conversa
-              </Botao>
-            </div>
-          ) : (
-            <div className="conversa-acoes">
-              {com !== null && (
-                <Selo forma="ponto" tom={lerSituacao(time[com]).tom}>
-                  {lerSituacao(time[com]).texto}
-                </Selo>
-              )}
-              {com === null ? (
-                <Botao variante="fantasma" onClick={aoAbrirMemoria}>
-                  Memória do time
-                </Botao>
-              ) : (
-                <Botao variante="fantasma" onClick={() => aoAbrirPagina(com)}>
-                  {`Página ${deAgente(com)}`}
-                </Botao>
-              )}
-              <Botao variante="fantasma" disabled={!conectado || !aberta} onClick={() => setApagando(true)}>
-                Apagar
-              </Botao>
-            </div>
-          )}
-        </header>
+        <CabecalhoConversa
+          com={com}
+          time={time}
+          podeApagar={conectado && aberta !== null}
+          apagar={conversas.apagar}
+          aoAbrirPagina={aoAbrirPagina}
+          aoAbrirMemoria={aoAbrirMemoria}
+        />
         <Mensagens com={com} time={time} conversas={conversas} />
         <Escrever
           key={chaveInterlocutor(com)}
@@ -128,6 +94,99 @@ export function Conversas({ canal, com, aoEscolher, aoAbrirPagina, aoAbrirMemori
         />
       </section>
     </div>
+  );
+}
+
+interface PropsCabecalho {
+  com: Interlocutor;
+  time: SituacaoTime;
+  podeApagar: boolean;
+  apagar: () => Promise<boolean>;
+  aoAbrirPagina: (agente: Agente) => void;
+  aoAbrirMemoria: () => void;
+}
+
+/**
+ * Quem está na conversa e as ações dela. Apagar pede confirmação ali mesmo: o foco vai para
+ * "Manter", Esc desiste, e ao fechar o foco volta para "Apagar". A confirmação é da conversa em
+ * que abriu: trocar de interlocutor fecha, e ela nunca passa para outra.
+ */
+function CabecalhoConversa({ com, time, podeApagar, apagar, aoAbrirPagina, aoAbrirMemoria }: PropsCabecalho) {
+  const [apagando, setApagando] = useState(false);
+  // Trocou de interlocutor: a confirmação fecha já neste quadro, sem passar para a outra conversa.
+  const [comVisto, setComVisto] = useState(com);
+  if (comVisto !== com) {
+    setComVisto(com);
+    setApagando(false);
+  }
+  const manter = useRef<HTMLButtonElement>(null);
+  const botaoApagar = useRef<HTMLButtonElement>(null);
+  // Onde estava aberta no último quadro: o foco só volta a "Apagar" na mesma conversa (trocar de
+  // interlocutor deixa o foco onde o usuário clicou).
+  const abertaEm = useRef<Interlocutor | undefined>(undefined);
+
+  useEffect(() => {
+    if (apagando) manter.current?.focus();
+    else if (abertaEm.current === com) botaoApagar.current?.focus();
+    abertaEm.current = apagando ? com : undefined;
+  }, [apagando, com]);
+
+  return (
+    <header className="conversa-cabecalho">
+      <div className="conversa-quem">
+        <h2 className="conversa-nome">{nomeDe(com)}</h2>
+        <span className="conversa-sobre">{com === null ? SOBRE_TIME : DADOS_AGENTES[com].funcao}</span>
+      </div>
+      {apagando ? (
+        <div
+          className="conversa-confirmar"
+          role="group"
+          aria-label="Apagar a conversa"
+          onKeyDown={(e) => {
+            if (e.key !== "Escape") return;
+            e.stopPropagation();
+            setApagando(false);
+          }}
+        >
+          <span>Apagar esta conversa? Ela fica 30 dias na lixeira.</span>
+          <Botao ref={manter} tamanho="pequeno" onClick={() => setApagando(false)}>
+            Manter
+          </Botao>
+          <Botao
+            variante="primario"
+            tamanho="pequeno"
+            onClick={() => void apagar().then(() => setApagando(false))}
+          >
+            Apagar conversa
+          </Botao>
+        </div>
+      ) : (
+        <div className="conversa-acoes">
+          {com !== null && (
+            <Selo forma="ponto" tom={lerSituacao(time[com]).tom}>
+              {lerSituacao(time[com]).texto}
+            </Selo>
+          )}
+          {com === null ? (
+            <Botao variante="fantasma" onClick={aoAbrirMemoria}>
+              Memória do time
+            </Botao>
+          ) : (
+            <Botao variante="fantasma" onClick={() => aoAbrirPagina(com)}>
+              {`Página ${deAgente(com)}`}
+            </Botao>
+          )}
+          <Botao
+            ref={botaoApagar}
+            variante="fantasma"
+            disabled={!podeApagar}
+            onClick={() => setApagando(true)}
+          >
+            Apagar
+          </Botao>
+        </div>
+      )}
+    </header>
   );
 }
 

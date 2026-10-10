@@ -331,6 +331,11 @@ export class ServicoConversas {
   /** A última resposta pedida a cada agente em cada conversa: a próxima espera esta terminar. */
   private readonly vezes = new Map<string, Promise<void>>();
   private readonly andamento = new Set<Promise<void>>();
+  /**
+   * Um cancelamento por conversa com resposta pedida: apagar a conversa cancela todas as dela, a
+   * que espera a vez (o agente dormindo ou pausado) e a que já roda.
+   */
+  private readonly cancelamentos = new Map<string, AbortController>();
 
   constructor(
     private readonly deps: DependenciasConversas,
@@ -372,13 +377,15 @@ export class ServicoConversas {
   }
 
   /**
-   * Manda a conversa para a lixeira com as mensagens e devolve as que ficaram. Resposta que ainda
-   * roda nela termina sem gravar (`rodar` confere a conversa antes), e a sessão do provedor dela
-   * é esquecida: uma conversa nova nunca continua de uma apagada.
+   * Manda a conversa para a lixeira com as mensagens e devolve as que ficaram. As respostas pedidas
+   * nela são canceladas: a que espera o agente acordar nem chega ao modelo, a que roda para e nada
+   * se grava. A sessão do provedor dela é esquecida: uma conversa nova nunca continua de uma apagada.
    */
   apagar(pedido: PedidoApagarConversa): Conversa[] {
     this.exigir(pedido.id);
     this.deps.repo.apagar(pedido.id, this.agora().toISOString());
+    this.cancelamentos.get(pedido.id)?.abort(new Error("a conversa foi apagada"));
+    this.cancelamentos.delete(pedido.id);
     for (const chave of this.sessoes.keys()) {
       if (chave.startsWith(`${pedido.id}:`)) this.sessoes.delete(chave);
     }
@@ -475,9 +482,17 @@ export class ServicoConversas {
   ): void {
     const chave = `${conversaId}:${destino.agenteId}`;
     const anterior = this.vezes.get(chave) ?? Promise.resolve();
+    let cancelamento = this.cancelamentos.get(conversaId);
+    if (!cancelamento) {
+      cancelamento = new AbortController();
+      this.cancelamentos.set(conversaId, cancelamento);
+    }
+    const { signal: sinal } = cancelamento;
     const vez = anterior
-      .then(() => this.rodar(conversaId, gatilho, destino, todos))
+      .then(() => this.rodar(conversaId, gatilho, destino, todos, sinal))
       .catch((erro: unknown) => {
+        // Cancelada porque a conversa foi apagada: não é falha.
+        if (sinal.aborted) return;
         console.error(`resposta de ${destino.agenteId} na conversa ${conversaId} falhou: ${String(erro)}`);
       });
     this.vezes.set(chave, vez);
@@ -485,6 +500,10 @@ export class ServicoConversas {
     void vez.finally(() => {
       this.andamento.delete(vez);
       if (this.vezes.get(chave) === vez) this.vezes.delete(chave);
+      // Sem resposta pendente na conversa, o cancelamento dela não tem mais o que cancelar.
+      const pendente = [...this.vezes.keys()].some((k) => k.startsWith(`${conversaId}:`));
+      if (!pendente && this.cancelamentos.get(conversaId) === cancelamento)
+        this.cancelamentos.delete(conversaId);
     });
   }
 
@@ -493,7 +512,10 @@ export class ServicoConversas {
     gatilho: Mensagem,
     destino: Destino,
     todos: readonly Destino[],
+    sinal: AbortSignal,
   ): Promise<void> {
+    // Apagada enquanto a resposta anterior do agente rodava: esta nem começa.
+    if (sinal.aborted || !this.deps.repo.conversa(conversaId)) return;
     const { agenteId } = destino;
     const chave = `${conversaId}:${agenteId}`;
     const sessao = this.sessoes.get(chave);
@@ -521,7 +543,9 @@ export class ServicoConversas {
         continuarDe: sessao?.continuacao ?? null,
         // Na reserva a sessão não vale: vai a conversa inteira.
         ...(sessao ? { mensagensSemSessao: paraOModelo(conversa) } : {}),
+        sinal,
         aoEvento: (evento, execucaoId) => {
+          if (sinal.aborted) return;
           if (evento.tipo === "texto") texto += evento.texto;
           // Ferramenta sem texto ainda é "pensando": a janela sabe que a execução está viva.
           else if (evento.tipo !== "ferramenta") return;
@@ -535,6 +559,8 @@ export class ServicoConversas {
       return;
     }
     const { execucao } = resultado;
+    // Apagada no meio: nada fica, nem a sessão (a conversa nova não continua da apagada).
+    if (sinal.aborted || !this.deps.repo.conversa(conversaId)) return;
     // Com erro, a sessão fica onde estava: o que esta vez mandou vai de novo na próxima.
     if (execucao.estado === "ok") {
       if (resultado.continuacao !== null) {
@@ -550,7 +576,6 @@ export class ServicoConversas {
       const erro = execucao.erro ?? MENSAGEM_SEM_RESPOSTA;
       conteudo = parcial ? `${parcial}\n\n${AVISO_PAROU_NO_MEIO(erro)}` : erro;
     }
-    if (!this.deps.repo.conversa(conversaId)) return;
     this.gravar(conversaId, agenteId, conteudo, execucao.id);
   }
 

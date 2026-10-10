@@ -639,6 +639,26 @@ describe("mensagens", () => {
     await servico.ocioso();
     expect(falsos.tula.pedidos.map((p) => p.continuarDe)).toEqual([null, null]);
   });
+
+  test("apagar cancela a resposta que esperava o agente acordar: ela nunca chega ao modelo", async () => {
+    const { db, servico, falsos, runtime, eventos } = montar();
+    db.exec(`UPDATE agentes SET estado = 'dormindo', motivo_sono = 'limite', dorme_ate = '2026-10-09T18:00:00.000Z'
+             WHERE id = 'tula'`);
+    falsos.tula.roteirizar(roteiros.resposta("R$ 45 no mercado."));
+    const falhas = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const tula = servico.abrir({ agenteId: "tula" });
+    await servico.enviar({ conversaId: tula.id, conteudo: "quanto foi de mercado?" });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    servico.apagar({ id: tula.id });
+    runtime.estados.acordar("tula");
+    await servico.ocioso();
+    expect(falsos.tula.pedidos).toEqual([]);
+    expect(eventos.mensagens.map((m) => m.agenteId)).toEqual([null]);
+    // Cancelada por apagar não é falha: nada no log de erro.
+    expect(falhas).not.toHaveBeenCalled();
+    falhas.mockRestore();
+  });
 });
 
 describe("o que vai ao modelo", () => {

@@ -340,6 +340,28 @@ describe("conversa com um agente", () => {
   });
 });
 
+describe("confirmação de apagar", () => {
+  it("o foco vai para Manter, Esc desiste e devolve o foco, e trocar de conversa fecha", async () => {
+    servicoDeConversas();
+    await montar("tula");
+    await act(async () => botao("Apagar").click());
+    expect(document.activeElement).toBe(botao("Manter"));
+
+    await act(async () => {
+      botao("Manter").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(botao("Apagar conversa")).toBeUndefined();
+    expect(document.activeElement).toBe(botao("Apagar"));
+
+    await act(async () => botao("Apagar").click());
+    await act(async () => raiz!.render(<Agentes secao="nuno" ir={(d) => idas.push(d)} />));
+    expect(por(".conversa-nome")!.textContent).toBe("Nuno");
+    expect(botao("Apagar conversa")).toBeUndefined();
+    expect(document.activeElement).not.toBe(botao("Apagar"));
+    expect(pedidosDe("conversas.apagar")).toEqual([]);
+  });
+});
+
 describe("página do agente", () => {
   const hoje = new Date();
   const as = (h: number, m = 0) =>
@@ -420,6 +442,25 @@ describe("página do agente", () => {
     await act(async () => botao("Desfazer: Criou lembrete da fatura para sexta").click());
     expect(pedidosDe("execucoes.desfazer")).toEqual([{ chamadaId: "01CH" }]);
     expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("desfaz da última chamada para a primeira e para na primeira recusa", async () => {
+    servicoDaTula();
+    const base = falso.responder;
+    const [primeira] = detalhe.chamadas;
+    const segunda = { ...primeira!, id: "01CI", criadoEm: as(0, 2) };
+    falso.responder = (metodo, dados) => {
+      if (metodo === "execucoes.obter") return Promise.resolve({ ...detalhe, chamadas: [primeira, segunda] });
+      if (metodo === "execucoes.desfazer") {
+        return Promise.reject(new RecusaDoServico("o lembrete já foi apagado à mão"));
+      }
+      return base(metodo, dados);
+    };
+    await montar("tula/pagina");
+    await act(async () => botao("Desfazer: Criou lembrete da fatura para sexta").click());
+    // A segunda (a mais nova) vai primeiro; recusada, a primeira nem é pedida.
+    expect(pedidosDe("execucoes.desfazer")).toEqual([{ chamadaId: "01CI" }]);
+    expect(por('[role="alert"]')!.textContent).toBe("O lembrete já foi apagado à mão");
   });
 
   it("pausar vale na hora, e o botão vira retomar", async () => {
