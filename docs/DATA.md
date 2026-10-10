@@ -204,7 +204,7 @@ Chave e valor (JSON). Tema, dock (lado, forma, modo), atalhos, fuso, idioma, hor
 
 ### `conexoes`
 Tem lixeira. Migração `004-sessoes-dev`.
-`id`, `tipo` (`google-agenda`, `outlook`, `github`, `hooks-claude-code`, `hooks-codex`…), `conta` (e-mail ou usuário), `escopos` (JSON lista), `credencial` (nome no Gerenciador de Credenciais), `estado`, `ultimo_erro`, `conectada_em`.
+`id`, `tipo` (`google-agenda`, `outlook`, `github`, `hooks-claude-code`, `hooks-opencode`…), `conta` (e-mail ou usuário), `escopos` (JSON lista), `credencial` (nome no Gerenciador de Credenciais), `estado`, `ultimo_erro`, `conectada_em`.
 `estado` é texto livre no banco; os valores chegam com a tela de conexões.
 `lida_em` (migração `006-conexoes-lida-em`): a última leitura que deu certo, mesmo sem item nenhum; é a idade do cache que a conexão alimenta (`github_itens`). Situação deste PC, como `estado`, `ultimo_erro` e `conectada_em`: não vai para outro PC.
 

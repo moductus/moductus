@@ -12,6 +12,10 @@ import { ROTAS_HOOKS } from "./receptor.ts";
  * com o token de `MODUCTUS_HOOKS_TOKEN` no cabeçalho; o serviço não precisa saber nada do OpenCode.
  * O OpenCode não oferece um bloco de configuração para o Moductus dividir com o usuário, então a
  * ligação é o arquivo inteiro: o Moductus só cria, troca e apaga o que traz a marca dele.
+ *
+ * Ainda não chega ao usuário: nada instancia `LigacaoOpenCode`. A instalação pela tela de Conexões e
+ * um token independente do Claude Code (`MODUCTUS_HOOKS_TOKEN` só existe com a conexão dele ligada)
+ * ficam para depois, porque o contrato e o `main.ts` estão com a F2-31.
  */
 
 /** Primeira linha do plugin: é por ela que o Moductus reconhece o arquivo como seu. */
@@ -32,7 +36,8 @@ export const ESPERA_PLUGIN_MS = 3000;
  *   segue como se o plugin não existisse.
  * - Da ferramenta em uso vão só comando, caminho, padrão, URL e descrição; o conteúdo de `write`,
  *   `edit` e a saída das ferramentas nunca saem do OpenCode.
- * - Sessão filha (subagente) não vira sessão do Moductus: o trabalho dela aparece na sessão pai.
+ * - Sessão filha (subagente) não vira sessão do Moductus: o trabalho dela aparece na sessão pai,
+ *   e o pedido de permissão dela chega como se fosse da pai, que é a que está esperando você.
  */
 export function codigoDoPlugin(porta: number): string {
   return `${MARCA_PLUGIN}
@@ -43,7 +48,7 @@ const CAMPOS = ["command", "pattern", "url", "query", "description"];
 export const Moductus = async ({ directory }) => {
   const token = process.env.${VARIAVEL_TOKEN};
   if (!token) return {};
-  const filhas = new Set();
+  const filhas = new Map();
   const andamento = new Map();
 
   const enviar = (corpo) => {
@@ -71,7 +76,7 @@ export const Moductus = async ({ directory }) => {
     switch (evento.type) {
       case "session.created":
         if (info.parentID) {
-          filhas.add(info.id);
+          filhas.set(info.id, info.parentID);
           return null;
         }
         return { hook_event_name: "SessionStart", session_id: info.id, cwd: info.directory ?? directory, source: "startup" };
@@ -87,8 +92,10 @@ export const Moductus = async ({ directory }) => {
         const parte = p.part;
         if (!parte || parte.type !== "tool" || !parte.state) return null;
         const status = parte.state.status;
-        if (andamento.get(parte.callID) === status) return null;
-        andamento.set(parte.callID, status);
+        const chave = parte.sessionID + ":" + parte.callID;
+        if (andamento.get(chave) === status) return null;
+        if (status === "completed" || status === "error") andamento.delete(chave);
+        else andamento.set(chave, status);
         const base = { session_id: parte.sessionID, tool_name: parte.tool, tool_input: entradaDe(parte.state.input) };
         if (status === "running") return { hook_event_name: "PreToolUse", ...base };
         if (status === "completed") return { hook_event_name: "PostToolUse", ...base };
@@ -104,7 +111,10 @@ export const Moductus = async ({ directory }) => {
     event: async ({ event }) => {
       try {
         const corpo = traduzir(event);
-        if (corpo && corpo.session_id && !filhas.has(corpo.session_id)) enviar(corpo);
+        if (!corpo || !corpo.session_id) return;
+        const pai = filhas.get(corpo.session_id);
+        if (pai === undefined) enviar(corpo);
+        else if (corpo.hook_event_name === "Notification") enviar({ ...corpo, session_id: pai });
       } catch {}
     },
   };

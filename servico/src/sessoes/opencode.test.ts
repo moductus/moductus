@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { estadoDepois, lerEventoHook, type EventoHook } from "./hooks.ts";
+import { estadoDepois, type EventoHook } from "./hooks.ts";
 import { VARIAVEL_TOKEN } from "./ligacao.ts";
 import {
   caminhoPluginOpenCode,
@@ -175,9 +175,17 @@ describe("plugin do OpenCode", () => {
       properties: { sessionID: "ses_filha", status: { type: "busy" } },
     });
     await enviar({ type: "session.idle", properties: { sessionID: "ses_filha" } });
+    await enviar({
+      type: "permission.asked",
+      properties: { sessionID: "ses_filha", permission: "bash" },
+    });
     await enviar(sessaoCriada());
-    const eventos = await esperar(1);
-    expect(eventos.map((e) => e?.idSessao)).toEqual([SESSAO]);
+    const eventos = await esperar(2);
+    // O pedido da filha chega como da pai, que é a sessão que espera você.
+    expect(eventos.map((e) => [e?.tipo, e?.idSessao])).toEqual([
+      ["Notification", SESSAO],
+      ["SessionStart", SESSAO],
+    ]);
   });
 
   test("evento que o Moductus não usa é ignorado", async () => {
@@ -282,36 +290,5 @@ describe("ligação do OpenCode", () => {
     expect(caminhoPluginOpenCode({}, "C:\\Users\\x")).toBe(
       join("C:\\Users\\x", ".config", "opencode", "plugins", "moductus.js"),
     );
-  });
-});
-
-describe("hooks do Codex", () => {
-  // Corpo de um hook de comando do Codex, nos campos que a documentação lista (hooks, 09/10/2026):
-  // o mesmo que o Claude Code manda, então a leitura do serviço é a mesma.
-  test("o payload documentado do Codex entra pelo mesmo leitor, e a rota é a do Codex", () => {
-    const base = {
-      session_id: "019a-codex",
-      transcript_path: null,
-      cwd: PASTA_PROJETO,
-      model: "gpt-5-codex",
-      turn_id: "t1",
-      permission_mode: "default",
-    };
-    const stop = lerEventoHook({ ...base, hook_event_name: "Stop", last_assistant_message: "pronto" });
-    expect(stop).toMatchObject({
-      tipo: "Stop",
-      idSessao: "019a-codex",
-      cwd: PASTA_PROJETO,
-      modelo: "gpt-5-codex",
-    });
-    expect(estadoDepois(stop as EventoHook, "trabalhando")).toBe("terminou");
-    const pedido = lerEventoHook({
-      ...base,
-      hook_event_name: "PermissionRequest",
-      tool_name: "Bash",
-      tool_input: { command: "npm test", description: null },
-    });
-    expect(pedido).toMatchObject({ tipo: "PermissionRequest", ferramenta: "Bash", resumo: "npm test" });
-    expect(estadoDepois(pedido as EventoHook, null)).toBe("esperando");
   });
 });
