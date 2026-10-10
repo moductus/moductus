@@ -73,3 +73,17 @@
   color: var(--texto-2);
   text-wrap: pretty;
 }
+
+.estado-vazio-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--esp-8);
+  margin-top: var(--esp-6);
+}
+
+/* Enquanto o serviço não responde: uma linha, nunca tela em branco. */
+.area-carregando {
+  margin: 0;
+  color: var(--texto-3);
+}
