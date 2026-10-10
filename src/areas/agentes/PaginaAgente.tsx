@@ -1,19 +1,20 @@
-import type { Capacidade, Execucao, SituacaoAgente } from "@moductus/contrato";
+import type { Capacidade, Execucao } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { Cartao } from "../../componentes/Cartao.tsx";
 import { DADOS_AGENTES, type Agente } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
+import { horaCurta } from "../../componentes/personagem/quando.ts";
 import { lerSituacao } from "../../componentes/personagem/situacao.ts";
 import { Selo, type TomSelo } from "../../componentes/Selo.tsx";
 import {
   agoraDoAgente,
+  tomDoModelo,
   custoDaExecucao,
   deHoje,
   desfaziveis,
   descreverProvedor,
-  horaCurta,
   LINHAS_HOJE,
   resumoDoDia,
   textoDaExecucao,
@@ -288,12 +289,6 @@ function VisaoGeral({ agente, dados, aoVerHistorico, aoTrocarModelo }: PropsVisa
       </CartaoGeral>
     </div>
   );
-}
-
-/** O ponto do modelo: verde trabalhando, aviso quando o provedor parou, apagado sem modelo. */
-function tomDoModelo({ estado, motivoSono }: SituacaoAgente): TomSelo {
-  if (estado === "dormindo" && motivoSono !== null && motivoSono !== "teto") return "aviso";
-  return "sucesso";
 }
 
 /**

@@ -1,6 +1,13 @@
 import type { SituacaoAgente } from "@moductus/contrato";
 import { describe, expect, it } from "vitest";
-import { CONVITE_MODELO, SEM_SITUACAO, lerSituacao } from "./situacao.ts";
+import {
+  CONVITE_MODELO,
+  SEM_SITUACAO,
+  eFalhaDoProvedor,
+  fraseDaSituacao,
+  lerSituacao,
+  naFila,
+} from "./situacao.ts";
 
 const ATIVO: SituacaoAgente = {
   estado: "ativo",
@@ -98,6 +105,28 @@ describe("lerSituacao: do runtime para o personagem", () => {
       ponto: "aviso",
     });
     expect(lerSituacao({ ...ATIVO, atividade: "erro" }).moldura).toBe("perigo");
+  });
+
+  it("a frase de quem está parado é uma só por estado, com a fila; ativo não tem frase", () => {
+    expect(fraseDaSituacao({ ...ATIVO, estado: "desligado" }, AGORA)).toBe(
+      "Desligado: não trabalha nem responde",
+    );
+    expect(fraseDaSituacao({ ...ATIVO, estado: "pausado" }, AGORA)).toBe("Em pausa até você retomar");
+    expect(fraseDaSituacao({ ...ATIVO, estado: "pausado", pausadoAte: local(8, 14), fila: 1 }, AGORA)).toBe(
+      "Em pausa até 14h · 1 pedido na fila",
+    );
+    expect(
+      fraseDaSituacao({ ...DORMINDO, motivoSono: "limite", dormeAte: local(12, 9), fila: 3 }, AGORA),
+    ).toBe("Volta seg 9h · 3 pedidos na fila");
+    expect(fraseDaSituacao({ ...DORMINDO, motivoSono: "fora_do_ar" }, AGORA)).toBe(
+      "Modelo fora do ar, tenta de novo em breve",
+    );
+    expect(fraseDaSituacao({ ...DORMINDO, motivoSono: null }, AGORA)).toBe("Dormindo");
+    expect(fraseDaSituacao({ ...ATIVO, atividade: "trabalhando" }, AGORA)).toBeNull();
+    expect(naFila(0)).toBeNull();
+    expect(eFalhaDoProvedor("credencial")).toBe(true);
+    expect(eFalhaDoProvedor("limite")).toBe(false);
+    expect(eFalhaDoProvedor(null)).toBe(false);
   });
 
   it("pausa e desligamento ganham da atividade: olhos fechados mesmo no meio de um trabalho", () => {

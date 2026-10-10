@@ -1,13 +1,15 @@
+import type { ItemGithub } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
 import { useId } from "react";
-import { useDadosDev } from "../../areas/dev/dev.ts";
-import { claudeCodeLigado, nomesDosProjetos, useDadosSessoes } from "../../areas/sessoes/sessoes.ts";
+import { useDadosDev, type DadosDev } from "../../areas/dev/dev.ts";
+import type { Leitura } from "../../areas/leitura.ts";
+import { nomesDosProjetos, useDadosSessoes } from "../../areas/sessoes/sessoes.ts";
 import { useAgora } from "../../areas/tempo.ts";
 import { Botao } from "../../componentes/Botao.tsx";
 import { Selo } from "../../componentes/Selo.tsx";
 import { DADOS_AREAS } from "../areas.ts";
 import { CabecalhoPainel } from "./Cabecalho.tsx";
-import { abrirNoSistema, CartaoSessao } from "./PedidosSessoes.tsx";
+import { abrirNoSistema, CartaoSessao, situacaoDasSessoes } from "./PedidosSessoes.tsx";
 import {
   metaDoPr,
   prsDoPainel,
@@ -17,19 +19,93 @@ import {
   SESSOES_NO_PAINEL,
 } from "./sessoes.ts";
 
-/** O vazio de uma seção do painel, com o atalho para ligar o que falta em Conexões. */
-function SecaoVazia({ texto, conectar }: { texto: string; conectar: boolean }) {
+interface PropsVazia {
+  texto: string;
+  /** Mostra o atalho para ligar o que falta em Conexões. */
+  conectar?: boolean;
+  /** Mostra o "Tentar de novo" quando a leitura falhou. */
+  tentarDeNovo?: () => void;
+  /** Lendo: o leitor de tela ouve a mudança, sem alarde. */
+  lendo?: boolean;
+}
+
+/** O vazio de uma seção do painel: lendo, não leu (com tentar de novo) ou falta ligar algo. */
+function SecaoVazia({ texto, conectar = false, tentarDeNovo, lendo = false }: PropsVazia) {
   return (
-    <div className="painel-secao-vazia">
+    <div className="painel-secao-vazia" role={lendo ? "status" : undefined}>
       <p>{texto}</p>
       {conectar && (
         <Botao tamanho="pequeno" onClick={() => abrirNoSistema("configuracoes/conexoes")}>
           Abrir Conexões
         </Botao>
       )}
+      {tentarDeNovo && (
+        <Botao tamanho="pequeno" onClick={tentarDeNovo}>
+          Tentar de novo
+        </Botao>
+      )}
     </div>
   );
 }
+
+/** Os PRs com o selo do que precisa de você e a linha de baixo (PainelDev.dc.html). */
+function ListaDePrs({ prs, agora }: { prs: readonly ItemGithub[]; agora: Date }) {
+  if (prs.length === 0) return <SecaoVazia texto="Nenhum PR aberto com você." />;
+  return (
+    <ul className="prs-lista">
+      {prs.map((pr) => {
+        const selo = seloDoPr(pr);
+        return (
+          <li key={pr.id} className="pr-linha">
+            <span className="pr-selo">
+              <Selo tom={selo.tom}>{selo.texto}</Selo>
+            </span>
+            <div className="pr-corpo">
+              <span className="pr-titulo" title={pr.titulo}>
+                {pr.titulo}
+              </span>
+              <span className="pr-meta">{metaDoPr(pr, agora)}</span>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * A seção de PRs pelo que se sabe do GitHub: lendo diz só isso; leitura recusada oferece tentar de
+ * novo; conexão em erro diz o que o serviço disse e ainda mostra o que está no cache; desligada
+ * convida a conectar.
+ */
+function PrsDoGithub({ github, agora }: { github: Leitura<DadosDev>; agora: Date }) {
+  if (github.estado === "esperando") return <SecaoVazia texto="Lendo o GitHub." lendo />;
+  if (github.estado === "falhou") {
+    return <SecaoVazia texto="Não consegui ler o GitHub agora." tentarDeNovo={github.tentarDeNovo} />;
+  }
+  const { conexao, situacao } = github.dados;
+  const prs = prsDoPainel(situacao.itens);
+  if (conexao?.estado === "erro") {
+    return (
+      <>
+        <p className="painel-secao-erro" role="alert">
+          {conexao.ultimoErro ?? "A conexão com o GitHub deu erro."}
+        </p>
+        <ListaDePrs prs={prs} agora={agora} />
+      </>
+    );
+  }
+  if (conexao?.estado !== "ligada") return <SecaoVazia texto={DADOS_AREAS.dev.vazio.texto} conectar />;
+  return <ListaDePrs prs={prs} agora={agora} />;
+}
+
+/** O vazio das sessões no painel Dev, pelo que se sabe da leitura e da ligação. */
+const VAZIO_DAS_SESSOES = {
+  esperando: "Lendo as sessões.",
+  falhou: "Não consegui ler as sessões agora.",
+  ligado: "Nenhuma sessão aberta agora.",
+  desligado: "Ligue o Claude Code em Conexões para acompanhar o contexto das sessões.",
+} as const;
 
 /**
  * O painel Dev do dock (PainelDev.dc.html): as sessões de IA com o contexto de cada uma (em aviso
@@ -45,12 +121,10 @@ export function PainelDev({ canal }: { canal: EstadoConexao }) {
   const idPrs = useId();
 
   const lista = sessoes.estado === "pronta" ? sessoes.dados.lista : null;
-  const ligado = sessoes.estado === "pronta" && claudeCodeLigado(sessoes.dados.conexao);
+  const situacao = situacaoDasSessoes(sessoes);
   const abertas = lista ? sessoesAbertas(lista) : [];
   const projetos = lista ? nomesDosProjetos(lista) : new Map();
-  const githubLigado = github.estado === "pronta" && github.dados.conexao?.estado === "ligada";
   const itens = github.estado === "pronta" ? github.dados.situacao.itens : [];
-  const prs = prsDoPainel(itens);
   const prsEsperando = itens.filter((i) => i.tipo === "pr" && i.estado === "aberto" && i.precisaDeMim).length;
 
   return (
@@ -66,12 +140,10 @@ export function PainelDev({ canal }: { canal: EstadoConexao }) {
           </header>
           {abertas.length === 0 ? (
             <SecaoVazia
-              texto={
-                ligado
-                  ? "Nenhuma sessão aberta agora."
-                  : "Ligue o Claude Code em Conexões para acompanhar o contexto das sessões."
-              }
-              conectar={!ligado}
+              texto={VAZIO_DAS_SESSOES[situacao]}
+              conectar={situacao === "desligado"}
+              tentarDeNovo={sessoes.estado === "falhou" ? sessoes.tentarDeNovo : undefined}
+              lendo={situacao === "esperando"}
             />
           ) : (
             abertas
@@ -95,30 +167,7 @@ export function PainelDev({ canal }: { canal: EstadoConexao }) {
             </h2>
             <span>GitHub</span>
           </header>
-          {!githubLigado ? (
-            <SecaoVazia texto={DADOS_AREAS.dev.vazio.texto} conectar />
-          ) : prs.length === 0 ? (
-            <SecaoVazia texto="Nenhum PR aberto com você." conectar={false} />
-          ) : (
-            <ul className="prs-lista">
-              {prs.map((pr) => {
-                const selo = seloDoPr(pr);
-                return (
-                  <li key={pr.id} className="pr-linha">
-                    <span className="pr-selo">
-                      <Selo tom={selo.tom}>{selo.texto}</Selo>
-                    </span>
-                    <div className="pr-corpo">
-                      <span className="pr-titulo" title={pr.titulo}>
-                        {pr.titulo}
-                      </span>
-                      <span className="pr-meta">{metaDoPr(pr, agora)}</span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <PrsDoGithub github={github} agora={agora} />
         </section>
       </div>
     </>

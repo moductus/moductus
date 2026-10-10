@@ -94,6 +94,33 @@ const ouvirPedidosDosAgentes: Ouvinte<Aprovacao[]> = (aplicar) =>
     if (aprovacao.fonte === "moductus") aplicar((lista) => juntarAprovacao(lista, aprovacao));
   });
 
+const pedirAtalho = () => servico.pedir("config.obter").then((estado) => estado.config.atalhos.sistema);
+const ouvirAtalho: Ouvinte<string> = (aplicar) =>
+  servico.ouvir("config.mudou", (estado) => aplicar(() => estado.config.atalhos.sistema));
+
+/**
+ * Só os pedidos do terminal ainda esperando você: decidido ou expirado sai da lista. É o que o
+ * dock conta (o Nuno com o ponto); a lista não cresce com o que já foi respondido.
+ */
+export function juntarPendente(lista: readonly Aprovacao[], aprovacao: Aprovacao): Aprovacao[] {
+  const outros = lista.filter((a) => a.id !== aprovacao.id);
+  return aprovacao.estado === "pendente" ? [...outros, aprovacao] : outros;
+}
+
+const pedirPendentesDoTerminal = () =>
+  servico.pedir("aprovacoes.pendentes").then((lista) => lista.filter((a) => a.fonte !== "moductus"));
+const ouvirPendentesDoTerminal: Ouvinte<Aprovacao[]> = (aplicar) =>
+  servico.ouvir("aprovacoes.mudou", (aprovacao) => {
+    if (aprovacao.fonte !== "moductus") aplicar((lista) => juntarPendente(lista, aprovacao));
+  });
+
+/** O atalho que abre o Sistema, como você configurou (Configurações › Atalhos). */
+export const useAtalhoDoSistema = (canal: EstadoConexao) => useCarga(canal, pedirAtalho, ouvirAtalho);
+
+/** Os pedidos do terminal esperando você, para o dock; o painel usa `usePedidosDoTerminal`. */
+export const usePendentesDoTerminal = (canal: EstadoConexao) =>
+  useCarga(canal, pedirPendentesDoTerminal, ouvirPendentesDoTerminal);
+
 /** O time como o serviço guarda: configuração (o modelo de cada um) e a situação do runtime. */
 export const useAgentes = (canal: EstadoConexao, recarregar?: unknown) =>
   useCarga(canal, pedirAgentes, ouvirAgentes, recarregar);

@@ -40,6 +40,16 @@ export function quando(instante: string, agora: Date, forma: "curta" | "longa"):
   return forma === "curta" ? `dia ${data.getDate()} ${hora}` : `dia ${data.getDate()} às ${hora}`;
 }
 
+/**
+ * Um instante já passado ou de qualquer dia, curto, para listas (o histórico do agente): a hora
+ * hoje ("9:02", "14h"), com o dia da semana em outro dia ("sáb 9h").
+ */
+export function horaCurta(instante: string, agora: Date = new Date()): string {
+  const data = new Date(instante);
+  const hora = horaDoDia(data);
+  return diasAte(data, agora) === 0 ? hora : `${DIA_CURTO[data.getDay()]} ${hora}`;
+}
+
 /** O fim de uma pausa: "até 14h" hoje, "até amanhã às 9h" depois; `null` como em {@link quando}. */
 export function ateQuando(instante: string, agora: Date): string | null {
   const dito = quando(instante, agora, "longa");

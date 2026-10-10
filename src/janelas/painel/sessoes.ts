@@ -10,7 +10,7 @@ import type {
 import { referencia } from "../../areas/dev/dev.ts";
 import { haQuanto } from "../../areas/tempo.ts";
 import type { TomSelo } from "../../componentes/Selo.tsx";
-import { detalheDoPedido, type PedidosDoTerminal } from "../../servico/aprovacoes.ts";
+import type { PedidosDoTerminal } from "../../servico/aprovacoes.ts";
 
 /**
  * As sessões de IA nos painéis do dock (Agentes.dc.html, PainelDev.dc.html): o pedido de
@@ -101,28 +101,6 @@ export function tempoDaSessao(sessao: SessaoIa, agora: Date): string | null {
     return haQuanto(sessao.iniciadaEm, agora).replace(/^há /, "");
   }
   return sessao.ultimoEventoEm ? haQuanto(sessao.ultimoEventoEm, agora) : null;
-}
-
-/** O verbo do pedido do terminal, antes do comando ou do arquivo ("Quer rodar `npm test`"). */
-const VERBO_DO_PEDIDO: Readonly<Record<string, string>> = {
-  Bash: "Quer rodar",
-  PowerShell: "Quer rodar",
-  Edit: "Quer alterar",
-  MultiEdit: "Quer alterar",
-  Write: "Quer alterar",
-  NotebookEdit: "Quer alterar",
-  Read: "Quer ler",
-  WebFetch: "Quer abrir",
-};
-
-/**
- * O pedido numa linha, como no Agentes.dc.html: o verbo e o comando, o arquivo ou o endereço
- * inteiro. `null` quando não há o que mostrar em linha; aí o cartão usa a descrição do serviço.
- */
-export function pedidoEmLinha(aprovacao: Aprovacao): { verbo: string; alvo: string } | null {
-  const alvo = detalheDoPedido(aprovacao.acao);
-  const verbo = VERBO_DO_PEDIDO[aprovacao.acao.ferramenta];
-  return alvo && verbo ? { verbo, alvo } : null;
 }
 
 /** Selo de um PR no painel Dev, curto para caber na coluna (PainelDev.dc.html). */

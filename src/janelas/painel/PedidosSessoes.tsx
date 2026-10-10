@@ -6,15 +6,11 @@ import { Botao } from "../../componentes/Botao.tsx";
 import { CartaoAprovacao } from "../../componentes/CartaoAprovacao.tsx";
 import { Progresso } from "../../componentes/Progresso.tsx";
 import type { TomSelo } from "../../componentes/Selo.tsx";
-import { decidirPedido, type PedidosDoTerminal } from "../../servico/aprovacoes.ts";
-import {
-  itensDasSessoes,
-  pedidoEmLinha,
-  projetosNaTela,
-  tempoDaSessao,
-  TOM_DA_SESSAO,
-  type ItemSessao,
-} from "./sessoes.ts";
+import type { Leitura } from "../../areas/leitura.ts";
+import type { DadosSessoes } from "../../areas/sessoes/sessoes.ts";
+import { claudeCodeLigado } from "../../areas/sessoes/sessoes.ts";
+import { decidirPedido, detalheDoPedido, type PedidosDoTerminal } from "../../servico/aprovacoes.ts";
+import { itensDasSessoes, projetosNaTela, tempoDaSessao, TOM_DA_SESSAO, type ItemSessao } from "./sessoes.ts";
 
 /** Nome de cada ferramenta de sessão, como o Agentes.dc.html escreve na linha da sessão. */
 export const NOME_FERRAMENTA: Readonly<Record<FerramentaSessao, string>> = {
@@ -51,10 +47,14 @@ function CabecaSessao({ tom, projeto, ferramenta, direita }: PropsCabeca) {
   );
 }
 
-/** O pedido de uma sessão, com Negar, Sempre neste projeto e Permitir (Agentes.dc.html). */
+/**
+ * O pedido de uma sessão, com Negar, Sempre neste projeto e Permitir (Agentes.dc.html): a frase é
+ * a do serviço ("Quer rodar o comando abaixo.") e o comando, o arquivo ou o endereço vem inteiro
+ * logo abaixo, de qualquer ferramenta que o traga.
+ */
 function PedidoDaSessao({ item }: { item: Extract<ItemSessao, { tipo: "pedido" }> }) {
   const { aprovacao } = item;
-  const linha = pedidoEmLinha(aprovacao);
+  const detalhe = detalheDoPedido(aprovacao.acao);
   const pendente = aprovacao.estado === "pendente";
   return (
     <CartaoAprovacao
@@ -74,13 +74,7 @@ function PedidoDaSessao({ item }: { item: Extract<ItemSessao, { tipo: "pedido" }
           }
         />
       }
-      resumo={
-        linha && (
-          <>
-            {linha.verbo} <code>{linha.alvo}</code>
-          </>
-        )
-      }
+      detalhe={detalhe && <code>{detalhe}</code>}
       aoDecidir={decidirPedido}
     />
   );
@@ -137,22 +131,37 @@ export function CartaoSessao({ sessao, projeto, agora, comContexto = false }: Pr
   );
 }
 
+/** O que se sabe das sessões: lendo, falhou, ou lido com o Claude Code ligado ou não. */
+export type SituacaoSessoes = "esperando" | "falhou" | "ligado" | "desligado";
+
+export function situacaoDasSessoes(leitura: Leitura<DadosSessoes>): SituacaoSessoes {
+  if (leitura.estado !== "pronta") return leitura.estado;
+  return claudeCodeLigado(leitura.dados.conexao) ? "ligado" : "desligado";
+}
+
+/** O vazio da seção, pelo que se sabe: lendo diz só isso; sem ligação, convida a ligar. */
+const VAZIO_DAS_SESSOES: Readonly<Record<SituacaoSessoes, string>> = {
+  esperando: "Lendo as sessões.",
+  falhou: "Não consegui ler as sessões agora.",
+  ligado: "Nenhuma sessão aberta. As do Claude Code aparecem aqui quando começam.",
+  desligado: "Ligue o Claude Code em Conexões para aprovar os pedidos dele por aqui.",
+};
+
 /**
  * A seção "Sessões de IA" do painel Agentes (Agentes.dc.html): o pedido de cada sessão do
  * terminal com os três botões e as sessões abertas com o que fazem agora. A resposta vai ao
- * serviço, que a devolve ao Claude Code pelo hook. Sem sessão nem pedido, convida a ligar o
- * Claude Code (quando ainda não está ligado) ou diz que não há sessão aberta.
+ * serviço, que a devolve ao Claude Code pelo hook. Sem sessão nem pedido, diz o que se sabe: lendo,
+ * não leu, nenhuma aberta, ou convida a ligar o Claude Code.
  */
 export function SessoesDoPainel({
   lista,
   pedidos,
-  ligado,
+  situacao,
   agora,
 }: {
   lista: ListaSessoes | null;
   pedidos: PedidosDoTerminal;
-  /** A ligação dos hooks do Claude Code está de pé. */
-  ligado: boolean;
+  situacao: SituacaoSessoes;
   agora: Date;
 }) {
   const idTitulo = useId();
@@ -167,13 +176,9 @@ export function SessoesDoPainel({
         {projetos > 0 && <span>{`${projetos} ${projetos === 1 ? "projeto" : "projetos"}`}</span>}
       </header>
       {itens.length === 0 && (
-        <div className="painel-secao-vazia">
-          <p>
-            {ligado
-              ? "Nenhuma sessão aberta. As do Claude Code aparecem aqui quando começam."
-              : "Ligue o Claude Code em Conexões para aprovar os pedidos dele por aqui."}
-          </p>
-          {!ligado && (
+        <div className="painel-secao-vazia" role={situacao === "esperando" ? "status" : undefined}>
+          <p>{VAZIO_DAS_SESSOES[situacao]}</p>
+          {situacao === "desligado" && (
             <Botao tamanho="pequeno" onClick={() => abrirNoSistema("configuracoes/conexoes")}>
               Abrir Conexões
             </Botao>

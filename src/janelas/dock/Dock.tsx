@@ -16,12 +16,12 @@ import {
   useTelaCheia,
 } from "../../nativo/eventos.ts";
 import { useDadosDev } from "../../areas/dev/dev.ts";
-import { usePedidosDoTerminal } from "../../servico/aprovacoes.ts";
 import { useCanal } from "../../servico/conexao.ts";
 import { marcarVistasDe, usePontosTime } from "../../servico/notificacoes.ts";
 import { useSituacaoTime } from "../../servico/time.ts";
 import { AREAS_DOCK, DADOS_AREAS, type AreaDock } from "../areas.ts";
 import { sessoesEsperando } from "../painel/agentes.ts";
+import { usePendentesDoTerminal } from "../painel/dados.ts";
 import { pontoDoAgente, rotuloDoAgente } from "./agentes.ts";
 import { proximoIndice } from "./navegacao.ts";
 import { useRelogio } from "./relogio.ts";
@@ -58,7 +58,7 @@ export function Dock() {
   const time = useSituacaoTime(canal);
   const pontos = usePontosTime(canal);
   // As sessões do terminal esperando você são do Nuno, que fica de olho nelas (Dock.dc.html).
-  const esperandoNoTerminal = sessoesEsperando(usePedidosDoTerminal(canal, null).aprovacoes);
+  const esperandoNoTerminal = sessoesEsperando(usePendentesDoTerminal(canal) ?? []);
   const github = useDadosDev(canal);
   // O badge do Dev conta o que precisa de você no GitHub; sem conexão, nada.
   const contagens: Partial<Record<AreaDock, number>> = {

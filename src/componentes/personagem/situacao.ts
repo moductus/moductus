@@ -1,7 +1,7 @@
-import type { SituacaoAgente } from "@moductus/contrato";
+import type { MotivoSono, SituacaoAgente } from "@moductus/contrato";
 import type { TomSelo } from "../Selo.tsx";
 import type { EstadoPersonagem, TomMoldura } from "./agentes.ts";
-import { quando } from "./quando.ts";
+import { ateQuando, quando } from "./quando.ts";
 
 /** Como um agente aparece: a expressão do personagem, o anel em volta e o status escrito ao lado. */
 export interface LeituraSituacao {
@@ -46,6 +46,45 @@ const DICA_FALHA = {
   ausente: "CLI do modelo não encontrado",
 } as const;
 
+export type FalhaDoProvedor = keyof typeof DICA_FALHA;
+
+/** O sono é por falha do provedor (o "Erro de provedor" do Estados.dc.html), não por limite ou teto. */
+export function eFalhaDoProvedor(motivo: MotivoSono | null): motivo is FalhaDoProvedor {
+  return motivo !== null && Object.hasOwn(DICA_FALHA, motivo);
+}
+
+/** "2 pedidos na fila"; `null` sem fila. */
+export function naFila(fila: number): string | null {
+  if (fila <= 0) return null;
+  return `${fila} ${fila === 1 ? "pedido na fila" : "pedidos na fila"}`;
+}
+
+/**
+ * A frase de um agente que não está trabalhando para você agora: desligado, em pausa (até quando)
+ * ou dormindo (quando volta, ou o que fazer), com a fila que espera por ele. Um texto só por
+ * estado, o mesmo no painel do dock, na página do agente e na conversa. Ativo, `null`: quem
+ * mostra diz o que ele está fazendo.
+ */
+export function fraseDaSituacao(situacao: SituacaoAgente, agora: Date = new Date()): string | null {
+  const comFila = (frase: string) => {
+    const fila = naFila(situacao.fila);
+    return fila ? `${frase} · ${fila}` : frase;
+  };
+  switch (situacao.estado) {
+    case "desligado":
+      return "Desligado: não trabalha nem responde";
+    case "pausado": {
+      const ate = situacao.pausadoAte ? ateQuando(situacao.pausadoAte, agora) : null;
+      return comFila(`Em pausa ${ate ?? "até você retomar"}`);
+    }
+    case "dormindo":
+      return comFila(lerSituacao(situacao, agora).dica ?? "Dormindo");
+    case "ativo":
+      return null;
+  }
+  return null;
+}
+
 /** "Volta seg 9h" e "tenta de novo às 14:05": a hora que o runtime deu, ou "em breve" sem ela. */
 function quandoVolta(dormeAte: string | null, agora: Date): string | null {
   return dormeAte ? quando(dormeAte, agora, "curta") : null;
@@ -82,7 +121,7 @@ export function lerSituacao(
           ponto: "aviso",
         };
       }
-      if (motivo === "fora_do_ar" || motivo === "credencial" || motivo === "ausente") {
+      if (eFalhaDoProvedor(motivo)) {
         return {
           expressao: "erro",
           moldura: "perigo",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ateQuando, horaDoDia, quando } from "./quando.ts";
+import { ateQuando, horaCurta, horaDoDia, quando } from "./quando.ts";
 
 // Quinta, 8 de outubro de 2026, 10h, na hora local.
 const AGORA = new Date(2026, 9, 8, 10, 0);
@@ -24,6 +24,12 @@ describe("quando o agente volta", () => {
     expect(quando(local(8, 9), AGORA, "curta")).toBeNull();
     expect(quando("não é data", AGORA, "longa")).toBeNull();
     expect(ateQuando(local(8, 9), AGORA)).toBeNull();
+  });
+
+  it("hora curta de listas: a hora hoje, com o dia da semana em outro dia, passado ou futuro", () => {
+    expect(horaCurta(local(8, 9, 2), AGORA)).toBe("9:02");
+    expect(horaCurta(local(10, 9), AGORA)).toBe("sáb 9h");
+    expect(horaCurta(local(7, 18, 30), AGORA)).toBe("qua 18:30");
   });
 
   it("fim da pausa: até a hora hoje, até o dia depois", () => {

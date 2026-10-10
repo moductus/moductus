@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   itensDasSessoes,
   metaDoPr,
-  pedidoEmLinha,
   projetosNaTela,
   prsDoPainel,
   resumoDoDev,
@@ -97,36 +96,6 @@ describe("sessões no painel", () => {
     expect(tempoDaSessao(sessao("x", { estado: "trabalhando", iniciadaEm: ha(12) }), AGORA)).toBe("12 min");
     expect(tempoDaSessao(sessao("x"), AGORA)).toBe("há 8 min");
     expect(tempoDaSessao(sessao("x", { ultimoEventoEm: null }), AGORA)).toBeNull();
-  });
-
-  it("o pedido em linha: verbo e alvo; ferramenta sem verbo conhecido fica com a descrição", () => {
-    expect(pedidoEmLinha(pedido("a", null))).toEqual({ verbo: "Quer rodar", alvo: "npm test" });
-    expect(
-      pedidoEmLinha(
-        pedido("a", null, {
-          acao: {
-            ferramenta: "Edit",
-            entrada: { file_path: "src/a.ts" },
-            rotulo: null,
-            rotuloRecusar: null,
-            desfazivel: false,
-          },
-        }),
-      ),
-    ).toEqual({ verbo: "Quer alterar", alvo: "src/a.ts" });
-    expect(
-      pedidoEmLinha(
-        pedido("a", null, {
-          acao: {
-            ferramenta: "mcp__x__y",
-            entrada: { query: "z" },
-            rotulo: null,
-            rotuloRecusar: null,
-            desfazivel: false,
-          },
-        }),
-      ),
-    ).toBeNull();
   });
 });
 

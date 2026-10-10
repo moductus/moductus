@@ -260,17 +260,12 @@ describe("Painel", () => {
     expect(chamadas.map((c) => c.comando)).toContain("painel_fechar");
   });
 
-  it("no time, convida a conectar um modelo e leva às Configurações", async () => {
+  it("no time, com o serviço subindo, diz que não sabe em vez de pedir um modelo", async () => {
     const el = await montar(<Painel />);
     await emitir("painel:area", "agentes");
-    expect(el.textContent).toContain("Conecte um modelo para acordar o time");
-    expect(el.querySelectorAll('.painel-time .personagem[data-estado="dormindo"]')).toHaveLength(4);
-    const botao = Array.from(el.querySelectorAll("button")).find(
-      (b) => b.textContent === "Abrir Configurações",
-    )!;
-    act(() => botao.click());
-    expect(chamadas).toContainEqual({ comando: "sistema_abrir", args: { area: "configuracoes/modelos" } });
-    expect(chamadas.map((c) => c.comando)).toContain("painel_fechar");
+    expect(el.textContent).toContain("Sem notícia do time agora");
+    expect(el.textContent).not.toContain("Conecte um modelo");
+    expect(el.querySelector(".time-lista")).toBeNull();
   });
 
   it("Esc fecha o painel", async () => {

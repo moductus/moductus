@@ -90,7 +90,7 @@ const conexao = (tipo: Conexao["tipo"], estado: Conexao["estado"] = "ligada"): C
 });
 
 const servidor: {
-  agentes: Agente[];
+  agentes: Agente[] | (() => Promise<Agente[]>);
   pendentes: Aprovacao[] | Promise<Aprovacao[]>;
   sessoes: ListaSessoes;
   github: SituacaoGithub;
@@ -106,7 +106,7 @@ const ouvintes = new Map<string, Set<(dados: unknown) => void>>();
 const pedir = vi.fn(async (metodo: string, _dados?: unknown): Promise<unknown> => {
   switch (metodo) {
     case "agentes.listar":
-      return servidor.agentes;
+      return typeof servidor.agentes === "function" ? servidor.agentes() : servidor.agentes;
     case "provedores.listar":
       return [PROVEDOR];
     case "execucoes.listar":
@@ -123,6 +123,8 @@ const pedir = vi.fn(async (metodo: string, _dados?: unknown): Promise<unknown> =
       return servidor.github;
     case "agentes.retomar":
       return [];
+    case "config.obter":
+      return { config: { atalhos: { sistema: "Ctrl+Shift+M" } }, portable: false, falhasAtalhos: {} };
     case "aprovacoes.decidir":
       return new Promise(() => {});
   }
@@ -263,10 +265,8 @@ describe("painel Agentes: pedidos das sessões do terminal", () => {
     expect(cartao!.querySelector(".aprovacao-origem")?.textContent).toBe(
       "api-pedidosClaude Codeesperando você",
     );
-    expect(cartao!.querySelector(".aprovacao-resumo")?.textContent).toBe(
-      "Quer rodar npm test -- --watch=false",
-    );
-    expect(cartao!.querySelector(".aprovacao-resumo code")?.textContent).toBe("npm test -- --watch=false");
+    expect(cartao!.querySelector(".aprovacao-descricao")?.textContent).toBe("Quer rodar o comando abaixo.");
+    expect(cartao!.querySelector(".aprovacao-detalhe code")?.textContent).toBe("npm test -- --watch=false");
     expect([...cartao!.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
       "Negar",
       "Sempre neste projeto",
@@ -363,6 +363,32 @@ describe("painel Agentes: pedidos das sessões do terminal", () => {
     expect(cartoes()[0]!.querySelector(".sessao-projeto")?.textContent).toBe("site");
   });
 
+  it.each([
+    ["WebSearch", { query: "zod discriminatedUnion" }, "Quer usar WebSearch.", "zod discriminatedUnion"],
+    [
+      "mcp__docs__abrir",
+      { url: "https://exemplo.dev/a" },
+      "Quer usar mcp__docs__abrir.",
+      "https://exemplo.dev/a",
+    ],
+    ["mcp__shell__rodar", { command: "make" }, "Quer usar mcp__shell__rodar.", "make"],
+  ])(
+    "%s: o alvo do pedido aparece inteiro, mesmo sem verbo conhecido",
+    async (ferramenta, entrada, descricao, alvo) => {
+      servidor.pendentes = [
+        pedido("a7", "x", {
+          descricao,
+          acao: { ferramenta, entrada, rotulo: null, rotuloRecusar: null, desfazivel: false },
+        }),
+      ];
+      await montar();
+      await abrir("agentes");
+      const [cartao] = cartoes();
+      expect(cartao!.querySelector(".aprovacao-descricao")?.textContent).toBe(descricao);
+      expect(cartao!.querySelector(".aprovacao-detalhe code")?.textContent).toBe(alvo);
+    },
+  );
+
   it("pedido sem regra possível mostra só Negar e Permitir", async () => {
     servidor.pendentes = [pedido("a6", "x", { admiteSempre: false })];
     await montar();
@@ -458,6 +484,22 @@ describe("painel Agentes: o time", () => {
     });
   });
 
+  it("sem resposta de agentes.listar, diz que não sabe do time e não pede modelo", async () => {
+    servidor.agentes = () => Promise.reject(new Error("recusado"));
+    await montar();
+    await abrir("agentes");
+    expect(recipiente.textContent).toContain("Sem notícia do time agora");
+    expect(recipiente.textContent).not.toContain("Conecte um modelo");
+    // As sessões do terminal continuam aprováveis.
+    expect(cartoes()).toHaveLength(1);
+  });
+
+  it("o atalho ao lado de Abrir no sistema é o que você configurou", async () => {
+    await montar();
+    await abrir("agentes");
+    expect(recipiente.querySelector(".painel-abrir")?.textContent).toBe("Abrir no sistemaCtrlShiftM");
+  });
+
   it("Abrir no sistema leva à área Agentes e fecha o painel", async () => {
     await montar();
     await abrir("agentes");
@@ -480,6 +522,24 @@ describe("painel Agentes: estados que pedem decisão (Estados.dc.html)", () => {
     expect(cartao!.querySelector(".selo")?.textContent).toBe("pausado");
     await act(async () => botaoCom(cartao!, "Retomar agora").click());
     expect(pedir).toHaveBeenCalledWith("agentes.retomar", {});
+  });
+
+  it("dois de quatro em pausa: um cartão, e Retomar agora retoma os dois, cada um", async () => {
+    servidor.agentes = [
+      agente("alba", { estado: "pausado" }),
+      agente("tula"),
+      agente("faina", { estado: "pausado" }),
+      agente("nuno"),
+    ];
+    await montar();
+    await abrir("agentes");
+    const [cartao] = estados();
+    expect(estados()).toHaveLength(1);
+    expect(cartao!.querySelector("h3")?.textContent).toBe("Alba e Faina em pausa até você retomar");
+    expect(cartao!.textContent).not.toContain("bandeja");
+    await act(async () => botaoCom(cartao!, "Retomar agora").click());
+    const retomadas = pedir.mock.calls.filter(([m]) => m === "agentes.retomar").map(([, d]) => d);
+    expect(retomadas).toEqual([{ agenteId: "alba" }, { agenteId: "faina" }]);
   });
 
   it("um agente em pausa: o cartão retoma só ele", async () => {
@@ -574,6 +634,30 @@ describe("painel Dev", () => {
       ["CI passou", "moductus #12 · seu"],
     ]);
     expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("GitHub em erro: diz o que o serviço disse e mostra o que está no cache", async () => {
+    servidor.conexoes = [
+      conexao("hooks-claude-code"),
+      { ...conexao("github", "erro"), ultimoErro: "Rode gh auth login de novo." },
+    ];
+    servidor.github = { itens: [pr(412)], atualizadoEm: INSTANTE };
+    await montar();
+    await abrir("dev");
+    expect(recipiente.querySelector("[role=alert]")?.textContent).toBe("Rode gh auth login de novo.");
+    expect(recipiente.textContent).not.toContain("Conecte o GitHub");
+    expect(recipiente.querySelectorAll(".pr-linha")).toHaveLength(1);
+  });
+
+  it("enquanto o GitHub e as sessões não respondem, diz que está lendo, sem convidar a conectar", async () => {
+    servidor.github = new Promise(() => {}) as unknown as SituacaoGithub;
+    servidor.sessoes = new Promise(() => {}) as unknown as ListaSessoes;
+    await montar();
+    await abrir("dev");
+    expect(recipiente.textContent).toContain("Lendo o GitHub.");
+    expect(recipiente.textContent).toContain("Lendo as sessões.");
+    expect(recipiente.textContent).not.toContain("Conecte o GitHub");
+    expect(recipiente.textContent).not.toContain("Ligue o Claude Code");
   });
 
   it("sem o GitHub ligado, a seção de PRs convida a conectar", async () => {

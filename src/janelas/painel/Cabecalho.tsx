@@ -50,6 +50,21 @@ export function CabecalhoPainel({ titulo, icone, subtitulo, sistema, atalho }: P
 }
 
 /**
+ * O serviço ainda não disse como o time está (subindo, canal caído ou pedido recusado): o painel
+ * diz que não sabe, sem convidar a conectar um modelo que talvez já esteja conectado.
+ */
+export function SemNoticiaDoTime() {
+  return (
+    <div className="painel-vazio" role="status">
+      <h2 className="painel-vazio-titulo">Sem notícia do time agora</h2>
+      <p className="painel-vazio-texto">
+        Esperando o serviço dizer como estão a Alba, a Tula, a Faina e o Nuno.
+      </p>
+    </div>
+  );
+}
+
+/**
  * O time sem modelo (fase 1 e "sem_modelo" do runtime): os quatro dormindo e o convite para
  * conectar um modelo, que leva às Configurações › Modelos.
  */

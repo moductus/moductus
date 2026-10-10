@@ -2,7 +2,7 @@ import type { Aprovacao } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
 import { useId, useState } from "react";
 import { useDadosDev } from "../../areas/dev/dev.ts";
-import { claudeCodeLigado, nomesDosProjetos, useDadosSessoes } from "../../areas/sessoes/sessoes.ts";
+import { nomesDosProjetos, useDadosSessoes } from "../../areas/sessoes/sessoes.ts";
 import { useAgora } from "../../areas/tempo.ts";
 import { Botao } from "../../componentes/Botao.tsx";
 import { AGENTES, DADOS_AGENTES, type Agente } from "../../componentes/personagem/agentes.ts";
@@ -25,9 +25,15 @@ import {
   type CartaoEstado,
   type TimeDoServico,
 } from "./agentes.ts";
-import { useAgentes, useExecucoes, usePedidosDosAgentes, useProvedores } from "./dados.ts";
-import { CabecalhoPainel, ConviteModelo } from "./Cabecalho.tsx";
-import { abrirNoSistema, SessoesDoPainel } from "./PedidosSessoes.tsx";
+import {
+  useAgentes,
+  useAtalhoDoSistema,
+  useExecucoes,
+  usePedidosDosAgentes,
+  useProvedores,
+} from "./dados.ts";
+import { CabecalhoPainel, ConviteModelo, SemNoticiaDoTime } from "./Cabecalho.tsx";
+import { abrirNoSistema, SessoesDoPainel, situacaoDasSessoes } from "./PedidosSessoes.tsx";
 
 /** O cartão de um estado que pede decisão (Estados.dc.html): o corpo, a fala e as saídas. */
 function CartaoDeEstado({ cartao, aoDispensar }: { cartao: CartaoEstado; aoDispensar: () => void }) {
@@ -38,9 +44,11 @@ function CartaoDeEstado({ cartao, aoDispensar }: { cartao: CartaoEstado; aoDispe
     if (acao.tipo === "modelos") abrirNoSistema("configuracoes/modelos");
     if (acao.tipo === "dispensar") aoDispensar();
     if (acao.tipo === "retomar") {
-      servico.pedir("agentes.retomar", acao.agenteId ? { agenteId: acao.agenteId } : {}).catch(() => {
-        setErro("Não consegui retomar agora. Tente de novo.");
-      });
+      // Sem lista, o time todo; com lista, um pedido por agente do grupo.
+      const pedidos = acao.agenteIds
+        ? acao.agenteIds.map((agenteId) => servico.pedir("agentes.retomar", { agenteId }))
+        : [servico.pedir("agentes.retomar", {})];
+      Promise.all(pedidos).catch(() => setErro("Não consegui retomar agora. Tente de novo."));
     }
   };
   const [primeiro] = cartao.agentes as [Agente];
@@ -143,7 +151,8 @@ function pedidoDeCada(pedidos: readonly Aprovacao[]): Partial<Record<string, Apr
  * quem espera você, os cartões dos estados que pedem decisão (pausa, limite, erro de provedor,
  * teto), o time com o que cada um faz, as sessões de IA com os pedidos do terminal e o modelo do
  * time. Tudo vem do serviço; sem modelo, o time dorme com o convite de sempre, e as sessões do
- * terminal continuam aqui, porque aprovar pelo dock não depende de modelo.
+ * terminal continuam aqui, porque aprovar pelo dock não depende de modelo. Sem resposta sobre o
+ * time, o painel diz que não sabe, em vez de pedir um modelo que talvez já esteja conectado.
  */
 export function PainelAgentes({ canal, abertura }: { canal: EstadoConexao; abertura: number }) {
   const agora = useAgora();
@@ -151,6 +160,7 @@ export function PainelAgentes({ canal, abertura }: { canal: EstadoConexao; abert
   const provedores = useProvedores(canal, abertura) ?? [];
   const execucoes = useExecucoes(canal, abertura) ?? [];
   const pedidosDosAgentes = usePedidosDosAgentes(canal, abertura) ?? [];
+  const atalho = useAtalhoDoSistema(canal);
   // Cada abertura relê os pedidos: os já respondidos da vez anterior saem da tela.
   const pedidos = usePedidosDoTerminal(canal, abertura);
   const sessoes = useDadosSessoes(canal, agora);
@@ -160,7 +170,6 @@ export function PainelAgentes({ canal, abertura }: { canal: EstadoConexao; abert
 
   const time = timeDoServico(agentes ?? []);
   const lista = sessoes.estado === "pronta" ? sessoes.dados.lista : null;
-  const ligado = sessoes.estado === "pronta" && claudeCodeLigado(sessoes.dados.conexao);
   const itensGithub = github.estado === "pronta" ? github.dados.situacao.itens : [];
   const projetos = lista ? nomesDosProjetos(lista) : new Map();
   const ultimas = ultimaDeCada(execucoes);
@@ -179,19 +188,22 @@ export function PainelAgentes({ canal, abertura }: { canal: EstadoConexao; abert
     return linhaDoAgente(id, agente, leitura, ultimas[id], pedidoDoAgente[id], agora);
   };
   const cartoes = cartoesDeEstado(time, provedores, agora).filter((c) => !dispensados.has(c.chave));
-  const semModelo = timeSemModelo(time);
+  const semNoticia = agentes === null;
+  const semModelo = !semNoticia && timeSemModelo(time);
   const modelo = modeloDoTime(time, provedores);
 
   return (
     <>
       <CabecalhoPainel
         titulo="Agentes"
-        subtitulo={resumoDoTime(time, pedidos.aprovacoes)}
+        subtitulo={semNoticia ? undefined : resumoDoTime(time, pedidos.aprovacoes)}
         sistema="agentes"
-        atalho="Ctrl+Alt+N"
+        atalho={atalho ?? undefined}
       />
       <div className="painel-corpo">
-        {semModelo ? (
+        {semNoticia ? (
+          <SemNoticiaDoTime />
+        ) : semModelo ? (
           <ConviteModelo />
         ) : (
           <>
@@ -205,8 +217,13 @@ export function PainelAgentes({ canal, abertura }: { canal: EstadoConexao; abert
             <SeuTime time={time} linha={linha} />
           </>
         )}
-        <SessoesDoPainel lista={lista} pedidos={pedidos} ligado={ligado} agora={agora} />
-        {!semModelo && (
+        <SessoesDoPainel
+          lista={lista}
+          pedidos={pedidos}
+          situacao={situacaoDasSessoes(sessoes)}
+          agora={agora}
+        />
+        {!semNoticia && !semModelo && (
           <footer className="painel-rodape">
             <span>{modelo.texto}</span>
             <Botao

@@ -203,7 +203,26 @@ describe("cartões de estado (Estados.dc.html)", () => {
       tipo: "pausa",
       agentes: ["alba", "tula", "faina", "nuno"],
       titulo: "Time pausado até 14h",
+      texto: "Ninguém usa modelo nem mexe em nada até lá.",
       primaria: { texto: "Retomar agora", acao: { tipo: "retomar" } },
+    });
+    expect(pausa!.primaria.acao).not.toHaveProperty("agenteIds");
+
+    // Dois de quatro: o cartão é dos dois e retoma os dois, sem dizer de onde veio a pausa.
+    const [dois] = cartoesDeEstado(
+      timeDoServico([
+        agente("alba", { estado: "pausado" }),
+        agente("tula"),
+        agente("faina", { estado: "pausado" }),
+        agente("nuno"),
+      ]),
+      PROVEDORES,
+      AGORA,
+    );
+    expect(dois).toMatchObject({
+      titulo: "Alba e Faina em pausa até você retomar",
+      texto: "Nada roda com modelo até lá; o resto do time segue normal.",
+      primaria: { acao: { tipo: "retomar", agenteIds: ["alba", "faina"] } },
     });
 
     const misto = timeDoServico([

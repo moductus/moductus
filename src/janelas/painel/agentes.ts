@@ -9,7 +9,12 @@ import {
 } from "@moductus/contrato";
 import { AGENTES, DADOS_AGENTES, type Agente } from "../../componentes/personagem/agentes.ts";
 import { ateQuando, quando } from "../../componentes/personagem/quando.ts";
-import type { LeituraSituacao } from "../../componentes/personagem/situacao.ts";
+import {
+  eFalhaDoProvedor,
+  fraseDaSituacao,
+  naFila,
+  type LeituraSituacao,
+} from "../../componentes/personagem/situacao.ts";
 import type { TomSelo } from "../../componentes/Selo.tsx";
 import { contextoDaSessao } from "../../areas/sessoes/sessoes.ts";
 
@@ -110,7 +115,8 @@ function trabalhando(execucao: Execucao | undefined, fila: number): string {
   const desde = inicio
     ? `Trabalhando desde ${inicio.getHours()}:${String(inicio.getMinutes()).padStart(2, "0")}`
     : "Trabalhando agora";
-  return fila > 0 ? `${desde} · ${plural(fila, "pedido na fila", "pedidos na fila")}` : desde;
+  const espera = naFila(fila);
+  return espera ? `${desde} · ${espera}` : desde;
 }
 
 /**
@@ -128,26 +134,18 @@ export function linhaDoAgente(
   const funcao = DADOS_AGENTES[id].funcao;
   const s = agente?.situacao;
   if (!s) return leitura.dica ?? funcao;
-  switch (s.estado) {
-    case "desligado":
-      return "Desligado: não roda nem os vigias";
-    case "pausado": {
-      const ate = s.pausadoAte ? ateQuando(s.pausadoAte, agora) : null;
-      return `Em pausa ${ate ?? "até você retomar"}`;
-    }
-    case "dormindo":
-      return leitura.dica ?? "Dormindo";
-    case "ativo":
-      switch (s.atividade) {
-        case "trabalhando":
-          return trabalhando(execucao, s.fila);
-        case "esperando":
-          return pedido?.descricao ?? "Esperando sua resposta";
-        case "erro":
-          return execucao?.erro ?? "A última tarefa deu erro";
-        case "ocioso":
-          return execucao?.estado === "ok" && execucao.resumo ? execucao.resumo : funcao;
-      }
+  // Parado: a mesma frase da página do agente e da conversa (fraseDaSituacao).
+  const parado = fraseDaSituacao(s, agora);
+  if (parado !== null) return parado;
+  switch (s.atividade) {
+    case "trabalhando":
+      return trabalhando(execucao, s.fila);
+    case "esperando":
+      return pedido?.descricao ?? "Esperando sua resposta";
+    case "erro":
+      return execucao?.erro ?? "A última execução deu erro";
+    case "ocioso":
+      return execucao?.estado === "ok" && execucao.resumo ? execucao.resumo : funcao;
   }
   return funcao;
 }
@@ -156,7 +154,8 @@ export function linhaDoAgente(
 export type TipoEstado = "pausa" | "limite" | "falha" | "teto";
 
 /** O que os botões do cartão fazem; quem decide é o serviço ou a tela de Modelos. */
-export type AcaoEstado = { tipo: "retomar"; agenteId?: string } | { tipo: "modelos" } | { tipo: "dispensar" };
+export type AcaoEstado =
+  { tipo: "retomar"; agenteIds?: string[] } | { tipo: "modelos" } | { tipo: "dispensar" };
 
 export interface CartaoEstado {
   /** Muda quando o estado muda: dispensar um cartão vale só para aquele sono. */
@@ -207,7 +206,7 @@ export function cartoesDeEstado(
     if (s.estado !== "dormindo") continue;
     const sono = `${agente.provedorId}:${s.dormeAte}`;
     if (s.motivoSono === "limite") juntar(`limite:${sono}`, "limite", id, agente);
-    if (s.motivoSono === "fora_do_ar" || s.motivoSono === "credencial" || s.motivoSono === "ausente") {
+    if (eFalhaDoProvedor(s.motivoSono)) {
       juntar(`falha:${s.motivoSono}:${sono}`, "falha", id, agente);
     }
     if (s.motivoSono === "teto") juntar(`teto:${s.dormeAte}`, "teto", id, agente);
@@ -229,12 +228,14 @@ export function cartoesDeEstado(
             ...base,
             estado: { texto: "pausado", tom: "neutro" },
             titulo: `${todos ? "Time pausado" : `${listaDeNomes(agentes)} em pausa`} ${ate ?? "até você retomar"}`,
+            // A pausa pode vir da bandeja ou da página do agente: o texto não diz de onde.
             texto: todos
-              ? "Pausa pela bandeja. Ninguém usa modelo nem mexe em nada até lá."
-              : "Pausa pela bandeja. Nada roda com modelo até lá; o resto do time segue normal.",
+              ? "Ninguém usa modelo nem mexe em nada até lá."
+              : "Nada roda com modelo até lá; o resto do time segue normal.",
             primaria: {
               texto: "Retomar agora",
-              acao: todos ? { tipo: "retomar" } : { tipo: "retomar", agenteId: agentes[0] },
+              // O time inteiro retoma de uma vez; um grupo, cada um do grupo (e só ele).
+              acao: todos ? { tipo: "retomar" } : { tipo: "retomar", agenteIds: [...agentes] },
             },
           };
         }

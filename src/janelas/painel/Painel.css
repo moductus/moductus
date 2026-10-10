@@ -126,6 +126,13 @@
   margin: 0;
 }
 
+/* O que o serviço disse da conexão em erro, acima do que ainda está no cache. */
+.painel-secao-erro {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--perigo);
+}
+
 .painel-secao > .botao--fantasma {
   align-self: flex-start;
 }
