@@ -59,6 +59,10 @@ export type ResultadoEnviar = z.infer<typeof ResultadoEnviar>;
 export const PedidoArquivarConversa = z.object({ id: Id, arquivada: z.boolean() });
 export type PedidoArquivarConversa = z.infer<typeof PedidoArquivarConversa>;
 
+/** Manda a conversa para a lixeira de 30 dias com as mensagens; volta a lista que ficou. */
+export const PedidoApagarConversa = z.object({ id: Id });
+export type PedidoApagarConversa = z.infer<typeof PedidoApagarConversa>;
+
 /**
  * Resposta em andamento: o texto inteiro até agora, não só o pedaço novo, para a janela que
  * conectar no meio ver a fala certa. Vazio é "pensando".

@@ -336,6 +336,7 @@ servidor = await abrirServidorWs(token, {
   "conversas.mensagens": (pedido) => conversas.mensagens(pedido),
   "conversas.enviar": (pedido) => conversas.enviar(pedido),
   "conversas.arquivar": (pedido) => conversas.arquivar(pedido),
+  "conversas.apagar": (pedido) => conversas.apagar(pedido),
   "notificacoes.obter": () => notificacoes.obter(),
   "notificacoes.definir": (mudanca) => notificacoes.definir(mudanca),
   "notificacoes.restaurar": (pedido) => notificacoes.restaurar(pedido),

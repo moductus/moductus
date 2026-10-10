@@ -71,13 +71,15 @@ export interface Destino {
 }
 
 /**
- * Lê um destino escrito como "dev" ou "configuracoes/modelos" (evento do dock, memória da
- * última área). Texto que não é área devolve `null`; a seção é validada por quem a mostra.
+ * Lê um destino escrito como "dev", "configuracoes/modelos" ou "agentes/tula/pagina" (evento do
+ * dock, memória da última área): a seção é tudo depois da área. Texto que não é área devolve
+ * `null`; a seção é validada por quem a mostra.
  */
 export function lerDestino(valor: unknown): Destino | null {
   if (typeof valor !== "string") return null;
-  const [area, secao] = valor.trim().split("/");
+  const [area, ...resto] = valor.trim().split("/");
   if (!eIdArea(area)) return null;
+  const secao = resto.join("/");
   return secao ? { area, secao } : { area };
 }
 

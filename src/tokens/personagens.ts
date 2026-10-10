@@ -22,6 +22,8 @@ export const TAMANHO_PERSONAGEM = {
   boasVindas: 116,
   /** Corpo inteiro na apresentação do time (Uso4Time.dc.html). */
   apresentacao: 132,
+  /** Corpo inteiro no alto da página do agente (AreaAgente.dc.html). */
+  paginaAgente: 120,
   cartao: 168,
 } as const;
 
