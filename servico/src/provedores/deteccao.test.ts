@@ -167,18 +167,20 @@ describe("rodar o CLI", () => {
   });
 
   // Um .cmd que abre um node que não sai, como o do npm: matar o cmd.exe não fecharia a saída.
+  // O prazo folgado deixa o `echo` sair mesmo com a máquina carregada (com 500 ms, o cmd.exe às
+  // vezes nem tinha escrito); o que o teste prova é a resposta chegar muito antes do neto acabar.
   test.runIf(process.platform === "win32")(
     "o prazo vale para o .cmd: a árvore cai e a resposta sai sem esperar o neto",
     async () => {
       const pasta = mkdtempSync(join(tmpdir(), "moductus-sonda-"));
       pastas.push(pasta);
       const cmd = join(pasta, "travado.cmd");
-      writeFileSync(cmd, `@echo 1.2.3\r\n@"${process.execPath}" -e "setTimeout(() => {}, 60000)"\r\n`);
+      writeFileSync(cmd, `@echo 1.2.3\r\n@"${process.execPath}" -e "setTimeout(() => {}, 120000)"\r\n`);
       const inicio = Date.now();
-      const resposta = await rodarComPrazo(cmd, ["--version"], process.env, 500);
+      const resposta = await rodarComPrazo(cmd, ["--version"], process.env, 3000);
       expect(resposta).toEqual({ codigo: null, saida: "1.2.3\r\n" });
-      expect(Date.now() - inicio).toBeLessThan(5000);
+      expect(Date.now() - inicio).toBeLessThan(20_000);
     },
-    15_000,
+    30_000,
   );
 });

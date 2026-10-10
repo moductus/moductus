@@ -389,6 +389,21 @@ export interface ResultadoEscrita {
   copia: string | null;
 }
 
+/**
+ * A pasta, ou alguma acima dela, é junção ou link simbólico. Olha cada trecho do caminho em vez de
+ * comparar com o `realpath`, que no Windows também expande nome curto (`RUNNER~1`, `PROGRA~1`) e
+ * corrige a caixa das letras: nada disso é link, e as cópias continuam ao lado do arquivo.
+ */
+function passaPorLink(pasta: string): boolean {
+  let atual = resolve(pasta);
+  while (!lstatSync(atual).isSymbolicLink()) {
+    const acima = dirname(atual);
+    if (acima === atual) return false;
+    atual = acima;
+  }
+  return true;
+}
+
 /** `settings.json.moductus-2026-10-09T12-00-00-000Z.bak`, e `-2.bak`, `-3.bak` na colisão. */
 const COPIA = /\.moductus-(\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d-\d{3}Z)(?:-(\d+))?\.bak$/;
 
@@ -622,9 +637,7 @@ export class LigacaoClaudeCode {
   private pastaDasCopias(): string {
     const declarada = dirname(this.caminho);
     const reserva = this.opcoes.copiasForaDoLink;
-    if (!reserva) return declarada;
-    const igual = (a: string, b: string) => resolve(a).toLowerCase() === resolve(b).toLowerCase();
-    if (igual(realpathSync.native(declarada), declarada)) return declarada;
+    if (!reserva || !passaPorLink(declarada)) return declarada;
     mkdirSync(reserva, { recursive: true });
     return reserva;
   }

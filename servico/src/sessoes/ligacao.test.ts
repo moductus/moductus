@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   linkSync,
@@ -60,6 +61,20 @@ function montar(conteudo?: string, opcoes: { semMemoria?: boolean; relogioParado
   const ler = () => readFileSync(caminho, "utf8");
   const copias = () => readdirSync(pasta).filter((f) => f.endsWith(".bak"));
   return { pasta, caminho, ligacao, nova, ler, copias };
+}
+
+/**
+ * O nome curto (8.3) da pasta, pelo `cmd.exe`; `null` fora do Windows ou quando o volume não gera
+ * nomes curtos (o Dev Drive, por exemplo) e o caminho volta igual.
+ */
+function nomeCurto(caminho: string): string | null {
+  if (process.platform !== "win32") return null;
+  const curto = spawnSync("cmd.exe", ["/d", "/c", `for %I in ("${caminho}") do @echo %~sI`], {
+    encoding: "utf8",
+    windowsHide: true,
+    windowsVerbatimArguments: true,
+  }).stdout.trim();
+  return curto !== "" && curto.toLowerCase() !== caminho.toLowerCase() ? curto : null;
 }
 
 /** Hooks do próprio usuário, que o Moductus nunca pode tocar. */
@@ -347,6 +362,21 @@ describe("settings.json que é link", () => {
     const { pasta, caminho } = montar(ORIGINAL);
     const reserva = join(pasta, "dados", "copias");
     new LigacaoClaudeCode({ caminho, porta: PORTA, copiasForaDoLink: reserva }).ligar();
+    expect(readdirSync(pasta).filter((f) => f.endsWith(".bak"))).toHaveLength(1);
+    expect(existsSync(reserva)).toBe(false);
+  });
+
+  // O runner do CI tem a pasta temporária em `C:\Users\RUNNER~1\...`: nome curto não é link.
+  test("pasta comum pelo nome curto (8.3) não é link: as cópias continuam ao lado do settings.json", (contexto) => {
+    const { pasta } = montar(ORIGINAL);
+    const curta = nomeCurto(pasta);
+    if (curta === null) return contexto.skip("o volume da pasta temporária não gera nomes curtos 8.3");
+    const reserva = join(pasta, "dados", "copias");
+    new LigacaoClaudeCode({
+      caminho: join(curta, "settings.json"),
+      porta: PORTA,
+      copiasForaDoLink: reserva,
+    }).ligar();
     expect(readdirSync(pasta).filter((f) => f.endsWith(".bak"))).toHaveLength(1);
     expect(existsSync(reserva)).toBe(false);
   });
