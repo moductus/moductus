@@ -111,6 +111,16 @@ function tentaDeNovo(dormeAte: string | null, agora: Date): string {
 }
 
 /**
+ * A fala de um cartão. Quando ela manda rodar algo no terminal, o comando vem num campo próprio
+ * (aparece como código, depois de `texto`), seguido do resto da frase: o nome do provedor é do
+ * usuário e pode ter qualquer caractere, então nada no texto marca onde o código começa.
+ */
+export interface FalaCartao {
+  texto: string;
+  comando?: { codigo: string; depois: string };
+}
+
+/**
  * A fala do cartão "Erro de provedor" no painel (Estados.dc.html), na voz de quem dormiu ("tento",
  * ou "tentamos" quando são vários). CLI sem login diz como entrar; chave recusada pede para
  * conferir a chave, porque tentar de novo com a mesma não adianta.
@@ -121,7 +131,7 @@ export function falaDaFalha(
   dormeAte: string | null,
   agora: Date,
   varios: boolean,
-): string {
+): FalaCartao {
   const nome = modelo?.nome ?? "modelo";
   const volta = dormeAte ? quando(dormeAte, agora, "longa") : null;
   const tento = jaTentando(dormeAte, agora)
@@ -130,14 +140,20 @@ export function falaDaFalha(
   switch (motivo) {
     case "credencial": {
       const comando = comandoDoCli(modelo);
-      if (comando) return `O ${nome} está sem login. Entre no terminal com \`${comando}\` e ${tento}.`;
-      if (!modelo) return "O modelo recusou o acesso. Nada foi alterado; confira o modelo em Modelos.";
-      return `O ${nome} recusou a chave. Nada foi alterado; confira a chave em Modelos.`;
+      if (comando) {
+        return {
+          texto: `O ${nome} está sem login. Entre no terminal com `,
+          comando: { codigo: comando, depois: ` e ${tento}.` },
+        };
+      }
+      if (!modelo)
+        return { texto: "O modelo recusou o acesso. Nada foi alterado; confira o modelo em Modelos." };
+      return { texto: `O ${nome} recusou a chave. Nada foi alterado; confira a chave em Modelos.` };
     }
     case "ausente":
-      return `Não achei o ${nome} neste PC. Nada foi alterado; ${tento}.`;
+      return { texto: `Não achei o ${nome} neste PC. Nada foi alterado; ${tento}.` };
     case "fora_do_ar":
-      return `O ${nome} não respondeu. Nada foi alterado; ${tento}.`;
+      return { texto: `O ${nome} não respondeu. Nada foi alterado; ${tento}.` };
   }
 }
 

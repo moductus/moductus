@@ -283,7 +283,8 @@ describe("cartões de estado (Estados.dc.html)", () => {
     expect(login).toMatchObject({
       tipo: "falha",
       titulo: "Não consegui falar com o modelo",
-      texto: "O Claude Code está sem login. Entre no terminal com `claude` e tento de novo às 10:05.",
+      texto: "O Claude Code está sem login. Entre no terminal com ",
+      comando: { codigo: "claude", depois: " e tento de novo às 10:05." },
     });
     const alba = agente("alba", { estado: "dormindo", motivoSono: "credencial", dormeAte: local(8, 10, 5) });
     const modelo = { tipo: "claude-cli", nome: "Claude Code" } as const;

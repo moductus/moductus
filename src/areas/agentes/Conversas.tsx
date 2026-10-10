@@ -19,6 +19,7 @@ import {
   type Interlocutor,
 } from "../../servico/conversas.ts";
 import { useTime, type ModelosDoTime, type SituacaoTime } from "../../servico/time.ts";
+import { useAgora } from "../tempo.ts";
 import { comArtigo, deAgente } from "./nomes.ts";
 
 interface PropsConversas {
@@ -266,6 +267,8 @@ const PERTO_DO_FIM = 48;
  * começou a responder. A conversa desce sozinha enquanto você está no fim dela.
  */
 function Mensagens({ com, time, modelos, conversas }: PropsMensagens) {
+  // A frase de quem dorme diz uma hora: o relógio da tela a tira de lá quando ela chega.
+  const agora = useAgora();
   const lista = useRef<HTMLDivElement>(null);
   const noFim = useRef(true);
   const { mensagens, andamento, aguardando, aprovacoes, aberta, temAnteriores } = conversas;
@@ -321,7 +324,7 @@ function Mensagens({ com, time, modelos, conversas }: PropsMensagens) {
         // Dormindo ou pausado, a resposta espera na fila: diz até quando, em vez de "pensando".
         const parado =
           situacao && situacao.estado !== "ativo"
-            ? agoraDoAgente(situacao, null, new Date(), modelos[a] ?? null)
+            ? agoraDoAgente(situacao, null, agora, modelos[a] ?? null)
             : null;
         return (
           <FalaAgente key={a} agente={a} estado={parado ? lerSituacao(situacao).expressao : "trabalhando"}>

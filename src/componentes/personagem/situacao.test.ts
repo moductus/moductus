@@ -215,30 +215,39 @@ describe("o modelo do agente e a fala do cartão de erro de provedor", () => {
 
   it("CLI sem login diz como entrar e quando tenta; chave recusada manda conferir a chave", () => {
     const volta = local(8, 10, 5);
-    expect(falaDaFalha("credencial", CLAUDE, volta, AGORA, false)).toBe(
-      "O Claude Code está sem login. Entre no terminal com `claude` e tento de novo às 10:05.",
+    expect(falaDaFalha("credencial", CLAUDE, volta, AGORA, false)).toEqual({
+      texto: "O Claude Code está sem login. Entre no terminal com ",
+      comando: { codigo: "claude", depois: " e tento de novo às 10:05." },
+    });
+    expect(falaDaFalha("credencial", CLAUDE, null, AGORA, true).comando?.depois).toBe(
+      " e tentamos de novo em breve.",
     );
-    expect(falaDaFalha("credencial", CLAUDE, null, AGORA, true)).toBe(
-      "O Claude Code está sem login. Entre no terminal com `claude` e tentamos de novo em breve.",
-    );
-    expect(falaDaFalha("credencial", OPENAI, volta, AGORA, false)).toBe(
-      "O OpenAI recusou a chave. Nada foi alterado; confira a chave em Modelos.",
-    );
-    expect(falaDaFalha("credencial", null, volta, AGORA, false)).toBe(
-      "O modelo recusou o acesso. Nada foi alterado; confira o modelo em Modelos.",
-    );
-    expect(falaDaFalha("fora_do_ar", null, volta, AGORA, false)).toBe(
-      "O modelo não respondeu. Nada foi alterado; tento de novo às 10:05.",
-    );
+    expect(falaDaFalha("credencial", OPENAI, volta, AGORA, false)).toEqual({
+      texto: "O OpenAI recusou a chave. Nada foi alterado; confira a chave em Modelos.",
+    });
+    expect(falaDaFalha("credencial", null, volta, AGORA, false)).toEqual({
+      texto: "O modelo recusou o acesso. Nada foi alterado; confira o modelo em Modelos.",
+    });
+    expect(falaDaFalha("fora_do_ar", null, volta, AGORA, false)).toEqual({
+      texto: "O modelo não respondeu. Nada foi alterado; tento de novo às 10:05.",
+    });
+  });
+
+  it("o comando vai no campo próprio: crase no nome do provedor (dado do usuário) fica no texto", () => {
+    const comCrase: ModeloDoAgente = { tipo: "claude-cli", nome: "Claude `trabalho`" };
+    expect(falaDaFalha("credencial", comCrase, null, AGORA, false)).toEqual({
+      texto: "O Claude `trabalho` está sem login. Entre no terminal com ",
+      comando: { codigo: "claude", depois: " e tento de novo em breve." },
+    });
   });
 
   it("com a hora chegada, o cartão diz que está tentando em vez da hora que passou", () => {
     const passou = new Date(2026, 9, 8, 10, 20);
-    expect(falaDaFalha("fora_do_ar", CLAUDE, local(8, 10, 5), passou, false)).toBe(
+    expect(falaDaFalha("fora_do_ar", CLAUDE, local(8, 10, 5), passou, false).texto).toBe(
       "O Claude Code não respondeu. Nada foi alterado; estou tentando de novo.",
     );
-    expect(falaDaFalha("credencial", CLAUDE, local(8, 10, 5), passou, true)).toBe(
-      "O Claude Code está sem login. Entre no terminal com `claude` e estamos tentando de novo.",
+    expect(falaDaFalha("credencial", CLAUDE, local(8, 10, 5), passou, true).comando?.depois).toBe(
+      " e estamos tentando de novo.",
     );
   });
 });

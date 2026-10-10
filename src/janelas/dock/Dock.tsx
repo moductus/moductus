@@ -16,6 +16,7 @@ import {
   useTelaCheia,
 } from "../../nativo/eventos.ts";
 import { useDadosDev } from "../../areas/dev/dev.ts";
+import { useAgora } from "../../areas/tempo.ts";
 import { useCanal } from "../../servico/conexao.ts";
 import { marcarVistasDe, usePontosTime } from "../../servico/notificacoes.ts";
 import { useTime } from "../../servico/time.ts";
@@ -24,7 +25,7 @@ import { sessoesEsperando } from "../painel/agentes.ts";
 import { usePendentesDoTerminal } from "../painel/dados.ts";
 import { pontoDoAgente, rotuloDoAgente } from "./agentes.ts";
 import { proximoIndice } from "./navegacao.ts";
-import { useRelogio } from "./relogio.ts";
+import { formatarHora } from "./relogio.ts";
 import "./Dock.css";
 
 /** Convite das cabeças do time enquanto nenhum modelo está conectado. */
@@ -69,7 +70,9 @@ export function Dock() {
   };
   const config = useConfiguracaoDock();
   const aberta = useAreaAberta();
-  const hora = useRelogio();
+  // Um relógio só para o dock: a hora no rodapé e a hora das dicas viram juntas, no minuto.
+  const agora = useAgora();
+  const hora = formatarHora(agora);
   const nav = useRef<HTMLElement>(null);
 
   // A casca avisa que o dock ganhou o foco pelo atalho: o teclado começa na primeira área.
@@ -156,9 +159,8 @@ export function Dock() {
         data-ativo={aberta === "agentes" || undefined}
       >
         {AGENTES.map((agente) => {
-          // A cabeça segue o runtime: expressão, anel no tom do status e o status no rótulo. O
-          // relógio do dock acorda na virada do minuto, e a hora da dica anda com ele.
-          const leitura = lerSituacao(time[agente], new Date(), modelos[agente] ?? null);
+          // A cabeça segue o runtime: expressão, anel no tom do status e o status no rótulo.
+          const leitura = lerSituacao(time[agente], agora, modelos[agente] ?? null);
           const { expressao, moldura } = leitura;
           const avisos = pontos[agente] ?? 0;
           const esperando = agente === "nuno" ? esperandoNoTerminal : 0;

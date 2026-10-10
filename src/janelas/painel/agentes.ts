@@ -12,6 +12,7 @@ import { ateQuando, quando } from "../../componentes/personagem/quando.ts";
 import {
   eFalhaDoProvedor,
   falaDaFalha,
+  type FalaCartao,
   fraseDaSituacao,
   modeloDoAgente,
   naFila,
@@ -172,8 +173,9 @@ export interface CartaoEstado {
   /** O status no selo, como no quadro: "pausado", "dormindo", "erro", "parado". */
   estado: { texto: string; tom: TomSelo };
   titulo: string;
-  /** A fala; o que vai entre crases é comando do terminal (`claude`) e aparece como código. */
+  /** A fala; o comando do terminal, quando há, vem no campo próprio e aparece como código. */
   texto: string;
+  comando?: FalaCartao["comando"];
   primaria: { texto: string; acao: AcaoEstado };
   secundaria?: { texto: string; acao: AcaoEstado };
 }
@@ -263,7 +265,7 @@ export function cartoesDeEstado(
             ...base,
             estado: { texto: "erro", tom: "perigo" },
             titulo: "Não consegui falar com o modelo",
-            texto: falaDaFalha(motivo, provedor, s.dormeAte, agora, varios),
+            ...falaDaFalha(motivo, provedor, s.dormeAte, agora, varios),
             primaria: { texto: "Trocar modelo", acao: { tipo: "modelos" } },
           };
         }

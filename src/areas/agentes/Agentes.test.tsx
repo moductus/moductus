@@ -496,3 +496,31 @@ describe("página do agente", () => {
     expect(auditar(recipiente)).toEqual([]);
   });
 });
+
+describe("quem espera na conversa dormindo por falha do provedor", () => {
+  it("a hora da nova tentativa chega: a fala não promete o passado", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    try {
+      vi.setSystemTime(new Date(2026, 9, 10, 1, 12, 40));
+      const dormeAte = new Date(2026, 9, 10, 1, 13, 20).toISOString();
+      servicoDeConversas(["tula"]);
+      const base = falso.responder;
+      falso.responder = (metodo, dados) =>
+        metodo === "agentes.listar"
+          ? Promise.resolve([agente("tula", { estado: "dormindo", motivoSono: "fora_do_ar", dormeAte })])
+          : base(metodo, dados);
+      await montar();
+      await escrever("Quanto já foi de mercado?");
+      await teclarEnter();
+      expect(falas()).toEqual([
+        "Você: Quanto já foi de mercado?",
+        "Tula: Modelo fora do ar, tenta de novo às 1:13",
+      ]);
+      // O relógio vira para 1:13: "às 1:13" já soaria passado.
+      await act(async () => vi.advanceTimersByTime(20_000));
+      expect(falas()[1]).toBe("Tula: Modelo fora do ar, tentando de novo");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

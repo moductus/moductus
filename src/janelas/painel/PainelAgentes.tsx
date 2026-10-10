@@ -35,11 +35,6 @@ import {
 import { CabecalhoPainel, ConviteModelo, SemNoticiaDoTime } from "./Cabecalho.tsx";
 import { abrirNoSistema, SessoesDoPainel, situacaoDasSessoes } from "./PedidosSessoes.tsx";
 
-/** A fala do cartão com o que vai entre crases como código: o comando que se roda no terminal. */
-function ComCodigo({ texto }: { texto: string }) {
-  return texto.split("`").map((trecho, i) => (i % 2 === 1 ? <code key={i}>{trecho}</code> : trecho || null));
-}
-
 /** O cartão de um estado que pede decisão (Estados.dc.html): o corpo, a fala e as saídas. */
 function CartaoDeEstado({ cartao, aoDispensar }: { cartao: CartaoEstado; aoDispensar: () => void }) {
   const idTitulo = useId();
@@ -73,7 +68,13 @@ function CartaoDeEstado({ cartao, aoDispensar }: { cartao: CartaoEstado; aoDispe
             {cartao.titulo}
           </h3>
           <p>
-            <ComCodigo texto={cartao.texto} />
+            {cartao.texto}
+            {cartao.comando && (
+              <>
+                <code>{cartao.comando.codigo}</code>
+                {cartao.comando.depois}
+              </>
+            )}
           </p>
         </div>
       </div>
