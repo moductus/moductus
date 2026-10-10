@@ -154,7 +154,7 @@ servico/src/
   main.ts         entrada: monta os serviços, abre o banco, liga o canal com a casca, o WebSocket, o MCP e o receptor dos hooks
   api/            servidor WebSocket para a interface (servidor.ts)
   banco/          conexão (WAL, foreign_keys, busy_timeout), executor de migrações, ULID, carimbo de origem e lixeira de 30 dias
-  migracoes/      uma migração por arquivo, de 001-config a 011-agentes-sono
+  migracoes/      uma migração por arquivo, de 001-config a 012-execucoes-falha-do-provedor
   casca/          canal stdio com a casca: credenciais, variáveis do usuário (ambiente) e avisos do Windows
   config/         preferências: valida, manda à casca o que é nativo, grava, avisa quem ouve
   primeiro-uso/   os cinco passos do primeiro uso e o tutorial
@@ -230,7 +230,7 @@ A regra mora no serviço, inclusive para o que é nativo:
 | `003-agentes` | 2 | `provedores`, `agentes` (com os quatro de fábrica), `execucoes`, `chamadas_ferramenta`, `aprovacoes`, `regras_permissao`, `conversas`, `mensagens` |
 | `004-sessoes-dev` | 2 | `projetos`, `sessoes_ia`, `eventos_sessao`, `uso_ia`, `github_itens`, `conexoes` |
 | `005-notificacoes` | 2 | `notificacoes_preferencias`, `notificacoes` |
-| `006` a `011` | 2 | `lida_em` nas conexões; leitura incremental do transcript; `uso_ia_mensagens`; `cobranca` nas execuções; `agendador_disparos`; motivo do sono e fim da pausa nos agentes |
+| `006` a `012` | 2 | `lida_em` nas conexões; leitura incremental do transcript; `uso_ia_mensagens`; `cobranca` nas execuções; `agendador_disparos`; motivo do sono e fim da pausa nos agentes; motivo da falha do provedor na execução |
 
 Cada tabela nova nasce com o carimbo de origem e, se for cadastro ou configuração, com lixeira ([DATA.md](DATA.md#1-regras-que-valem-para-tudo)). Nenhuma chave estrangeira aponta para tabela com lixeira, e os quatro agentes de fábrica são protegidos por gatilho no banco (ADR-0019).
 
@@ -259,7 +259,7 @@ Um arquivo `moductus.db` em `%APPDATA%\Moductus` (ou ao lado do executável com 
 
 Na mesma pasta ficam também `ligacao-claude-code.json` (como o `settings.json` do Claude Code estava antes de ligar, para desligar devolvê-lo como era), `claude-cli/` (a pasta em que o CLI dos agentes roda, para não herdar o `CLAUDE.md` nem o `.claude/` de um projeto) e `copias/claude-code/` (as cópias de segurança do `settings.json` quando a pasta dele é um link para um repositório de configuração; nos demais casos as cópias ficam ao lado do próprio arquivo).
 
-O banco está na migração 11. A fase 1 criou `config` (preferências, uma linha JSON por chave) e `onboarding` (passos do primeiro uso); a fase 2 criou as tabelas de agentes, sessões de IA, GitHub, conexões e notificações. As demais entram com as áreas.
+O banco está na migração 12. A fase 1 criou `config` (preferências, uma linha JSON por chave) e `onboarding` (passos do primeiro uso); a fase 2 criou as tabelas de agentes, sessões de IA, GitHub, conexões e notificações. As demais entram com as áreas.
 
 | Tabela (agrupada) | Conteúdo | Situação |
 |---|---|---|

@@ -2,7 +2,7 @@
 
 > O que cada área guarda e como. O produto está em [PRODUCT.md](PRODUCT.md); onde o banco mora e quem acessa, em [ARCHITECTURE.md](ARCHITECTURE.md#5-dados); os agentes, em [AGENTS.md](AGENTS.md).
 
-**Status:** as seções 5 a 7 (agentes, sessões de IA, GitHub, conexões, notificações e agendador) descrevem as migrações 003 a 011, entregues na fase 2; os nomes de coluna valem como estão lá. As seções 2 a 4 ainda são o desenho da fase 0: cada fase cria as tabelas da sua área por migração, e campos podem mudar na implementação, mas as regras da seção 1 não mudam.
+**Status:** as seções 5 a 7 (agentes, sessões de IA, GitHub, conexões, notificações e agendador) descrevem as migrações 003 a 012, entregues na fase 2; os nomes de coluna valem como estão lá. As seções 2 a 4 ainda são o desenho da fase 0: cada fase cria as tabelas da sua área por migração, e campos podem mudar na implementação, mas as regras da seção 1 não mudam.
 
 ---
 

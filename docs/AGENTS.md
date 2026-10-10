@@ -388,8 +388,8 @@ O serviço guarda quatro estados do agente (`ativo`, `pausado`, `dormindo`, `des
 | Ativo, rodando uma execução | focado | `trabalhando` | — |
 | Ativo, com cartão ou pergunta esperando você | atento | `esperando você` | — |
 | Ativo, a última execução deu erro | preocupado | `erro` | vermelho |
-| Dormindo por limite de uso | olhos fechados | `dormindo`, com "Volta seg 9h" | — |
-| Dormindo por falha do provedor (fora do ar, chave recusada, CLI ausente) | preocupado | `erro`, com "tenta de novo às 14:05" (ou "tentando de novo" quando a hora chegou) | vermelho |
+| Dormindo por limite de uso | olhos fechados | `dormindo`, com "Volta seg 9:00" | — |
+| Dormindo por falha do provedor (fora do ar, chave recusada, CLI ausente) | preocupado | `erro`, com "tenta de novo às 14:05" (a hora é sempre HH:MM, inclusive a cheia; ou "tentando de novo" quando a hora chegou) | vermelho |
 | Dormindo por teto de gasto | preocupado | `parado`, com "Chegou ao teto de hoje" | amarelo |
 | Sem modelo | olhos fechados | `dormindo`, com o convite "Conectar um modelo" | — |
 | Pausado | olhos fechados | `pausado`, com "Em pausa até 14:30" ou "até você retomar" | — |
