@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Moductus · modelos</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&amp;family=Geist+Mono:wght@400;600&amp;family=Instrument+Sans:wght@400;600&amp;family=JetBrains+Mono:wght@400;600&amp;family=Onest:wght@400;600&amp;family=IBM+Plex+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit}a:hover{color:inherit}
+button{font:inherit;cursor:pointer}
+input,textarea{font:inherit}
+input::placeholder,textarea::placeholder{color:inherit;opacity:0.7}
+@keyframes corre{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; position: relative; overflow: hidden; background: {{t.paredeFundo}}; font-family: {{t.fonte}}; color: {{t.texto}}; font-size: 13px; line-height: 1.45">
+<sc-if value="{{t.vidro}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: -120px; top: 80px; width: 720px; height: 720px; border-radius: 360px; background: #2C3A5C"></div>
+<div style="position: absolute; left: 520px; top: -260px; width: 640px; height: 640px; border-radius: 320px; background: #3A2F52"></div>
+<div style="position: absolute; right: -160px; bottom: -220px; width: 760px; height: 760px; border-radius: 380px; background: #1F3B44"></div>
+</sc-if>
+<div style="position: absolute; inset: 20px; display: flex; flex-direction: column; background: {{t.janela}}; backdrop-filter: {{t.desfoque}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioJanela}}; overflow: hidden; box-shadow: {{t.sombra}}">
+<div style="height: 40px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; border-bottom: 1px solid {{t.borda}}">
+<div style="display: flex; align-items: center; gap: 10px; font-size: 12px; color: {{t.texto3}}"><div style="width: 16px; height: 16px; position: relative; font-size: 16px; color: {{t.destaque}}; flex: none"><div style="position: absolute; left: 0.24em; top: 0.04em; bottom: 0.04em; width: 0.15em; border-radius: 0.075em; background: currentColor"></div><div style="position: absolute; left: 0.5em; top: 0.08em; width: 0.32em; height: 0.32em; border-radius: 0.16em; background: currentColor"></div></div><span>Moductus</span></div>
+<div style="display: flex; gap: 2px; color: {{t.texto3}}">
+<button aria-label="Minimizar" style="width: 40px; height: 30px; border: 0; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 12h16"></path></svg></button>
+<button aria-label="Maximizar" style="width: 40px; height: 30px; border: 0; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 5h14v14H5z"></path></svg></button>
+<button aria-label="Fechar" style="width: 40px; height: 30px; border: 0; background: transparent; color: inherit; display: flex; align-items: center; justify-content: center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+</div>
+</div>
+<div style="flex: 1; min-height: 0; display: flex">
+<nav aria-label="Áreas" style="width: 232px; flex: none; border-right: 1px solid {{t.borda}}; background: {{t.lateral}}; padding: 14px 10px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px">
+<div style="display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px; margin-bottom: 10px; border-radius: {{t.raioControle}}; border: 1px solid {{t.borda}}; background: {{t.campo}}; color: {{t.texto3}}">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-3.5-3.5"></path></svg>
+<span style="flex: 1">Buscar</span>
+<span style="{{s.atalho}}">Ctrl K</span>
+</div>
+<sc-for list="{{nav}}" as="n" hint-placeholder-count="12">
+<a href="#" style="{{n.estilo}}">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{n.d}}"></path></svg>
+<span style="flex: 1">{{n.nome}}</span>
+<sc-if value="{{n.temContagem}}" hint-placeholder-val="{{ false }}"><span style="font-family: {{t.mono}}; font-size: 11px; color: {{t.texto3}}">{{n.contagem}}</span></sc-if>
+</a>
+</sc-for>
+</nav>
+<main style="flex: 1; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; flex-direction: row; padding: 0">
+<div style="width: 220px; flex: none; border-right: 1px solid {{t.borda}}; padding: 22px 12px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px">
+<h2 style="{{s.h2}}; padding: 0 10px 12px">Configurações</h2>
+<sc-for list="{{secoes}}" as="x" hint-placeholder-count="9"><a href="#" style="{{x.estilo}}">{{x.nome}}</a></sc-for>
+</div>
+<div style="flex: 1; min-width: 0; padding: 26px 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 16px"><div style="display: flex; flex-direction: column; gap: 4px"><h1 style="{{s.h1}}">Modelos</h1><span style="color: {{t.texto2}}; max-width: 640px; text-wrap: pretty">Cada agente usa um provedor principal e, se quiser, uma reserva para quando o principal falhar.</span></div><div style="display: flex; gap: 8px; align-items: center"><button style="{{s.btn}}">Procurar no PC</button><button style="{{s.btnPri}}">Adicionar provedor</button></div></div>
+<section style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: center; {{s.rot}}"><span>Provedores</span><span>3 conectados</span></div>
+<div style="border: 1px solid {{t.borda}}; border-radius: {{t.raioCartao}}; overflow: hidden">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 120px 210px; gap: 16px; {{cabTabela}}"><span>Provedor</span><span>Estado</span><span>Resposta</span><span></span></div>
+<sc-for list="{{provs}}" as="p" hint-placeholder-count="3">
+<div style="padding: 12px 16px; border-top: 1px solid {{t.borda}}; display: flex; flex-direction: column; gap: 8px">
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 120px 210px; gap: 16px; align-items: center">
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-weight: 600">{{p.nome}}</span><span style="{{s.rot}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{p.tipo}}</span></div>
+<div style="display: flex; flex-direction: column; gap: 6px"><span style="{{p.seloEstilo}}"><span style="{{p.ponto}}"></span>{{p.estado}}</span><sc-if value="{{p.testando}}" hint-placeholder-val="{{ false }}"><div style="{{s.trilho}}; position: relative; width: 120px"><div style="{{corre}}"></div></div></sc-if></div>
+<div style="display: flex; flex-direction: column; gap: 2px"><span style="{{s.num}}">{{p.lat}}</span><span style="font-size: 11px; color: {{t.texto3}}">{{p.quando}}</span></div>
+<div style="display: flex; gap: 6px; justify-content: flex-end"><sc-for list="{{p.acoes}}" as="b" hint-placeholder-count="2"><button style="{{b.estilo}}">{{b.nome}}</button></sc-for></div>
+</div>
+<sc-if value="{{p.temErro}}" hint-placeholder-val="{{ false }}"><div style="font-size: 12px; color: {{t.texto2}}; padding: 8px 10px; border-radius: {{t.raioControle}}; background: {{t.chip}}">{{p.erro}}</div></sc-if>
+</div>
+</sc-for>
+</div>
+</section>
+<section style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: center; {{s.rot}}"><span>Agentes</span><span><span style="display: inline-flex; align-items: center; gap: 8px">trocar vale na próxima execução <span style="{{pend}}">moeda do teto a decidir</span></span></span></div>
+<div style="border: 1px solid {{t.borda}}; border-radius: {{t.raioCartao}}; overflow: hidden">
+<div style="display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr) minmax(0, 1fr) 140px 120px; gap: 14px; {{cabTabela}}"><span>Agente</span><span>Principal</span><span>Reserva</span><span>Teto por dia</span><span>Hoje</span></div>
+<sc-for list="{{agentes}}" as="a" hint-placeholder-count="4">
+<div style="display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr) minmax(0, 1fr) 140px 120px; gap: 14px; padding: 0 16px; min-height: 56px; align-items: center; border-top: 1px solid {{t.borda}}">
+<div style="display: flex; align-items: center; gap: 10px; min-width: 0"><span style="flex: none; width: 28px; height: 28px; display: flex"><dc-import name="Personagem" agente="{{a.id}}" estado="{{a.expr}}" modo="cabeca" tamanho="{{ 28 }}" hint-size="28px,28px"></dc-import></span><div style="display: flex; flex-direction: column; min-width: 0"><span style="font-weight: 600">{{a.nome}}</span><sc-if value="{{a.temAviso}}" hint-placeholder-val="{{ false }}"><span style="{{a.seloEstilo}}"><span style="{{a.ponto}}"></span>{{a.aviso}}</span></sc-if><sc-if value="{{a.semAviso}}" hint-placeholder-val="{{ true }}"><span style="{{s.rot}}">{{a.funcao}}</span></sc-if></div></div>
+<button style="{{s.campo}}; height: 30px; width: 100%; font-size: 12px; justify-content: flex-start; min-width: 0"><span style="{{a.principalPonto}}"></span><span style="flex: 1; min-width: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{a.principal}}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+<button style="{{s.campo}}; height: 30px; width: 100%; font-size: 12px; justify-content: flex-start; min-width: 0"><span style="{{a.reservaPonto}}"></span><span style="flex: 1; min-width: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{a.reserva}}</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+<div><sc-if value="{{a.temTeto}}" hint-placeholder-val="{{ false }}"><div style="{{s.campo}}; height: 30px; padding: 0 8px; gap: 6px"><span style="{{pend}}">moeda</span><span style="{{s.num}}; color: {{t.texto}}">{{a.teto}}</span></div></sc-if><sc-if value="{{a.semTeto}}" hint-placeholder-val="{{ true }}"><div style="display: flex; align-items: center; gap: 8px"><span style="{{s.rot}}">sem teto</span><a href="#" style="font-size: 12px">Definir</a></div></sc-if></div>
+<div><sc-if value="{{a.temBarra}}" hint-placeholder-val="{{ false }}"><div style="display: flex; flex-direction: column; gap: 5px"><span style="{{s.num}}">{{a.hoje}}</span><div style="{{s.trilho}}"><div style="{{a.barra}}"></div></div></div></sc-if><sc-if value="{{a.semBarra}}" hint-placeholder-val="{{ true }}"><span style="{{s.num}}">{{a.hoje}}</span></sc-if></div>
+</div>
+</sc-for>
+</div>
+</section>
+<span style="{{s.rot}}">A execução que está rodando termina no modelo de antes. No teto do dia, o agente dorme até a meia-noite e os pedidos esperam na fila.</span>
+
+</div>
+
+</main>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tema": {"editor": "enum", "options": ["Grafite", "Papel", "Vidro"], "default": "Grafite"}, "$preview": {"width": 1440, "height": 900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var TEMA_PADRAO = 'Grafite';
+    var NAV_ATIVO = 'config';
+    var self = this;
+
+    var TEMAS = {
+      Grafite: {
+        paredeFundo: '#191B1F', janelaFantasma: '#141619', linhaFantasma: '#1E2125', painel: '#131417', janela: '#111214', lateral: '#0D0E10', cartao: '#16181B', elevada: '#1A1C20', campo: '#0F1012', chip: 'rgba(255,255,255,0.06)', trilho: 'rgba(255,255,255,0.08)',
+        borda: 'rgba(255,255,255,0.07)', bordaForte: 'rgba(255,255,255,0.14)', ativo: 'rgba(255,255,255,0.08)',
+        texto: '#E8E9EB', texto2: '#B5B8BD', texto3: '#8C9097', apagado: '#6F737A',
+        destaque: '#E8E9EB', sobreDestaque: '#0D0E10', sucesso: '#7FB89E', aviso: '#E3B262', perigo: '#E5787A',
+        raioJanela: '10px', raioPainel: '12px', raioCartao: '10px', raioControle: '8px', raioBotao: '8px', raioCaixa: '4px',
+        fonte: "'Geist', 'Segoe UI', system-ui, sans-serif", mono: "'Geist Mono', Consolas, monospace",
+        desfoque: 'none', sombra: '0 24px 64px rgba(0,0,0,0.45)', sombraPainel: '0 24px 48px rgba(0,0,0,0.45)', vidro: false, claro: false, painelEsq: '76px'
+      },
+      Papel: {
+        paredeFundo: '#E3E1DC', janelaFantasma: '#F1F0EC', linhaFantasma: '#E6E4DF', painel: '#FFFFFF', janela: '#FFFFFF', lateral: '#F6F5F2', cartao: '#FFFFFF', elevada: '#F6F5F2', campo: '#FFFFFF', chip: '#EFEEEA', trilho: '#E6E4DF',
+        borda: 'rgba(20,20,19,0.08)', bordaForte: 'rgba(20,20,19,0.16)', ativo: '#EAE8E3',
+        texto: '#1A1A18', texto2: '#3E3D39', texto3: '#6B6A64', apagado: '#8A8983',
+        destaque: '#1A1A18', sobreDestaque: '#FBFAF8', sucesso: '#2F7A52', aviso: '#B5761A', perigo: '#B4443C',
+        raioJanela: '14px', raioPainel: '16px', raioCartao: '14px', raioControle: '10px', raioBotao: '17px', raioCaixa: '8px',
+        fonte: "'Instrument Sans', 'Segoe UI', system-ui, sans-serif", mono: "'JetBrains Mono', Consolas, monospace",
+        desfoque: 'none', sombra: '0 24px 64px rgba(40,36,28,0.16)', sombraPainel: '0 16px 40px rgba(40,36,28,0.12)', vidro: false, claro: true, painelEsq: '88px'
+      },
+      Vidro: {
+        paredeFundo: '#161B26', janelaFantasma: 'rgba(18,21,29,0.82)', linhaFantasma: '#222733', painel: 'rgba(22,25,34,0.66)', janela: 'rgba(18,21,29,0.62)', lateral: 'rgba(0,0,0,0.16)', cartao: 'rgba(255,255,255,0.05)', elevada: 'rgba(255,255,255,0.07)', campo: 'rgba(0,0,0,0.18)', chip: 'rgba(255,255,255,0.08)', trilho: 'rgba(255,255,255,0.10)',
+        borda: 'rgba(255,255,255,0.09)', bordaForte: 'rgba(255,255,255,0.18)', ativo: 'rgba(255,255,255,0.10)',
+        texto: '#EEF0F6', texto2: '#C4C9D4', texto3: '#9AA1B1', apagado: '#7C8394',
+        destaque: '#A3B5FF', sobreDestaque: '#10131C', sucesso: '#7CCBA2', aviso: '#E8B86A', perigo: '#F08A8A',
+        raioJanela: '16px', raioPainel: '18px', raioCartao: '14px', raioControle: '10px', raioBotao: '10px', raioCaixa: '5px',
+        fonte: "'Onest', 'Segoe UI', system-ui, sans-serif", mono: "'IBM Plex Mono', Consolas, monospace",
+        desfoque: 'blur(40px) saturate(140%)', sombra: '0 24px 64px rgba(0,0,0,0.35)', sombraPainel: 'none', vidro: true, claro: false, painelEsq: '88px'
+      }
+    };
+    var nome = (this.state && this.state.tema) || this.props.tema || TEMA_PADRAO;
+    if (!TEMAS[nome]) nome = 'Grafite';
+    var t = TEMAS[nome];
+    var ag = t.claro
+      ? { alba: '#9A6A1E', tula: '#2F7A52', faina: '#A34E2E', nuno: '#3F64A8' }
+      : { alba: '#D9A55A', tula: '#6FAE8C', faina: '#D2805E', nuno: '#7C9CD6' };
+    var btnBase = 'height: 32px; padding: 0 14px; border-radius: ' + t.raioBotao + '; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; flex: none; ';
+    var s = {
+      btn: btnBase + 'border: 1px solid ' + t.bordaForte + '; background: transparent; color: ' + t.texto + ';',
+      btnPri: btnBase + 'border: 0; background: ' + t.destaque + '; color: ' + t.sobreDestaque + '; font-weight: 600;',
+      btnG: btnBase + 'border: 0; background: transparent; color: ' + t.texto3 + '; padding: 0 8px;',
+      btnP: 'height: 26px; padding: 0 10px; border-radius: ' + t.raioBotao + '; font-size: 12px; border: 1px solid ' + t.bordaForte + '; background: transparent; color: ' + t.texto + '; white-space: nowrap; flex: none;',
+      btnPPri: 'height: 26px; padding: 0 10px; border-radius: ' + t.raioBotao + '; font-size: 12px; border: 0; background: ' + t.destaque + '; color: ' + t.sobreDestaque + '; font-weight: 600; white-space: nowrap; flex: none;',
+      cartao: 'background: ' + t.cartao + '; border: 1px solid ' + t.borda + '; border-radius: ' + t.raioCartao + '; padding: 14px; box-sizing: border-box;',
+      elevada: 'background: ' + t.elevada + '; border: 1px solid ' + t.bordaForte + '; border-radius: ' + t.raioCartao + '; padding: 14px; box-sizing: border-box;',
+      linha: 'border-bottom: 1px solid ' + t.borda + ';',
+      rot: 'font-size: 12px; color: ' + t.texto3,
+      meta: 'font-family: ' + t.mono + '; font-size: 11px; color: ' + t.texto3 + ';',
+      num: 'font-family: ' + t.mono + '; font-size: 12px; color: ' + t.texto2 + ';',
+      atalho: 'font-family: ' + t.mono + '; font-size: 11px; padding: 1px 5px; border-radius: 4px; background: ' + t.chip + '; color: ' + t.texto2 + ';',
+      codigo: 'font-family: ' + t.mono + '; font-size: 11px; padding: 1px 5px; border-radius: 4px; background: ' + t.chip + '; color: ' + t.texto + ';',
+      campo: 'height: 34px; padding: 0 10px; border-radius: ' + t.raioControle + '; border: 1px solid ' + t.bordaForte + '; background: ' + t.campo + '; color: ' + t.texto + '; display: flex; align-items: center; gap: 8px; box-sizing: border-box;',
+      trilho: 'height: 4px; border-radius: 2px; background: ' + t.trilho + '; overflow: hidden;',
+      h1: 'margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.02em;',
+      h2: 'margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em;',
+      h3: 'margin: 0; font-size: 14px; font-weight: 600;'
+    };
+    var barra = function (pct, cor, alt) { var h = alt || 4; return 'width: ' + pct + '%; height: ' + h + 'px; border-radius: ' + (h / 2) + 'px; background: ' + (cor || t.destaque) + ';'; };
+    var pill = function (cor) { return 'font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid ' + t.borda + '; color: ' + cor + '; white-space: nowrap;'; };
+    var ponto = function (cor) { return 'width: 8px; height: 8px; border-radius: 4px; flex: none; background: ' + cor + ';'; };
+    var caixa = function (feita) { return 'width: 16px; height: 16px; border-radius: ' + t.raioCaixa + '; box-sizing: border-box; flex: none; ' + (feita ? 'background: ' + t.apagado + '; border: 1px solid ' + t.apagado + ';' : 'border: 1.5px solid ' + t.apagado + ';'); };
+    var marcada = function () { var svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='" + t.sobreDestaque + "' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>"; return 'width: 16px; height: 16px; border-radius: ' + t.raioCaixa + '; box-sizing: border-box; flex: none; background: ' + t.destaque + ' url(data:image/svg+xml,' + encodeURIComponent(svg).replace(/'/g, '%27') + ') center / 12px no-repeat;'; };
+    var radio = function (on) { return 'width: 16px; height: 16px; border-radius: 8px; box-sizing: border-box; flex: none; ' + (on ? 'border: 5px solid ' + t.destaque + ';' : 'border: 1.5px solid ' + t.apagado + ';'); };
+    var chave = function (on) { return 'width: 32px; height: 18px; border-radius: 9px; flex: none; position: relative; box-sizing: border-box; ' + (on ? 'background: ' + t.destaque + ';' : 'background: ' + t.trilho + '; border: 1px solid ' + t.bordaForte + ';'); };
+    var chaveBola = function (on) { return 'position: absolute; top: ' + (on ? 3 : 2) + 'px; ' + (on ? 'right: 3px;' : 'left: 2px;') + ' width: 12px; height: 12px; border-radius: 6px; background: ' + (on ? t.sobreDestaque : t.apagado) + ';'; };
+    var segmento = function (on) { return 'height: 28px; padding: 0 12px; border: 0; border-radius: 6px; font-size: 12px; white-space: nowrap; ' + (on ? 'background: ' + (t.claro ? '#FFFFFF' : t.elevada) + '; color: ' + t.texto + '; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.12);' : 'background: transparent; color: ' + t.texto3 + ';'); };
+    var item = 'display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: ' + t.raioControle + '; text-decoration: none; font-size: 13px; ';
+    var nav = [
+      { id: 'inicio', nome: 'Início', d: 'M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z' },
+      { id: 'agentes', nome: 'Agentes', d: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
+      { id: 'sessoes', nome: 'Sessões de IA', d: 'M4 17l6-6-6-6M12 19h8', contagem: '3' },
+      { id: 'tarefas', nome: 'Tarefas', d: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11', contagem: '7' },
+      { id: 'foco', nome: 'Foco', d: 'M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z' },
+      { id: 'financas', nome: 'Finanças', d: 'M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4' },
+      { id: 'dev', nome: 'Dev', d: 'M6 9v12M18 15V9a3 3 0 0 0-3-3h-4M14 3l-3 3 3 3M9 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM21 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z', contagem: '2' },
+      { id: 'notas', nome: 'Notas', d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8' },
+      { id: 'arquivos', nome: 'Arquivos', d: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z' },
+      { id: 'memoria', nome: 'Memória', d: 'M12 3a9 9 0 1 0 9 9M12 7v5l3 3M21 3v6h-6' },
+      { id: 'ferramentas', nome: 'Ferramentas', d: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z' },
+      { id: 'config', nome: 'Configurações', d: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4 12h2M18 12h2M12 4v2M12 18v2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4' }
+    ].map(function (n) {
+      var on = n.id === NAV_ATIVO;
+      return Object.assign({}, n, { estilo: item + (on ? 'background: ' + t.ativo + '; color: ' + t.texto + '; font-weight: 600;' : 'background: transparent; color: ' + t.texto2 + ';'), temContagem: !!n.contagem });
+    });
+    var R = function (o) { return Object.assign({ t: t, s: s, nome: nome, nav: nav, ag: ag }, o || {}); };
+
+var SECAO = "Modelos";
+    var secoes = ['Geral', 'Tema e dock', 'Notificações', 'Modelos', 'Agentes', 'Conexões', 'Atalhos', 'Privacidade', 'Levar para outro PC'].map(function (n) {
+      var on = n === SECAO;
+      return { nome: n, estilo: 'display: flex; align-items: center; height: 32px; padding: 0 10px; border-radius: ' + t.raioControle + '; text-decoration: none; ' + (on ? 'background: ' + t.ativo + '; font-weight: 600; color: ' + t.texto + ';' : 'color: ' + t.texto2 + ';') };
+    });
+
+    var COR = { ok: t.sucesso, erro: t.perigo, aviso: t.aviso, testando: t.texto2, off: t.texto3 };
+    var PONTO = { ok: t.sucesso, erro: t.perigo, aviso: t.aviso, testando: t.destaque, off: t.apagado };
+    var selo = function (tipo) { return 'display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; color: ' + COR[tipo] + ';'; };
+    var pontoDe = function (tipo) { return tipo === 'off' ? 'width: 8px; height: 8px; border-radius: 4px; flex: none; box-sizing: border-box; border: 1.5px solid ' + t.apagado + ';' : ponto(PONTO[tipo]); };
+    var corre = 'position: absolute; left: 0; top: 0; height: 4px; width: 40%; border-radius: 2px; background: ' + t.destaque + '; animation: corre 1.4s linear infinite;';
+    var pend = 'font-size: 11px; padding: 0 6px; border-radius: 10px; border: 1px dashed ' + t.aviso + '; color: ' + t.aviso + '; white-space: nowrap; font-weight: 400;';
+    var cabTabela = 'padding: 0 16px; height: 36px; align-items: center; background: ' + t.elevada + '; font-size: 12px; color: ' + t.texto3 + ';';
+    var bot = function (nome, tipo) { return { nome: nome, estilo: tipo === 'pri' ? s.btnPPri : tipo === 'g' ? s.btnP.replace('border: 1px solid ' + t.bordaForte, 'border: 0') + ' color: ' + t.texto3 + ';' : s.btnP }; };
+
+    var PROVS = {
+      claude: { nome: 'Claude Code', tipo: 'CLI · sua assinatura · versão 2.4', e: 'ok', estado: 'funcionando', lat: '2,1 s', quando: 'testado há 3 min' },
+      ollama: { nome: 'Ollama neste PC', tipo: 'Compatível com OpenAI · 127.0.0.1:11434 · llama3.1:8b', e: 'ok', estado: 'funcionando', lat: '0,8 s', quando: 'testado há 1 h' },
+      router: { nome: 'OpenRouter', tipo: 'Compatível com OpenAI · chave no Gerenciador de Credenciais', e: 'erro', estado: 'erro', lat: '—', quando: 'falhou às 14:02' }
+    };
+    var vestir = function (p) { return Object.assign({}, p, { seloEstilo: selo(p.e), ponto: pontoDe(p.e) }); };
+
+    var nomeP = function (k) { return k ? PROVS[k].nome : 'Nenhuma'; };
+    var pontoP = function (k) { return k ? pontoDe(PROVS[k].e) : pontoDe('off'); };
+    var agentes = [
+      { id: 'alba', nome: 'Alba', funcao: 'o dia a dia', p: 'claude', r: 'ollama', hoje: '14 execuções' },
+      { id: 'tula', nome: 'Tula', funcao: 'finanças', p: 'claude', r: null, hoje: '6 execuções' },
+      { id: 'faina', nome: 'Faina', funcao: 'o serviço pesado', p: 'ollama', r: 'claude', hoje: '3 execuções' },
+      { id: 'nuno', nome: 'Nuno', funcao: 'dev e sessões de IA', p: 'router', r: 'claude', teto: '5,00', hoje: '1,12 de 5,00', pct: 22, aviso: 'usando a reserva' }
+    ].map(function (a) {
+      return Object.assign({}, a, {
+        expr: 'descansando', principal: nomeP(a.p), principalPonto: pontoP(a.p), reserva: nomeP(a.r), reservaPonto: pontoP(a.r),
+        temTeto: !!a.teto, semTeto: !a.teto, temBarra: !!a.pct, semBarra: !a.pct, barra: barra(a.pct || 0),
+        temAviso: !!a.aviso, semAviso: !a.aviso, seloEstilo: selo('aviso'), ponto: pontoDe('aviso')
+      });
+    });
+
+    var provs = [
+      Object.assign(vestir(PROVS.claude), { acoes: [bot('Testar')] }),
+      Object.assign(vestir({ nome: 'Ollama neste PC', tipo: PROVS.ollama.tipo, e: 'testando', estado: 'testando', lat: '…', quando: 'há 4 s, sem resposta' }), { testando: true, acoes: [bot('Cancelar teste', 'g')] }),
+      Object.assign(vestir(PROVS.router), { temErro: true, erro: 'A chave foi recusada (401). O Nuno passou para a reserva e volta ao OpenRouter quando a chave funcionar.', acoes: [bot('Testar'), bot('Trocar chave', 'pri')] })
+    ];
+    return R({ secoes: secoes, provs: provs, agentes: agentes, cabTabela: cabTabela, pend: pend, corre: corre });
+  }
+}
+</script>
+</body>
+</html>
