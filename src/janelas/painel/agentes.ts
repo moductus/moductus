@@ -8,7 +8,7 @@ import {
   type SessaoIa,
 } from "@moductus/contrato";
 import { AGENTES, DADOS_AGENTES, type Agente } from "../../componentes/personagem/agentes.ts";
-import { ateQuando, quando } from "../../componentes/personagem/quando.ts";
+import { ateQuando, formatarHora, quando } from "../../componentes/personagem/quando.ts";
 import {
   eFalhaDoProvedor,
   falaDaFalha,
@@ -116,9 +116,7 @@ export function linhaDoNuno(
 /** "Trabalhando desde 14:05", com a fila quando há mais pedidos esperando a vez. */
 function trabalhando(execucao: Execucao | undefined, fila: number): string {
   const inicio = execucao?.estado === "rodando" && execucao.inicio ? new Date(execucao.inicio) : null;
-  const desde = inicio
-    ? `Trabalhando desde ${inicio.getHours()}:${String(inicio.getMinutes()).padStart(2, "0")}`
-    : "Trabalhando agora";
+  const desde = inicio ? `Trabalhando desde ${formatarHora(inicio)}` : "Trabalhando agora";
   const espera = naFila(fila);
   return espera ? `${desde} · ${espera}` : desde;
 }

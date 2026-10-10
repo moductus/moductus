@@ -35,6 +35,7 @@ function execucao(id: string, parte: Partial<Execucao> = {}): Execucao {
     fim: as(14, 1),
     estado: "ok",
     erro: null,
+    falhaDoProvedor: null,
     tokensEntrada: null,
     tokensSaida: null,
     custoEstimadoMicrodolares: null,
@@ -115,6 +116,16 @@ describe("histórico", () => {
       "O limite de uso acabou",
     );
     expect(textoDaExecucao(execucao("e1", { gatilho: "horario" }))).toBe("Trabalhou no horário marcado");
+    // A falha do provedor sai no passado, pelo provedor em que rodou, nunca com o texto cru.
+    const semLogin = execucao("e1", {
+      estado: "erro",
+      erro: "O Claude Code recusou o login: Not logged in · Please run /login",
+      falhaDoProvedor: "credencial",
+    });
+    expect(textoDaExecucao(semLogin, { tipo: "claude-cli", nome: "Claude Code" })).toBe(
+      "O Claude Code estava sem login.",
+    );
+    expect(textoDaExecucao(semLogin)).toBe("O modelo recusou o acesso.");
     expect(textoDaExecucao(execucao("e1", { estado: "rodando" }))).toBe("Respondendo na conversa");
     expect(textoDaExecucao(execucao("e1", { estado: "rodando", gatilho: "intervalo" }))).toBe(
       "Conferindo no intervalo marcado",
@@ -172,7 +183,7 @@ describe("o que o agente está fazendo", () => {
         null,
         agora,
       ),
-    ).toBe("Volta amanhã 9h");
+    ).toBe("Volta amanhã 09:00");
     // Falha do provedor é erro, não sono tranquilo.
     expect(
       agoraDoAgente(
@@ -243,7 +254,7 @@ describe("vigias", () => {
   });
 
   it("descreve cada gatilho como a página escreve", () => {
-    expect(descreverGatilho({ tipo: "horario", hora: "08:30" })).toBe("todo dia às 8:30");
+    expect(descreverGatilho({ tipo: "horario", hora: "08:30" })).toBe("todo dia às 08:30");
     expect(descreverGatilho({ tipo: "evento", nome: "arquivo.chegou" })).toBe(
       "quando acontece arquivo.chegou",
     );

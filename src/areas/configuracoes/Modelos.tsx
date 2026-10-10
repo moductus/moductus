@@ -97,22 +97,22 @@ export function SecaoModelos() {
   const travado = !m.conectado;
 
   return (
-    <Secao titulo="Modelos">
-      <div className="config-modelos-topo">
-        <p className="config-intro">
-          Cada agente usa um provedor principal e, se quiser, uma reserva para quando o principal falhar.
-        </p>
-        {!vazio && (
-          <div className="config-modelos-botoes">
+    <Secao
+      titulo="Modelos"
+      intro="Cada agente usa um provedor principal e, se quiser, uma reserva para quando o principal falhar."
+      acoes={
+        !vazio && (
+          <>
             <Botao disabled={travado || m.procurando} onClick={() => void m.procurar()}>
               Procurar no PC
             </Botao>
             <Botao variante="primario" disabled={travado} onClick={() => setFormulario("openai")}>
               Adicionar provedor
             </Botao>
-          </div>
-        )}
-      </div>
+          </>
+        )
+      }
+    >
       {m.erro && <Aviso>{m.erro}</Aviso>}
       {vazio && <SemModelo aoProcurar={() => void m.procurar()} aoChave={setFormulario} travado={travado} />}
       {formulario && (

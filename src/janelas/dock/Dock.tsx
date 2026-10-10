@@ -5,6 +5,7 @@ import { Icone } from "../../componentes/Icone.tsx";
 import { Marca } from "../../componentes/Marca.tsx";
 import { AGENTES, DADOS_AGENTES } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
+import { formatarHora } from "../../componentes/personagem/quando.ts";
 import { CONVITE_MODELO, lerSituacao } from "../../componentes/personagem/situacao.ts";
 import { Contagem } from "../../componentes/Selo.tsx";
 import {
@@ -25,7 +26,6 @@ import { sessoesEsperando } from "../painel/agentes.ts";
 import { usePendentesDoTerminal } from "../painel/dados.ts";
 import { pontoDoAgente, rotuloDoAgente } from "./agentes.ts";
 import { proximoIndice } from "./navegacao.ts";
-import { formatarHora } from "./relogio.ts";
 import "./Dock.css";
 
 /** Convite das cabeças do time enquanto nenhum modelo está conectado. */

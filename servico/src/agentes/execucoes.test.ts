@@ -72,6 +72,7 @@ describe("histórico de execuções", () => {
       fim: "2026-10-09T12:00:02.000Z",
       estado: "ok",
       erro: null,
+      falhaDoProvedor: null,
       tokensEntrada: 10,
       tokensSaida: 2,
       custoEstimadoMicrodolares: null,

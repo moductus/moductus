@@ -6,6 +6,7 @@ import type {
   EstadoExecucao,
   Execucao,
   ExecucaoDetalhada,
+  MotivoFalhaProvedor,
   PaginaExecucoes,
   PedidoDesfazer,
   PedidoExecucao,
@@ -32,6 +33,7 @@ interface LinhaExecucao {
   fim: string | null;
   estado: EstadoExecucao;
   erro: string | null;
+  falha_do_provedor: MotivoFalhaProvedor | null;
   tokens_entrada: number | null;
   tokens_saida: number | null;
   custo_estimado_microdolares: number | null;
@@ -39,8 +41,8 @@ interface LinhaExecucao {
   resumo: string | null;
 }
 
-const COLUNAS_EXECUCAO = `id, do_agente_id, gatilho, provedor_id, inicio, fim, estado, erro, tokens_entrada,
-  tokens_saida, custo_estimado_microdolares, cobranca, resumo`;
+const COLUNAS_EXECUCAO = `id, do_agente_id, gatilho, provedor_id, inicio, fim, estado, erro, falha_do_provedor,
+  tokens_entrada, tokens_saida, custo_estimado_microdolares, cobranca, resumo`;
 
 const paraExecucao = (l: LinhaExecucao): Execucao => ({
   id: l.id,
@@ -51,6 +53,7 @@ const paraExecucao = (l: LinhaExecucao): Execucao => ({
   fim: l.fim,
   estado: l.estado,
   erro: l.erro,
+  falhaDoProvedor: l.falha_do_provedor,
   tokensEntrada: l.tokens_entrada,
   tokensSaida: l.tokens_saida,
   custoEstimadoMicrodolares: l.custo_estimado_microdolares,
@@ -106,6 +109,8 @@ export interface FimExecucao {
   fim: string;
   estado: Exclude<EstadoExecucao, "rodando">;
   erro: string | null;
+  /** O motivo, quando o erro foi do provedor (o classificador dele); vazio em erro de outra causa. */
+  falhaDoProvedor: MotivoFalhaProvedor | null;
   tokensEntrada: number | null;
   tokensSaida: number | null;
   custoEstimadoMicrodolares: number | null;
@@ -158,7 +163,7 @@ export class RepositorioExecucoes {
     this.db
       .prepare(
         `UPDATE execucoes
-            SET fim = ?, estado = ?, erro = ?, tokens_entrada = ?, tokens_saida = ?,
+            SET fim = ?, estado = ?, erro = ?, falha_do_provedor = ?, tokens_entrada = ?, tokens_saida = ?,
                 custo_estimado_microdolares = ?, cobranca = ?, resumo = ?, atualizado_em = ?
           WHERE id = ?`,
       )
@@ -166,6 +171,7 @@ export class RepositorioExecucoes {
         f.fim,
         f.estado,
         f.erro,
+        f.falhaDoProvedor,
         f.tokensEntrada,
         f.tokensSaida,
         f.custoEstimadoMicrodolares,

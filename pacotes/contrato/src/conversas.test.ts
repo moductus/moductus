@@ -26,6 +26,7 @@ const doUsuario = {
   agenteId: null,
   conteudo: "separa os comprovantes de setembro e lança tudo",
   execucaoId: null,
+  falhaDoProvedor: null,
   criadoEm: "2026-10-09T12:00:01.000Z",
 };
 
@@ -60,6 +61,9 @@ describe("mensagem", () => {
     expect(Mensagem.safeParse(doUsuario).success).toBe(true);
     expect(PaginaMensagens.safeParse({ itens: [doUsuario, daTula], proximo: null }).success).toBe(true);
     expect(Mensagem.safeParse({ ...doUsuario, criadoEm: null }).success).toBe(false);
+    expect(Mensagem.safeParse({ ...daTula, falhaDoProvedor: "credencial" }).success).toBe(true);
+    expect(Mensagem.safeParse({ ...daTula, falhaDoProvedor: "teto" }).success).toBe(false);
+    expect(Mensagem.safeParse({ ...daTula, falhaDoProvedor: undefined }).success).toBe(false);
   });
 
   test("enviar recusa mensagem vazia e devolve quem vai responder", () => {

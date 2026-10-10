@@ -30,6 +30,29 @@
   font-weight: var(--peso-forte);
 }
 
+/* Título e frase à esquerda e as ações da seção à direita, no meio dos dois (ConfigModelos); sem
+   largura para as duas colunas, as ações descem para baixo da frase. */
+.config-secao-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8) var(--esp-16);
+}
+
+.config-secao-cabeca {
+  display: flex;
+  flex: 1 1 var(--largura-min-cabeca-secao);
+  flex-direction: column;
+  gap: var(--esp-8);
+}
+
+.config-secao-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-8);
+}
+
 .config-intro,
 .config-carregando {
   margin: 0;
@@ -404,7 +427,10 @@
 }
 
 /* ---------- Tabela das seções (Modelos) ---------- */
+/* Em janela estreita as listas e o teto encolhem (até a fração da tabela, nunca abaixo do que
+   cabe neles) e o agente fica com o resto; só o que não couber nem assim rola de lado. */
 .config-tabela {
+  container-type: inline-size;
   overflow-x: auto;
   border: var(--espessura-borda) solid var(--borda);
   border-radius: var(--raio-cartao);
@@ -467,23 +493,14 @@
 }
 
 .config-tabela .config-tabela-lista {
-  width: calc(var(--largura-lista-modelo) + var(--esp-12));
+  width: min(calc(var(--largura-lista-modelo) + var(--esp-12)), var(--fracao-col-lista-modelo));
 }
 
 .config-tabela .config-tabela-teto {
-  width: var(--largura-col-teto);
+  width: min(var(--largura-col-teto), var(--fracao-col-teto));
 }
 
 /* ---------- Modelos (ConfigModelos*.dc.html) ---------- */
-.config-modelos-topo {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--esp-12);
-}
-
-.config-modelos-botoes,
 .config-modelos-acoes {
   display: flex;
   flex-wrap: wrap;
@@ -632,7 +649,7 @@
 }
 
 .config-lista--ponto select {
-  min-width: var(--largura-lista-modelo);
+  min-width: var(--largura-lista-modelo-min);
   padding-left: calc(var(--esp-10) + var(--tamanho-ponto-estado) + var(--esp-8));
 }
 
@@ -663,10 +680,12 @@
   background: none;
 }
 
+/* Sem largura, o "Definir" desce para baixo do "sem teto" em vez de alargar a coluna. */
 .config-modelos-teto {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--esp-4);
+  gap: 0 var(--esp-4);
 }
 
 /* Nenhum modelo: o time dormindo no alto, os três caminhos e os CLIs achados. */
@@ -851,6 +870,12 @@
 .config-modelos-opcao:has(input:focus-visible) {
   outline: var(--espessura-foco) solid var(--cor-foco);
   outline-offset: var(--recuo-foco);
+}
+
+/* O nome do provedor fica inteiro: sem largura, o "atual" desce para baixo dele. */
+.config-modelos-opcao .config-modelos-nome {
+  flex-wrap: wrap;
+  gap: 0 var(--esp-6);
 }
 
 .config-modelos-opcao input {

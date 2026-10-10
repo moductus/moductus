@@ -94,6 +94,7 @@ function mensagem(parte: Partial<Mensagem>): Mensagem {
     agenteId: null,
     conteudo: "",
     execucaoId: null,
+    falhaDoProvedor: null,
     criadoEm: INSTANTE,
     ...parte,
   };
@@ -375,6 +376,7 @@ describe("página do agente", () => {
     fim: as(0, 2),
     estado: "ok",
     erro: null,
+    falhaDoProvedor: null,
     tokensEntrada: null,
     tokensSaida: null,
     custoEstimadoMicrodolares: null,
@@ -463,6 +465,52 @@ describe("página do agente", () => {
     expect(por('[role="alert"]')!.textContent).toBe("O lembrete já foi apagado à mão");
   });
 
+  it("o dia diz a falha do provedor no passado e o erro de outra causa como veio", async () => {
+    servicoDaTula();
+    const base = falso.responder;
+    const { chamadas: _, ...ok } = detalhe;
+    const semLogin = {
+      ...ok,
+      id: "01EA",
+      inicio: as(0, 3),
+      estado: "erro",
+      erro: "O Claude Code recusou o login: Not logged in · Please run /login",
+      falhaDoProvedor: "credencial",
+      resumo: null,
+    };
+    const outraCausa = {
+      ...semLogin,
+      id: "01EB",
+      inicio: as(0, 4),
+      erro: "O prazo de 5 min acabou",
+      falhaDoProvedor: null,
+    };
+    const claude = {
+      id: "p1",
+      tipo: "claude-cli",
+      nome: "Claude Code",
+      modelo: null,
+      baseUrl: null,
+      temChave: false,
+      testadoEm: null,
+    };
+    falso.responder = (metodo, dados) => {
+      if (metodo === "execucoes.listar")
+        return Promise.resolve({ itens: [outraCausa, semLogin, ok], proximo: null });
+      if (metodo === "provedores.listar") return Promise.resolve([claude]);
+      return base(metodo, dados);
+    };
+    await montar("tula/pagina");
+    const linhas = [...recipiente.querySelectorAll(".pagina-agente-execucao-texto")].map(
+      (l) => l.textContent,
+    );
+    expect(linhas).toEqual([
+      "O prazo de 5 min acabou",
+      "O Claude Code estava sem login.",
+      "Criou lembrete da fatura para sexta",
+    ]);
+  });
+
   it("pausar vale na hora, e o botão vira retomar", async () => {
     servicoDaTula();
     await montar("tula/pagina");
@@ -497,6 +545,83 @@ describe("página do agente", () => {
   });
 });
 
+describe("a fala que foi só o erro do provedor", () => {
+  it("CLI sem login: a conversa diz como entrar, com o comando à parte, em vez do texto cru", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    try {
+      vi.setSystemTime(new Date(2026, 9, 10, 2, 45, 10));
+      const dormeAte = new Date(2026, 9, 10, 2, 46).toISOString();
+      servicoDeConversas();
+      const base = falso.responder;
+      const ontem = mensagem({ conversaId: DA_TULA.id, conteudo: "Tula, ontem" });
+      const antiga = mensagem({
+        conversaId: DA_TULA.id,
+        agenteId: "tula",
+        execucaoId: "01E5",
+        conteudo: "O Claude Code recusou o login: Not logged in",
+        falhaDoProvedor: "credencial",
+      });
+      const deNovo = mensagem({ conversaId: DA_TULA.id, conteudo: "e agora?" });
+      const outraCausa = mensagem({
+        conversaId: DA_TULA.id,
+        agenteId: "tula",
+        execucaoId: "01E6",
+        conteudo: "O prazo de 5 min acabou",
+      });
+      const pergunta = mensagem({ conversaId: DA_TULA.id, conteudo: "Tula, oi" });
+      const cru = mensagem({
+        conversaId: DA_TULA.id,
+        agenteId: "tula",
+        execucaoId: "01E7",
+        conteudo: "O Claude Code recusou o login: Not logged in · Please run /login",
+        falhaDoProvedor: "credencial",
+      });
+      falso.responder = (metodo, dados) => {
+        if (metodo === "agentes.listar")
+          return Promise.resolve([
+            agente("tula", { estado: "dormindo", motivoSono: "credencial", dormeAte }),
+          ]);
+        if (metodo === "provedores.listar")
+          return Promise.resolve([
+            {
+              id: "p1",
+              tipo: "claude-cli",
+              nome: "Claude Code",
+              modelo: null,
+              baseUrl: null,
+              temChave: false,
+              testadoEm: null,
+            },
+          ]);
+        if (metodo === "conversas.mensagens")
+          return Promise.resolve({
+            itens: [cru, pergunta, outraCausa, deNovo, antiga, ontem],
+            proximo: null,
+          });
+        return base(metodo, dados);
+      };
+      await montar("tula");
+
+      const esperado = "O Claude Code está sem login. Entre no terminal com claude e tento de novo às 02:46.";
+      // A antiga no passado, sem hora; o erro de outra causa como veio; a última com a hora de agora.
+      expect(falas()).toEqual([
+        "Você: Tula, ontem",
+        "Tula: O Claude Code estava sem login.",
+        "Você: e agora?",
+        "Tula: O prazo de 5 min acabou",
+        "Você: Tula, oi",
+        `Tula: ${esperado}`,
+      ]);
+      expect(por(".conversa-mensagens .fala-texto code")!.textContent).toBe("claude");
+      expect(recipiente.textContent).not.toContain("Not logged in");
+      // A linha da lista diz o mesmo, numa linha só.
+      expect(por('.conversas-item[aria-current="page"] .conversas-item-ultima')!.textContent).toBe(esperado);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("quem espera na conversa dormindo por falha do provedor", () => {
   it("a hora da nova tentativa chega: a fala não promete o passado", async () => {
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
@@ -514,9 +639,9 @@ describe("quem espera na conversa dormindo por falha do provedor", () => {
       await teclarEnter();
       expect(falas()).toEqual([
         "Você: Quanto já foi de mercado?",
-        "Tula: Modelo fora do ar, tenta de novo às 1:13",
+        "Tula: Modelo fora do ar, tenta de novo às 01:13",
       ]);
-      // O relógio vira para 1:13: "às 1:13" já soaria passado.
+      // O relógio vira para 01:13: "às 01:13" já soaria passado.
       await act(async () => vi.advanceTimersByTime(20_000));
       expect(falas()[1]).toBe("Tula: Modelo fora do ar, tentando de novo");
     } finally {

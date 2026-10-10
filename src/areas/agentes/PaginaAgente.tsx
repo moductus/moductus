@@ -6,7 +6,7 @@ import { Cartao } from "../../componentes/Cartao.tsx";
 import { DADOS_AGENTES, type Agente } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
 import { horaCurta } from "../../componentes/personagem/quando.ts";
-import { lerSituacao } from "../../componentes/personagem/situacao.ts";
+import { lerSituacao, modeloDoAgente } from "../../componentes/personagem/situacao.ts";
 import { Selo, type TomSelo } from "../../componentes/Selo.tsx";
 import {
   agoraDoAgente,
@@ -352,17 +352,18 @@ function LinhasExecucao({
         {execucoes.map((e) => {
           const custo = comCusto ? custoDaExecucao(e) : null;
           const podeDesfazer = desfaziveis(dados.detalhes[e.id]).length > 0;
+          const texto = textoDaExecucao(e, modeloDoAgente(e.provedorId, dados.provedores));
           return (
             <li key={e.id} className="pagina-agente-execucao" data-estado={e.estado}>
               <span className="pagina-agente-hora">{e.inicio ? horaCurta(e.inicio) : ""}</span>
-              <span className="pagina-agente-execucao-texto">{textoDaExecucao(e)}</span>
+              <span className="pagina-agente-execucao-texto">{texto}</span>
               {custo && <span className="pagina-agente-custo">{custo}</span>}
               {podeDesfazer && (
                 <Botao
                   variante="fantasma"
                   tamanho="pequeno"
                   disabled={!dados.conectado || desfazendo !== null}
-                  aria-label={`Desfazer: ${textoDaExecucao(e)}`}
+                  aria-label={`Desfazer: ${texto}`}
                   onClick={() => void desfazer(e.id)}
                 >
                   Desfazer

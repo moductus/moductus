@@ -157,6 +157,8 @@
   /* Configurações: campo que grava atalho e coluna do nome na prévia da importação */
   --largura-campo-atalho: 132px;
   --largura-rotulo-mudanca: 148px;
+  /* Título e frase de uma seção ao lado das ações dela só com esta largura; abaixo, as ações descem */
+  --largura-min-cabeca-secao: 220px;
   /* Notificações (AreaNotificacoes.dc.html): colunas Agente e Onde da lista por agente, altura da
      linha, a lista suspensa do "Onde" e o canto do toast na prévia do aviso do Windows */
   --largura-col-agente: 200px;
@@ -178,6 +180,11 @@
   --largura-col-modelo-resposta: 150px;
   --largura-col-teto: 150px;
   --largura-lista-modelo: 176px;
+  /* Janela estreita: as listas e o teto ficam com até esta fração da tabela, e a lista nunca
+     menor que o nome do provedor com o ponto e a seta; o agente fica com o resto. */
+  --fracao-col-lista-modelo: 22cqi;
+  --fracao-col-teto: 18cqi;
+  --largura-lista-modelo-min: 132px;
   --largura-trilho-teste: 120px;
   --largura-min-caminho: 220px;
   --largura-min-dado-conexao: 160px;

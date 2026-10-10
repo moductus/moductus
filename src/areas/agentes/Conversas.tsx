@@ -6,12 +6,13 @@ import { CartaoAprovacao } from "../../componentes/CartaoAprovacao.tsx";
 import { FalaAgente } from "../../componentes/FalaAgente.tsx";
 import { AGENTES, DADOS_AGENTES, eAgente, type Agente } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
-import { lerSituacao } from "../../componentes/personagem/situacao.ts";
+import { lerSituacao, type FalaCartao } from "../../componentes/personagem/situacao.ts";
 import { Selo } from "../../componentes/Selo.tsx";
 import { agoraDoAgente } from "../../servico/agente.ts";
 import { decidirPedido } from "../../servico/aprovacoes.ts";
 import {
   chaveInterlocutor,
+  falhaNaConversa,
   mencionar,
   previa,
   quandoCurto,
@@ -46,6 +47,8 @@ export function Conversas({ canal, com, aoEscolher, aoAbrirPagina, aoAbrirMemori
   const conversas = useConversas(canal, com);
   const { situacoes: time, modelos } = useTime(canal);
   const { conectado, aberta } = conversas;
+  // A frase de quem dorme diz uma hora: o relógio da tela a tira de lá quando ela chega.
+  const agora = useAgora();
 
   return (
     <div className="conversas">
@@ -64,6 +67,8 @@ export function Conversas({ canal, com, aoEscolher, aoAbrirPagina, aoAbrirMemori
                 quem={quem}
                 ativo={quem === com}
                 time={time}
+                modelos={modelos}
+                agora={agora}
                 ultima={ultimaDe(conversas, quem)}
                 aoEscolher={() => aoEscolher(quem)}
               />
@@ -84,7 +89,7 @@ export function Conversas({ canal, com, aoEscolher, aoAbrirPagina, aoAbrirMemori
           aoAbrirPagina={aoAbrirPagina}
           aoAbrirMemoria={aoAbrirMemoria}
         />
-        <Mensagens com={com} time={time} modelos={modelos} conversas={conversas} />
+        <Mensagens com={com} time={time} modelos={modelos} agora={agora} conversas={conversas} />
         <Escrever
           key={chaveInterlocutor(com)}
           com={com}
@@ -203,13 +208,17 @@ interface PropsItemConversa {
   quem: Interlocutor;
   ativo: boolean;
   time: SituacaoTime;
+  modelos: ModelosDoTime;
+  agora: Date;
   ultima: Mensagem | null;
   aoEscolher: () => void;
 }
 
 /** Uma linha da lista: cabeça (as quatro, no time), nome, quando e a última fala. */
-function ItemConversa({ quem, ativo, time, ultima, aoEscolher }: PropsItemConversa) {
+function ItemConversa({ quem, ativo, time, modelos, agora, ultima, aoEscolher }: PropsItemConversa) {
   const vazio = quem === null ? "Pergunte ao time; quem souber responde." : DADOS_AGENTES[quem].funcao;
+  // A última fala da conversa é a última de quem disse.
+  const falha = ultima && falhaDe(ultima, true, time, modelos, agora);
   return (
     <li>
       <button
@@ -245,7 +254,9 @@ function ItemConversa({ quem, ativo, time, ultima, aoEscolher }: PropsItemConver
             <span className="conversas-item-nome">{nomeDe(quem)}</span>
             {ultima && <span className="conversas-item-quando">{quandoCurto(ultima.criadoEm)}</span>}
           </span>
-          <span className="conversas-item-ultima">{ultima ? previa(ultima, quem === null) : vazio}</span>
+          <span className="conversas-item-ultima">
+            {ultima ? previa(ultima, quem === null, falha) : vazio}
+          </span>
         </span>
       </button>
     </li>
@@ -256,7 +267,21 @@ interface PropsMensagens {
   com: Interlocutor;
   time: SituacaoTime;
   modelos: ModelosDoTime;
+  agora: Date;
   conversas: EstadoDaConversa;
+}
+
+/** {@link falhaNaConversa} de uma fala, com a situação e o modelo de quem disse. */
+function falhaDe(
+  mensagem: Mensagem,
+  ultimaDele: boolean,
+  time: SituacaoTime,
+  modelos: ModelosDoTime,
+  agora: Date,
+): FalaCartao | null {
+  const quem = mensagem.agenteId;
+  if (quem === null || !eAgente(quem)) return null;
+  return falhaNaConversa(mensagem, ultimaDele, time[quem], modelos[quem] ?? null, agora);
 }
 
 /** Distância do fim, em px de tela, até onde a conversa ainda acompanha a resposta que chega. */
@@ -266,9 +291,7 @@ const PERTO_DO_FIM = 48;
  * As falas na ordem em que foram ditas, depois as respostas em andamento e quem ainda não
  * começou a responder. A conversa desce sozinha enquanto você está no fim dela.
  */
-function Mensagens({ com, time, modelos, conversas }: PropsMensagens) {
-  // A frase de quem dorme diz uma hora: o relógio da tela a tira de lá quando ela chega.
-  const agora = useAgora();
+function Mensagens({ com, time, modelos, agora, conversas }: PropsMensagens) {
   const lista = useRef<HTMLDivElement>(null);
   const noFim = useRef(true);
   const { mensagens, andamento, aguardando, aprovacoes, aberta, temAnteriores } = conversas;
@@ -285,6 +308,10 @@ function Mensagens({ com, time, modelos, conversas }: PropsMensagens) {
 
   const vazia =
     aberta !== null && mensagens.length === 0 && emAndamento.length === 0 && esperando.length === 0;
+
+  // A última fala de cada um: só ela diz a falha do jeito da janela, com a hora de agora.
+  const ultimaDeCada = new Map<string, string>();
+  for (const m of mensagens) if (m.agenteId !== null) ultimaDeCada.set(m.agenteId, m.id);
 
   return (
     <div
@@ -314,7 +341,18 @@ function Mensagens({ com, time, modelos, conversas }: PropsMensagens) {
         </p>
       )}
       {mensagens.map((m) => (
-        <Fala key={m.id} mensagem={m} cartoes={cartoes(m.execucaoId)} />
+        <Fala
+          key={m.id}
+          mensagem={m}
+          falha={falhaDe(
+            m,
+            m.agenteId !== null && ultimaDeCada.get(m.agenteId) === m.id,
+            time,
+            modelos,
+            agora,
+          )}
+          cartoes={cartoes(m.execucaoId)}
+        />
       ))}
       {emAndamento.map((p) => (
         <FalaEmAndamento key={p.execucaoId} parcial={p} cartoes={cartoes(p.execucaoId)} />
@@ -351,7 +389,14 @@ function Cartoes({ cartoes }: { cartoes: readonly Aprovacao[] }) {
   );
 }
 
-function Fala({ mensagem, cartoes }: { mensagem: Mensagem; cartoes: readonly Aprovacao[] }) {
+interface PropsFala {
+  mensagem: Mensagem;
+  /** A falha dita do jeito da janela, no lugar do erro cru; `null` mostra a fala como foi gravada. */
+  falha: FalaCartao | null;
+  cartoes: readonly Aprovacao[];
+}
+
+function Fala({ mensagem, falha, cartoes }: PropsFala) {
   const { agenteId, conteudo } = mensagem;
   if (agenteId === null) {
     return (
@@ -371,7 +416,19 @@ function Fala({ mensagem, cartoes }: { mensagem: Mensagem; cartoes: readonly Apr
   }
   return (
     <FalaAgente agente={agenteId} acao={cartoes.length > 0 && <Cartoes cartoes={cartoes} />}>
-      {conteudo}
+      {falha ? (
+        <>
+          {falha.texto}
+          {falha.comando && (
+            <>
+              <code>{falha.comando.codigo}</code>
+              {falha.comando.depois}
+            </>
+          )}
+        </>
+      ) : (
+        conteudo
+      )}
     </FalaAgente>
   );
 }

@@ -38,9 +38,6 @@ const EXEMPLOS: Readonly<Record<Agente, string>> = {
 
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-/** "07:30" vira "7:30", como o quadro escreve. */
-const hora = (valor: string) => valor.replace(/^0(\d)/, "$1");
-
 const desativadas = <T extends string>(opcoes: readonly OpcaoSeletor<T>[], desativar: boolean) =>
   desativar ? opcoes.map((o) => ({ ...o, desativada: true })) : opcoes;
 
@@ -196,7 +193,7 @@ export function SecaoNotificacoes() {
           <h3 className="config-cartao-titulo">Silêncio</h3>
           <Opcao
             titulo="Horário de silêncio"
-            descricao={`das ${hora(silencio.horario.inicio)} às ${hora(silencio.horario.fim)}`}
+            descricao={`das ${silencio.horario.inicio} às ${silencio.horario.fim}`}
           >
             <Interruptor
               aria-label="Horário de silêncio"

@@ -3,6 +3,7 @@ import type {
   Conversa,
   FalaParcial,
   Mensagem,
+  MotivoFalhaProvedor,
   PaginaMensagens,
   PedidoAbrirConversa,
   PedidoApagarConversa,
@@ -55,9 +56,16 @@ interface LinhaMensagem {
   conteudo: string;
   da_execucao_id: string | null;
   criado_em: string;
+  falha_do_provedor: MotivoFalhaProvedor | null;
 }
 
-const COLUNAS_MENSAGEM = "id, conversa_id, do_agente_id, conteudo, da_execucao_id, criado_em";
+/**
+ * As colunas de uma mensagem lidas de {@link DE_MENSAGENS}. A falha do provedor vale para a fala
+ * que é só o erro gravado da execução: com texto antes, ela continua do agente, com o aviso.
+ */
+const COLUNAS_MENSAGEM = `m.id, m.conversa_id, m.do_agente_id, m.conteudo, m.da_execucao_id, m.criado_em,
+  CASE WHEN e.estado = 'erro' AND m.conteudo = e.erro THEN e.falha_do_provedor END AS falha_do_provedor`;
+const DE_MENSAGENS = "mensagens m LEFT JOIN execucoes e ON e.id = m.da_execucao_id";
 
 const paraMensagem = (l: LinhaMensagem): Mensagem => ({
   id: l.id,
@@ -65,6 +73,7 @@ const paraMensagem = (l: LinhaMensagem): Mensagem => ({
   agenteId: l.do_agente_id,
   conteudo: l.conteudo,
   execucaoId: l.da_execucao_id,
+  falhaDoProvedor: l.falha_do_provedor,
   criadoEm: l.criado_em,
 });
 
@@ -214,7 +223,7 @@ export class RepositorioConversas {
 
   mensagem(id: string): Mensagem | null {
     const linha = this.db
-      .prepare(`SELECT ${COLUNAS_MENSAGEM} FROM mensagens WHERE id = ? AND apagado_em IS NULL`)
+      .prepare(`SELECT ${COLUNAS_MENSAGEM} FROM ${DE_MENSAGENS} WHERE m.id = ? AND m.apagado_em IS NULL`)
       .get(id) as unknown as LinhaMensagem | undefined;
     return linha ? paraMensagem(linha) : null;
   }
@@ -225,13 +234,13 @@ export class RepositorioConversas {
     const valores: (string | number)[] = [pedido.conversaId];
     let antes = "";
     if (pedido.antesDe !== undefined) {
-      antes = "AND id < ?";
+      antes = "AND m.id < ?";
       valores.push(pedido.antesDe);
     }
     const linhas = this.db
       .prepare(
-        `SELECT ${COLUNAS_MENSAGEM} FROM mensagens WHERE conversa_id = ? AND apagado_em IS NULL ${antes}
-          ORDER BY id DESC LIMIT ?`,
+        `SELECT ${COLUNAS_MENSAGEM} FROM ${DE_MENSAGENS} WHERE m.conversa_id = ? AND m.apagado_em IS NULL ${antes}
+          ORDER BY m.id DESC LIMIT ?`,
       )
       .all(...valores, limite + 1) as unknown as LinhaMensagem[];
     const itens = linhas.slice(0, limite).map(paraMensagem);
@@ -245,10 +254,10 @@ export class RepositorioConversas {
   historico(conversaId: string, ateId: string, limite: number): MensagemDoHistorico[] {
     const linhas = this.db
       .prepare(
-        `SELECT m.id, m.conversa_id, m.do_agente_id, m.conteudo, m.da_execucao_id, m.criado_em,
+        `SELECT ${COLUNAS_MENSAGEM},
                 CASE WHEN m.do_agente_id IS NOT NULL AND m.da_execucao_id IS NULL THEN 1
                      ELSE COALESCE(e.estado = 'erro', 0) END AS falhou
-           FROM mensagens m LEFT JOIN execucoes e ON e.id = m.da_execucao_id
+           FROM ${DE_MENSAGENS}
           WHERE m.conversa_id = ? AND m.apagado_em IS NULL AND m.id <= ?
           ORDER BY m.id DESC LIMIT ?`,
       )
@@ -263,10 +272,11 @@ export class RepositorioConversas {
   pendentes(): Mensagem[] {
     const linhas = this.db
       .prepare(
-        `SELECT m.id, m.conversa_id, m.do_agente_id, m.conteudo, m.da_execucao_id, m.criado_em
+        `SELECT ${COLUNAS_MENSAGEM}
            FROM conversas c
            JOIN mensagens m ON m.id = (
              SELECT MAX(u.id) FROM mensagens u WHERE u.conversa_id = c.id AND u.apagado_em IS NULL)
+           LEFT JOIN execucoes e ON e.id = m.da_execucao_id
           WHERE c.apagado_em IS NULL AND c.arquivada = 0 AND m.do_agente_id IS NULL
           ORDER BY m.id`,
       )

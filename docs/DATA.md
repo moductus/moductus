@@ -180,7 +180,7 @@ Têm lixeira. Quem apaga a conversa manda as mensagens junto: mensagem viva segu
 
 ### `execucoes`
 Cada vez que um agente trabalha. Sem lixeira.
-`id`, `do_agente_id`, `gatilho` (`mensagem`, `horario`, `intervalo`, `evento`), `provedor_id`, `inicio`, `fim`, `estado` (`rodando`, `ok`, `erro`, `adiada`), `erro`, `tokens_entrada`, `tokens_saida`, `custo_estimado_microdolares` (vazio em assinatura ou modelo sem preço conhecido; quando há, é estimativa pela tabela de preços do serviço), `cobranca` (`assinatura`, `por_token`; migração `009-execucoes-cobranca`, vazia sem provedor), `resumo`.
+`id`, `do_agente_id`, `gatilho` (`mensagem`, `horario`, `intervalo`, `evento`), `provedor_id`, `inicio`, `fim`, `estado` (`rodando`, `ok`, `erro`, `adiada`), `erro`, `falha_do_provedor` (`limite`, `fora_do_ar`, `credencial`, `ausente`; só com `erro`, quando o provedor derrubou a execução; vazio em erro de outra causa; migração `012-execucoes-falha-do-provedor`), `tokens_entrada`, `tokens_saida`, `custo_estimado_microdolares` (vazio em assinatura ou modelo sem preço conhecido; quando há, é estimativa pela tabela de preços do serviço), `cobranca` (`assinatura`, `por_token`; migração `009-execucoes-cobranca`, vazia sem provedor), `resumo`.
 `rodando` existe para as chamadas de ferramenta e as falas já apontarem para a execução enquanto ela acontece.
 
 ### `chamadas_ferramenta`

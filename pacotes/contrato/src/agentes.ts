@@ -134,6 +134,11 @@ const CamposExecucao = z.object({
   fim: Instante.nullable(),
   estado: EstadoExecucao,
   erro: z.string().nullable(),
+  /**
+   * O motivo, quando o erro foi do provedor (o classificador que põe o agente para dormir); vazio
+   * em erro de outra causa (ferramenta, prazo, cancelado), que se mostra como veio.
+   */
+  falhaDoProvedor: MotivoFalhaProvedor.nullable(),
   tokensEntrada: z.number().int().nonnegative().nullable(),
   tokensSaida: z.number().int().nonnegative().nullable(),
   custoEstimadoMicrodolares: z.number().int().nonnegative().nullable(),

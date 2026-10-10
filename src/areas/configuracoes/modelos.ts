@@ -13,6 +13,7 @@ import {
   eFalhaDoProvedor,
   type FalhaDoProvedor,
 } from "../../componentes/personagem/situacao.ts";
+import { formatarHora } from "../../componentes/personagem/quando.ts";
 import { formatarLatencia } from "../../janelas/sistema/primeiro-uso/modelo.ts";
 import { haQuanto } from "../tempo.ts";
 
@@ -51,8 +52,6 @@ const ehCli = (tipo: Provedor["tipo"]) => (TIPOS_PROVEDOR_CLI as readonly string
  */
 export const temChaveTrocavel = (provedor: Provedor) =>
   !ehCli(provedor.tipo) && (provedor.temChave || provedor.tipo === "openai");
-
-const HORA = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
 /**
  * O que a falha diz ao usuário quando o agente dorme por ela e a tela não testou nada. Credencial
@@ -100,7 +99,7 @@ export function estadoDoProvedor(
       texto: "erro",
       tom: "perigo",
       resposta: "—",
-      quando: `falhou às ${HORA.format(new Date(teste.testadoEm))}`,
+      quando: `falhou às ${formatarHora(new Date(teste.testadoEm))}`,
       erro: teste.falha.mensagem,
     };
   }
