@@ -161,9 +161,20 @@
      linha, a lista suspensa do "Onde" e o canto do toast na prévia do aviso do Windows */
   --largura-col-agente: 200px;
   --largura-col-onde: 210px;
+  /* Janela estreita: as duas colunas encolhem até o mínimo, cada uma com até 26% da lista, para
+     o "Avisar" caber; abaixo disso a lista rola de lado. */
+  --largura-col-agente-min: 150px;
+  --largura-col-onde-min: 160px;
+  --fracao-col-agentes: 26cqi;
   --altura-linha-agente: 64px;
   --altura-campo-tabela: 30px;
   --raio-toast: 8px;
+  /* Silêncio e prévia lado a lado só com esta largura cada; abaixo, um embaixo do outro */
+  --largura-min-coluna-notificacoes: 300px;
+  /* A lista aberta de um <select> é desenhada pelo Windows: cores de sistema, que seguem o
+     color-scheme do tema */
+  --fundo-lista-nativa: Canvas;
+  --texto-lista-nativa: CanvasText;
   /* Sessões de IA (AreaSessoes.dc.html): pedidos à direita, gráfico da semana e tabela */
   --largura-coluna-pedidos: 340px;
   --altura-grafico-uso: 110px;
