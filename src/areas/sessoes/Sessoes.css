@@ -16,30 +16,30 @@
 }
 
 /* ---------- uso da semana ---------- */
-.uso {
+.sessoes-uso {
   gap: var(--esp-12);
 }
 
-.uso-cabecalho,
-.uso-rodape {
+.sessoes-uso-cabecalho,
+.sessoes-uso-rodape {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--esp-12);
 }
 
-.uso-cabecalho {
+.sessoes-uso-cabecalho {
   font-size: var(--tipo-12);
   color: var(--texto-3);
 }
 
-.uso-titulo {
+.sessoes-uso-titulo {
   margin: 0;
   font: inherit;
   color: inherit;
 }
 
-.uso-grafico {
+.sessoes-uso-grafico {
   display: flex;
   align-items: flex-end;
   gap: var(--esp-10);
@@ -49,7 +49,7 @@
   list-style: none;
 }
 
-.uso-dia {
+.sessoes-uso-dia {
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -60,8 +60,8 @@
   min-width: 0;
 }
 
-.uso-numero,
-.uso-rotulo {
+.sessoes-uso-numero,
+.sessoes-uso-rotulo {
   font-family: var(--fonte-mono);
   font-size: var(--tipo-11);
   color: var(--texto-3);
@@ -69,7 +69,7 @@
 }
 
 /* A barra mede contra o maior dia da semana; o dia de hoje vai no destaque. */
-.uso-barra {
+.sessoes-uso-barra {
   width: 100%;
   max-width: var(--largura-barra-uso);
   height: calc(var(--altura-barra-uso) * var(--fracao-uso, 0));
@@ -79,16 +79,16 @@
   opacity: var(--opacidade-barra-passada);
 }
 
-.uso-dia[data-hoje="true"] .uso-barra {
+.sessoes-uso-dia[data-hoje="true"] .sessoes-uso-barra {
   background: var(--destaque);
   opacity: 1;
 }
 
-.uso-rodape {
+.sessoes-uso-rodape {
   color: var(--texto-2);
 }
 
-.uso-total {
+.sessoes-uso-total {
   font-family: var(--fonte-mono);
   font-size: var(--tipo-12);
   color: var(--texto-2);
@@ -182,53 +182,53 @@
   border-top: var(--espessura-borda) solid var(--borda);
 }
 
-.sessao-projeto {
+.sessoes-tabela-projeto {
   overflow: hidden;
   font-weight: var(--peso-forte);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.sessao-projeto[data-sem-projeto="true"] {
+.sessoes-tabela-projeto[data-sem-projeto="true"] {
   font-weight: var(--peso-normal);
   color: var(--texto-3);
 }
 
-.sessao-ferramenta {
+.sessoes-tabela-ferramenta {
   color: var(--texto-2);
 }
 
-.sessao-contexto {
+.sessoes-tabela-contexto {
   display: flex;
   align-items: center;
   gap: var(--esp-8);
 }
 
-.sessao-contexto-trilho {
+.sessoes-tabela-contexto-trilho {
   flex: none;
   width: var(--largura-trilho-contexto);
 }
 
-.sessao-numero {
+.sessoes-tabela-numero {
   font-family: var(--fonte-mono);
   font-size: var(--tipo-12);
   color: var(--texto-2);
 }
 
-.sessao-contexto .sessao-numero {
+.sessoes-tabela-contexto .sessoes-tabela-numero {
   font-size: var(--tipo-11);
   color: var(--texto-3);
 }
 
-.sessao-contexto[data-alto="true"] .sessao-numero {
+.sessoes-tabela-contexto[data-alto="true"] .sessoes-tabela-numero {
   color: var(--aviso);
 }
 
-.sessao-numero[data-vazio="true"] {
+.sessoes-tabela-numero[data-vazio="true"] {
   color: var(--texto-3);
 }
 
-.sessao-acao {
+.sessoes-tabela-acao {
   overflow: hidden;
   font-size: var(--tipo-12);
   color: var(--texto-2);

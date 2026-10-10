@@ -5,6 +5,8 @@ import type {
   Silencio,
 } from "@moductus/contrato";
 import { Campo } from "../../componentes/Campo.tsx";
+import { Cartao } from "../../componentes/Cartao.tsx";
+import { Icone } from "../../componentes/Icone.tsx";
 import { Interruptor } from "../../componentes/Interruptor.tsx";
 import { AGENTES, DADOS_AGENTES, type Agente } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
@@ -54,6 +56,40 @@ function unico<T>(
   return valores.size === 1 ? (valores.values().next().value ?? null) : null;
 }
 
+interface PropsListaOnde {
+  rotulo: string;
+  /** `null` quando o canal varia por tipo: a lista mostra isso em vez de inventar um valor. */
+  valor: CanalNotificacao | null;
+  desativada: boolean;
+  aoMudar: (canal: CanalNotificacao) => void;
+}
+
+/** O "Onde" do quadro: lista suspensa nativa (teclado e Esc do Windows) com a seta do campo. */
+function ListaOnde({ rotulo, valor, desativada, aoMudar }: PropsListaOnde) {
+  return (
+    <span className="config-lista" data-desativada={desativada || undefined}>
+      <select
+        aria-label={rotulo}
+        value={valor ?? ""}
+        disabled={desativada}
+        onChange={(e) => aoMudar(e.target.value as CanalNotificacao)}
+      >
+        {valor === null && (
+          <option value="" disabled hidden>
+            Varia por tipo
+          </option>
+        )}
+        {CANAIS.map((c) => (
+          <option key={c.valor} value={c.valor}>
+            {c.rotulo}
+          </option>
+        ))}
+      </select>
+      <Icone nome="abrirLista" tamanho={12} />
+    </span>
+  );
+}
+
 /**
  * Notificações (AreaNotificacoes.dc.html): por agente, quanto avisar e onde; o silêncio do aviso
  * do Windows (horário, tela cheia, foco) e o início com o Windows. A tela muda os cinco tipos do
@@ -83,139 +119,165 @@ export function SecaoNotificacoes() {
       <p className="config-intro">
         Com "nada", o agente continua trabalhando. Você vê tudo no histórico e no dock quando quiser.
       </p>
-      <Grupo titulo="Por agente">
-        {AGENTES.map((agente) => {
-          const doAgente = estado.preferencias.filter((p) => p.agenteId === agente);
-          if (doAgente.length === 0) return null;
-          const nivel = unico(doAgente, (p) => p.nivel);
-          const canal = unico(doAgente, (p) => p.canal);
-          const nome = DADOS_AGENTES[agente].nome;
-          const variado = nivel === null || canal === null;
-          // Muda só o campo escolhido: se o outro varia por tipo, cada tipo guarda o seu.
-          const mudar = (parte: { nivel?: NivelNotificacao; canal?: CanalNotificacao }) => {
-            if (nivel !== null && canal !== null) {
-              void notificacoes.definir({ agenteId: agente, nivel, canal, ...parte });
-              return;
-            }
-            for (const p of doAgente) {
-              void notificacoes.definir({
-                agenteId: agente,
-                tipo: p.tipo,
-                nivel: parte.nivel ?? p.nivel,
-                canal: parte.canal ?? p.canal,
-              });
-            }
-          };
-          return (
-            <Opcao
-              key={agente}
-              titulo={nome}
-              descricao={variado ? `${EXEMPLOS[agente]} · varia por tipo` : EXEMPLOS[agente]}
-            >
-              <div className="config-notificacao-controles">
-                <Seletor
-                  rotulo={`Avisar de ${nome}`}
-                  opcoes={desativadas(NIVEIS, travado)}
-                  valor={nivel ?? ("" as NivelNotificacao)}
-                  aoMudar={(novo) => mudar({ nivel: novo })}
-                />
-                <Seletor
-                  rotulo={`Onde avisar de ${nome}`}
-                  opcoes={desativadas(CANAIS, travado || nivel === "nada")}
-                  valor={canal ?? ("" as CanalNotificacao)}
-                  aoMudar={(novo) => mudar({ canal: novo })}
-                />
-              </div>
-            </Opcao>
-          );
-        })}
-        <p className="config-nota">"Só o que precisa de mim" = pedidos de aprovação, lembretes e erros.</p>
-      </Grupo>
-      <Grupo titulo="Silêncio">
-        <Opcao
-          titulo="Horário de silêncio"
-          descricao={`das ${hora(silencio.horario.inicio)} às ${hora(silencio.horario.fim)}`}
-        >
-          <Interruptor
-            aria-label="Horário de silêncio"
-            ligado={silencio.horario.ligado}
-            desativado={!conectado}
-            aoMudar={(ligado) => mudarHorario({ ligado })}
-          />
-        </Opcao>
-        {silencio.horario.ligado && (
-          <div className="config-horario">
-            <Campo
-              rotulo="Começa às"
-              type="time"
-              value={silencio.horario.inicio}
-              disabled={!conectado}
-              onChange={(e) => {
-                if (HORA.test(e.target.value)) mudarHorario({ inicio: e.target.value });
-              }}
-            />
-            <Campo
-              rotulo="Termina às"
-              type="time"
-              value={silencio.horario.fim}
-              disabled={!conectado}
-              onChange={(e) => {
-                if (HORA.test(e.target.value)) mudarHorario({ fim: e.target.value });
-              }}
-            />
-          </div>
-        )}
-        <Opcao titulo="Em tela cheia e apresentação" descricao="jogos, vídeos, compartilhamento de tela">
-          <Interruptor
-            aria-label="Silêncio em tela cheia e apresentação"
-            ligado={silencio.telaCheia}
-            desativado={!conectado}
-            aoMudar={(telaCheia) => mudarSilencio({ telaCheia })}
-          />
-        </Opcao>
-        <Opcao titulo="Durante o foco" descricao="menos aprovações e lembretes">
-          <Interruptor
-            aria-label="Silêncio durante o foco"
-            ligado={silencio.foco}
-            desativado={!conectado}
-            aoMudar={(foco) => mudarSilencio({ foco })}
-          />
-        </Opcao>
-        <Opcao
-          titulo="Iniciar com o Windows"
-          descricao={
-            config.portable
-              ? "Indisponível no modo portable: esta cópia não se registra no Windows."
-              : "os agentes só vigiam com o app aberto"
-          }
-        >
-          <Interruptor
-            aria-label="Iniciar o Moductus junto com o Windows"
-            ligado={autostart}
-            desativado={config.portable || !conectado}
-            aoMudar={(ligado) => void definirConfig({ autostart: ligado })}
-          />
-        </Opcao>
-      </Grupo>
+      <div className="config-agentes">
+        <table>
+          <caption className="so-leitor">Por agente</caption>
+          <thead>
+            <tr>
+              <th scope="col">Agente</th>
+              <th scope="col">Avisar</th>
+              <th scope="col">Onde</th>
+            </tr>
+          </thead>
+          <tbody>
+            {AGENTES.map((agente) => {
+              const doAgente = estado.preferencias.filter((p) => p.agenteId === agente);
+              if (doAgente.length === 0) return null;
+              const nivel = unico(doAgente, (p) => p.nivel);
+              const canal = unico(doAgente, (p) => p.canal);
+              const nome = DADOS_AGENTES[agente].nome;
+              const variado = nivel === null || canal === null;
+              // Muda só o campo escolhido: se o outro varia por tipo, cada tipo guarda o seu.
+              const mudar = (parte: { nivel?: NivelNotificacao; canal?: CanalNotificacao }) => {
+                if (nivel !== null && canal !== null) {
+                  void notificacoes.definir({ agenteId: agente, nivel, canal, ...parte });
+                  return;
+                }
+                for (const p of doAgente) {
+                  void notificacoes.definir({
+                    agenteId: agente,
+                    tipo: p.tipo,
+                    nivel: parte.nivel ?? p.nivel,
+                    canal: parte.canal ?? p.canal,
+                  });
+                }
+              };
+              return (
+                <tr key={agente}>
+                  <th scope="row">
+                    <span className="config-agente">
+                      <span className="config-agente-cabeca" aria-hidden="true">
+                        <Personagem agente={agente} modo="cabeca" tamanho="notificacoes" />
+                      </span>
+                      <span className="config-agente-textos">
+                        <span className="config-agente-nome">{nome}</span>
+                        <span className="config-agente-exemplo">
+                          {variado ? `${EXEMPLOS[agente]} · varia por tipo` : EXEMPLOS[agente]}
+                        </span>
+                      </span>
+                    </span>
+                  </th>
+                  <td>
+                    <Seletor
+                      rotulo={`Avisar de ${nome}`}
+                      opcoes={desativadas(NIVEIS, travado)}
+                      valor={nivel ?? ("" as NivelNotificacao)}
+                      aoMudar={(novo) => mudar({ nivel: novo })}
+                    />
+                  </td>
+                  <td>
+                    <ListaOnde
+                      rotulo={`Onde avisar de ${nome}`}
+                      valor={canal}
+                      desativada={travado || nivel === "nada"}
+                      aoMudar={(novo) => mudar({ canal: novo })}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="config-nota">"Só o que precisa de mim" = pedidos de aprovação, lembretes e erros.</p>
       {erro && <Aviso>{erro}</Aviso>}
-      <Grupo titulo="Prévia de um aviso do Windows">
-        {/* Só para ver como sai: os botões do aviso são os do cartão de aprovação. */}
-        <div className="config-previa-aviso" aria-hidden="true">
-          <Personagem agente="faina" modo="cabeca" tamanho="dock" estado="esperando" />
-          <div className="config-previa-aviso-textos">
-            <div className="config-previa-aviso-cabeca">
-              <span>Moductus · Faina</span>
-              <span>agora</span>
+      <div className="config-notificacoes-baixo">
+        <Cartao como="section" aria-label="Silêncio">
+          <h3 className="config-cartao-titulo">Silêncio</h3>
+          <Opcao
+            titulo="Horário de silêncio"
+            descricao={`das ${hora(silencio.horario.inicio)} às ${hora(silencio.horario.fim)}`}
+          >
+            <Interruptor
+              aria-label="Horário de silêncio"
+              ligado={silencio.horario.ligado}
+              desativado={!conectado}
+              aoMudar={(ligado) => mudarHorario({ ligado })}
+            />
+          </Opcao>
+          {silencio.horario.ligado && (
+            <div className="config-horario">
+              <Campo
+                rotulo="Começa às"
+                type="time"
+                value={silencio.horario.inicio}
+                disabled={!conectado}
+                onChange={(e) => {
+                  if (HORA.test(e.target.value)) mudarHorario({ inicio: e.target.value });
+                }}
+              />
+              <Campo
+                rotulo="Termina às"
+                type="time"
+                value={silencio.horario.fim}
+                disabled={!conectado}
+                onChange={(e) => {
+                  if (HORA.test(e.target.value)) mudarHorario({ fim: e.target.value });
+                }}
+              />
             </div>
-            <strong className="config-previa-aviso-titulo">Organizar Downloads</strong>
-            <span>142 arquivos em 6 pastas. A lista está no painel.</span>
-            <div className="config-previa-aviso-botoes">
-              <span>Ver lista</span>
-              <span data-primario="">Organizar 142 arquivos</span>
+          )}
+          <Opcao titulo="Em tela cheia e apresentação" descricao="jogos, vídeos, compartilhamento de tela">
+            <Interruptor
+              aria-label="Silêncio em tela cheia e apresentação"
+              ligado={silencio.telaCheia}
+              desativado={!conectado}
+              aoMudar={(telaCheia) => mudarSilencio({ telaCheia })}
+            />
+          </Opcao>
+          <Opcao titulo="Durante o foco" descricao="menos aprovações e lembretes">
+            <Interruptor
+              aria-label="Silêncio durante o foco"
+              ligado={silencio.foco}
+              desativado={!conectado}
+              aoMudar={(foco) => mudarSilencio({ foco })}
+            />
+          </Opcao>
+          <Opcao
+            titulo="Iniciar com o Windows"
+            descricao={
+              config.portable
+                ? "Indisponível no modo portable: esta cópia não se registra no Windows."
+                : "os agentes só vigiam com o app aberto"
+            }
+          >
+            <Interruptor
+              aria-label="Iniciar o Moductus junto com o Windows"
+              ligado={autostart}
+              desativado={config.portable || !conectado}
+              aoMudar={(ligado) => void definirConfig({ autostart: ligado })}
+            />
+          </Opcao>
+        </Cartao>
+        <Grupo titulo="Prévia de um aviso do Windows">
+          {/* Só para ver como sai: os botões do aviso são os do cartão de aprovação. */}
+          <div className="config-previa-aviso" aria-hidden="true">
+            <Personagem agente="faina" modo="cabeca" tamanho="dock" estado="esperando" />
+            <div className="config-previa-aviso-textos">
+              <div className="config-previa-aviso-cabeca">
+                <span>Moductus · Faina</span>
+                <span>agora</span>
+              </div>
+              <strong className="config-previa-aviso-titulo">Organizar Downloads</strong>
+              <span>142 arquivos em 6 pastas. A lista está no painel.</span>
+              <div className="config-previa-aviso-botoes">
+                <span>Ver lista</span>
+                <span data-primario="">Organizar 142 arquivos</span>
+              </div>
             </div>
           </div>
-        </div>
-      </Grupo>
+        </Grupo>
+      </div>
     </Secao>
   );
 }

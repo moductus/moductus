@@ -157,8 +157,13 @@
   /* Configurações: campo que grava atalho e coluna do nome na prévia da importação */
   --largura-campo-atalho: 132px;
   --largura-rotulo-mudanca: 148px;
-  /* Prévia do aviso do Windows em Notificações: a largura de um toast (AreaNotificacoes.dc.html) */
-  --largura-previa-aviso: 364px;
+  /* Notificações (AreaNotificacoes.dc.html): colunas Agente e Onde da lista por agente, altura da
+     linha, a lista suspensa do "Onde" e o canto do toast na prévia do aviso do Windows */
+  --largura-col-agente: 200px;
+  --largura-col-onde: 210px;
+  --altura-linha-agente: 64px;
+  --altura-campo-tabela: 30px;
+  --raio-toast: 8px;
   /* Sessões de IA (AreaSessoes.dc.html): pedidos à direita, gráfico da semana e tabela */
   --largura-coluna-pedidos: 340px;
   --altura-grafico-uso: 110px;

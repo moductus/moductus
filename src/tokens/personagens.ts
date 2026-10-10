@@ -18,6 +18,8 @@ export const TAMANHO_PERSONAGEM = {
   faixa: 26,
   /** Cabeça na fala do agente (Conversas.dc.html). */
   fala: 30,
+  /** Cabeça na lista por agente de Notificações (AreaNotificacoes.dc.html). */
+  notificacoes: 28,
   /** Corpo inteiro no time das boas-vindas (Uso1Boas.dc.html). */
   boasVindas: 116,
   /** Corpo inteiro na apresentação do time (Uso4Time.dc.html). */

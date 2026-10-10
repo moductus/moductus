@@ -393,9 +393,9 @@ describe("aprovação pendente", () => {
       corpo: "Claude Code quer rodar um comando em moductus.",
     });
     expect(JSON.stringify(aviso)).not.toContain("pnpm test");
-    // Os mesmos do cartão do terminal: Negar, Sempre neste projeto e Permitir.
+    // Os mesmos do cartão do terminal, com o "Sempre neste projeto" encurtado para caber no aviso.
     expect(aviso.botoes).toEqual(botoesDoCartao(aprovacao));
-    expect(aviso.botoes.map((b) => b.rotulo)).toEqual(["Negar", "Sempre neste projeto", "Permitir"]);
+    expect(aviso.botoes.map((b) => b.rotulo)).toEqual(["Negar", "Sempre aqui", "Permitir"]);
     expect(servico.naoVistas()).toEqual([
       expect.objectContaining({
         id: aviso.id,
@@ -415,7 +415,7 @@ describe("aprovação pendente", () => {
     expect(servico.naoVistas()).toEqual([]);
   });
 
-  test('"Sempre neste projeto" no aviso cria a regra; negar no cartão retira o aviso', async () => {
+  test('"Sempre aqui" no aviso cria a regra; negar no cartão retira o aviso', async () => {
     const montado = montar();
     const { servico, casca, db } = montado;
     const { aprovacoes, assentar } = comAprovacoes(montado);
