@@ -22,6 +22,25 @@
   text-wrap: pretty;
 }
 
+/* O pedido numa linha (Agentes.dc.html): o verbo no texto e o comando no chip, quebrando junto. */
+.aprovacao-resumo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-6);
+}
+
+.aprovacao-resumo code {
+  max-width: 100%;
+  padding: var(--esp-2) var(--esp-6);
+  border-radius: var(--raio-atalho);
+  background: var(--fundo-chip);
+  color: var(--texto);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+  overflow-wrap: anywhere;
+}
+
 /* Comando ou lista de arquivos: mono, sobre o chip, como no canvas. */
 .aprovacao-detalhe {
   display: flex;

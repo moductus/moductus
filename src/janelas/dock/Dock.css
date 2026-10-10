@@ -136,6 +136,11 @@
   box-sizing: content-box;
 }
 
+/* Vermelho até o modelo voltar a responder (Estados.dc.html, "Erro de provedor"). */
+.dock-agente-ponto[data-tom="perigo"] {
+  background: var(--perigo);
+}
+
 .dock-espaco {
   flex: 1;
 }

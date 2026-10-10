@@ -38,6 +38,11 @@ interface PropsCartaoAprovacao {
   origem?: ReactNode;
   /** O que vai acontecer em detalhe: o comando, a lista de arquivos. */
   detalhe?: ReactNode;
+  /**
+   * O pedido numa linha, no lugar da descrição ("Quer rodar `npm test`", Agentes.dc.html): o
+   * leitor de tela ouve esta linha como a descrição do cartão.
+   */
+  resumo?: ReactNode;
   /** A descrição já está na fala do agente logo acima (Conversas.dc.html): não repete. */
   semDescricao?: boolean;
   /** Ação a mais entre recusar e permitir ("Ver lista"). */
@@ -61,6 +66,7 @@ export function CartaoAprovacao({
   aprovacao,
   origem,
   detalhe,
+  resumo,
   semDescricao = false,
   extra,
   tamanho = "normal",
@@ -96,9 +102,15 @@ export function CartaoAprovacao({
       data-estado={estado}
     >
       {origem && <div className="aprovacao-origem">{origem}</div>}
-      <p id={idDescricao} className={semDescricao ? "so-leitor" : "aprovacao-descricao"}>
-        {aprovacao.descricao}
-      </p>
+      {resumo ? (
+        <p id={idDescricao} className="aprovacao-descricao aprovacao-resumo">
+          {resumo}
+        </p>
+      ) : (
+        <p id={idDescricao} className={semDescricao ? "so-leitor" : "aprovacao-descricao"}>
+          {aprovacao.descricao}
+        </p>
+      )}
       {detalhe && <div className="aprovacao-detalhe">{detalhe}</div>}
       {!doTerminal && (
         <span className="aprovacao-desfazer">

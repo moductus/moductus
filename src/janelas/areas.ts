@@ -59,7 +59,7 @@ export const DADOS_AREAS: Readonly<Record<AreaPainel, DadosArea>> = {
     vazio: { titulo: "Nenhuma pasta indexada", texto: "Escolha as pastas que a Faina pode organizar." },
   },
   agentes: {
-    nome: "Time",
+    nome: "Agentes",
     icone: "agentes",
     vazio: {
       titulo: "Conecte um modelo para acordar o time",
