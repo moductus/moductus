@@ -17,6 +17,10 @@
   --cor-progresso: var(--destaque);
 }
 
+.progresso--neutro {
+  --cor-progresso: var(--texto-3);
+}
+
 .progresso--sucesso {
   --cor-progresso: var(--sucesso);
 }

@@ -120,6 +120,11 @@ describe("Sistema", () => {
         expect(por("main .config-secao").textContent!.length).toBeGreaterThan(30);
         continue;
       }
+      // Sessões de IA e Dev já leem o serviço: sem ele, dizem que esperam a resposta.
+      if (area.id === "sessoes" || area.id === "dev") {
+        expect(por('main [role="status"]').textContent).toBe("Esperando o serviço responder.");
+        continue;
+      }
       const vazio = por("main .estado-vazio");
       expect(vazio.querySelector(".estado-vazio-titulo")!.textContent!.length).toBeGreaterThan(3);
       expect(vazio.querySelector(".estado-vazio-texto")!.textContent!.length).toBeGreaterThan(30);
