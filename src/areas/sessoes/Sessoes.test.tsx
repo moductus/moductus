@@ -222,7 +222,7 @@ describe("Sessões de IA com dados", () => {
       ],
     ]);
     // Acima dos 80%, número e barra em aviso; sem número, nenhuma barra inventada.
-    const contextos = [...recipiente.querySelectorAll<HTMLElement>(".sessao-contexto")];
+    const contextos = [...recipiente.querySelectorAll<HTMLElement>(".sessoes-tabela-contexto")];
     expect(contextos.map((c) => c.dataset.alto)).toEqual(["false", "true"]);
     expect(contextos[0]!.querySelector('[role="progressbar"]')).toBeNull();
     expect(contextos[1]!.querySelector('[role="progressbar"]')?.className).toContain("progresso--aviso");
@@ -231,7 +231,7 @@ describe("Sessões de IA com dados", () => {
       de: "2026-10-03",
       ate: "2026-10-09",
     });
-    expect(por(".uso-rodape")?.textContent).toContain("12,4 mil tokens em 7 dias, 12,4 mil hoje.");
+    expect(por(".sessoes-uso-rodape")?.textContent).toContain("12,4 mil tokens em 7 dias, 12,4 mil hoje.");
     expect(auditar(recipiente)).toEqual([]);
   });
 

@@ -130,30 +130,30 @@ function UsoDaSemana({ dados, agora }: { dados: DadosSessoes; agora: Date }) {
       ? "Nenhum token registrado nos últimos 7 dias."
       : `${formatarTokens(semana.total)} tokens em 7 dias, ${formatarTokens(hoje)} hoje.`;
   return (
-    <Cartao como="section" className="uso" aria-labelledby={idTitulo}>
-      <div className="uso-cabecalho">
-        <h2 id={idTitulo} className="uso-titulo">
+    <Cartao como="section" className="sessoes-uso" aria-labelledby={idTitulo}>
+      <div className="sessoes-uso-cabecalho">
+        <h2 id={idTitulo} className="sessoes-uso-titulo">
           Uso de tokens · últimos 7 dias
         </h2>
         {semana.estimativa && <span>parte é estimativa</span>}
       </div>
-      <ol className="uso-grafico">
+      <ol className="sessoes-uso-grafico">
         {semana.dias.map((d) => (
-          <li key={d.dia} className="uso-dia" data-hoje={d.hoje}>
-            <span className="uso-numero" aria-hidden="true">
+          <li key={d.dia} className="sessoes-uso-dia" data-hoje={d.hoje}>
+            <span className="sessoes-uso-numero" aria-hidden="true">
               {formatarTokens(d.tokens)}
             </span>
-            <span className="uso-barra" style={alturaDaBarra(d.pct)} />
-            <span className="uso-rotulo" aria-hidden="true">
+            <span className="sessoes-uso-barra" style={alturaDaBarra(d.pct)} />
+            <span className="sessoes-uso-rotulo" aria-hidden="true">
               {d.rotulo}
             </span>
             <span className="so-leitor">{`${d.hoje ? "hoje" : d.rotulo}: ${formatarTokens(d.tokens)} tokens`}</span>
           </li>
         ))}
       </ol>
-      <div className="uso-rodape">
+      <div className="sessoes-uso-rodape">
         <span>{resumo}</span>
-        <span className="uso-total" aria-hidden="true">
+        <span className="sessoes-uso-total" aria-hidden="true">
           {formatarTokens(semana.total)}
         </span>
       </div>
@@ -264,19 +264,19 @@ function LinhaSessao({ sessao, projeto, caminho, dados, hoje, agora }: PropsLinh
   const nome = projeto ?? "sem projeto";
   return (
     <tr>
-      <td className="sessao-projeto" data-sem-projeto={projeto === null}>
+      <td className="sessoes-tabela-projeto" data-sem-projeto={projeto === null}>
         {nome}
       </td>
-      <td className="sessao-ferramenta">{NOME_FERRAMENTA[sessao.ferramenta]}</td>
+      <td className="sessoes-tabela-ferramenta">{NOME_FERRAMENTA[sessao.ferramenta]}</td>
       <td>
         <Selo forma="ponto" tom={estado.tom}>
           {estado.texto}
         </Selo>
       </td>
       <td>
-        <span className="sessao-contexto" data-alto={contexto.alto}>
+        <span className="sessoes-tabela-contexto" data-alto={contexto.alto}>
           {contexto.pct !== null && (
-            <span className="sessao-contexto-trilho">
+            <span className="sessoes-tabela-contexto-trilho">
               <Progresso
                 valor={contexto.pct}
                 rotulo={`Contexto de ${nome}`}
@@ -285,16 +285,16 @@ function LinhaSessao({ sessao, projeto, caminho, dados, hoje, agora }: PropsLinh
               />
             </span>
           )}
-          <span className="sessao-numero">{contexto.texto}</span>
+          <span className="sessoes-tabela-numero">{contexto.texto}</span>
         </span>
       </td>
       <td>
-        <span className="sessao-numero" data-vazio={gasto.vazio} title={gasto.rotulo}>
+        <span className="sessoes-tabela-numero" data-vazio={gasto.vazio} title={gasto.rotulo}>
           <span aria-hidden="true">{gasto.texto}</span>
           <span className="so-leitor">{gasto.rotulo}</span>
         </span>
       </td>
-      <td className="sessao-acao" title={acao ?? undefined}>
+      <td className="sessoes-tabela-acao" title={acao ?? undefined}>
         {acao ?? "—"}
       </td>
     </tr>

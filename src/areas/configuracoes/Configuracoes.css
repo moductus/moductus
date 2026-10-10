@@ -163,11 +163,164 @@
 }
 
 /* ---------- Notificações (AreaNotificacoes.dc.html) ---------- */
-.config-notificacao-controles {
+/* Lista por agente: tabela num cartão, cabeçalho elevado, colunas Agente 200 e Onde 210. Em
+   janela estreita as duas encolhem (até 26% da lista cada, nunca abaixo do mínimo) e o "Avisar"
+   fica sempre inteiro: o layout automático não deixa a coluna menor que o seletor, e o que não
+   couber rola de lado dentro do cartão. */
+.config-agentes {
+  container-type: inline-size;
+  overflow-x: auto;
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+}
+
+.config-agentes table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.config-agentes th,
+.config-agentes td {
+  padding: 0;
+  font-weight: var(--peso-normal);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.config-agentes th:first-child,
+.config-agentes td:first-child {
+  padding-left: var(--esp-16);
+}
+
+.config-agentes th:last-child,
+.config-agentes td:last-child {
+  padding-right: var(--esp-16);
+}
+
+.config-agentes thead tr {
+  height: var(--altura-cabecalho-tabela);
+  background: var(--fundo-elevado);
+}
+
+.config-agentes thead th {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+/* Respiro entre as colunas quando a janela aperta e cada uma fica com o mínimo. */
+.config-agentes tr > :not(:last-child) {
+  padding-right: var(--esp-12);
+}
+
+.config-agentes thead th:first-child {
+  width: clamp(
+    calc(var(--largura-col-agente-min) + var(--esp-16)),
+    var(--fracao-col-agentes),
+    calc(var(--largura-col-agente) + var(--esp-16))
+  );
+}
+
+.config-agentes thead th:last-child {
+  width: clamp(
+    calc(var(--largura-col-onde-min) + var(--esp-16)),
+    var(--fracao-col-agentes),
+    calc(var(--largura-col-onde) + var(--esp-16))
+  );
+}
+
+.config-agentes tbody tr {
+  height: var(--altura-linha-agente);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+/* Os mínimos ficam no conteúdo: célula de tabela não segura a largura pedida quando falta espaço. */
+.config-agente {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  min-width: var(--largura-col-agente-min);
+}
+
+.config-agente-cabeca {
+  display: flex;
+  flex: none;
+}
+
+.config-agente-textos {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: var(--esp-6);
+  min-width: 0;
+}
+
+.config-agente-nome {
+  font-weight: var(--peso-forte);
+  color: var(--texto);
+}
+
+.config-agente-exemplo {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+/* "Onde": lista suspensa nativa com a cara do campo; a seta fica por cima, sem pegar clique. */
+.config-lista {
+  position: relative;
+  display: flex;
+  align-items: center;
+  color: var(--texto);
+}
+
+.config-lista select {
+  width: 100%;
+  min-width: var(--largura-col-onde-min);
+  height: var(--altura-campo-tabela);
+  padding: 0 calc(var(--esp-10) + var(--icone-12) + var(--esp-6)) 0 var(--esp-10);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-campo);
+  appearance: none;
+  cursor: pointer;
+  transition: border-color var(--dur-entrada) ease-out;
+}
+
+.config-lista select:hover:not(:disabled) {
+  border-color: var(--texto-apagado);
+}
+
+.config-lista select:disabled {
+  opacity: var(--opacidade-desativado);
+  cursor: default;
+}
+
+.config-lista option {
+  background: var(--fundo-lista-nativa);
+  color: var(--texto-lista-nativa);
+}
+
+.config-lista > .icone {
+  position: absolute;
+  right: var(--esp-10);
+  pointer-events: none;
+}
+
+.config-lista[data-desativada] > .icone {
+  opacity: var(--opacidade-desativado);
+}
+
+/* Embaixo da lista: o silêncio num cartão e, ao lado, a prévia do aviso; sem largura para as
+   duas colunas, a prévia desce para baixo do silêncio. */
+.config-notificacoes-baixo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--largura-min-coluna-notificacoes)), 1fr));
+  gap: var(--esp-16);
+  align-items: start;
+}
+
+.config-cartao-titulo {
+  margin: 0;
+  padding-bottom: var(--esp-6);
+  font-size: var(--tipo-13);
+  font-weight: var(--peso-forte);
 }
 
 .config-horario {
@@ -177,14 +330,13 @@
   border-bottom: var(--espessura-borda) solid var(--borda);
 }
 
-/* Prévia do aviso do Windows: o cartão do toast, sem ação. */
+/* Prévia do aviso do Windows: o toast, sem ação; o canto é o do Windows nos três temas. */
 .config-previa-aviso {
   display: flex;
   gap: var(--esp-12);
-  max-width: var(--largura-previa-aviso);
-  padding: var(--esp-12);
+  padding: var(--esp-14);
   border: var(--espessura-borda) solid var(--borda-forte);
-  border-radius: var(--raio-cartao);
+  border-radius: var(--raio-toast);
   background: var(--fundo-elevado);
   font-size: var(--tipo-12);
   color: var(--texto-2);
@@ -195,12 +347,12 @@
   flex: 1;
   flex-direction: column;
   gap: var(--esp-4);
+  min-width: 0;
 }
 
 .config-previa-aviso-cabeca {
   display: flex;
   justify-content: space-between;
-  font-size: var(--tipo-11);
   color: var(--texto-3);
 }
 
@@ -210,19 +362,25 @@
   color: var(--texto);
 }
 
+/* Botões pequenos do tamanho do rótulo, numa linha só como no toast; numa coluna estreita demais,
+   o segundo desce em vez de vazar do cartão. */
 .config-previa-aviso-botoes {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--esp-8);
-  margin-top: var(--esp-6);
+  padding-top: var(--esp-6);
 }
 
 .config-previa-aviso-botoes > span {
-  flex: 1;
-  padding: var(--esp-6) var(--esp-8);
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: var(--altura-botao-pequeno);
+  padding: 0 var(--esp-10);
   border: var(--espessura-borda) solid var(--borda-forte);
-  border-radius: var(--raio-controle);
-  text-align: center;
+  border-radius: var(--raio-botao);
   color: var(--texto);
+  white-space: nowrap;
 }
 
 .config-previa-aviso-botoes > [data-primario] {

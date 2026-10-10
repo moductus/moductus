@@ -8,7 +8,11 @@ const NUNO = "nuno";
 /** Os textos dos botões genéricos, os mesmos do cartão do terminal (DESIGN.md §5). */
 const PERMITIR = "Permitir";
 const NEGAR = "Negar";
-const SEMPRE_NESTE_PROJETO = "Sempre neste projeto";
+/**
+ * O "Sempre neste projeto" do cartão, encurtado: com três botões, o aviso do Windows corta o
+ * rótulo longo. O projeto já está no corpo do aviso ("… em moductus").
+ */
+const SEMPRE_AQUI = "Sempre aqui";
 
 /** Cada botão do aviso e o que ele decide. */
 const DECISOES: Readonly<Record<string, Omit<PedidoDecidir, "id">>> = {
@@ -20,15 +24,16 @@ const DECISOES: Readonly<Record<string, Omit<PedidoDecidir, "id">>> = {
 const referenciaDe = (id: string) => `aprovacao:${id}`;
 
 /**
- * Os botões do cartão (CartaoAprovacao.tsx), na mesma ordem: recusar, "Sempre neste projeto"
- * quando o pedido do terminal admite a regra, e o primário com verbo e objeto.
+ * Os botões do cartão (CartaoAprovacao.tsx), na mesma ordem: recusar, "Sempre aqui" (o "Sempre
+ * neste projeto" do cartão) quando o pedido do terminal admite a regra, e o primário com verbo e
+ * objeto.
  */
 export function botoesDoCartao(aprovacao: Aprovacao): BotaoAviso[] {
   const { acao } = aprovacao;
   const doTerminal = aprovacao.fonte !== "moductus";
   return [
     { id: "negar", rotulo: acao.rotuloRecusar ?? NEGAR },
-    ...(doTerminal && aprovacao.admiteSempre ? [{ id: "sempre", rotulo: SEMPRE_NESTE_PROJETO }] : []),
+    ...(doTerminal && aprovacao.admiteSempre ? [{ id: "sempre", rotulo: SEMPRE_AQUI }] : []),
     { id: "permitir", rotulo: acao.rotulo ?? PERMITIR },
   ];
 }

@@ -108,6 +108,13 @@ const marcada = (rotulo: string) =>
 const opcao = (rotulo: string, texto: string) =>
   [...grupo(rotulo).querySelectorAll<HTMLElement>('[role="radio"]')].find((r) => r.textContent === texto)!;
 const chave = (rotulo: string) => por(`[role="switch"][aria-label="${rotulo}"]`)!;
+const lista = (rotulo: string) => por(`select[aria-label="${rotulo}"]`) as HTMLSelectElement;
+const onde = (rotulo: string) => lista(rotulo).options[lista(rotulo).selectedIndex]?.textContent ?? null;
+const escolher = (rotulo: string, valor: string) =>
+  act(async () => {
+    lista(rotulo).value = valor;
+    lista(rotulo).dispatchEvent(new Event("change", { bubbles: true }));
+  });
 const pedidosDe = (metodo: string) => falso.pedidos.filter((p) => p.metodo === metodo).map((p) => p.dados);
 
 describe("Notificações", () => {
@@ -116,15 +123,16 @@ describe("Notificações", () => {
     await montar();
     expect(marcada("Avisar de Alba")).toBe("Só o que precisa de mim");
     expect(marcada("Avisar de Nuno")).toBe("Tudo");
-    expect(marcada("Onde avisar de Tula")).toBe("Windows e dock");
+    expect(onde("Onde avisar de Tula")).toBe("Windows e dock");
 
     await act(async () => opcao("Avisar de Tula", "Nada").click());
     expect(pedidosDe("notificacoes.definir")).toEqual([{ agenteId: "tula", nivel: "nada", canal: "ambos" }]);
     expect(marcada("Avisar de Tula")).toBe("Nada");
-    // Com "nada", onde avisar não faz diferença: o seletor fica travado.
-    expect(opcao("Onde avisar de Tula", "Só o Windows").hasAttribute("disabled")).toBe(true);
+    // Com "nada", onde avisar não faz diferença: a lista fica travada.
+    expect(lista("Onde avisar de Tula").disabled).toBe(true);
+    expect(lista("Onde avisar de Faina").disabled).toBe(false);
 
-    await act(async () => opcao("Onde avisar de Faina", "Só o ponto no dock").click());
+    await escolher("Onde avisar de Faina", "dock");
     expect(pedidosDe("notificacoes.definir").at(-1)).toEqual({
       agenteId: "faina",
       nivel: "so_o_que_precisa",
@@ -140,10 +148,10 @@ describe("Notificações", () => {
     await montar();
     expect(marcada("Avisar de Alba")).toBeNull();
     expect(recipiente.textContent).toContain("lembretes, briefing · varia por tipo");
-    expect(marcada("Onde avisar de Alba")).toBe("Windows e dock");
+    expect(onde("Onde avisar de Alba")).toBe("Windows e dock");
 
     // Mudar só onde: cada tipo vai com o próprio nível, e a rotina continua em "nada".
-    await act(async () => opcao("Onde avisar de Alba", "Só o ponto no dock").click());
+    await escolher("Onde avisar de Alba", "dock");
     expect(pedidosDe("notificacoes.definir")).toEqual(
       TipoNotificacao.options.map((tipo) => ({
         agenteId: "alba",
@@ -179,6 +187,44 @@ describe("Notificações", () => {
     servicoQueAceita();
     await montar();
     await act(async () => falso.ouvintes.get("notificacoes.mudou")!(preferencias(() => ({ canal: "dock" }))));
-    expect(marcada("Onde avisar de Nuno")).toBe("Só o ponto no dock");
+    expect(onde("Onde avisar de Nuno")).toBe("Só o ponto no dock");
+  });
+
+  it("canal mudado só para um tipo: a lista diz que varia, sem marcar um canal", async () => {
+    servicoQueAceita(
+      preferencias((agenteId, tipo) => (agenteId === "tula" && tipo === "rotina" ? { canal: "dock" } : {})),
+    );
+    await montar();
+    expect(onde("Onde avisar de Tula")).toBe("Varia por tipo");
+    expect(onde("Onde avisar de Alba")).toBe("Windows e dock");
+  });
+
+  it("segue o quadro: tabela por agente com a cabeça de cada um, silêncio num cartão ao lado da prévia", async () => {
+    servicoQueAceita();
+    await montar();
+    const tabela = por("table")!;
+    expect([...tabela.querySelectorAll("thead th")].map((th) => th.textContent)).toEqual([
+      "Agente",
+      "Avisar",
+      "Onde",
+    ]);
+    const linhas = [...tabela.querySelectorAll("tbody tr")];
+    expect(linhas.map((l) => l.querySelector("th")!.textContent)).toEqual([
+      "Albalembretes, briefing",
+      "Tulavencimentos, orçamento",
+      "Fainaprévias para aprovar",
+      "Nunosessões, CI, limites",
+    ]);
+    // Cabeça do personagem em cada linha; "Avisar" segmentado e "Onde" em lista suspensa.
+    for (const linha of linhas) {
+      expect(linha.querySelector('.personagem[data-modo="cabeca"]')).not.toBeNull();
+      expect(linha.querySelector('[role="radiogroup"]')).not.toBeNull();
+      expect(linha.querySelector("select")).not.toBeNull();
+    }
+    const [silencio, previa] = [...por(".config-notificacoes-baixo")!.children] as HTMLElement[];
+    expect(silencio!.classList.contains("cartao")).toBe(true);
+    expect(silencio!.getAttribute("aria-label")).toBe("Silêncio");
+    expect(previa!.getAttribute("aria-label")).toBe("Prévia de um aviso do Windows");
+    expect(auditar(recipiente)).toEqual([]);
   });
 });

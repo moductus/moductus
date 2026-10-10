@@ -241,7 +241,7 @@ mod testes {
             Some("Nuno"),
             "Claude Code pede permissão",
             Some("Rodar pnpm test em moductus."),
-            &[botao("negar", "Negar"), botao("sempre", "Sempre neste projeto"), botao("permitir", "Permitir")],
+            &[botao("negar", "Negar"), botao("sempre", "Sempre aqui"), botao("permitir", "Permitir")],
         );
         assert!(xml.starts_with("<toast launch=\"corpo\" activationType=\"foreground\">"));
         assert!(xml.contains("<text>Claude Code pede permissão</text><text>Rodar pnpm test em moductus.</text>"));
