@@ -27,7 +27,7 @@ const CLAUDE: ProvedorDetectado = {
   caminho: "C:\\bin\\claude.exe",
   versao: "2.1.287",
   logado: true,
-  atendido: true,
+  impedimento: null,
   versaoMinima: null,
 };
 
@@ -35,7 +35,14 @@ const CLAUDE: ProvedorDetectado = {
  * Banco migrado de verdade (com os quatro agentes de fábrica, sem modelo), cofre em memória e o
  * provedor falso no lugar dos adaptadores: nenhum teste chama modelo, rede ou CLI.
  */
-function montar(opcoes: { detectados?: ProvedorDetectado[]; prazoTesteMs?: number } = {}) {
+function montar(
+  opcoes: {
+    detectados?: ProvedorDetectado[];
+    detectar?: () => Promise<ProvedorDetectado[]>;
+    prazoTesteMs?: number;
+    prazoDeteccaoMs?: number;
+  } = {},
+) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-provedores-"));
   pastas.push(pasta);
   const db = abrirBanco(pasta);
@@ -65,11 +72,12 @@ function montar(opcoes: { detectados?: ProvedorDetectado[]; prazoTesteMs?: numbe
       registro,
       detectar: () => {
         deteccoes++;
-        return Promise.resolve(opcoes.detectados ?? [CLAUDE]);
+        return opcoes.detectar ? opcoes.detectar() : Promise.resolve(opcoes.detectados ?? [CLAUDE]);
       },
       agora: () => new Date("2026-10-10T12:00:00.000Z"),
       cronometro: () => tempos.shift() ?? 0,
       ...(opcoes.prazoTesteMs ? { prazoTesteMs: opcoes.prazoTesteMs } : {}),
+      ...(opcoes.prazoDeteccaoMs ? { prazoDeteccaoMs: opcoes.prazoDeteccaoMs } : {}),
     },
     {
       provedores: (lista) => avisos.provedores.push(lista),
@@ -213,12 +221,84 @@ describe("testar provedor", () => {
       expect(agente(id)).toMatchObject({ provedor_id: primeiro.id, origem: "usuario" });
     }
     expect(avisos.agentes).toEqual([["alba", "faina", "nuno", "tula"]]);
-    expect(avisos.voltou).toEqual([["alba", "faina", "nuno", "tula"]]);
+    // Ninguém dormia por ele: ninguém a acordar.
+    expect(avisos.voltou).toEqual([]);
 
     await servico.testar({ id: segundo.id });
     expect(agente("alba").provedor_id).toBe(primeiro.id);
     expect(avisos.agentes).toHaveLength(1);
-    expect(avisos.voltou.at(-1)).toEqual([]);
+  });
+
+  test("acorda quem dorme pelo provedor, não quem dorme pelo teto de gasto", async () => {
+    const { db, servico, falso, avisos } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    db.prepare("UPDATE agentes SET provedor_id = ?").run(criado.id);
+    db.prepare("UPDATE agentes SET estado = 'dormindo', motivo_sono = 'limite' WHERE id = 'alba'").run();
+    db.prepare("UPDATE agentes SET estado = 'dormindo', motivo_sono = 'credencial' WHERE id = 'nuno'").run();
+    db.prepare("UPDATE agentes SET estado = 'dormindo', motivo_sono = 'teto' WHERE id = 'tula'").run();
+    falso.roteirizar([{ tipo: "fim" }]);
+
+    await servico.testar({ id: criado.id });
+    expect(avisos.voltou).toEqual([["alba", "nuno"]]);
+  });
+
+  test("substituir: passou, os agentes do antigo vão para o novo e o antigo sai com a chave", async () => {
+    const { db, servico, falso, agente, linha, cofre, avisos } = montar();
+    const antigo = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1", chave: CHAVE });
+    falso.roteirizar([{ tipo: "fim" }], [{ tipo: "fim" }]);
+    await servico.testar({ id: antigo.id });
+    const novo = await servico.criar({ tipo: "openai", nome: "OpenAI", modelo: "gpt-5", chave: "sk-2" });
+    // A reserva da Tula é o novo: virar principal deixa a reserva vazia.
+    db.prepare("UPDATE agentes SET provedor_reserva_id = ? WHERE id = 'tula'").run(novo.id);
+    avisos.agentes.length = 0;
+
+    const resultado = await servico.testar({ id: novo.id, substitui: [antigo.id, "ja-saiu"] });
+
+    expect(resultado.ok).toBe(true);
+    for (const id of ["alba", "faina", "nuno"]) expect(agente(id)).toMatchObject({ provedor_id: novo.id });
+    expect(agente("tula")).toMatchObject({ provedor_id: novo.id, provedor_reserva_id: null });
+    expect(linha(antigo.id)).toMatchObject({ apagado_em: "2026-10-10T12:00:00.000Z", credencial: null });
+    expect([...cofre.keys()]).toEqual([credencialDoProvedor(novo.id)]);
+    expect(servico.listar().map((p) => p.id)).toEqual([novo.id]);
+    expect(avisos.agentes).toEqual([["alba", "faina", "nuno", "tula"]]);
+  });
+
+  test("substituir: não passou, nada muda", async () => {
+    const { servico, falso, agente, cofre } = montar();
+    const antigo = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1", chave: CHAVE });
+    falso.roteirizar([{ tipo: "fim" }]);
+    await servico.testar({ id: antigo.id });
+    const novo = await servico.criar({ tipo: "openai", nome: "OpenAI", modelo: "gpt-5", chave: "sk-2" });
+    const recusa = { motivo: "credencial" as const, mensagem: "A OpenAI recusou a chave.", voltaEm: null };
+    falso.roteirizar([{ tipo: "erro", falha: recusa }]);
+
+    await expect(servico.testar({ id: novo.id, substitui: [antigo.id] })).resolves.toMatchObject({
+      ok: false,
+    });
+    expect(agente("alba").provedor_id).toBe(antigo.id);
+    expect(servico.listar().map((p) => p.id)).toEqual([antigo.id, novo.id]);
+    expect(cofre.size).toBe(2);
+  });
+
+  test("provedor que mudou ou saiu enquanto o teste rodava não grava nem toma lugar", async () => {
+    const { servico, falso, agente, linha } = montar();
+    const mudou = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    const saiu = await servico.criar({ ...ollama, baseUrl: "http://localhost:1234/v1" });
+    falso.roteirizar(
+      [{ tipo: "pausa", ms: 30 }, { tipo: "fim" }],
+      [{ tipo: "pausa", ms: 30 }, { tipo: "fim" }],
+    );
+
+    const testeDoQueMudou = servico.testar({ id: mudou.id });
+    await servico.definir({ id: mudou.id, modelo: "llama3.2" });
+    await expect(testeDoQueMudou).resolves.toMatchObject({ ok: true });
+    expect(linha(mudou.id).testado_em).toBeNull();
+
+    const testeDoQueSaiu = servico.testar({ id: saiu.id, substitui: [mudou.id] });
+    await servico.remover({ id: saiu.id });
+    await expect(testeDoQueSaiu).resolves.toMatchObject({ ok: true });
+    expect(servico.listar().map((p) => p.id)).toEqual([mudou.id]);
+    expect(agente("alba").provedor_id).toBeNull();
   });
 
   test("agente cujo provedor foi para a lixeira recebe o próximo que passa", async () => {
@@ -289,6 +369,11 @@ describe("testar provedor", () => {
         "credencial",
         "Claude Code está sem login. Abra um terminal, entre com a sua conta e teste de novo.",
       ],
+      [
+        [{ ...CLAUDE, caminho: "C:\\npm\\claude.cmd", impedimento: "instalado_pelo_npm" }],
+        "ausente",
+        "Claude Code foi instalado pelo npm, e o Moductus usa o do instalador nativo. Instale por ele e teste de novo.",
+      ],
     ];
     for (const [detectados, motivo, mensagem] of casos) {
       const { servico, falso, linha } = montar({ detectados });
@@ -300,6 +385,19 @@ describe("testar provedor", () => {
       expect(falso.pedidos).toEqual([]);
       expect(linha(criado.id).testado_em).toBeNull();
     }
+  });
+
+  test("detecção que não volta no prazo vira fora do ar, sem chamar o CLI", async () => {
+    const { servico, falso } = montar({
+      detectar: () => new Promise(() => undefined),
+      prazoDeteccaoMs: 20,
+    });
+    const criado = await servico.criar({ tipo: "claude-cli", nome: "Claude Code" });
+    await expect(servico.testar({ id: criado.id })).resolves.toMatchObject({
+      ok: false,
+      falha: { motivo: "fora_do_ar", mensagem: "Claude Code não respondeu à versão nem ao login em 1 s." },
+    });
+    expect(falso.pedidos).toEqual([]);
   });
 
   test("CLI pronto faz a chamada; API não passa pela detecção", async () => {

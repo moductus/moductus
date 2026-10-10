@@ -37,6 +37,8 @@ const falso = vi.hoisted(() => {
     detectados: [] as unknown[],
     provedores: [] as { id: string; tipo: string; nome: string }[],
     criados: 0,
+    /** Quando preenchido, criar provedor é recusado com esta mensagem. */
+    recusarCriar: null as string | null,
     /** Como o teste de cada provedor termina. */
     teste: (_id: string): unknown => null,
     emitir(nome: string, dados: unknown) {
@@ -56,7 +58,12 @@ vi.mock("../../../servico/conexao.ts", () => ({
     },
     pedir(metodo: string, dados?: unknown) {
       falso.pedidos.push([metodo, dados]);
-      return Promise.resolve(atender(metodo, dados));
+      // Como o canal: o erro do serviço chega como promessa recusada.
+      try {
+        return Promise.resolve(atender(metodo, dados));
+      } catch (erro) {
+        return Promise.reject(erro as Error);
+      }
     },
   },
 }));
@@ -73,15 +80,25 @@ function atender(metodo: string, dados: unknown): unknown {
     case "provedores.listar":
       return falso.provedores;
     case "provedores.criar": {
+      if (falso.recusarCriar) throw new Error(falso.recusarCriar);
       const novo = { id: `prov-${++falso.criados}`, ...(dados as { tipo: string; nome: string }) };
       falso.provedores = [...falso.provedores, novo];
       return novo;
     }
-    case "provedores.remover":
-      falso.provedores = falso.provedores.filter((p) => p.id !== (dados as { id: string }).id);
+    case "provedores.remover": {
+      const { id } = dados as { id: string };
+      if (!falso.provedores.some((p) => p.id === id)) throw new Error("provedor não encontrado");
+      falso.provedores = falso.provedores.filter((p) => p.id !== id);
       return falso.provedores;
-    case "provedores.testar":
-      return falso.teste((dados as { id: string }).id);
+    }
+    case "provedores.testar": {
+      // Como o serviço: id que não existe é erro; o que passa toma o lugar dos que substitui.
+      const { id, substitui = [] } = dados as { id: string; substitui?: string[] };
+      if (!falso.provedores.some((p) => p.id === id)) throw new Error("provedor não encontrado");
+      const resultado = falso.teste(id) as { ok: boolean };
+      if (resultado.ok) falso.provedores = falso.provedores.filter((p) => !substitui.includes(p.id));
+      return resultado;
+    }
     case "config.obter":
       return estadoConfig();
     case "config.definir":
@@ -155,6 +172,7 @@ beforeEach(() => {
   falso.detectados = [];
   falso.provedores = [];
   falso.criados = 0;
+  falso.recusarCriar = null;
   falso.teste = (id) => ({
     ok: true,
     provedorId: id,
@@ -336,7 +354,7 @@ const CLAUDE = {
   caminho: "C:\\bin\\claude.exe",
   versao: "2.1.287",
   logado: true,
-  atendido: true,
+  impedimento: null,
   versaoMinima: null,
 };
 
@@ -381,7 +399,7 @@ describe("primeiro uso: modelo", () => {
         caminho: "C:\\npm\\gemini.cmd",
         versao: "0.42.0",
         logado: null,
-        atendido: false,
+        impedimento: "sem_adaptador",
       },
     ];
     await noModelo();
@@ -508,7 +526,8 @@ describe("primeiro uso: modelo", () => {
     expect(por<HTMLInputElement>('input[type="password"]')!.value).toBe("sk-local");
     await clicar(botao("Testar"));
 
-    expect(pedidosDe("provedores.remover")).toEqual([{ id: "prov-1" }]);
+    // A troca é do serviço, no teste: a interface não remove nada sozinha.
+    expect(pedidosDe("provedores.remover")).toEqual([]);
     expect(pedidosDe("provedores.criar").at(-1)).toEqual({
       tipo: "openai-compativel",
       nome: "localhost:11434",
@@ -516,10 +535,82 @@ describe("primeiro uso: modelo", () => {
       modelo: "qwen3:8b",
       chave: "sk-local",
     });
-    expect(pedidosDe("provedores.testar").at(-1)).toEqual({ id: "prov-2" });
+    expect(pedidosDe("provedores.testar").at(-1)).toEqual({ id: "prov-2", substitui: ["prov-1"] });
     expect(falso.provedores.map((p) => p.id)).toEqual(["prov-2"]);
     expect(por(".uso-nota")!.textContent).toContain("Paga por uso");
+    // A chave foi para o Gerenciador de Credenciais e saiu da tela.
+    expect(por<HTMLInputElement>('input[type="password"]')!.value).toBe("");
     expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("criar que falha não estraga o passo: o Testar seguinte funciona e o primeiro fica", async () => {
+    falso.detectados = [CLAUDE];
+    await noModelo();
+    await clicar(botao("Testar"));
+    expect(falso.provedores.map((p) => p.id)).toEqual(["prov-1"]);
+
+    await clicar(todos('input[name="modelo"]').at(-1));
+    await clicar(por('[role="radiogroup"][aria-label="Provedor da chave"] [role="radio"]:last-child'));
+    await digitar("Endereço (base_url)", "http://localhost:11434/v1");
+    falso.recusarCriar = "O endereço (base_url) não é válido.";
+    await clicar(botao("Testar"));
+    expect(por(".uso-nota")!.textContent).toContain("O endereço (base_url) não é válido.");
+    expect(falso.provedores.map((p) => p.id)).toEqual(["prov-1"]);
+
+    // De volta ao Claude Code: o mesmo provedor, sem nada a substituir.
+    await clicar(todos('input[name="modelo"]')[0]);
+    await clicar(botao("Testar"));
+    expect(pedidosDe("provedores.testar").at(-1)).toEqual({ id: "prov-1" });
+    expect(por(".uso-nota .selo")!.textContent).toBe("funcionando");
+
+    // E a chave de API, agora aceita, toma o lugar dele.
+    falso.recusarCriar = null;
+    await clicar(todos('input[name="modelo"]').at(-1));
+    await clicar(botao("Testar"));
+    expect(pedidosDe("provedores.testar").at(-1)).toEqual({ id: "prov-2", substitui: ["prov-1"] });
+    expect(falso.provedores.map((p) => p.id)).toEqual(["prov-2"]);
+  });
+
+  it("o que falhou sai junto quando outro passa; o que já existia antes do passo nunca", async () => {
+    falso.detectados = [CLAUDE];
+    falso.provedores = [{ id: "ja-existia", tipo: "claude-cli", nome: "Claude Code" }];
+    await noModelo();
+    await clicar(botao("Testar"));
+
+    await clicar(todos('input[name="modelo"]').at(-1));
+    await digitar("Modelo", "gpt-5-mini");
+    falso.teste = (id) => ({
+      ok: false,
+      provedorId: id,
+      falha: { motivo: "credencial", mensagem: "A OpenAI pede uma chave.", voltaEm: null },
+      testadoEm: "2026-10-10T12:00:00.000Z",
+    });
+    await clicar(botao("Testar"));
+    expect(pedidosDe("provedores.testar").at(-1)).toEqual({ id: "prov-1" });
+
+    falso.teste = (id) => ({
+      ok: true,
+      provedorId: id,
+      latenciaMs: 900,
+      testadoEm: "2026-10-10T12:00:00.000Z",
+    });
+    await digitar("Chave", "sk-certa");
+    await clicar(botao("Testar"));
+    expect(pedidosDe("provedores.testar").at(-1)).toEqual({ id: "prov-2", substitui: ["prov-1"] });
+    expect(falso.provedores.map((p) => p.id)).toEqual(["ja-existia", "prov-2"]);
+  });
+
+  it("o Claude Code do npm aparece, mas não dá para escolher", async () => {
+    falso.detectados = [{ ...CLAUDE, caminho: "C:\\npm\\claude.cmd", impedimento: "instalado_pelo_npm" }];
+    await noModelo();
+    expect(modelos()[0]).toEqual({
+      nome: "Claude Code",
+      selo: "instalado pelo npm",
+      texto:
+        "CLI no PATH, versão 2.1.287 · o Moductus usa o Claude Code do instalador nativo. Instale por ele e procure de novo.",
+      marcado: false,
+      desativado: true,
+    });
   });
 });
 

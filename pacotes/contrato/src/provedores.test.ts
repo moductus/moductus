@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   MudancaProvedor,
   NovoProvedor,
+  PedidoTesteProvedor,
   Provedor,
   ProvedorDetectado,
   ResultadoTesteProvedor,
@@ -62,15 +63,24 @@ describe("provedor", () => {
       caminho: "C:\\bin\\claude.exe",
       versao: "2.1.3",
       logado: true,
-      atendido: true,
+      impedimento: null,
       versaoMinima: "2.1.257",
     };
     expect(ProvedorDetectado.safeParse(claude).success).toBe(true);
     expect(ProvedorDetectado.safeParse({ ...claude, tipo: "openai" }).success).toBe(false);
     expect(ProvedorDetectado.safeParse({ ...claude, logado: null, versaoMinima: null }).success).toBe(true);
+    expect(ProvedorDetectado.safeParse({ ...claude, impedimento: "instalado_pelo_npm" }).success).toBe(true);
+    expect(ProvedorDetectado.safeParse({ ...claude, impedimento: "outro" }).success).toBe(false);
     // Sem dizer se o Moductus fala com ele, a tela não sabe se oferece o CLI.
-    const { atendido: _, ...semAtendido } = claude;
-    expect(ProvedorDetectado.safeParse(semAtendido).success).toBe(false);
+    const { impedimento: _, ...semImpedimento } = claude;
+    expect(ProvedorDetectado.safeParse(semImpedimento).success).toBe(false);
+  });
+
+  test("teste pode dizer quem o provedor substitui", () => {
+    expect(PedidoTesteProvedor.parse({ id: ollama.id })).toEqual({ id: ollama.id });
+    expect(PedidoTesteProvedor.safeParse({ id: ollama.id, substitui: [ollama.id] }).success).toBe(true);
+    expect(PedidoTesteProvedor.safeParse({ id: ollama.id, substitui: [""] }).success).toBe(false);
+    expect(PedidoTesteProvedor.safeParse({ id: ollama.id, substitui: ollama.id }).success).toBe(false);
   });
 
   test("teste que falhou diz o motivo e quando volta", () => {

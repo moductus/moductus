@@ -32,10 +32,12 @@ import { Seletor, type OpcaoSeletor } from "../../../componentes/Seletor.tsx";
 import { servico } from "../../../servico/conexao.ts";
 import {
   CLIS,
+  criadosDepois,
   formatarLatencia,
   MODELO_INICIAL,
   novoDaApi,
   situacaoDoCli,
+  substituicao,
   type EscolhaModelo,
   type EstadoModelo,
   type TipoApi,
@@ -490,8 +492,8 @@ interface PropsModelo extends PropsCabecalho {
 
 /**
  * Conectar um modelo (PRODUCT.md §5): os CLIs que o serviço achou no PC, ou uma chave de API, e um
- * teste de verdade, só quando o usuário pede. O provedor que passa vai para os quatro agentes (o
- * serviço faz isso); trocar de escolha e testar de novo tira o que este passo tinha criado.
+ * teste de verdade, só quando o usuário pede. O provedor que passa vai para os quatro agentes, e
+ * toma o lugar dos que este passo tinha criado antes: as duas coisas o serviço faz, no teste.
  */
 function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
   const [detectados, setDetectados] = useState<ProvedorDetectado[] | null>(null);
@@ -544,29 +546,41 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
     if (!escolha || testando) return;
     const nome = nomeDaEscolha;
     mudar((e) => ({ ...e, resultado: { fase: "testando", nome } }));
+    const criadosAqui = estado.criadosAqui;
+    // O que foi criado agora entra na lista mesmo se o teste quebrar, para sair no próximo que passar.
+    let criado: string | null = null;
     try {
-      const anterior = estado.criadoAqui;
       let id: string;
       if (escolha === "api") {
-        // A chave vai junto do provedor novo; o de antes, deste passo, sai.
-        if (anterior) await servico.pedir("provedores.remover", { id: anterior });
-        id = (await servico.pedir("provedores.criar", novoDaApi(formulario))).id;
+        criado = (await servico.pedir("provedores.criar", novoDaApi(formulario))).id;
+        id = criado;
+        // A chave já está no Gerenciador de Credenciais: não fica na tela.
+        mudar((e) => ({ ...e, formulario: { ...e.formulario, chave: "" } }));
       } else {
         const existente = (await servico.pedir("provedores.listar")).find((p) => p.tipo === escolha);
-        if (anterior && anterior !== existente?.id)
-          await servico.pedir("provedores.remover", { id: anterior });
-        id = existente?.id ?? (await servico.pedir("provedores.criar", { tipo: escolha, nome })).id;
+        if (existente) id = existente.id;
+        else {
+          criado = (await servico.pedir("provedores.criar", { tipo: escolha, nome })).id;
+          id = criado;
+        }
       }
-      mudar((e) => ({ ...e, criadoAqui: id }));
-      const r = await servico.pedir("provedores.testar", { id });
+      const alvo = id;
+      const substitui = substituicao(criadosAqui, alvo);
+      const r = await servico.pedir("provedores.testar", substitui.length > 0 ? { id, substitui } : { id });
       mudar((e) => ({
         ...e,
+        criadosAqui: criadosDepois(criadosAqui, alvo, criado === alvo, r.ok),
         resultado: r.ok
           ? { fase: "ok", nome, latenciaMs: r.latenciaMs, assinatura: escolha !== "api" }
           : { fase: "falhou", nome, mensagem: r.falha.mensagem },
       }));
     } catch (e) {
-      mudar((atual) => ({ ...atual, resultado: { fase: "falhou", nome, mensagem: mensagem(e) } }));
+      const novo = criado;
+      mudar((atual) => ({
+        ...atual,
+        criadosAqui: novo ? criadosDepois(criadosAqui, novo, true, false) : atual.criadosAqui,
+        resultado: { fase: "falhou", nome, mensagem: mensagem(e) },
+      }));
     }
   };
 

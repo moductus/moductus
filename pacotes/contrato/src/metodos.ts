@@ -45,6 +45,7 @@ import {
   MudancaProvedor,
   NovoProvedor,
   PedidoProvedor,
+  PedidoTesteProvedor,
   Provedor,
   ProvedorDetectado,
   ResultadoTesteProvedor,
@@ -92,7 +93,7 @@ export const METODOS = {
   "provedores.criar": metodo(NovoProvedor, Provedor),
   "provedores.definir": metodo(MudancaProvedor, Provedor),
   "provedores.remover": metodo(PedidoProvedor, z.array(Provedor)),
-  "provedores.testar": metodo(PedidoProvedor, ResultadoTesteProvedor),
+  "provedores.testar": metodo(PedidoTesteProvedor, ResultadoTesteProvedor),
 
   "conversas.listar": metodo(z.undefined(), z.array(Conversa)),
   "conversas.abrir": metodo(PedidoAbrirConversa, Conversa),

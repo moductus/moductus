@@ -1,11 +1,14 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProvedorDetectado } from "@moductus/contrato";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import {
   acharNoPath,
   compararVersoes,
   detectar,
   loginDoClaude,
+  rodarComPrazo,
   versaoDe,
   type RespostaCli,
   type RodarCli,
@@ -91,7 +94,7 @@ describe("detectar", () => {
         caminho: "C:\\local\\claude.exe",
         versao: "2.1.287",
         logado: true,
-        atendido: true,
+        impedimento: null,
         versaoMinima: null,
       },
       // O gemini não tem adaptador nesta versão, e o opencode quebrado aparece sem versão.
@@ -100,7 +103,7 @@ describe("detectar", () => {
         caminho: "C:\\npm\\gemini.cmd",
         versao: "0.42.0",
         logado: null,
-        atendido: false,
+        impedimento: "sem_adaptador",
         versaoMinima: null,
       },
       {
@@ -108,7 +111,7 @@ describe("detectar", () => {
         caminho: "C:\\npm\\opencode.cmd",
         versao: null,
         logado: null,
-        atendido: false,
+        impedimento: "sem_adaptador",
         versaoMinima: null,
       },
     ]);
@@ -142,4 +145,40 @@ describe("detectar", () => {
     await expect(detectar({ atende, rodar, achar: () => null })).resolves.toEqual([]);
     expect(chamadas).toEqual([]);
   });
+
+  test("o Claude Code do npm (.cmd) aparece, mas o Moductus não o usa", async () => {
+    const { rodar } = cli({
+      "C:\\npm\\claude.cmd --version": { codigo: 0, saida: "2.1.287 (Claude Code)" },
+      "C:\\npm\\claude.cmd auth status --json": { codigo: 0, saida: STATUS_LOGADO },
+    });
+    const [claude] = await detectar({
+      atende,
+      rodar,
+      achar: (c) => (c === "claude" ? "C:\\npm\\claude.cmd" : null),
+    });
+    expect(claude).toMatchObject({ logado: true, impedimento: "instalado_pelo_npm" });
+  });
+});
+
+describe("rodar o CLI", () => {
+  const pastas: string[] = [];
+  afterEach(() => {
+    for (const p of pastas.splice(0)) rmSync(p, { recursive: true, force: true });
+  });
+
+  // Um .cmd que abre um node que não sai, como o do npm: matar o cmd.exe não fecharia a saída.
+  test.runIf(process.platform === "win32")(
+    "o prazo vale para o .cmd: a árvore cai e a resposta sai sem esperar o neto",
+    async () => {
+      const pasta = mkdtempSync(join(tmpdir(), "moductus-sonda-"));
+      pastas.push(pasta);
+      const cmd = join(pasta, "travado.cmd");
+      writeFileSync(cmd, `@echo 1.2.3\r\n@"${process.execPath}" -e "setTimeout(() => {}, 60000)"\r\n`);
+      const inicio = Date.now();
+      const resposta = await rodarComPrazo(cmd, ["--version"], process.env, 500);
+      expect(resposta).toEqual({ codigo: null, saida: "1.2.3\r\n" });
+      expect(Date.now() - inicio).toBeLessThan(5000);
+    },
+    15_000,
+  );
 });

@@ -264,6 +264,7 @@ const servicoProvedores = new ServicoProvedores(
       }
       bandeja.atualizar();
     },
+    // Só vêm os que dormem pelo provedor; quem dorme pelo teto continua dormindo.
     provedorVoltou: (ids) => ids.forEach((id) => runtime.estados.acordar(id)),
   },
 );

@@ -1,13 +1,20 @@
 import { NovoProvedor } from "@moductus/contrato";
 import { describe, expect, it } from "vitest";
-import { formatarLatencia, FORMULARIO_API_VAZIO, novoDaApi, situacaoDoCli } from "./modelo.ts";
+import {
+  criadosDepois,
+  formatarLatencia,
+  FORMULARIO_API_VAZIO,
+  novoDaApi,
+  situacaoDoCli,
+  substituicao,
+} from "./modelo.ts";
 
 const claude = {
   tipo: "claude-cli" as const,
   caminho: "C:\\bin\\claude.exe",
   versao: "2.1.287",
   logado: true,
-  atendido: true,
+  impedimento: null,
   versaoMinima: null,
 };
 
@@ -25,6 +32,21 @@ describe("situação de cada CLI", () => {
       texto: "CLI no PATH",
       escolhivel: true,
     });
+  });
+});
+
+describe("um modelo só para o time", () => {
+  it("o testado substitui os outros criados no passo, nunca a si mesmo", () => {
+    expect(substituicao(["a", "b"], "b")).toEqual(["a"]);
+    expect(substituicao([], "x")).toEqual([]);
+  });
+
+  it("depois do teste: passou, sobra o testado se é do passo; falhou, ele entra na fila de saída", () => {
+    expect(criadosDepois(["a"], "b", true, true)).toEqual(["b"]);
+    expect(criadosDepois(["a"], "ja-existia", false, true)).toEqual([]);
+    expect(criadosDepois(["a"], "b", true, false)).toEqual(["a", "b"]);
+    expect(criadosDepois(["a"], "a", false, false)).toEqual(["a"]);
+    expect(criadosDepois(["a"], "ja-existia", false, false)).toEqual(["a"]);
   });
 });
 

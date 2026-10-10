@@ -34,11 +34,19 @@ export function situacaoDoCli(nome: string, achado: ProvedorDetectado | undefine
     };
   }
   const versao = achado.versao ? `CLI no PATH, versão ${achado.versao}` : "CLI no PATH";
-  if (!achado.atendido) {
+  if (achado.impedimento === "sem_adaptador") {
     return {
       estado: "detectado",
       tom: "neutro",
       texto: `${versao} · esta versão do Moductus ainda não conecta a ele.`,
+      escolhivel: false,
+    };
+  }
+  if (achado.impedimento === "instalado_pelo_npm") {
+    return {
+      estado: "instalado pelo npm",
+      tom: "aviso",
+      texto: `${versao} · o Moductus usa o ${nome} do instalador nativo. Instale por ele e procure de novo.`,
       escolhivel: false,
     };
   }
@@ -118,22 +126,43 @@ export type ResultadoModelo =
 
 /**
  * O passo inteiro, guardado fora dele: voltar um passo e seguir de novo não perde o teste feito.
- * `criadoAqui` é o provedor que este passo criou; testar outro o tira, para o time ficar com um
- * modelo só (o serviço dá aos agentes sem modelo o primeiro que passa no teste).
+ * `criadosAqui`: os provedores que este passo criou e ainda valem (o que passou e os que falharam
+ * depois dele). Nunca leva um que já existia antes do passo.
  */
 export interface EstadoModelo {
   escolha: EscolhaModelo | null;
   formulario: FormularioApi;
-  criadoAqui: string | null;
+  criadosAqui: readonly string[];
   resultado: ResultadoModelo;
 }
 
 export const MODELO_INICIAL: EstadoModelo = {
   escolha: null,
   formulario: FORMULARIO_API_VAZIO,
-  criadoAqui: null,
+  criadosAqui: [],
   resultado: { fase: "parado" },
 };
+
+/**
+ * O que o teste leva e como o passo fica depois dele. O time fica com um modelo só porque o teste
+ * pede ao serviço para o testado substituir os outros que este passo criou; o serviço só tira os
+ * antigos se o novo passar, e ignora o que já não existe. Depois de passar, sobra só o testado
+ * (se foi criado aqui); depois de falhar, ele entra na lista para sair no próximo que passar.
+ */
+export function substituicao(criadosAqui: readonly string[], alvo: string): string[] {
+  return criadosAqui.filter((id) => id !== alvo);
+}
+
+export function criadosDepois(
+  criadosAqui: readonly string[],
+  alvo: string,
+  criadoAgora: boolean,
+  passou: boolean,
+): string[] {
+  const doPasso = criadoAgora || criadosAqui.includes(alvo);
+  if (passou) return doPasso ? [alvo] : [];
+  return doPasso && !criadosAqui.includes(alvo) ? [...criadosAqui, alvo] : [...criadosAqui];
+}
 
 function hostDe(endereco: string): string | null {
   try {

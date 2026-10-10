@@ -1,10 +1,12 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
+  MotivoFalhaProvedor,
   TIPOS_PROVEDOR_CLI,
   type FalhaProvedor,
   type MudancaProvedor,
   type NovoProvedor,
   type PedidoProvedor,
+  type PedidoTesteProvedor,
   type Provedor,
   type ProvedorDetectado,
   type ResultadoTesteProvedor,
@@ -39,6 +41,9 @@ export const credencialDoProvedor = (id: string) => `provedor-${id}`;
 
 /** Quanto o teste espera a resposta do modelo antes de dar o provedor como fora do ar. */
 export const PRAZO_TESTE_MS = 60_000;
+
+/** Quanto o teste de um CLI espera a detecção (versão e login) antes de desistir. */
+export const PRAZO_DETECCAO_MS = 20_000;
 
 /** A chamada curta do teste: uma palavra de volta, para gastar o mínimo da assinatura ou da conta. */
 export const INSTRUCOES_TESTE = "Teste de conexão do Moductus. Responda só com a palavra ok, sem mais nada.";
@@ -112,44 +117,50 @@ export class RepositorioProvedores {
       );
   }
 
-  /** O último teste que passou; não conta como mudança de quem configurou. */
-  marcarTestado(id: string, quando: string): void {
-    this.db
-      .prepare("UPDATE provedores SET testado_em = ? WHERE id = ? AND apagado_em IS NULL")
-      .run(quando, id);
-  }
-
   /**
    * Manda o provedor para a lixeira e o tira dos agentes que o usavam, como principal ou reserva,
    * numa transação. Devolve os agentes que mudaram.
    */
   remover(id: string, agora: string): string[] {
-    const origem = colunasDeOrigem(DO_USUARIO);
-    this.db.exec("BEGIN");
-    try {
+    return this.emTransacao(() => {
       const agentes = this.agentesDo(id);
-      this.db
-        .prepare(
-          `UPDATE provedores SET apagado_em = ?, credencial = NULL, atualizado_em = ?, origem = ?,
-             agente_id = ?, execucao_id = ?
-           WHERE id = ? AND apagado_em IS NULL`,
-        )
-        .run(agora, agora, origem.origem, origem.agente_id, origem.execucao_id, id);
-      this.db
-        .prepare(
-          `UPDATE agentes SET
-             provedor_id = CASE WHEN provedor_id = ? THEN NULL ELSE provedor_id END,
-             provedor_reserva_id = CASE WHEN provedor_reserva_id = ? THEN NULL ELSE provedor_reserva_id END,
-             atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
-           WHERE (provedor_id = ? OR provedor_reserva_id = ?) AND apagado_em IS NULL`,
-        )
-        .run(id, id, agora, origem.origem, origem.agente_id, origem.execucao_id, id, id);
-      this.db.exec("COMMIT");
+      this.trocarNosAgentes(id, null, agora);
+      this.paraALixeira(id, agora);
       return agentes;
-    } catch (erro) {
-      this.db.exec("ROLLBACK");
-      throw erro;
-    }
+    });
+  }
+
+  /**
+   * Depois de um teste que passou, numa transação só: grava `testado_em`, o provedor toma o lugar
+   * dos que ele substitui (os agentes deles passam a usá-lo, e eles vão para a lixeira) e vira o
+   * principal de quem está sem modelo. Nada acontece se, enquanto o teste rodava, o provedor saiu
+   * ou mudou de configuração: o teste valia para a de antes. Substituído que já não existe é
+   * ignorado. Devolve os agentes que mudaram, os substituídos e as credenciais deles, para apagar.
+   */
+  depoisDePassar(
+    testado: LinhaProvedor,
+    substitui: readonly string[],
+    quando: string,
+  ): { agentes: string[]; credenciais: string[]; substituidos: string[] } | null {
+    return this.emTransacao(() => {
+      const atual = this.obter(testado.id);
+      if (!atual || !mesmaConfig(atual, testado)) return null;
+      this.db.prepare("UPDATE provedores SET testado_em = ? WHERE id = ?").run(quando, testado.id);
+      const agentes = new Set<string>();
+      const credenciais: string[] = [];
+      const substituidos: string[] = [];
+      for (const velho of new Set(substitui)) {
+        const linha = velho === testado.id ? null : this.obter(velho);
+        if (!linha) continue;
+        for (const agente of this.agentesDo(velho)) agentes.add(agente);
+        this.trocarNosAgentes(velho, testado.id, quando);
+        this.paraALixeira(velho, quando);
+        substituidos.push(velho);
+        if (linha.credencial) credenciais.push(linha.credencial);
+      }
+      for (const agente of this.atribuirAosSemModelo(testado.id, quando)) agentes.add(agente);
+      return { agentes: [...agentes].sort(), credenciais, substituidos };
+    });
   }
 
   /** Os agentes que usam o provedor, como principal ou reserva. */
@@ -164,34 +175,99 @@ export class RepositorioProvedores {
   }
 
   /**
+   * Os que usam o provedor e dormem por causa de um provedor (limite, queda, credencial, CLI
+   * ausente). Quem dorme pelo teto de gasto continua dormindo: o provedor voltar não muda o teto.
+   */
+  dormindoPeloProvedor(id: string): string[] {
+    const motivos = MotivoFalhaProvedor.options.map((m) => `'${m}'`).join(", ");
+    const linhas = this.db
+      .prepare(
+        `SELECT id FROM agentes WHERE (provedor_id = ? OR provedor_reserva_id = ?) AND apagado_em IS NULL
+           AND estado = 'dormindo' AND motivo_sono IN (${motivos})
+         ORDER BY id`,
+      )
+      .all(id, id) as unknown as { id: string }[];
+    return linhas.map((l) => l.id);
+  }
+
+  /**
    * Dá o provedor como principal a quem está sem modelo: sem provedor nenhum ou com um que foi
    * para a lixeira (AGENTS.md §3: o primeiro uso conecta um modelo e o atribui aos quatro). Se ele
    * era a reserva do agente, passa a principal e a reserva fica vazia. Devolve quem recebeu.
    */
-  atribuirAosSemModelo(id: string, agora: string): string[] {
+  private atribuirAosSemModelo(id: string, agora: string): string[] {
     const origem = colunasDeOrigem(DO_USUARIO);
     const semModelo = `apagado_em IS NULL AND (provedor_id IS NULL OR provedor_id NOT IN
       (SELECT id FROM provedores WHERE apagado_em IS NULL))`;
+    const linhas = this.db
+      .prepare(`SELECT id FROM agentes WHERE ${semModelo} ORDER BY id`)
+      .all() as unknown as { id: string }[];
+    this.db
+      .prepare(
+        `UPDATE agentes SET provedor_id = ?,
+           provedor_reserva_id = CASE WHEN provedor_reserva_id = ? THEN NULL ELSE provedor_reserva_id END,
+           atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
+         WHERE ${semModelo}`,
+      )
+      .run(id, id, agora, origem.origem, origem.agente_id, origem.execucao_id);
+    return linhas.map((l) => l.id);
+  }
+
+  /**
+   * Nos agentes, troca `velho` por `novo` (ou por nada), como principal e como reserva. Se a troca
+   * deixaria principal e reserva iguais, a reserva fica vazia.
+   */
+  private trocarNosAgentes(velho: string, novo: string | null, agora: string): void {
+    const origem = colunasDeOrigem(DO_USUARIO);
+    const principal = "CASE WHEN provedor_id = :velho THEN :novo ELSE provedor_id END";
+    const reserva = "CASE WHEN provedor_reserva_id = :velho THEN :novo ELSE provedor_reserva_id END";
+    this.db
+      .prepare(
+        `UPDATE agentes SET
+           provedor_id = ${principal},
+           provedor_reserva_id = CASE WHEN ${reserva} = ${principal} THEN NULL ELSE ${reserva} END,
+           atualizado_em = :agora, origem = :origem, agente_id = :agente, execucao_id = :execucao
+         WHERE (provedor_id = :velho OR provedor_reserva_id = :velho) AND apagado_em IS NULL`,
+      )
+      .run({
+        velho,
+        novo,
+        agora,
+        origem: origem.origem,
+        agente: origem.agente_id,
+        execucao: origem.execucao_id,
+      });
+  }
+
+  private paraALixeira(id: string, agora: string): void {
+    const origem = colunasDeOrigem(DO_USUARIO);
+    this.db
+      .prepare(
+        `UPDATE provedores SET apagado_em = ?, credencial = NULL, atualizado_em = ?, origem = ?,
+           agente_id = ?, execucao_id = ?
+         WHERE id = ? AND apagado_em IS NULL`,
+      )
+      .run(agora, agora, origem.origem, origem.agente_id, origem.execucao_id, id);
+  }
+
+  private emTransacao<T>(fazer: () => T): T {
     this.db.exec("BEGIN");
     try {
-      const linhas = this.db
-        .prepare(`SELECT id FROM agentes WHERE ${semModelo} ORDER BY id`)
-        .all() as unknown as { id: string }[];
-      this.db
-        .prepare(
-          `UPDATE agentes SET provedor_id = ?,
-             provedor_reserva_id = CASE WHEN provedor_reserva_id = ? THEN NULL ELSE provedor_reserva_id END,
-             atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
-           WHERE ${semModelo}`,
-        )
-        .run(id, id, agora, origem.origem, origem.agente_id, origem.execucao_id);
+      const resultado = fazer();
       this.db.exec("COMMIT");
-      return linhas.map((l) => l.id);
+      return resultado;
     } catch (erro) {
       this.db.exec("ROLLBACK");
       throw erro;
     }
   }
+}
+
+/** O que o adaptador usa: com isso igual, o teste feito vale para a linha de agora. */
+function mesmaConfig(a: LinhaProvedor, b: LinhaProvedor): boolean {
+  return (
+    a.tipo === b.tipo && a.modelo === b.modelo && a.base_url === b.base_url && a.credencial === b.credencial
+  );
 }
 
 export interface DependenciasProvedores {
@@ -205,13 +281,17 @@ export interface DependenciasProvedores {
   /** Relógio da latência, em ms; os testes trocam pelo falso. */
   cronometro?: () => number;
   prazoTesteMs?: number;
+  prazoDeteccaoMs?: number;
 }
 
 export interface AvisosProvedores {
   provedores: (lista: Provedor[]) => void;
   /** Agentes que trocaram de modelo: receberam o primeiro que funcionou, ou perderam o removido. */
   agentesMudaram: (ids: string[]) => void;
-  /** O provedor passou no teste: quem dormia por causa dele pode tentar de novo já. */
+  /**
+   * O provedor passou no teste: quem dormia por causa dele pode tentar de novo já. Quem dorme pelo
+   * teto de gasto não vem aqui.
+   */
   provedorVoltou: (agentes: string[]) => void;
 }
 
@@ -315,22 +395,35 @@ export class ServicoProvedores {
   }
 
   /**
-   * Teste de verdade: CLI que não está no PC, velho demais ou sem login nem chega a ser chamado
-   * (a detecção diz por quê, sem gastar nada); o resto faz a chamada curta e mede quanto o modelo
-   * levou para responder inteiro. Falha do provedor volta tipada, como a dos agentes.
+   * Teste de verdade: CLI que não está no PC, velho demais, sem login ou que o Moductus não usa
+   * nem chega a ser chamado (a detecção diz por quê, sem gastar nada); o resto faz a chamada curta
+   * e mede quanto o modelo levou para responder inteiro. Falha do provedor volta tipada, como a dos
+   * agentes, e não muda nada. Passou: o provedor toma o lugar dos que `substitui` (é assim que o
+   * time fica com um modelo só quando o primeiro uso troca de escolha) e vai aos agentes sem modelo.
    */
-  async testar(pedido: PedidoProvedor): Promise<ResultadoTesteProvedor> {
+  async testar(pedido: PedidoTesteProvedor): Promise<ResultadoTesteProvedor> {
     const linha = this.obter(pedido.id);
     const impedimento = ehCli(linha.tipo) ? await this.impedimentoDoCli(linha) : null;
     const medido = impedimento ? { falha: impedimento } : await this.chamar(linha);
     const testadoEm = this.agora().toISOString();
     if ("falha" in medido) return { ok: false, provedorId: linha.id, falha: medido.falha, testadoEm };
 
-    this.repositorio.marcarTestado(linha.id, testadoEm);
-    const atribuidos = this.repositorio.atribuirAosSemModelo(linha.id, testadoEm);
-    this.mudou();
-    if (atribuidos.length > 0) this.avisos.agentesMudaram(atribuidos);
-    this.avisos.provedorVoltou(this.repositorio.agentesDo(linha.id));
+    const efeito = this.repositorio.depoisDePassar(linha, pedido.substitui ?? [], testadoEm);
+    if (efeito) {
+      for (const id of efeito.substituidos) this.deps.registro.esquecer(id);
+      // A linha já saiu; a chave que sobrar no Gerenciador não é usada por ninguém.
+      for (const credencial of efeito.credenciais) {
+        await this.deps.credenciais
+          .apagar(credencial)
+          .catch((erro: unknown) =>
+            console.error(`provedores: chave de um provedor substituído não apagada: ${String(erro)}`),
+          );
+      }
+      this.mudou();
+      if (efeito.agentes.length > 0) this.avisos.agentesMudaram(efeito.agentes);
+      const dormindo = this.repositorio.dormindoPeloProvedor(linha.id);
+      if (dormindo.length > 0) this.avisos.provedorVoltou(dormindo);
+    }
     return { ok: true, provedorId: linha.id, latenciaMs: medido.latenciaMs, testadoEm };
   }
 
@@ -346,10 +439,34 @@ export class ServicoProvedores {
     return lista;
   }
 
+  /** A detecção tem prazo próprio: um CLI travado não segura o teste nem a tela. */
   private async impedimentoDoCli(linha: LinhaProvedor): Promise<FalhaProvedor | null> {
-    const achado = (await this.deps.detectar()).find((d) => d.tipo === linha.tipo);
+    const prazoMs = this.deps.prazoDeteccaoMs ?? PRAZO_DETECCAO_MS;
+    let prazo: ReturnType<typeof setTimeout> | undefined;
+    const estourou = new Promise<"prazo">((resolve) => {
+      prazo = setTimeout(() => resolve("prazo"), prazoMs);
+    });
+    const detectados = await Promise.race([this.deps.detectar(), estourou]).finally(() =>
+      clearTimeout(prazo),
+    );
+    if (detectados === "prazo") {
+      return falha(
+        "fora_do_ar",
+        `${linha.nome} não respondeu à versão nem ao login em ${Math.ceil(prazoMs / 1000)} s.`,
+      );
+    }
+    const achado = detectados.find((d) => d.tipo === linha.tipo);
     if (!achado) {
       return falha("ausente", `${linha.nome} não está no PATH deste PC. Instale e teste de novo.`);
+    }
+    if (achado.impedimento === "instalado_pelo_npm") {
+      return falha(
+        "ausente",
+        `${linha.nome} foi instalado pelo npm, e o Moductus usa o do instalador nativo. Instale por ele e teste de novo.`,
+      );
+    }
+    if (achado.impedimento === "sem_adaptador") {
+      return falha("ausente", `Esta versão do Moductus ainda não conecta ao ${linha.nome}.`);
     }
     if (achado.versaoMinima) {
       const qual = achado.versao ? `${linha.nome} ${achado.versao}` : linha.nome;

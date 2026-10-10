@@ -93,12 +93,24 @@ export const ProvedorDetectado = z.object({
   caminho: z.string().min(1),
   versao: z.string().nullable(),
   logado: z.boolean().nullable(),
-  /** Esta versão do Moductus tem adaptador para ele (hoje, só o Claude Code). */
-  atendido: z.boolean(),
+  /**
+   * Por que esta versão do Moductus não usa este CLI; `null` quando usa. `sem_adaptador`: ainda
+   * não fala com ele (hoje só fala com o Claude Code). `instalado_pelo_npm`: o Claude Code achado
+   * é o `.cmd` do npm, e o adaptador roda o executável do instalador nativo.
+   */
+  impedimento: z.enum(["sem_adaptador", "instalado_pelo_npm"]).nullable(),
   /** A versão que o Moductus pede, quando a achada é mais velha; `null` quando serve ou não dá para saber. */
   versaoMinima: z.string().nullable(),
 });
 export type ProvedorDetectado = z.infer<typeof ProvedorDetectado>;
+
+/**
+ * Testar um provedor (F2-08). `substitui`: provedores que ele toma o lugar se passar no teste
+ * (os agentes que os usavam passam a usar este, e eles vão para a lixeira); se não passar, nada
+ * muda. Id que já não existe é ignorado: já saiu.
+ */
+export const PedidoTesteProvedor = z.object({ id: Id, substitui: z.array(Id).max(20).optional() });
+export type PedidoTesteProvedor = z.infer<typeof PedidoTesteProvedor>;
 
 /** Resultado de uma chamada curta de verdade ao provedor (F2-08). */
 export const ResultadoTesteProvedor = z.discriminatedUnion("ok", [

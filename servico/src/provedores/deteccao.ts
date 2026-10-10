@@ -136,7 +136,7 @@ export async function detectar(opcoes: OpcoesDeteccao): Promise<ProvedorDetectad
         caminho,
         versao,
         logado: comLogin ? loginDoClaude(comLogin) : null,
-        atendido: opcoes.atende(tipo),
+        impedimento: impedimentoDe(tipo, caminho, opcoes.atende),
         versaoMinima: versao && minima && compararVersoes(versao, minima) < 0 ? minima : null,
       };
     }),
@@ -145,30 +145,81 @@ export async function detectar(opcoes: OpcoesDeteccao): Promise<ProvedorDetectad
 }
 
 /**
+ * Por que o Moductus não usa o CLI achado. O adaptador do Claude Code inicia o executável sem
+ * shell, e o `.cmd` do npm só roda pelo `cmd.exe`: aceitar o `.cmd` aqui seria mostrar
+ * "conectado" e falhar no Testar. Passar o caminho achado ao adaptador fica para depois.
+ */
+export function impedimentoDe(
+  tipo: TipoProvedorCli,
+  caminho: string,
+  atende: (tipo: TipoProvedor) => boolean,
+): ProvedorDetectado["impedimento"] {
+  if (!atende(tipo)) return "sem_adaptador";
+  if (tipo === "claude-cli" && /\.(cmd|bat)$/i.test(caminho)) return "instalado_pelo_npm";
+  return null;
+}
+
+/**
  * Roda o CLI sem janela, com prazo. `.cmd` e `.bat` (instalação pelo npm) só rodam pelo `cmd.exe`:
  * o comando vai inteiro numa linha, com o caminho entre aspas e só argumentos fixos deste arquivo.
+ *
+ * O prazo vale de verdade: pelo `cmd.exe`, matar o processo mata só o `cmd`, e o node que ele
+ * abriu segura a saída aberta (o `close` só viria quando ele terminasse). No prazo, a árvore
+ * inteira cai (`taskkill /T /F`), a saída é largada e a resposta sai sem esperar o `close`.
  */
 export const rodarCli: RodarCli = (caminho, argumentos, ambiente) =>
-  new Promise((resolve, reject) => {
+  rodarComPrazo(caminho, argumentos, ambiente, PRAZO_SONDA_MS);
+
+export function rodarComPrazo(
+  caminho: string,
+  argumentos: readonly string[],
+  ambiente: NodeJS.ProcessEnv,
+  prazoMs: number,
+): Promise<RespostaCli> {
+  return new Promise((resolve, reject) => {
     const peloCmd = /\.(cmd|bat)$/i.test(caminho);
     const processo = peloCmd
       ? spawn(`"${caminho}" ${argumentos.join(" ")}`, { shell: true, env: ambiente, windowsHide: true })
       : spawn(caminho, [...argumentos], { env: ambiente, windowsHide: true });
     let saida = "";
+    let terminou = false;
+    const terminar = (fazer: () => void) => {
+      if (terminou) return;
+      terminou = true;
+      clearTimeout(prazo);
+      fazer();
+    };
     processo.stdout.setEncoding("utf8");
     processo.stdout.on("data", (pedaco: string) => (saida = (saida + pedaco).slice(-20_000)));
     processo.stderr.resume();
     processo.stdin.end();
-    const prazo = setTimeout(() => processo.kill(), PRAZO_SONDA_MS);
-    processo.once("error", (erro) => {
-      clearTimeout(prazo);
-      reject(erro);
-    });
-    processo.once("close", (codigo) => {
-      clearTimeout(prazo);
-      resolve({ codigo, saida });
-    });
+    const prazo = setTimeout(
+      () =>
+        terminar(() => {
+          derrubarArvore(processo.pid, () => processo.kill());
+          processo.stdout.destroy();
+          processo.stderr.destroy();
+          resolve({ codigo: null, saida });
+        }),
+      prazoMs,
+    );
+    processo.once("error", (erro) => terminar(() => reject(erro)));
+    processo.once("close", (codigo) => terminar(() => resolve({ codigo, saida })));
   });
+}
+
+/** Derruba o processo e os filhos dele; fora do Windows, ou sem `taskkill`, só o processo. */
+function derrubarArvore(pid: number | undefined, soOProcesso: () => void): void {
+  if (process.platform !== "win32" || pid === undefined) {
+    soOProcesso();
+    return;
+  }
+  const taskkill = spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
+    windowsHide: true,
+    stdio: "ignore",
+  });
+  taskkill.once("error", soOProcesso);
+}
 
 function arquivoExiste(caminho: string): boolean {
   return statSync(caminho, { throwIfNoEntry: false })?.isFile() ?? false;
