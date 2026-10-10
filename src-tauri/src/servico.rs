@@ -5,7 +5,11 @@
 //! morrer de repente, o Windows derruba o serviço também.
 //!
 //! Canal com o serviço pelo stdio, em linhas JSON: o serviço avisa `pronto` com a porta
-//! e pede credenciais (`{"tipo":"credencial","id",…}`), respondidas no stdin.
+//! e pede credenciais (`{"tipo":"credencial","id",…}`), variáveis do usuário
+//! (`{"tipo":"ambiente","id",…}`) e avisos do Windows (`{"tipo":"notificacao","id",…}`),
+//! respondidos no stdin; o menu do time na bandeja (`{"tipo":"bandeja",…}`) vem sem id. Pelo
+//! stdin também vão avisos da casca sem id, como a retomada da suspensão (`{"tipo":"retomou"}`),
+//! o clique num aviso do Windows (`notificacao-clique`) e num item da bandeja (`bandeja-clique`).
 
 use std::{
     io::{BufRead, BufReader, Write},
@@ -33,7 +37,7 @@ use windows::Win32::{
     },
 };
 
-use crate::credenciais;
+use crate::{ambiente, credenciais, notificacao};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "estado", rename_all = "lowercase")]
@@ -159,6 +163,16 @@ struct Mensagem {
 fn responder(id: u64, resposta: serde_json::Value) {
     let mut linha = resposta;
     linha["id"] = id.into();
+    escrever(&linha);
+}
+
+/// Aviso da casca sem pedido do serviço (`{"tipo":"retomou"}`), sem id. Sem serviço de pé, some:
+/// o que sobe depois começa do zero.
+pub fn avisar(aviso: serde_json::Value) {
+    escrever(&aviso);
+}
+
+fn escrever(linha: &serde_json::Value) {
     if let Some(entrada) = ENTRADA.lock().unwrap().as_mut() {
         let _ = writeln!(entrada, "{linha}");
         let _ = entrada.flush();
@@ -175,6 +189,8 @@ fn ouvir(app: &AppHandle, saida: std::process::ChildStdout, token: &str) {
                 crate::registro::info(&format!("servico pronto na porta {porta}"));
                 definir(app, Estado::Pronto { porta, token: token.to_string() });
             }
+            // O menu do time na bandeja (pausar), pronto: a casca só redesenha.
+            ("bandeja", _) => crate::bandeja::atualizar(app, &linha),
             ("aplicar", Some(id)) => {
                 let resposta = serde_json::from_str::<crate::config_nativa::PedidoAplicar>(&linha)
                     .map(|p| crate::config_nativa::aplicar(app, p))
@@ -184,6 +200,20 @@ fn ouvir(app: &AppHandle, saida: std::process::ChildStdout, token: &str) {
             ("credencial", Some(id)) => {
                 let resposta = serde_json::from_str::<credenciais::Pedido>(&linha)
                     .map(credenciais::atender)
+                    .map(|r| serde_json::to_value(r).unwrap_or_default())
+                    .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
+                responder(id, resposta);
+            }
+            ("notificacao", Some(id)) => {
+                let resposta = serde_json::from_str::<notificacao::Pedido>(&linha)
+                    .map(notificacao::atender)
+                    .map(|r| serde_json::to_value(r).unwrap_or_default())
+                    .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
+                responder(id, resposta);
+            }
+            ("ambiente", Some(id)) => {
+                let resposta = serde_json::from_str::<ambiente::Pedido>(&linha)
+                    .map(ambiente::atender)
                     .map(|r| serde_json::to_value(r).unwrap_or_default())
                     .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
                 responder(id, resposta);
@@ -216,6 +246,8 @@ pub fn iniciar(app: AppHandle, pasta: PathBuf) {
             if SAINDO.load(Ordering::SeqCst) {
                 break;
             }
+            // Sem serviço, pausar pela bandeja não teria quem atender.
+            crate::bandeja::sem_servico(&app);
             // Ficou de pé um bom tempo: a queda é nova, recomeça a espera do início.
             tentativa = if inicio.elapsed() > Duration::from_secs(60) { 1 } else { tentativa + 1 };
             let espera = espera(tentativa);

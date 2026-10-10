@@ -2,7 +2,7 @@
 
 > O sistema visual do Moductus: três temas sobre a mesma estrutura. O produto está em [PRODUCT.md](PRODUCT.md); os desenhos vivem no canvas [Moductus — identidade visual](https://claude.ai/artifact/8im3xVzwsYkKuTocTiDfXZ), com cópia das fontes em [design/](design/).
 
-**Status:** em uso desde a fase 1. Os valores abaixo saem dos desenhos do canvas e são a fonte dos tokens em `src/tokens/`.
+**Status:** em uso desde a fase 1; a fase 2 acrescentou as telas dos agentes (seção 5) e a leitura dos estados no personagem (seção 6). Os valores abaixo saem dos desenhos do canvas e são a fonte dos tokens em `src/tokens/`.
 
 ---
 
@@ -25,7 +25,7 @@ Regras que valem para os três:
 - Elevação por borda de 1 px + uma sombra suave. Nunca sombras empilhadas.
 - Animação: entrada até 140 ms, saída até 90 ms, nada acima de 200 ms; duração zero quando o Windows pede menos animação.
 - Ícones de traço único, 1,6 px, no mesmo conjunto.
-- Texto com contraste mínimo de 4,5:1; status nunca só por cor (sempre acompanhado de texto ou forma). No Papel, `texto.3` e `aviso` ficaram um tom abaixo do canvas (`#6B6A64` e `#B5761A`) para passar sobre `fundo.ativo` e como texto de selo; `src/tokens/acessibilidade.test.ts` mede todos os pares.
+- Texto com contraste mínimo de 4,5:1; status nunca só por cor (sempre acompanhado de texto ou forma). No Papel, `texto.3` e `aviso` ficaram um tom abaixo do canvas (`#6B6A64` e `#B5761A`) para passar sobre `fundo.ativo` e como texto de selo; pelo mesmo motivo, o nome da Alba na fala do agente é `#96671D` no Papel (canvas `#9A6A1E`) e o da Faina é `#D48461` no Vidro (canvas `#D2805E`), para passar sobre `fundo.elevado`. `src/tokens/acessibilidade.test.ts` mede todos os pares.
 - Foco do teclado: anel de 2 px no token `--cor-foco` (o destaque do tema, 3:1 ou mais sobre todo fundo) em todo elemento interativo; no dock o anel fica por dentro do botão.
 - Alto contraste do Windows (`forced-colors`): cores do sistema; item atual, opção marcada e foco em `Highlight` (`src/tokens/alto-contraste.css`). Personagens e prévias de tema mantêm as próprias cores, como imagem.
 
@@ -93,7 +93,8 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 - **Espaço** (grade de 4): 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 32.
 - **Tipo:** 11 (meta, atalho), 12 (rótulo), 13 (corpo), 17–22 (título de painel), 26 (título do Sistema), 30–36 (número grande, mono).
 - **Dock:** 64–68 px de largura; botões de 44 × 44; badge de 16 px.
-- **Painel lateral:** 368–372 px de largura.
+- **Painel lateral:** 368–372 px de largura. O quadro Agentes da fase 2 foi desenhado com 400 px e a casca usa 372; a largura é decisão do humano, ainda em aberto.
+- **Medidas de tela:** colunas de tabela, trilhos de progresso, o balão da conversa e afins também são tokens (`--largura-col-*`, `--altura-trilho-*`, `--largura-balao`…) em `src/tokens/temas.css`, e o lint visual reprova número solto. `--dur-correr` (1,4 s) é a barra indeterminada de "testando" e vira 0 com movimento reduzido.
 
 ---
 
@@ -128,8 +129,10 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 | Prévia da Faina antes de organizar | ✓ (tweak de tema) | ✓ | ✓ |
 | Sistema: Tarefas, Finanças, Notas, Sessões de IA, Dev, Memória, página do agente | ✓ (tweak de tema) | ✓ | ✓ |
 | Configurações: notificações e levar para outro PC | ✓ (tweak de tema) | ✓ | ✓ |
+| Configurações › Modelos: provedores, principal e reserva por agente, teto por dia, trocar o modelo, nenhum conectado | ✓ (tweak de tema) | ✓ | ✓ |
+| Configurações › Conexões: Claude Code e GitHub, prévia do `settings.json` com consentimento, conectando, erros, nenhuma ligada | ✓ (tweak de tema) | ✓ | ✓ |
 
-O cartão de aprovação traz três ações: **Negar**, **Sempre neste projeto** e **Permitir**. A do meio vira uma regra de permissão do Claude Code para aquele projeto, registrada pelo hook.
+O cartão de aprovação traz três ações: **Negar**, **Sempre neste projeto** e **Permitir**. A do meio vira uma regra do Moductus para aquele projeto: os próximos pedidos iguais (o mesmo comando, o mesmo caminho, o mesmo domínio) são decididos sem cartão. O Moductus não escreve nas permissões do Claude Code (ADR-0023). No aviso do Windows o rótulo é "Sempre aqui".
 
 Padrões que saíram dessas telas e valem para o resto:
 
@@ -139,8 +142,12 @@ Padrões que saíram dessas telas e valem para o resto:
 - **Status nunca só por cor:** ponto + texto ("esperando você", "CI falhou").
 - **Seleção:** caixa marcada no destaque com ✓; tarefa feita fica apagada e riscada.
 - **Configurações:** sub-navegação própria à esquerda; cada seção numa página.
+- **Estado de uma conexão ou provedor:** ponto + texto ao lado do nome (`funcionando`, `testando`, `erro`, `desligada`, `em breve`); testando ganha uma barra indeterminada embaixo e o botão vira "Cancelar"; o erro vem numa linha abaixo, com impacto, motivo e saída.
+- **Prévia de arquivo antes de mexer:** o agente diz numa fala o que muda e o tamanho; ao lado, o trecho antes e depois em mono, linhas novas marcadas com `+` no tom de sucesso; uma linha diz onde fica a cópia e como desfazer; o botão primário é verbo com objeto ("Ligar 8 hooks no Claude Code").
+- **Estado do agente, em texto:** o status, a hora de volta e a frase de cada situação saem de um formatador só (`situacao.ts` e `quando.ts` em `src/componentes/personagem/`), então dock, painel, página do agente e conversa dizem o mesmo: "seg 9:00" curto no dock e "segunda às 9:00" no cartão (a hora é sempre HH:MM, inclusive a cheia: diferença deliberada do quadro Estados); "tentando de novo" quando a hora já chegou, em vez de prometer uma hora que passou. Um quadro novo de estado reaproveita esses textos (ADR-0026).
+- **Valor pendente de decisão:** marcador tracejado no tom de aviso ("moeda a decidir") no lugar do símbolo, até a decisão ser registrada.
 
-**A desenhar:** Foco e Ferramentas no Sistema, instruções e ferramentas na página do agente, criar agente (fase 7), demais seções de Configurações (Geral, Modelos, Conexões, Atalhos, Privacidade) e o instalador.
+**A desenhar:** Foco e Ferramentas no Sistema, instruções e ferramentas na página do agente, criar agente (fase 7), demais seções de Configurações (Geral, Atalhos, Privacidade) e o instalador.
 
 **Ícones da marca:** em [design/marca/](design/marca/): `moductus.ico` (16 a 256 px, Grafite), `app-*.png` (32 a 512), ícones da bandeja claro e escuro (16 e 32) e `marca.svg` em `currentColor`.
 
@@ -168,6 +175,7 @@ Cada agente é um **personagem**: corpo, rosto e um traço próprio. Formas simp
 | `erro` | Preocupado: sobrancelhas caídas, boca para baixo | Anel tracejado em `perigo` |
 | `desligado` | Dormindo: olhos fechados e "z" | Nenhuma, a 55% |
 
+- **Estados do serviço na tela:** `pausado`, `desligado`, `sem modelo` e o sono por limite de uso usam a expressão de `desligado` (olhos fechados, sem moldura), com o status escrito ao lado. A falha do provedor (fora do ar, chave recusada, CLI ausente) usa `erro`, com anel e um ponto vermelho no canto da cabeça no dock até o modelo voltar; o teto de gasto usa `erro` com anel e ponto em `aviso`. Vermelho vale mais que amarelo quando os dois acontecem. A tabela completa está em [AGENTS.md](AGENTS.md#7-estados-visíveis-do-agente).
 - **Tamanhos:** cabeça a 16, 24 e 32 px (listas e dock) e 36 px (painéis); corpo inteiro a 168 px nos cartões e na página do agente.
 - **Movimento:** respiração de 4,2 s e piscar a cada 5,5 s. Tudo para com `prefers-reduced-motion`. Nada de pulos, confetes ou balões de fala.
 - **Agentes do usuário:** montados de peças fechadas (4 silhuetas, 8 traços, 8 tons), para o time continuar coerente.

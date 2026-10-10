@@ -1,7 +1,9 @@
 import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import type { DatabaseSync } from "node:sqlite";
 import {
   CONFIG_PADRAO,
   Config,
+  ConteudoArquivo,
   FORMATO_ARQUIVO,
   Manifesto,
   PedidoExportar,
@@ -14,6 +16,7 @@ import {
 } from "@moductus/contrato";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import type { ServicoConfig } from "../config/config.ts";
+import { lerConfiguracoes } from "./tabelas.ts";
 
 /** De onde o arquivo sai: vai no manifesto. */
 export interface Origem {
@@ -34,14 +37,16 @@ const CORROMPIDO = "O arquivo está corrompido ou não é um arquivo do Moductus
 export class ArquivoRecusado extends Error {}
 
 /**
- * Levar para outro PC, modalidade "só configurações": gera o .moductus com manifesto e
- * config, e importa passando pelo ServicoConfig, para a casca aplicar o que é nativo e
- * nada ser gravado se ela recusar. Credenciais e a pasta portable nunca entram: o arquivo
- * leva só a tabela config.
+ * Levar para outro PC, modalidade "só configurações": gera o .moductus com manifesto, config
+ * e um JSON por tabela de configuração (agentes, provedores, regras, conexões, preferências de
+ * aviso), e importa a config passando pelo ServicoConfig, para a casca aplicar o que é nativo e
+ * nada ser gravado se ela recusar. Credenciais e a pasta portable nunca entram. A importação
+ * das tabelas ainda não existe: o arquivo já as leva, e o PC novo por ora lê só a config.
  */
 export class ServicoOutroPc {
   constructor(
     private readonly config: ServicoConfig,
+    private readonly banco: DatabaseSync,
     private readonly origem: Origem,
     private readonly agora: () => Date = () => new Date(),
   ) {}
@@ -50,19 +55,25 @@ export class ServicoOutroPc {
     const { caminho } = PedidoExportar.parse(entrada);
     const config = this.config.obter().config;
     const chaves = Object.keys(config);
+    const agora = this.agora();
+    // As demais tabelas de configuração, uma por arquivo, já sem credencial nem o que é deste PC.
+    const tabelas = [...lerConfiguracoes(this.banco, agora)];
     const manifesto: Manifesto = {
       formato: FORMATO_ARQUIVO,
       versao_formato: VERSAO_FORMATO,
       versao_app: this.origem.versaoApp,
       versao_esquema: this.origem.versaoEsquema,
       pc_origem: this.origem.pcOrigem,
-      criado_em: this.agora().toISOString(),
+      criado_em: agora.toISOString(),
       modalidade: "configuracoes",
-      conteudo: ["config"],
+      conteudo: ["config", ...tabelas.map(([tabela]) => ConteudoArquivo.parse(tabela))],
     };
     const zip = zipSync({
       [MANIFESTO]: strToU8(JSON.stringify(Manifesto.parse(manifesto), null, 2)),
       [CONFIG]: strToU8(JSON.stringify(config, null, 2)),
+      ...Object.fromEntries(
+        tabelas.map(([tabela, linhas]) => [`${tabela}.json`, strToU8(JSON.stringify(linhas, null, 2))]),
+      ),
     });
     // Grava ao lado e renomeia: uma falha no meio não deixa um .moductus pela metade.
     const temporario = `${caminho}.${process.pid}.tmp`;

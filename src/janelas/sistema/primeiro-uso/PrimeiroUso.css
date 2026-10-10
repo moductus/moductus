@@ -21,6 +21,8 @@
   padding: var(--espaco-pagina) var(--espaco-cabecalho);
   border-right: var(--espessura-borda) solid var(--borda);
   background: var(--fundo-lateral);
+  /* Só rola na vertical: o texto quebra dentro dos 248, nunca empurra para o lado. */
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -32,8 +34,12 @@
   padding-top: var(--esp-14);
 }
 
+/* O rodapé da lateral fica inteiro: não encolhe quando falta altura, e a lateral rola. */
 .uso-lateral-pe {
+  flex: none;
   margin-top: auto;
+  padding-top: var(--esp-14);
+  overflow-wrap: anywhere;
 }
 
 .uso-passos {
@@ -121,6 +127,13 @@
   font-size: var(--tipo-26);
   font-weight: var(--peso-forte);
   letter-spacing: var(--tracado-titulo);
+}
+
+/* O título recebe o foco a cada passo só para o leitor de tela anunciar: não é controle, e o anel
+   em volta dele parecia um campo de texto. */
+.uso-titulo:focus,
+.uso-titulo:focus-visible {
+  outline: 0;
 }
 
 .uso-texto {
@@ -351,6 +364,12 @@
   background: var(--fundo-elevado);
 }
 
+/* O selo e o botão do resultado ficam do tamanho deles: quem encolhe e quebra é o texto, e o
+   selo nunca passa por cima dele em janela estreita. */
+.uso-nota > :not(.uso-item-texto) {
+  flex: none;
+}
+
 .uso-item-texto {
   display: flex;
   flex: 1;
@@ -372,6 +391,63 @@
 .uso-item-descricao {
   font-size: var(--tipo-12);
   color: var(--texto-2);
+}
+
+/* ---------- 5. Conexões (Uso5Conexoes.dc.html) ---------- */
+/* A do Nuno abre embaixo os cartões de Configurações › Conexões. */
+.uso-item--nuno {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.uso-item-cabeca {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-14);
+}
+
+.uso-item-acoes {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.uso-conexoes-nuno {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-10);
+}
+
+/* ---------- 3. Modelo (Uso3Modelo.dc.html) ---------- */
+/* Os modelos são rádios em linha, um por cartão, com o estado num selo ao lado do nome. */
+.uso-opcoes--lista {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--esp-8);
+}
+
+.uso-opcoes--lista .uso-opcao {
+  gap: var(--esp-2);
+  padding: var(--esp-12) var(--esp-16);
+}
+
+.uso-opcoes--lista .uso-opcao-texto {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.uso-procurar {
+  display: flex;
+}
+
+.uso-api {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--esp-14);
+}
+
+.uso-numero {
+  font-family: var(--fonte-mono);
 }
 
 /* ---------- 4. Conhecer o time ---------- */

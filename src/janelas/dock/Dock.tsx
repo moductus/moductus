@@ -5,6 +5,8 @@ import { Icone } from "../../componentes/Icone.tsx";
 import { Marca } from "../../componentes/Marca.tsx";
 import { AGENTES, DADOS_AGENTES } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
+import { formatarHora } from "../../componentes/personagem/quando.ts";
+import { CONVITE_MODELO, lerSituacao } from "../../componentes/personagem/situacao.ts";
 import { Contagem } from "../../componentes/Selo.tsx";
 import {
   useAwake,
@@ -14,14 +16,20 @@ import {
   useServico,
   useTelaCheia,
 } from "../../nativo/eventos.ts";
+import { useDadosDev } from "../../areas/dev/dev.ts";
+import { useAgora } from "../../areas/tempo.ts";
 import { useCanal } from "../../servico/conexao.ts";
-import { AREAS_DOCK, DADOS_AREAS } from "../areas.ts";
+import { marcarVistasDe, usePontosTime } from "../../servico/notificacoes.ts";
+import { useTime } from "../../servico/time.ts";
+import { AREAS_DOCK, DADOS_AREAS, type AreaDock } from "../areas.ts";
+import { sessoesEsperando } from "../painel/agentes.ts";
+import { usePendentesDoTerminal } from "../painel/dados.ts";
+import { pontoDoAgente, rotuloDoAgente } from "./agentes.ts";
 import { proximoIndice } from "./navegacao.ts";
-import { useRelogio } from "./relogio.ts";
 import "./Dock.css";
 
-/** Convite das cabeças do time enquanto nenhum modelo está conectado (fase 1). */
-export const CONVITE_AGENTES = "Conectar um modelo";
+/** Convite das cabeças do time enquanto nenhum modelo está conectado. */
+export const CONVITE_AGENTES = CONVITE_MODELO;
 
 /** Área aberta no painel lateral, para marcar o botão; `null` com o painel fechado. */
 function useAreaAberta(): string | null {
@@ -48,9 +56,23 @@ export function Dock() {
   const awake = useAwake();
   const servico = useServico();
   const canal = useCanal(servico);
+  const { situacoes: time, modelos } = useTime(canal);
+  const pontos = usePontosTime(canal);
+  // As sessões do terminal esperando você são do Nuno, que fica de olho nelas (Dock.dc.html).
+  const esperandoNoTerminal = sessoesEsperando(usePendentesDoTerminal(canal) ?? []);
+  const github = useDadosDev(canal);
+  // O badge do Dev conta o que precisa de você no GitHub; sem conexão, nada.
+  const contagens: Partial<Record<AreaDock, number>> = {
+    dev:
+      github.estado === "pronta"
+        ? github.dados.situacao.itens.filter((i) => i.estado === "aberto" && i.precisaDeMim).length
+        : 0,
+  };
   const config = useConfiguracaoDock();
   const aberta = useAreaAberta();
-  const hora = useRelogio();
+  // Um relógio só para o dock: a hora no rodapé e a hora das dicas viram juntas, no minuto.
+  const agora = useAgora();
+  const hora = formatarHora(agora);
   const nav = useRef<HTMLElement>(null);
 
   // A casca avisa que o dock ganhou o foco pelo atalho: o teclado começa na primeira área.
@@ -122,8 +144,8 @@ export function Dock() {
             onClick={() => void invoke("painel_abrir", { area: id })}
           >
             <Icone nome={area.icone} tamanho={20} />
-            {/* Fase 1: nada para contar ainda; zero não desenha o badge. */}
-            {area.contagem && <Contagem valor={0} rotulo={area.contagem} />}
+            {/* Área sem número ao vivo ainda conta zero, e zero não desenha o badge. */}
+            {area.contagem && <Contagem valor={contagens[id] ?? 0} rotulo={area.contagem} />}
           </button>
         );
       })}
@@ -136,20 +158,36 @@ export function Dock() {
         aria-label="Time"
         data-ativo={aberta === "agentes" || undefined}
       >
-        {AGENTES.map((agente) => (
-          <button
-            key={agente}
-            type="button"
-            className="dock-agente"
-            data-agente={agente}
-            aria-label={`${DADOS_AGENTES[agente].nome}, dormindo. ${CONVITE_AGENTES}`}
-            aria-expanded={aberta === "agentes"}
-            title={`${DADOS_AGENTES[agente].nome} está dormindo. ${CONVITE_AGENTES}`}
-            onClick={() => void invoke("painel_abrir", { area: "agentes" })}
-          >
-            <Personagem agente={agente} modo="cabeca" tamanho="dock" estado="dormindo" moldura />
-          </button>
-        ))}
+        {AGENTES.map((agente) => {
+          // A cabeça segue o runtime: expressão, anel no tom do status e o status no rótulo.
+          const leitura = lerSituacao(time[agente], agora, modelos[agente] ?? null);
+          const { expressao, moldura } = leitura;
+          const avisos = pontos[agente] ?? 0;
+          const esperando = agente === "nuno" ? esperandoNoTerminal : 0;
+          const rotulo = rotuloDoAgente(DADOS_AGENTES[agente].nome, leitura, avisos, esperando);
+          const ponto = pontoDoAgente(leitura, avisos, esperando);
+          return (
+            <button
+              key={agente}
+              type="button"
+              className="dock-agente"
+              data-agente={agente}
+              aria-label={rotulo}
+              aria-expanded={aberta === "agentes"}
+              title={rotulo}
+              onClick={() => {
+                if (avisos > 0) marcarVistasDe(agente);
+                void invoke("painel_abrir", { area: "agentes" });
+              }}
+            >
+              <Personagem agente={agente} modo="cabeca" tamanho="dock" estado={expressao} moldura={moldura} />
+              {/* Ponto no canto (Dock.dc.html, Estados.dc.html): algo para você, teto ou erro. */}
+              {ponto && (
+                <span className="dock-agente-ponto" data-ponto="" data-tom={ponto} aria-hidden="true" />
+              )}
+            </button>
+          );
+        })}
       </div>
 
       <div className="dock-divisor" role="separator" />

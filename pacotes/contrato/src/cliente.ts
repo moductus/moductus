@@ -1,4 +1,10 @@
-import { MensagemDoServico, PARAMETRO_TOKEN, type Pedido } from "./canal.ts";
+import {
+  MensagemDoServico,
+  PARAMETRO_PROTOCOLO,
+  PARAMETRO_TOKEN,
+  VERSAO_PROTOCOLO,
+  type Pedido,
+} from "./canal.ts";
 import {
   EVENTOS,
   METODOS,
@@ -19,6 +25,28 @@ export type EstadoConexao = "desconectado" | "conectando" | "conectado";
 /** Espera antes de reconectar: 250 ms dobrando até 5 s. */
 export function esperaReconexao(tentativa: number): number {
   return Math.min(250 * 2 ** Math.max(0, tentativa - 1), 5000);
+}
+
+/**
+ * O pedido nem saiu: sem conexão aberta com o serviço. Diferente de uma falha depois do envio
+ * (conexão caiu, resposta de erro), em que o serviço pode já ter agido.
+ */
+export class ServicoIndisponivel extends Error {
+  constructor() {
+    super("serviço indisponível");
+    this.name = "ServicoIndisponivel";
+  }
+}
+
+/**
+ * O serviço recebeu o pedido e respondeu que não fez ("o arquivo fica fora do projeto"): a
+ * mensagem é dele e pode ir para a tela. Diferente de a conexão cair no meio, quando não se sabe.
+ */
+export class RecusaDoServico extends Error {
+  constructor(mensagem: string) {
+    super(mensagem);
+    this.name = "RecusaDoServico";
+  }
 }
 
 interface Pendente {
@@ -77,7 +105,7 @@ export class ClienteServico {
   ): Promise<SaidaDe<M>> {
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-      return Promise.reject(new Error("serviço indisponível"));
+      return Promise.reject(new ServicoIndisponivel());
     }
     const id = this.proximoId++;
     const pedido: Pedido = { tipo: "pedido", id, metodo, dados: dados[0] };
@@ -114,7 +142,8 @@ export class ClienteServico {
     if (!this.endereco || this.encerrado) return;
     const { porta, token } = this.endereco;
     this.definirEstado("conectando");
-    const ws = new WebSocket(`ws://127.0.0.1:${porta}/?${PARAMETRO_TOKEN}=${encodeURIComponent(token)}`);
+    const consulta = `${PARAMETRO_TOKEN}=${encodeURIComponent(token)}&${PARAMETRO_PROTOCOLO}=${VERSAO_PROTOCOLO}`;
+    const ws = new WebSocket(`ws://127.0.0.1:${porta}/?${consulta}`);
     this.ws = ws;
     ws.onopen = () => {
       this.tentativa = 0;
@@ -158,7 +187,7 @@ export class ClienteServico {
     if (!pendente) return;
     this.pendentes.delete(m.id);
     if (!m.ok) {
-      pendente.rejeitar(new Error(m.erro));
+      pendente.rejeitar(new RecusaDoServico(m.erro));
       return;
     }
     const saida = METODOS[pendente.metodo].saida.safeParse(m.dados);

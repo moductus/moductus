@@ -56,6 +56,8 @@
   /* A janela flutuante tem 80 px (src-tauri/src/dock.rs): 8 de margem em volta dos 64 */
   --margem-dock-flutuante: 8px;
   --tamanho-ponto-estado: 6px;
+  /* Ponto do status nas linhas de sessão e de PR (Agentes.dc.html) */
+  --tamanho-ponto-status: 8px;
   /* O painel desenha o cartão afastado do dock, como no Main.dc.html */
   --margem-painel: 12px;
 
@@ -155,6 +157,59 @@
   /* Configurações: campo que grava atalho e coluna do nome na prévia da importação */
   --largura-campo-atalho: 132px;
   --largura-rotulo-mudanca: 148px;
+  /* Título e frase de uma seção ao lado das ações dela só com esta largura; abaixo, as ações descem */
+  --largura-min-cabeca-secao: 220px;
+  /* Notificações (AreaNotificacoes.dc.html): colunas Agente e Onde da lista por agente, altura da
+     linha, a lista suspensa do "Onde" e o canto do toast na prévia do aviso do Windows */
+  --largura-col-agente: 200px;
+  --largura-col-onde: 210px;
+  /* Janela estreita: as duas colunas encolhem até o mínimo, cada uma com até 26% da lista, para
+     o "Avisar" caber; abaixo disso a lista rola de lado. */
+  --largura-col-agente-min: 150px;
+  --largura-col-onde-min: 160px;
+  --fracao-col-agentes: 26cqi;
+  --altura-linha-agente: 64px;
+  --altura-campo-tabela: 30px;
+  --raio-toast: 8px;
+  /* Silêncio e prévia lado a lado só com esta largura cada; abaixo, um embaixo do outro */
+  --largura-min-coluna-notificacoes: 300px;
+  /* Modelos e Conexões (ConfigModelos*.dc.html, ConfigConexoes*.dc.html): colunas Estado,
+     Resposta e Teto, a lista do provedor, o trilho do teste, os caminhos do vazio lado a lado só
+     com esta largura cada, as colunas do resumo de uma conexão e a altura dos blocos da prévia */
+  --largura-col-modelo-estado: 168px;
+  --largura-col-modelo-resposta: 150px;
+  --largura-col-teto: 150px;
+  --largura-lista-modelo: 176px;
+  /* Janela estreita: as listas e o teto ficam com até esta fração da tabela, e a lista nunca
+     menor que o nome do provedor com o ponto e a seta; o agente fica com o resto. */
+  --fracao-col-lista-modelo: 22cqi;
+  --fracao-col-teto: 18cqi;
+  --largura-lista-modelo-min: 132px;
+  --largura-trilho-teste: 120px;
+  --largura-min-caminho: 220px;
+  --largura-min-dado-conexao: 160px;
+  --altura-bloco-hooks: 216px;
+  /* A lista aberta de um <select> é desenhada pelo Windows: cores de sistema, que seguem o
+     color-scheme do tema */
+  --fundo-lista-nativa: Canvas;
+  --texto-lista-nativa: CanvasText;
+  /* Sessões de IA (AreaSessoes.dc.html): pedidos à direita, gráfico da semana e tabela */
+  --largura-coluna-pedidos: 340px;
+  --altura-grafico-uso: 110px;
+  /* O maior dia: o gráfico menos o número em cima e o dia embaixo */
+  --altura-barra-uso: 64px;
+  --largura-barra-uso: 40px;
+  --altura-barra-minima: 2px;
+  --raio-barra-uso: 4px;
+  --opacidade-barra-passada: 0.5;
+  --altura-cabecalho-tabela: 36px;
+  --altura-linha-tabela: 46px;
+  --largura-col-projeto: 170px;
+  --largura-col-ferramenta: 110px;
+  --largura-col-estado: 130px;
+  --largura-col-contexto: 150px;
+  --largura-col-gasto: 120px;
+  --largura-trilho-contexto: 70px;
   /* Fechar no padrão do Windows 11: vermelho do sistema, igual nos três temas */
   --fundo-fechar: #c42b1c;
   --texto-fechar: #ffffff;
@@ -176,6 +231,25 @@
   --largura-progresso-tutorial: 120px;
   /* Segunda volta de borda da opção marcada (a cor vem junto, do tema): 2 sem mudar o tamanho */
   --sombra-opcao-marcada: inset 0 0 0 1px;
+
+  /* Painéis Agentes e Dev (Agentes.dc.html, PainelDev.dc.html): a barra que corre enquanto o
+     agente trabalha (2 px, 40% do trilho, 1,4 s) e o trilho do contexto de cada sessão (3 px) */
+  --altura-trilho-trabalho: 2px;
+  --largura-barra-trabalho: 40%;
+  --dur-correr: 1.4s;
+  --altura-trilho-sessao: 3px;
+  /* Selo dos PRs do painel Dev numa coluna só, para os títulos alinharem */
+  --largura-selo-pr: 66px;
+  /* Agentes (Conversas.dc.html e AreaAgente.dc.html): lista de conversas, cabeçalho da conversa,
+     balão do usuário com a ponta embaixo à direita, largura da fala, aba e coluna da hora */
+  --largura-lista-conversas: 260px;
+  --altura-cabecalho-conversa: 60px;
+  --largura-balao: 520px;
+  --largura-fala: 620px;
+  --raio-balao: 14px;
+  --raio-balao-ponta: 4px;
+  --espessura-aba: 2px;
+  --largura-hora: 40px;
 }
 
 /* Menos animação no Windows: pela mídia do WebView ou pelo "Efeitos de animação" que a casca
@@ -186,6 +260,7 @@
     --dur-saida: 0ms;
     --dur-respirar: 0ms;
     --dur-piscar: 0ms;
+    --dur-correr: 0ms;
   }
 }
 
@@ -194,6 +269,7 @@
   --dur-saida: 0ms;
   --dur-respirar: 0ms;
   --dur-piscar: 0ms;
+  --dur-correr: 0ms;
 }
 
 /* ---------- Grafite: escuro, sólido, dock colado ---------- */
@@ -276,7 +352,8 @@
   --perigo: #b4443c;
   --capa: #d9d6cf;
 
-  --agente-alba: #9a6a1e;
+  /* Um tom abaixo do #9A6A1E do canvas: o nome da Alba na fala (12, sobre fundo-elevado) pede 4,5:1 */
+  --agente-alba: #96671d;
   --agente-tula: #2f7a52;
   --agente-faina: #a34e2e;
   --agente-nuno: #3f64a8;
@@ -328,7 +405,8 @@
 
   --agente-alba: #d9a55a;
   --agente-tula: #6fae8c;
-  --agente-faina: #d2805e;
+  /* Um tom acima do #D2805E do canvas: sobre o fundo-elevado do Vidro sólido pede 4,5:1 */
+  --agente-faina: #d48461;
   --agente-nuno: #7c9cd6;
 
   --raio-janela: 16px;

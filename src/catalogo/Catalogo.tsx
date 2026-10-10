@@ -1,13 +1,20 @@
+import type { Aprovacao, PedidoDecidir, SituacaoAgente } from "@moductus/contrato";
+import { ServicoIndisponivel } from "@moductus/contrato/cliente";
 import { useState, type ReactNode } from "react";
 import { Atalho } from "../componentes/Atalho.tsx";
 import { Botao, type VarianteBotao } from "../componentes/Botao.tsx";
 import { Caixa } from "../componentes/Caixa.tsx";
 import { Campo } from "../componentes/Campo.tsx";
 import { Cartao } from "../componentes/Cartao.tsx";
+import { CartaoAprovacao } from "../componentes/CartaoAprovacao.tsx";
+import { FalaAgente } from "../componentes/FalaAgente.tsx";
 import { Icone, NOMES_ICONES } from "../componentes/Icone.tsx";
 import { Interruptor } from "../componentes/Interruptor.tsx";
 import { ItemLista, Lista } from "../componentes/ItemLista.tsx";
 import { Marca } from "../componentes/Marca.tsx";
+import { DADOS_AGENTES, type Agente } from "../componentes/personagem/agentes.ts";
+import { Personagem } from "../componentes/personagem/Personagem.tsx";
+import { lerSituacao } from "../componentes/personagem/situacao.ts";
 import { Progresso } from "../componentes/Progresso.tsx";
 import { Seletor } from "../componentes/Seletor.tsx";
 import { Contagem, Selo } from "../componentes/Selo.tsx";
@@ -315,6 +322,237 @@ function Icones() {
   );
 }
 
+function SelosDeStatus() {
+  return (
+    <Grupo titulo="Selo de status: pílula e ponto">
+      <Linha rotulo="Selo (listas do time)">
+        <Selo>ocioso</Selo>
+        <Selo tom="sucesso">trabalhando</Selo>
+        <Selo tom="aviso">esperando você</Selo>
+        <Selo tom="perigo">erro</Selo>
+        <Selo tom="apagado">desligado</Selo>
+      </Linha>
+      <Linha rotulo="Ponto (sessões e PRs)">
+        <Selo forma="ponto" tom="sucesso">
+          trabalhando
+        </Selo>
+        <Selo forma="ponto" tom="aviso">
+          esperando você
+        </Selo>
+        <Selo forma="ponto" tom="perigo">
+          CI falhou
+        </Selo>
+        <Selo forma="ponto" tom="apagado">
+          terminou
+        </Selo>
+      </Linha>
+    </Grupo>
+  );
+}
+
+const SITUACAO_BASE: SituacaoAgente = {
+  estado: "ativo",
+  atividade: "ocioso",
+  motivoSono: null,
+  dormeAte: null,
+  pausadoAte: null,
+  fila: 0,
+};
+
+/** Uma situação do runtime para cada linha do Estados.dc.html, e o que o personagem faz com ela. */
+const SITUACOES: { agente: Agente; situacao: SituacaoAgente | null; nota: string }[] = [
+  { agente: "alba", situacao: null, nota: "sem serviço" },
+  { agente: "alba", situacao: SITUACAO_BASE, nota: "ativo, ocioso" },
+  { agente: "tula", situacao: { ...SITUACAO_BASE, atividade: "trabalhando" }, nota: "ativo, trabalhando" },
+  { agente: "faina", situacao: { ...SITUACAO_BASE, atividade: "esperando" }, nota: "ativo, esperando" },
+  { agente: "tula", situacao: { ...SITUACAO_BASE, atividade: "erro" }, nota: "ativo, erro" },
+  {
+    agente: "nuno",
+    situacao: { ...SITUACAO_BASE, estado: "dormindo", motivoSono: "limite" },
+    nota: "dormindo, limite",
+  },
+  {
+    agente: "nuno",
+    situacao: { ...SITUACAO_BASE, estado: "dormindo", motivoSono: "teto" },
+    nota: "dormindo, teto",
+  },
+  { agente: "faina", situacao: { ...SITUACAO_BASE, estado: "pausado" }, nota: "pausado" },
+  { agente: "alba", situacao: { ...SITUACAO_BASE, estado: "desligado" }, nota: "desligado" },
+];
+
+function Situacoes() {
+  return (
+    <Grupo titulo="Personagem e estado real">
+      <ul className="catalogo-situacoes">
+        {SITUACOES.map(({ agente, situacao, nota }) => {
+          const { expressao, moldura, texto, tom } = lerSituacao(situacao);
+          return (
+            <li key={nota} className="catalogo-situacao">
+              <Personagem agente={agente} modo="cabeca" tamanho="dock" estado={expressao} moldura={moldura} />
+              <span className="catalogo-situacao-nome">{DADOS_AGENTES[agente].nome}</span>
+              <Selo tom={tom}>{texto}</Selo>
+              <span className="catalogo-apagado">{nota}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </Grupo>
+  );
+}
+
+function Falas() {
+  return (
+    <Grupo titulo="Fala do agente">
+      <FalaAgente agente="tula">
+        R$ 512 de R$ 600 em mercado em outubro, 85% do previsto, com 8 dias passados.
+      </FalaAgente>
+      <FalaAgente agente="nuno" estado="esperando" acao={<AcoesFala />}>
+        A sessão do Codex chegou a 85% do contexto. Compacto agora?
+      </FalaAgente>
+    </Grupo>
+  );
+}
+
+function AcoesFala() {
+  return (
+    <div className="catalogo-linha">
+      <Botao tamanho="pequeno">Depois</Botao>
+      <Botao tamanho="pequeno" variante="primario">
+        Compactar
+      </Botao>
+    </div>
+  );
+}
+
+const INSTANTE = "2026-10-09T14:31:00.000Z";
+
+const DO_TERMINAL: Aprovacao = {
+  id: "aprovacao-terminal",
+  fonte: "claude-code",
+  agenteId: null,
+  execucaoId: null,
+  sessaoId: "sessao-api-pedidos",
+  descricao: "Quer rodar o comando abaixo.",
+  acao: { ferramenta: "Bash", entrada: null, rotulo: null, rotuloRecusar: null, desfazivel: false },
+  estado: "pendente",
+  criadoEm: INSTANTE,
+  decididaEm: null,
+  regraCriadaId: null,
+  admiteSempre: true,
+};
+
+const DA_FAINA: Aprovacao = {
+  id: "aprovacao-faina",
+  fonte: "moductus",
+  agenteId: "faina",
+  execucaoId: "execucao-faina",
+  sessaoId: null,
+  descricao:
+    "Achei 38 instaladores (1,4 GB) com mais de 60 dias. Vou mover para a Lixeira; a lista está abaixo.",
+  acao: {
+    ferramenta: "arquivos.mover",
+    entrada: null,
+    rotulo: "Mover 38 arquivos",
+    rotuloRecusar: "Não mover",
+    desfazivel: true,
+  },
+  estado: "pendente",
+  criadoEm: INSTANTE,
+  decididaEm: null,
+  regraCriadaId: null,
+  admiteSempre: true,
+};
+
+/** No catálogo, decidir só muda o cartão na tela; nada sai daqui. */
+function useAprovacaoDeMentira(inicial: Aprovacao) {
+  const [aprovacao, setAprovacao] = useState(inicial);
+  const aoDecidir = async (pedido: PedidoDecidir) => {
+    setAprovacao((a) => ({
+      ...a,
+      estado: pedido.decisao === "permitir" ? "aprovada" : "negada",
+      decididaEm: INSTANTE,
+      regraCriadaId: pedido.sempre ? "regra-catalogo" : null,
+    }));
+  };
+  const refazer = () => setAprovacao(inicial);
+  return { aprovacao, aoDecidir, refazer };
+}
+
+function OrigemSessao() {
+  return (
+    <>
+      <Selo forma="ponto" tom="aviso">
+        esperando você
+      </Selo>
+      <span className="catalogo-situacao-nome">api-pedidos</span>
+      <span className="catalogo-apagado">Claude Code</span>
+    </>
+  );
+}
+
+function Aprovacoes() {
+  const terminal = useAprovacaoDeMentira(DO_TERMINAL);
+  const faina = useAprovacaoDeMentira(DA_FAINA);
+  const nunca = async () => {
+    throw new ServicoIndisponivel();
+  };
+  return (
+    <Grupo titulo="Cartão de aprovação">
+      <Linha rotulo="Sessão do terminal (interativo)">
+        <Botao tamanho="pequeno" variante="fantasma" onClick={terminal.refazer}>
+          Recomeçar
+        </Botao>
+      </Linha>
+      <CartaoAprovacao
+        aprovacao={terminal.aprovacao}
+        origem={<OrigemSessao />}
+        detalhe={<code>npm test -- --watch=false</code>}
+        aoDecidir={terminal.aoDecidir}
+      />
+      <Linha rotulo="Agente do Moductus, dentro da fala (interativo)">
+        <Botao tamanho="pequeno" variante="fantasma" onClick={faina.refazer}>
+          Recomeçar
+        </Botao>
+      </Linha>
+      <FalaAgente
+        agente="faina"
+        estado="esperando"
+        acao={
+          <CartaoAprovacao
+            aprovacao={faina.aprovacao}
+            semDescricao
+            tamanho="pequeno"
+            detalhe={
+              <>
+                <span>Setup-editor-1.82.exe · 98 MB · 74 dias</span>
+                <span>instalador-impressora.msi · 210 MB · 190 dias</span>
+                <span>+ 36 outros</span>
+              </>
+            }
+            extra={<Botao tamanho="pequeno">Ver lista</Botao>}
+            aoDecidir={faina.aoDecidir}
+          />
+        }
+      >
+        {DA_FAINA.descricao}
+      </FalaAgente>
+      <Linha rotulo="Serviço fora do ar ao responder">
+        <span className="catalogo-apagado">Os botões mostram o erro no próprio cartão.</span>
+      </Linha>
+      <CartaoAprovacao aprovacao={DO_TERMINAL} origem={<OrigemSessao />} aoDecidir={nunca} />
+      <Linha rotulo="Já decidido e expirado">
+        <span className="catalogo-apagado">Sem botões: o cartão diz o que valeu.</span>
+      </Linha>
+      <CartaoAprovacao
+        aprovacao={{ ...DO_TERMINAL, estado: "aprovada", regraCriadaId: "regra-catalogo" }}
+        origem={<OrigemSessao />}
+        aoDecidir={nunca}
+      />
+      <CartaoAprovacao aprovacao={{ ...DA_FAINA, estado: "expirada" }} aoDecidir={nunca} />
+    </Grupo>
+  );
+}
+
 function Coluna({ tema, nome }: { tema: TemaConcreto; nome: string }) {
   return (
     <div className="catalogo-tema" data-tema={tema}>
@@ -329,6 +567,10 @@ function Coluna({ tema, nome }: { tema: TemaConcreto; nome: string }) {
       <Progressos />
       <Selos />
       <Seletores />
+      <SelosDeStatus />
+      <Situacoes />
+      <Falas />
+      <Aprovacoes />
     </div>
   );
 }

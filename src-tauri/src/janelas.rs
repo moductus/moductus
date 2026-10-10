@@ -7,6 +7,7 @@
 //! - captura: centralizada no monitor principal, ganha foco e some ao perdê-lo.
 
 use std::{
+    mem::size_of,
     path::PathBuf,
     sync::{Mutex, OnceLock},
     time::Instant,
@@ -16,8 +17,10 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow, WebviewWindowBuilder};
 use windows::Win32::{
     Foundation::{HWND, RECT},
+    Graphics::Gdi::{GetMonitorInfoW, MonitorFromRect, MONITORINFO, MONITOR_DEFAULTTONEAREST},
     UI::WindowsAndMessaging::{
-        GetWindowRect, IsWindowVisible, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE, SW_HIDE, SW_SHOWNOACTIVATE,
+        GetWindowRect, IsWindowVisible, SetForegroundWindow, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOZORDER, SW_HIDE,
+        SW_SHOWNOACTIVATE,
     },
 };
 
@@ -54,10 +57,12 @@ pub fn iniciar(app: &AppHandle, pasta: PathBuf) {
         dock::sem_ativar(dock::hwnd_de(&painel));
     }
     let arquivo = ARQUIVO_SISTEMA.get_or_init(|| pasta.join("sistema.json"));
-    if let (Some(sistema), Some(pos)) = (janela(app, "sistema"), ler_posicao(arquivo)) {
+    let Some(sistema) = janela(app, "sistema") else { return };
+    if let Some(pos) = ler_posicao(arquivo) {
         let _ = sistema.set_size(PhysicalSize::new(pos.largura, pos.altura));
         let _ = sistema.set_position(PhysicalPosition::new(pos.x, pos.y));
     }
+    caber_no_monitor(&sistema);
 }
 
 /// Esconde pelo Win32, que vale também para janela mostrada fora do Tauri (o hide() dele
@@ -81,10 +86,22 @@ pub fn retangulo_painel(dock: RECT, lado: appbar::Lado, largura: i32) -> RECT {
 /// Abre o painel de uma área ao lado do dock; a mesma área de novo fecha.
 #[tauri::command]
 pub fn painel_abrir(app: AppHandle, area: String) {
+    abrir_painel(app, area, true);
+}
+
+/// Abre o painel de uma área sem alternar: já aberto nela, fica aberto (o clique no aviso do
+/// Windows leva ao time, nunca o esconde).
+pub fn painel_mostrar(app: AppHandle, area: String) {
+    abrir_painel(app, area, false);
+}
+
+fn abrir_painel(app: AppHandle, area: String, alternar: bool) {
     let (Some(painel), Some(janela_dock)) = (janela(&app, "painel"), janela(&app, "dock")) else { return };
     let aberta = PAINEL.lock().unwrap().as_ref().map(|(a, _)| a.clone());
     if aberta.as_deref() == Some(area.as_str()) && unsafe { IsWindowVisible(hwnd(&painel)) }.as_bool() {
-        painel_fechar(app);
+        if alternar {
+            painel_fechar(app);
+        }
         return;
     }
     *PAINEL.lock().unwrap() = Some((area.clone(), Instant::now()));
@@ -161,6 +178,46 @@ fn ler_posicao(arquivo: &PathBuf) -> Option<Posicao> {
     (p.largura >= 400 && p.altura >= 300).then_some(p)
 }
 
+/// O retângulo da janela dentro da área útil do monitor: encolhe o que passa do tamanho dela e
+/// traz de volta o que sobra para fora, sem mexer no que já cabe.
+pub fn retangulo_na_area_util(janela: RECT, area: RECT) -> RECT {
+    let largura = (janela.right - janela.left).min(area.right - area.left);
+    let altura = (janela.bottom - janela.top).min(area.bottom - area.top);
+    let x = janela.left.clamp(area.left, area.right - largura);
+    let y = janela.top.clamp(area.top, area.bottom - altura);
+    RECT { left: x, top: y, right: x + largura, bottom: y + altura }
+}
+
+/// Prende o Sistema restaurado à área útil do monitor onde ele está (sem a barra de tarefas e a
+/// faixa do dock). O tamanho gravado veio de outra tela ou de outra escala e pode não caber.
+fn caber_no_monitor(sistema: &WebviewWindow) {
+    if sistema.is_maximized().unwrap_or(false) || sistema.is_minimized().unwrap_or(false) {
+        return;
+    }
+    let h = hwnd(sistema);
+    let mut rc = RECT::default();
+    let mut info = MONITORINFO { cbSize: size_of::<MONITORINFO>() as u32, ..Default::default() };
+    unsafe {
+        if GetWindowRect(h, &mut rc).is_err() || !GetMonitorInfoW(MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST), &mut info).as_bool() {
+            return;
+        }
+    }
+    let alvo = retangulo_na_area_util(rc, info.rcWork);
+    if alvo == rc {
+        return;
+    }
+    crate::registro::info(&format!(
+        "sistema {}x{} preso à área útil: {}x{}",
+        rc.right - rc.left,
+        rc.bottom - rc.top,
+        alvo.right - alvo.left,
+        alvo.bottom - alvo.top
+    ));
+    unsafe {
+        let _ = SetWindowPos(h, None, alvo.left, alvo.top, alvo.right - alvo.left, alvo.bottom - alvo.top, SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+}
+
 /// Grava posição e tamanho do Sistema quando ele se move ou muda de tamanho.
 pub fn sistema_mudou(sistema: &WebviewWindow) {
     if sistema.is_minimized().unwrap_or(false) || sistema.is_maximized().unwrap_or(false) {
@@ -182,6 +239,7 @@ pub fn sistema_alternar(app: AppHandle) {
         let _ = sistema.hide();
     } else {
         let _ = sistema.unminimize();
+        caber_no_monitor(&sistema);
         let _ = sistema.show();
         let _ = sistema.set_focus();
     }
@@ -214,6 +272,7 @@ pub fn sistema_abrir(app: AppHandle, area: String) {
     let Some(sistema) = janela(&app, "sistema") else { return };
     let area = destino_sistema(&area);
     let _ = sistema.unminimize();
+    caber_no_monitor(&sistema);
     let _ = sistema.show();
     let _ = sistema.set_focus();
     let _ = sistema.emit_to("sistema", "sistema:ir", &area);
@@ -276,6 +335,26 @@ mod testes {
         assert_eq!(destino_sistema("configuracoes/modelos"), "configuracoes/modelos");
         assert_eq!(destino_sistema("hoje/x"), "inicio");
         assert_eq!(destino_sistema("agentes/"), "agentes");
+    }
+
+    #[test]
+    fn sistema_maior_que_a_tela_encolhe_para_a_area_util() {
+        // 1920x1080 com a barra de tarefas embaixo (48) e o dock à esquerda (64).
+        let area = RECT { left: 64, top: 0, right: 1920, bottom: 1032 };
+        let gravado = RECT { left: 100, top: 40, right: 100 + 2252, bottom: 40 + 1750 };
+        let r = retangulo_na_area_util(gravado, area);
+        assert_eq!((r.left, r.top, r.right, r.bottom), (64, 0, 1920, 1032));
+    }
+
+    #[test]
+    fn sistema_que_cabe_so_volta_para_dentro() {
+        let area = RECT { left: 64, top: 0, right: 1920, bottom: 1032 };
+        let dentro = RECT { left: 300, top: 120, right: 1500, bottom: 900 };
+        assert_eq!(retangulo_na_area_util(dentro, area), dentro);
+        // Gravado num monitor que saiu: mesmo tamanho, puxado para dentro da área útil.
+        let fora = RECT { left: 2400, top: -50, right: 3600, bottom: 730 };
+        let r = retangulo_na_area_util(fora, area);
+        assert_eq!((r.left, r.top, r.right, r.bottom), (720, 0, 1920, 780));
     }
 
     #[test]
