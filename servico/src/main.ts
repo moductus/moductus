@@ -13,6 +13,7 @@ import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
+import { ligarBandeja } from "./bandeja/bandeja.ts";
 import { ambientePelaCasca } from "./casca/ambiente.ts";
 import { avisosPelaCasca, CLIQUE_NO_AVISO, lerClique } from "./casca/avisos.ts";
 import { CanalCasca } from "./casca/canal.ts";
@@ -230,6 +231,7 @@ const runtime = new Runtime(
     agente: (agenteId) => {
       const agente = agentes.procurar(agenteId);
       if (agente) servidor?.emitir("agentes.mudou", agente);
+      bandeja.atualizar();
     },
   },
 );
@@ -239,6 +241,8 @@ const agentes = new ServicoAgentes(
   (agente) => runtime.situacao(agente),
   runtime.estados,
 );
+// Pausar pela bandeja (F2-18): o menu do ícone mostra o estado de cada agente e se refaz quando muda.
+const bandeja = ligarBandeja({ agentes, canal });
 vigiaNuno = new VigiaNuno({
   executar: (pedido) => runtime.executar(pedido),
   githubConhecido: github.obter().itens,
@@ -265,6 +269,7 @@ const conversas = new ServicoConversas(
 // Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
 // Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
 runtime.estados.vigiar();
+bandeja.atualizar();
 conversas
   .retomarPendentes()
   .then((n) => n > 0 && console.error(`falas pendentes retomadas: ${n}`))
