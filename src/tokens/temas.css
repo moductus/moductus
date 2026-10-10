@@ -178,6 +178,11 @@
   --largura-col-modelo-resposta: 150px;
   --largura-col-teto: 150px;
   --largura-lista-modelo: 176px;
+  /* Janela estreita: as listas e o teto ficam com até esta fração da tabela, e a lista nunca
+     menor que o nome do provedor com o ponto e a seta; o agente fica com o resto. */
+  --fracao-col-lista-modelo: 22cqi;
+  --fracao-col-teto: 18cqi;
+  --largura-lista-modelo-min: 132px;
   --largura-trilho-teste: 120px;
   --largura-min-caminho: 220px;
   --largura-min-dado-conexao: 160px;

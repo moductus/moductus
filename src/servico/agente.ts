@@ -185,11 +185,11 @@ export function agoraDoAgente(
   return fila ?? "Sem nada em andamento.";
 }
 
-/** "todo dia às 8:30", "a cada 15 min", "quando chega arquivo.chegou". */
+/** "todo dia às 08:30", "a cada 15 min", "quando chega arquivo.chegou". */
 export function descreverGatilho(gatilho: Gatilho): string {
   switch (gatilho.tipo) {
     case "horario":
-      return `todo dia às ${gatilho.hora.replace(/^0(\d)/, "$1")}`;
+      return `todo dia às ${gatilho.hora}`;
     case "intervalo":
       return `a cada ${gatilho.minutos} min`;
     case "evento":

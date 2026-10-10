@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ateQuando, horaCurta, horaDoDia, quando } from "./quando.ts";
+import { ateQuando, formatarHora, horaCurta, horaDoDia, quando } from "./quando.ts";
 
 // Quinta, 8 de outubro de 2026, 10h, na hora local.
 const AGORA = new Date(2026, 9, 8, 10, 0);
@@ -9,6 +9,14 @@ describe("quando o agente volta", () => {
   it("hora cheia sem minutos, com minutos no relógio", () => {
     expect(horaDoDia(new Date(2026, 9, 8, 9, 0))).toBe("9h");
     expect(horaDoDia(new Date(2026, 9, 8, 17, 5))).toBe("17:05");
+  });
+
+  it("com minutos, a hora é a do relógio do dock: dois dígitos, 24 h", () => {
+    const madrugada = new Date(2026, 9, 10, 2, 46);
+    expect(horaDoDia(madrugada)).toBe("02:46");
+    expect(horaDoDia(madrugada)).toBe(formatarHora(madrugada));
+    expect(formatarHora(new Date(2026, 9, 8, 0, 0))).toBe("00:00");
+    expect(quando(local(9, 2, 46), AGORA, "longa")).toBe("amanhã às 02:46");
   });
 
   it("hoje, amanhã, na semana e mais longe, curto no dock e longo no cartão", () => {
@@ -27,7 +35,7 @@ describe("quando o agente volta", () => {
   });
 
   it("hora curta de listas: a hora hoje, com o dia da semana em outro dia, passado ou futuro", () => {
-    expect(horaCurta(local(8, 9, 2), AGORA)).toBe("9:02");
+    expect(horaCurta(local(8, 9, 2), AGORA)).toBe("09:02");
     expect(horaCurta(local(10, 9), AGORA)).toBe("sáb 9h");
     expect(horaCurta(local(7, 18, 30), AGORA)).toBe("qua 18:30");
   });

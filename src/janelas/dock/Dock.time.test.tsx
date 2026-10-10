@@ -375,8 +375,8 @@ describe("estados e sessões no dock (Estados.dc.html, Dock.dc.html)", () => {
       const dormeAte = new Date(2026, 9, 10, 1, 13, 20).toISOString();
       canal.lista = async () => [agente("alba", { estado: "dormindo", motivoSono: "fora_do_ar", dormeAte })];
       await montar();
-      expect(cabecas()[0]!.rotulo).toBe("Alba, erro. Modelo fora do ar, tenta de novo às 1:13");
-      // O relógio do dock vira para 1:13: "às 1:13" já soaria passado, mesmo 20 s antes da hora.
+      expect(cabecas()[0]!.rotulo).toBe("Alba, erro. Modelo fora do ar, tenta de novo às 01:13");
+      // O relógio do dock vira para 01:13: "às 01:13" já soaria passado, mesmo 20 s antes da hora.
       await act(async () => vi.advanceTimersByTime(20_000));
       expect(cabecas()[0]!.rotulo).toBe("Alba, erro. Modelo fora do ar, tentando de novo");
       // Passou da hora e o serviço ainda não mandou notícia: continua "tentando", sem hora velha.
@@ -391,7 +391,7 @@ describe("estados e sessões no dock (Estados.dc.html, Dock.dc.html)", () => {
             fn(agente("alba", { estado: "dormindo", motivoSono: "fora_do_ar", dormeAte: proxima })),
           );
       });
-      expect(cabecas()[0]!.rotulo).toBe("Alba, erro. Modelo fora do ar, tenta de novo às 1:20");
+      expect(cabecas()[0]!.rotulo).toBe("Alba, erro. Modelo fora do ar, tenta de novo às 01:20");
     } finally {
       vi.useRealTimers();
     }

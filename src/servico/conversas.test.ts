@@ -1,10 +1,11 @@
-import type { Conversa, FalaParcial, Mensagem } from "@moductus/contrato";
+import type { Conversa, FalaParcial, Mensagem, SituacaoAgente } from "@moductus/contrato";
 import { RecusaDoServico, ServicoIndisponivel } from "@moductus/contrato/cliente";
 import { describe, expect, it } from "vitest";
 import {
   aplicarParcial,
   conversaEmUso,
   encerrarParcial,
+  falhaNaConversa,
   juntarConversa,
   juntarMensagem,
   mencionar,
@@ -32,6 +33,7 @@ function mensagem(id: string, parte: Partial<Mensagem> = {}): Mensagem {
     agenteId: null,
     conteudo: "oi",
     execucaoId: null,
+    erroDaExecucao: false,
     criadoEm: "2026-10-09T12:00:00.000Z",
     ...parte,
   };
@@ -91,11 +93,52 @@ describe("mensagens e resposta em andamento", () => {
   });
 });
 
+describe("a falha do provedor na conversa", () => {
+  // Sábado, 10 de outubro de 2026, 2:45, na hora local.
+  const agora = new Date(2026, 9, 10, 2, 45);
+  const volta = new Date(2026, 9, 10, 2, 46).toISOString();
+  const CLAUDE = { tipo: "claude-cli", nome: "Claude Code" } as const;
+  const semLogin: SituacaoAgente = {
+    estado: "dormindo",
+    atividade: "ocioso",
+    motivoSono: "credencial",
+    dormeAte: volta,
+    pausadoAte: null,
+    fila: 0,
+  };
+  const cru = mensagem("01E", {
+    agenteId: "tula",
+    execucaoId: "e1",
+    conteudo: "O Claude Code recusou o login: Not logged in · Please run /login",
+    erroDaExecucao: true,
+  });
+
+  it("CLI sem login: o texto de login dos outros lugares, com o comando num campo próprio", () => {
+    expect(falhaNaConversa(cru, true, semLogin, CLAUDE, agora)).toEqual({
+      texto: "O Claude Code está sem login. Entre no terminal com ",
+      comando: { codigo: "claude", depois: " e tento de novo às 02:46." },
+    });
+    expect(falhaNaConversa(cru, true, { ...semLogin, motivoSono: "fora_do_ar" }, CLAUDE, agora)).toEqual({
+      texto: "O Claude Code não respondeu. Nada foi alterado; tento de novo às 02:46.",
+    });
+  });
+
+  it("a fala vale como foi gravada: resposta de verdade, fala antiga, agente acordado ou sono sem falha", () => {
+    expect(falhaNaConversa({ ...cru, erroDaExecucao: false }, true, semLogin, CLAUDE, agora)).toBeNull();
+    expect(falhaNaConversa(cru, false, semLogin, CLAUDE, agora)).toBeNull();
+    expect(
+      falhaNaConversa(cru, true, { ...semLogin, estado: "ativo", motivoSono: null }, CLAUDE, agora),
+    ).toBeNull();
+    expect(falhaNaConversa(cru, true, { ...semLogin, motivoSono: "limite" }, CLAUDE, agora)).toBeNull();
+    expect(falhaNaConversa(cru, true, undefined, CLAUDE, agora)).toBeNull();
+  });
+});
+
 describe("como a lista escreve", () => {
   const agora = new Date(2026, 9, 9, 15, 0);
 
   it("quando: hora hoje, ontem, dia da semana e depois a data", () => {
-    expect(quandoCurto(new Date(2026, 9, 9, 9, 2).toISOString(), agora)).toBe("9:02");
+    expect(quandoCurto(new Date(2026, 9, 9, 9, 2).toISOString(), agora)).toBe("09:02");
     expect(quandoCurto(new Date(2026, 9, 8, 23, 0).toISOString(), agora)).toBe("ontem");
     expect(quandoCurto(new Date(2026, 9, 5, 10, 0).toISOString(), agora)).toBe("seg");
     expect(quandoCurto(new Date(2026, 8, 30, 10, 0).toISOString(), agora)).toBe("30/09");
@@ -106,6 +149,17 @@ describe("como a lista escreve", () => {
     expect(previa(daFaina, true)).toBe("Faina: Achei 38 instaladores");
     expect(previa(daFaina, false)).toBe("Achei 38 instaladores");
     expect(previa(mensagem("01B", { conteudo: "tira os velhos" }), false)).toBe("Você: tira os velhos");
+  });
+
+  it("a prévia da falha dita pela janela junta o comando ao texto", () => {
+    const falha = {
+      texto: "O Claude Code está sem login. Entre no terminal com ",
+      comando: { codigo: "claude", depois: " e tento de novo às 15:05." },
+    };
+    const daTula = mensagem("01C", { agenteId: "tula", conteudo: "Not logged in", erroDaExecucao: true });
+    expect(previa(daTula, true, falha)).toBe(
+      "Tula: O Claude Code está sem login. Entre no terminal com claude e tento de novo às 15:05.",
+    );
   });
 
   it("menciona no começo, sem repetir a menção que já está no texto", () => {

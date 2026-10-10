@@ -1,6 +1,8 @@
 /**
  * Quando um agente volta, como o Estados.dc.html escreve: curto no dock ("seg 9h", "às 17:40") e
- * por extenso no cartão do painel ("segunda às 9h"). Hora cheia vira "9h"; com minutos, "17:40".
+ * por extenso no cartão do painel ("segunda às 9h"). Hora cheia vira "9h"; com minutos, a hora do
+ * relógio do dock ("02:46"), para a dica e o relógio ao lado nunca escreverem a mesma hora de dois
+ * jeitos.
  */
 
 const DIA_CURTO = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
@@ -8,11 +10,15 @@ const DIA_LONGO = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", 
 
 const DIA_MS = 24 * 60 * 60_000;
 
-/** "9h", "17:40", na hora local. */
+/** "09:05": hora e minuto com dois dígitos, sempre 24 h, como o relógio do dock. */
+export function formatarHora(data: Date): string {
+  const dois = (n: number) => String(n).padStart(2, "0");
+  return `${dois(data.getHours())}:${dois(data.getMinutes())}`;
+}
+
+/** "9h", "17:40", "02:46", na hora local. */
 export function horaDoDia(data: Date): string {
-  const h = data.getHours();
-  const m = data.getMinutes();
-  return m === 0 ? `${h}h` : `${h}:${String(m).padStart(2, "0")}`;
+  return data.getMinutes() === 0 ? `${data.getHours()}h` : formatarHora(data);
 }
 
 /** Dias de calendário entre hoje e a data (0 hoje, 1 amanhã), na hora local. */
@@ -42,7 +48,7 @@ export function quando(instante: string, agora: Date, forma: "curta" | "longa"):
 
 /**
  * Um instante já passado ou de qualquer dia, curto, para listas (o histórico do agente): a hora
- * hoje ("9:02", "14h"), com o dia da semana em outro dia ("sáb 9h").
+ * hoje ("09:02", "14h"), com o dia da semana em outro dia ("sáb 9h").
  */
 export function horaCurta(instante: string, agora: Date = new Date()): string {
   const data = new Date(instante);

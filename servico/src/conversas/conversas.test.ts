@@ -603,12 +603,31 @@ describe("conversa com um agente", () => {
     const [, parcial] = conversaInteira(servico, tula.id);
     expect(parcial!.conteudo).toBe(`R$ 512 de\n\n${AVISO_PAROU_NO_MEIO("o CLI caiu")}`);
     expect(execucoes.execucao(parcial!.execucaoId!)?.estado).toBe("erro");
+    // Com texto antes, a fala continua do agente: não é só o erro.
+    expect(parcial!.erroDaExecucao).toBe(false);
     // Sem sessão a retomar, o histórico vai inteiro, sem a fala que falhou.
     expect(falsos.tula.pedidos[1]!.continuarDe).toBeNull();
     expect(falsos.tula.pedidos[1]!.mensagens).toEqual([
       { papel: "usuario", texto: "quanto foi de mercado?" },
       { papel: "usuario", texto: "e aí?" },
     ]);
+  });
+
+  test("falha do provedor sem nada dito: a fala é só o erro da execução, no aviso e na página", async () => {
+    const { servico, falsos, eventos } = montar();
+    falsos.tula.roteirizar(roteiros.falha("credencial"));
+    const tula = servico.abrir({ agenteId: "tula" });
+    await servico.enviar({ conversaId: tula.id, conteudo: "quanto foi de mercado?" });
+    await servico.ocioso();
+
+    const [pergunta, falha] = conversaInteira(servico, tula.id);
+    expect(pergunta).toMatchObject({ agenteId: null, erroDaExecucao: false });
+    expect(falha).toMatchObject({
+      agenteId: "tula",
+      conteudo: "falha roteirizada: credencial",
+      erroDaExecucao: true,
+    });
+    expect(eventos.mensagens.at(-1)).toEqual(falha);
   });
 });
 
@@ -729,6 +748,7 @@ describe("o que vai ao modelo", () => {
     agenteId,
     conteudo,
     execucaoId: agenteId ? "01K79Z6N7Q4W3J5XG2B8C1D0EB" : null,
+    erroDaExecucao: false,
     criadoEm: "2026-10-09T14:00:00.000Z",
   });
 

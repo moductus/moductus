@@ -1,7 +1,14 @@
-import type { Aprovacao, Conversa, FalaParcial, Mensagem } from "@moductus/contrato";
+import type { Aprovacao, Conversa, FalaParcial, Mensagem, SituacaoAgente } from "@moductus/contrato";
 import { RecusaDoServico, ServicoIndisponivel, type EstadoConexao } from "@moductus/contrato/cliente";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AGENTES, DADOS_AGENTES, eAgente, type Agente } from "../componentes/personagem/agentes.ts";
+import { formatarHora } from "../componentes/personagem/quando.ts";
+import {
+  eFalhaDoProvedor,
+  falaDaFalha,
+  type FalaCartao,
+  type ModeloDoAgente,
+} from "../componentes/personagem/situacao.ts";
 import { juntarAprovacao } from "./aprovacoes.ts";
 import { servico } from "./conexao.ts";
 
@@ -67,7 +74,6 @@ export function encerrarParcial(andamento: Andamento, mensagem: Mensagem): Andam
   return resto;
 }
 
-const MINUTO = new Intl.DateTimeFormat("pt-BR", { hour: "numeric", minute: "2-digit", hourCycle: "h23" });
 const DIA_SEMANA = new Intl.DateTimeFormat("pt-BR", { weekday: "short" });
 const DIA_MES = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" });
 
@@ -83,18 +89,42 @@ function inicioDoDia(data: Date): number {
 export function quandoCurto(instante: string, agora: Date = new Date()): string {
   const data = new Date(instante);
   const dias = Math.round((inicioDoDia(agora) - inicioDoDia(data)) / 86_400_000);
-  if (dias <= 0) return MINUTO.format(data);
+  if (dias <= 0) return formatarHora(data);
   if (dias === 1) return "ontem";
   if (dias < 7) return DIA_SEMANA.format(data).replace(".", "");
   return DIA_MES.format(data);
 }
 
 /**
- * A última fala numa linha da lista: no time, com quem disse ("Faina: Achei 38…"); na conversa
- * de um agente, só o texto, como no quadro.
+ * A fala que é só o erro de uma execução, quando é a última de quem ainda dorme por falha do
+ * provedor: diz a falha como o cartão do painel ({@link falaDaFalha}: CLI sem login com o comando
+ * para entrar, a hora da nova tentativa), não com o texto cru do provedor ("Not logged in · Please
+ * run /login"). Fora disso, `null`: a fala vale como foi gravada.
  */
-export function previa(mensagem: Mensagem, doTime: boolean): string {
-  const texto = mensagem.conteudo.replace(/\s+/g, " ").trim();
+export function falhaNaConversa(
+  mensagem: Mensagem,
+  ultimaDele: boolean,
+  situacao: SituacaoAgente | undefined,
+  modelo: ModeloDoAgente | null,
+  agora: Date,
+): FalaCartao | null {
+  if (!mensagem.erroDaExecucao || !ultimaDele || situacao?.estado !== "dormindo") return null;
+  const motivo = situacao.motivoSono;
+  return eFalhaDoProvedor(motivo) ? falaDaFalha(motivo, modelo, situacao.dormeAte, agora, false) : null;
+}
+
+/** A fala do cartão numa linha só, com o comando no meio, para onde não cabe o código à parte. */
+export function textoDaFala(fala: FalaCartao): string {
+  return fala.comando ? `${fala.texto}${fala.comando.codigo}${fala.comando.depois}` : fala.texto;
+}
+
+/**
+ * A última fala numa linha da lista: no time, com quem disse ("Faina: Achei 38…"); na conversa
+ * de um agente, só o texto, como no quadro. A falha dita do jeito da janela
+ * ({@link falhaNaConversa}) entra no lugar do erro cru.
+ */
+export function previa(mensagem: Mensagem, doTime: boolean, falha: FalaCartao | null = null): string {
+  const texto = (falha ? textoDaFala(falha) : mensagem.conteudo).replace(/\s+/g, " ").trim();
   if (!doTime) return mensagem.agenteId === null ? `Você: ${texto}` : texto;
   if (mensagem.agenteId === null) return `Você: ${texto}`;
   const nome = eAgente(mensagem.agenteId) ? DADOS_AGENTES[mensagem.agenteId].nome : mensagem.agenteId;

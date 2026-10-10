@@ -243,7 +243,7 @@ describe("vigias", () => {
   });
 
   it("descreve cada gatilho como a página escreve", () => {
-    expect(descreverGatilho({ tipo: "horario", hora: "08:30" })).toBe("todo dia às 8:30");
+    expect(descreverGatilho({ tipo: "horario", hora: "08:30" })).toBe("todo dia às 08:30");
     expect(descreverGatilho({ tipo: "evento", nome: "arquivo.chegou" })).toBe(
       "quando acontece arquivo.chegou",
     );

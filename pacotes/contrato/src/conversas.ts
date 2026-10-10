@@ -29,6 +29,11 @@ export const Mensagem = z.object({
   conteudo: z.string(),
   /** Execução que produziu a fala; vazio nas do usuário. */
   execucaoId: Id.nullable(),
+  /**
+   * A fala é só o erro da execução que falhou, sem nada dito antes: a janela diz a falha do jeito
+   * dela (CLI sem login, com o comando para entrar), não com o texto cru do provedor.
+   */
+  erroDaExecucao: z.boolean(),
   criadoEm: Instante,
 });
 export type Mensagem = z.infer<typeof Mensagem>;

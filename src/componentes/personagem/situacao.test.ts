@@ -241,6 +241,16 @@ describe("o modelo do agente e a fala do cartão de erro de provedor", () => {
     });
   });
 
+  it("de madrugada, a hora da nova tentativa sai como o relógio do dock (02:46), no cartão e na dica", () => {
+    const madrugada = new Date(2026, 9, 10, 2, 45);
+    const volta = new Date(2026, 9, 10, 2, 46).toISOString();
+    expect(falaDaFalha("credencial", CLAUDE, volta, madrugada, false).comando?.depois).toBe(
+      " e tento de novo às 02:46.",
+    );
+    const sono = { ...DORMINDO, motivoSono: "credencial", dormeAte: volta } as const;
+    expect(lerSituacao(sono, madrugada, CLAUDE).dica).toBe("Claude Code sem login, tenta de novo às 02:46");
+  });
+
   it("com a hora chegada, o cartão diz que está tentando em vez da hora que passou", () => {
     const passou = new Date(2026, 9, 8, 10, 20);
     expect(falaDaFalha("fora_do_ar", CLAUDE, local(8, 10, 5), passou, false).texto).toBe(

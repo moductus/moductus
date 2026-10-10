@@ -40,7 +40,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 const { Dock, CONVITE_AGENTES } = await import("./Dock.tsx");
 const { Painel } = await import("../painel/Painel.tsx");
-const { formatarHora } = await import("./relogio.ts");
+const { formatarHora } = await import("../../componentes/personagem/quando.ts");
 const { proximoIndice } = await import("./navegacao.ts");
 const { auditar, marcos } = await import("../../teste/acessibilidade.ts");
 

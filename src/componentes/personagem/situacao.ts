@@ -94,8 +94,8 @@ function oQueFalhou(motivo: FalhaDoProvedor, modelo: ModeloDoAgente | null): str
 const MINUTO_MS = 60_000;
 
 /**
- * A hora de tentar de novo já chegou: passou, ou cai no minuto que o relógio mostra (à 1:13,
- * "tenta de novo às 1:13" já soa passado). O serviço acorda o agente nessa hora e tenta; até a
+ * A hora de tentar de novo já chegou: passou, ou cai no minuto que o relógio mostra (à 01:13,
+ * "tenta de novo às 01:13" já soa passado). O serviço acorda o agente nessa hora e tenta; até a
  * notícia chegar, o texto diz que está tentando, em vez de prometer uma hora que já foi.
  */
 export function jaTentando(dormeAte: string | null, agora: Date): boolean {

@@ -152,7 +152,7 @@ describe("o time no painel", () => {
         { atividade: "trabalhando", fila: 2 },
         execucao("alba", { estado: "rodando", inicio: local(8, 9, 5) }),
       ),
-    ).toBe("Trabalhando desde 9:05 · 2 pedidos na fila");
+    ).toBe("Trabalhando desde 09:05 · 2 pedidos na fila");
     expect(linha({ atividade: "trabalhando" })).toBe("Trabalhando agora");
     expect(
       linha({ atividade: "esperando" }, undefined, { ...pedido("a", null), descricao: "Prévia pronta" }),

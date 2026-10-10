@@ -165,7 +165,7 @@ describe("Notificações", () => {
   it("silêncio vai à configuração; o horário ligado mostra as horas e muda uma por vez", async () => {
     servicoQueAceita();
     await montar();
-    expect(recipiente.textContent).toContain("das 22:00 às 7:30");
+    expect(recipiente.textContent).toContain("das 22:00 às 07:30");
     expect(por('input[type="time"]')).toBeNull();
     expect(chave("Silêncio em tela cheia e apresentação").getAttribute("aria-checked")).toBe("true");
 
