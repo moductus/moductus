@@ -48,6 +48,7 @@ const execucao = {
   fim: null,
   estado: "rodando",
   erro: null,
+  falhaDoProvedor: null,
   tokensEntrada: null,
   tokensSaida: null,
   custoEstimadoMicrodolares: null,

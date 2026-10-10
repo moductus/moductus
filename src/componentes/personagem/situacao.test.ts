@@ -6,6 +6,7 @@ import {
   comandoDoCli,
   eFalhaDoProvedor,
   falaDaFalha,
+  falhaQuePassou,
   fraseDaSituacao,
   jaTentando,
   lerSituacao,
@@ -80,7 +81,7 @@ describe("lerSituacao: do runtime para o personagem", () => {
       moldura: "nenhuma",
       texto: "dormindo",
       tom: "neutro",
-      dica: "Volta seg 9h",
+      dica: "Volta seg 09:00",
       ponto: null,
     });
     expect(lerSituacao({ ...limite, dormeAte: local(8, 17, 40) }, AGORA).dica).toBe("Volta às 17:40");
@@ -98,7 +99,9 @@ describe("lerSituacao: do runtime para o personagem", () => {
       dica: "Modelo fora do ar, tenta de novo às 10:05",
       ponto: "perigo",
     });
-    expect(falha("ausente", local(9, 8)).dica).toBe("CLI do modelo não encontrado, tenta de novo amanhã 8h");
+    expect(falha("ausente", local(9, 8)).dica).toBe(
+      "CLI do modelo não encontrado, tenta de novo amanhã 08:00",
+    );
   });
 
   it("credencial recusada: num CLI é falta de login, numa API é a chave; sem saber o modelo, nenhum dos dois", () => {
@@ -152,11 +155,11 @@ describe("lerSituacao: do runtime para o personagem", () => {
     );
     expect(fraseDaSituacao({ ...ATIVO, estado: "pausado" }, AGORA)).toBe("Em pausa até você retomar");
     expect(fraseDaSituacao({ ...ATIVO, estado: "pausado", pausadoAte: local(8, 14), fila: 1 }, AGORA)).toBe(
-      "Em pausa até 14h · 1 pedido na fila",
+      "Em pausa até 14:00 · 1 pedido na fila",
     );
     expect(
       fraseDaSituacao({ ...DORMINDO, motivoSono: "limite", dormeAte: local(12, 9), fila: 3 }, AGORA),
-    ).toBe("Volta seg 9h · 3 pedidos na fila");
+    ).toBe("Volta seg 09:00 · 3 pedidos na fila");
     expect(fraseDaSituacao({ ...DORMINDO, motivoSono: "fora_do_ar" }, AGORA)).toBe(
       "Modelo fora do ar, tenta de novo em breve",
     );
@@ -231,6 +234,15 @@ describe("o modelo do agente e a fala do cartão de erro de provedor", () => {
     expect(falaDaFalha("fora_do_ar", null, volta, AGORA, false)).toEqual({
       texto: "O modelo não respondeu. Nada foi alterado; tento de novo às 10:05.",
     });
+  });
+
+  it("a falha que passou: no passado, sem hora nem promessa; login num CLI, chave numa API", () => {
+    expect(falhaQuePassou("credencial", CLAUDE)).toBe("O Claude Code estava sem login.");
+    expect(falhaQuePassou("credencial", OPENAI)).toBe("A chave do OpenAI foi recusada.");
+    expect(falhaQuePassou("credencial", null)).toBe("O modelo recusou o acesso.");
+    expect(falhaQuePassou("fora_do_ar", null)).toBe("O modelo estava fora do ar.");
+    expect(falhaQuePassou("ausente", CLAUDE)).toBe("O Claude Code não estava neste PC.");
+    expect(falhaQuePassou("limite", CLAUDE)).toBe("O Claude Code estava no limite de uso.");
   });
 
   it("o comando vai no campo próprio: crase no nome do provedor (dado do usuário) fica no texto", () => {

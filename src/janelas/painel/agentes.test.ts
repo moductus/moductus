@@ -95,6 +95,7 @@ const execucao = (agenteId: string, extra: Partial<Execucao> = {}): Execucao => 
   fim: null,
   estado: "ok",
   erro: null,
+  falhaDoProvedor: null,
   tokensEntrada: null,
   tokensSaida: null,
   custoEstimadoMicrodolares: null,
@@ -160,8 +161,10 @@ describe("o time no painel", () => {
     expect(linha({ atividade: "erro" }, execucao("alba", { estado: "erro", erro: "O modelo recusou" }))).toBe(
       "O modelo recusou",
     );
-    expect(linha({ estado: "pausado", pausadoAte: local(8, 14) })).toBe("Em pausa até 14h");
-    expect(linha({ estado: "dormindo", motivoSono: "limite", dormeAte: local(12, 9) })).toBe("Volta seg 9h");
+    expect(linha({ estado: "pausado", pausadoAte: local(8, 14) })).toBe("Em pausa até 14:00");
+    expect(linha({ estado: "dormindo", motivoSono: "limite", dormeAte: local(12, 9) })).toBe(
+      "Volta seg 09:00",
+    );
     expect(linhaDoAgente("alba", undefined, lerSituacao(undefined), undefined, undefined, AGORA)).toBe(
       "Conectar um modelo",
     );
@@ -202,7 +205,7 @@ describe("cartões de estado (Estados.dc.html)", () => {
     expect(pausa).toMatchObject({
       tipo: "pausa",
       agentes: ["alba", "tula", "faina", "nuno"],
-      titulo: "Time pausado até 14h",
+      titulo: "Time pausado até 14:00",
       texto: "Ninguém usa modelo nem mexe em nada até lá.",
       primaria: { texto: "Retomar agora", acao: { tipo: "retomar" } },
     });
@@ -249,7 +252,7 @@ describe("cartões de estado (Estados.dc.html)", () => {
     expect(limite).toMatchObject({
       quem: "Alba e Nuno",
       titulo: "O limite do Claude Code acabou",
-      texto: "Voltamos segunda às 9h, quando ele renova. O que não precisa de modelo continua.",
+      texto: "Voltamos segunda às 09:00, quando ele renova. O que não precisa de modelo continua.",
       estado: { texto: "dormindo", tom: "neutro" },
     });
   });

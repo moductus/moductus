@@ -17,6 +17,7 @@ import type { EstadoConexao } from "@moductus/contrato/cliente";
 import { useCallback, useEffect, useState } from "react";
 import {
   eFalhaDoProvedor,
+  falhaQuePassou,
   fraseDaSituacao,
   naFila,
   type ModeloDoAgente,
@@ -94,11 +95,18 @@ const ROTULO_EM_ANDAMENTO: Record<TipoGatilho, string> = {
   evento: "Atendendo um aviso",
 };
 
-/** A linha do histórico: o resumo, o erro ou, sem os dois, o que disparou. */
-export function textoDaExecucao(execucao: Execucao): string {
+/**
+ * A linha do histórico: o resumo, o erro ou, sem os dois, o que disparou. A falha do provedor é
+ * dita no passado, do jeito da janela ({@link falhaQuePassou}, com o `modelo` da execução); erro
+ * de outra causa aparece como veio.
+ */
+export function textoDaExecucao(execucao: Execucao, modelo: ModeloDoAgente | null = null): string {
   if (execucao.estado === "rodando") return ROTULO_EM_ANDAMENTO[execucao.gatilho];
   if (execucao.estado === "adiada") return "Ficou para quando o modelo voltar";
-  if (execucao.estado === "erro") return execucao.erro ?? "Não deu certo";
+  if (execucao.estado === "erro") {
+    if (execucao.falhaDoProvedor) return falhaQuePassou(execucao.falhaDoProvedor, modelo);
+    return execucao.erro ?? "Não deu certo";
+  }
   return execucao.resumo ?? ROTULO_GATILHO[execucao.gatilho];
 }
 
@@ -246,6 +254,8 @@ export interface DadosAgente {
   capacidades: readonly Capacidade[];
   /** `null` quando o serviço não diz (provedores ainda sem atendimento) ou o agente não tem. */
   provedor: Provedor | null;
+  /** Todos, para dizer a falha de cada execução pelo provedor em que ela rodou. */
+  provedores: readonly Provedor[];
   conexoes: readonly Conexao[];
   execucoes: readonly Execucao[];
   /** Há execuções mais antigas que as lidas. */
@@ -405,6 +415,7 @@ export function useAgente(canal: EstadoConexao, agenteId: string): DadosAgente &
     agente,
     capacidades,
     provedor,
+    provedores,
     conexoes,
     execucoes,
     temAnteriores: proximo !== null,

@@ -2,7 +2,7 @@ import type { LeituraSituacao } from "../../componentes/personagem/situacao.ts";
 
 /**
  * O rótulo de cada cabeça do dock, que também é a dica ao passar o mouse: o status, o que fazer
- * ("Volta seg 9h", "Chegou ao teto de hoje"), as sessões do terminal esperando você (só o Nuno) e
+ * ("Volta seg 09:00", "Chegou ao teto de hoje"), as sessões do terminal esperando você (só o Nuno) e
  * os avisos não vistos. "Nuno, ocioso. 1 sessão esperando você. 2 avisos novos".
  */
 export function rotuloDoAgente(

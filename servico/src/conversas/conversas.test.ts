@@ -603,8 +603,8 @@ describe("conversa com um agente", () => {
     const [, parcial] = conversaInteira(servico, tula.id);
     expect(parcial!.conteudo).toBe(`R$ 512 de\n\n${AVISO_PAROU_NO_MEIO("o CLI caiu")}`);
     expect(execucoes.execucao(parcial!.execucaoId!)?.estado).toBe("erro");
-    // Com texto antes, a fala continua do agente: não é só o erro.
-    expect(parcial!.erroDaExecucao).toBe(false);
+    // Com texto antes, a fala continua do agente, e a exceção não é falha do provedor.
+    expect(parcial!.falhaDoProvedor).toBeNull();
     // Sem sessão a retomar, o histórico vai inteiro, sem a fala que falhou.
     expect(falsos.tula.pedidos[1]!.continuarDe).toBeNull();
     expect(falsos.tula.pedidos[1]!.mensagens).toEqual([
@@ -613,20 +613,21 @@ describe("conversa com um agente", () => {
     ]);
   });
 
-  test("falha do provedor sem nada dito: a fala é só o erro da execução, no aviso e na página", async () => {
-    const { servico, falsos, eventos } = montar();
+  test("falha do provedor sem nada dito: a fala leva o motivo, no aviso e na página", async () => {
+    const { servico, falsos, eventos, execucoes } = montar();
     falsos.tula.roteirizar(roteiros.falha("credencial"));
     const tula = servico.abrir({ agenteId: "tula" });
     await servico.enviar({ conversaId: tula.id, conteudo: "quanto foi de mercado?" });
     await servico.ocioso();
 
     const [pergunta, falha] = conversaInteira(servico, tula.id);
-    expect(pergunta).toMatchObject({ agenteId: null, erroDaExecucao: false });
+    expect(pergunta).toMatchObject({ agenteId: null, falhaDoProvedor: null });
     expect(falha).toMatchObject({
       agenteId: "tula",
       conteudo: "falha roteirizada: credencial",
-      erroDaExecucao: true,
+      falhaDoProvedor: "credencial",
     });
+    expect(execucoes.execucao(falha!.execucaoId!)?.falhaDoProvedor).toBe("credencial");
     expect(eventos.mensagens.at(-1)).toEqual(falha);
   });
 });
@@ -748,7 +749,7 @@ describe("o que vai ao modelo", () => {
     agenteId,
     conteudo,
     execucaoId: agenteId ? "01K79Z6N7Q4W3J5XG2B8C1D0EB" : null,
-    erroDaExecucao: false,
+    falhaDoProvedor: null,
     criadoEm: "2026-10-09T14:00:00.000Z",
   });
 

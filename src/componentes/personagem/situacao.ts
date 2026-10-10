@@ -1,6 +1,7 @@
 import {
   COMANDOS_CLI,
   TIPOS_PROVEDOR_CLI,
+  type MotivoFalhaProvedor,
   type MotivoSono,
   type Provedor,
   type SituacaoAgente,
@@ -157,6 +158,27 @@ export function falaDaFalha(
   }
 }
 
+/**
+ * Uma falha do provedor que já passou, sem hora e sem promessa de tentar de novo: a fala antiga da
+ * conversa e a linha do histórico do agente, no lugar do texto cru do provedor. A que ainda vale
+ * (o agente dorme por ela) usa {@link falaDaFalha}. Credencial num CLI é login; numa API, a chave;
+ * sem saber o modelo, não se fala de nenhum dos dois.
+ */
+export function falhaQuePassou(motivo: MotivoFalhaProvedor, modelo: ModeloDoAgente | null): string {
+  const nome = modelo?.nome ?? "modelo";
+  switch (motivo) {
+    case "credencial":
+      if (!modelo) return "O modelo recusou o acesso.";
+      return comandoDoCli(modelo) ? `O ${nome} estava sem login.` : `A chave do ${nome} foi recusada.`;
+    case "fora_do_ar":
+      return `O ${nome} estava fora do ar.`;
+    case "ausente":
+      return `O ${nome} não estava neste PC.`;
+    case "limite":
+      return `O ${nome} estava no limite de uso.`;
+  }
+}
+
 /** "2 pedidos na fila"; `null` sem fila. */
 export function naFila(fila: number): string | null {
   if (fila <= 0) return null;
@@ -193,7 +215,7 @@ export function fraseDaSituacao(
   return null;
 }
 
-/** "Volta seg 9h" e "tenta de novo às 14:05": a hora que o runtime deu, ou "em breve" sem ela. */
+/** "Volta seg 09:00" e "tenta de novo às 14:05": a hora que o runtime deu, ou "em breve" sem ela. */
 function quandoVolta(dormeAte: string | null, agora: Date): string | null {
   return dormeAte ? quando(dormeAte, agora, "curta") : null;
 }

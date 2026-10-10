@@ -187,6 +187,7 @@ describe("hoje", () => {
     fim: null,
     estado: "ok",
     erro: null,
+    falhaDoProvedor: null,
     tokensEntrada: null,
     tokensSaida: null,
     custoEstimadoMicrodolares: null,

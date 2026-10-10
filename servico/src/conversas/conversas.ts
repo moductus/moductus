@@ -3,6 +3,7 @@ import type {
   Conversa,
   FalaParcial,
   Mensagem,
+  MotivoFalhaProvedor,
   PaginaMensagens,
   PedidoAbrirConversa,
   PedidoApagarConversa,
@@ -55,15 +56,15 @@ interface LinhaMensagem {
   conteudo: string;
   da_execucao_id: string | null;
   criado_em: string;
-  erro_da_execucao: number;
+  falha_do_provedor: MotivoFalhaProvedor | null;
 }
 
 /**
- * As colunas de uma mensagem lidas de {@link DE_MENSAGENS}. A fala é só o erro quando a execução
- * dela falhou e o que ficou gravado é o próprio erro: com texto antes, ela continua do agente.
+ * As colunas de uma mensagem lidas de {@link DE_MENSAGENS}. A falha do provedor vale para a fala
+ * que é só o erro gravado da execução: com texto antes, ela continua do agente, com o aviso.
  */
 const COLUNAS_MENSAGEM = `m.id, m.conversa_id, m.do_agente_id, m.conteudo, m.da_execucao_id, m.criado_em,
-  COALESCE(e.estado = 'erro' AND m.conteudo = e.erro, 0) AS erro_da_execucao`;
+  CASE WHEN e.estado = 'erro' AND m.conteudo = e.erro THEN e.falha_do_provedor END AS falha_do_provedor`;
 const DE_MENSAGENS = "mensagens m LEFT JOIN execucoes e ON e.id = m.da_execucao_id";
 
 const paraMensagem = (l: LinhaMensagem): Mensagem => ({
@@ -72,7 +73,7 @@ const paraMensagem = (l: LinhaMensagem): Mensagem => ({
   agenteId: l.do_agente_id,
   conteudo: l.conteudo,
   execucaoId: l.da_execucao_id,
-  erroDaExecucao: l.erro_da_execucao === 1,
+  falhaDoProvedor: l.falha_do_provedor,
   criadoEm: l.criado_em,
 });
 

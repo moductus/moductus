@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Id, Instante, PedidoPagina, pagina } from "./comum.ts";
+import { MotivoFalhaProvedor } from "./provedores.ts";
 
 /**
  * Conversas com o time e com cada agente (AGENTS.md §1 "Conversas", §2 "Roteamento"; DATA.md §6
@@ -30,10 +31,11 @@ export const Mensagem = z.object({
   /** Execução que produziu a fala; vazio nas do usuário. */
   execucaoId: Id.nullable(),
   /**
-   * A fala é só o erro da execução que falhou, sem nada dito antes: a janela diz a falha do jeito
-   * dela (CLI sem login, com o comando para entrar), não com o texto cru do provedor.
+   * A fala é só o erro de uma execução que o provedor derrubou, sem nada dito antes: o motivo, para
+   * a janela dizer a falha do jeito dela (CLI sem login, com o comando para entrar) e não com o
+   * texto cru do provedor. Vazio em resposta, em fala com texto antes e em erro de outra causa.
    */
-  erroDaExecucao: z.boolean(),
+  falhaDoProvedor: MotivoFalhaProvedor.nullable(),
   criadoEm: Instante,
 });
 export type Mensagem = z.infer<typeof Mensagem>;

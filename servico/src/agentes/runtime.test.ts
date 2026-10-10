@@ -397,6 +397,7 @@ describe("runtime: registro em execucoes", () => {
       fim: "2026-10-09T12:00:01.000Z",
       estado: "ok",
       erro: null,
+      falhaDoProvedor: null,
       tokensEntrada: 150,
       tokensSaida: 30,
       // CLI roda com a assinatura: nenhum preço de API inventado.
@@ -469,7 +470,12 @@ describe("runtime: registro em execucoes", () => {
     );
 
     const r = await runtime.executar(pedir("nuno", "oi"));
-    expect(r.execucao).toMatchObject({ estado: "erro", erro: "falha roteirizada: limite", resumo: null });
+    expect(r.execucao).toMatchObject({
+      estado: "erro",
+      erro: "falha roteirizada: limite",
+      falhaDoProvedor: "limite",
+      resumo: null,
+    });
     expect(r.falha?.motivo).toBe("limite");
     expect(r.sono).toEqual({ motivo: "limite", ate: "2026-10-09T15:00:00.000Z" });
     expect(situacao("nuno")).toMatchObject({
@@ -505,7 +511,13 @@ describe("runtime: registro em execucoes", () => {
       { tipo: "excecao", erro: new Error("adaptador quebrou") },
     ]);
     const r = await runtime.executar(pedir("nuno", "oi"));
-    expect(r.execucao).toMatchObject({ estado: "erro", erro: "adaptador quebrou", resumo: "Começando" });
+    // Exceção não é falha do provedor: sem motivo, o erro real é o que se mostra.
+    expect(r.execucao).toMatchObject({
+      estado: "erro",
+      erro: "adaptador quebrou",
+      falhaDoProvedor: null,
+      resumo: "Começando",
+    });
     expect(r.sono).toBeNull();
   });
 
@@ -521,7 +533,7 @@ describe("runtime: registro em execucoes", () => {
     cancelar.abort();
     porta.abrir("a");
     const r = await execucao;
-    expect(r.execucao).toMatchObject({ estado: "erro", erro: MENSAGEM_CANCELADA });
+    expect(r.execucao).toMatchObject({ estado: "erro", erro: MENSAGEM_CANCELADA, falhaDoProvedor: null });
     expect(situacao("alba").atividade).toBe("ocioso");
   });
 });

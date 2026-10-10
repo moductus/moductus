@@ -6,6 +6,7 @@ import { formatarHora } from "../componentes/personagem/quando.ts";
 import {
   eFalhaDoProvedor,
   falaDaFalha,
+  falhaQuePassou,
   type FalaCartao,
   type ModeloDoAgente,
 } from "../componentes/personagem/situacao.ts";
@@ -96,10 +97,11 @@ export function quandoCurto(instante: string, agora: Date = new Date()): string 
 }
 
 /**
- * A fala que é só o erro de uma execução, quando é a última de quem ainda dorme por falha do
- * provedor: diz a falha como o cartão do painel ({@link falaDaFalha}: CLI sem login com o comando
- * para entrar, a hora da nova tentativa), não com o texto cru do provedor ("Not logged in · Please
- * run /login"). Fora disso, `null`: a fala vale como foi gravada.
+ * A fala que é só a falha do provedor numa execução, dita do jeito da janela e não com o texto cru
+ * do provedor ("Not logged in · Please run /login"). A última de quem ainda dorme por esse motivo
+ * é o cartão do painel ({@link falaDaFalha}: CLI sem login com o comando para entrar, a hora da
+ * nova tentativa); as outras dizem a falha no passado, sem hora ({@link falhaQuePassou}). Sem
+ * falha do provedor (resposta, ou erro de outra causa), `null`: a fala vale como foi gravada.
  */
 export function falhaNaConversa(
   mensagem: Mensagem,
@@ -108,9 +110,14 @@ export function falhaNaConversa(
   modelo: ModeloDoAgente | null,
   agora: Date,
 ): FalaCartao | null {
-  if (!mensagem.erroDaExecucao || !ultimaDele || situacao?.estado !== "dormindo") return null;
-  const motivo = situacao.motivoSono;
-  return eFalhaDoProvedor(motivo) ? falaDaFalha(motivo, modelo, situacao.dormeAte, agora, false) : null;
+  const motivo = mensagem.falhaDoProvedor;
+  if (motivo === null) return null;
+  // A última dele, e ele ainda dorme por esse motivo: a falha vale agora, com a hora de voltar.
+  const aindaDorme = ultimaDele && situacao?.estado === "dormindo" && situacao.motivoSono === motivo;
+  if (aindaDorme && eFalhaDoProvedor(motivo)) {
+    return falaDaFalha(motivo, modelo, situacao.dormeAte, agora, false);
+  }
+  return { texto: falhaQuePassou(motivo, modelo) };
 }
 
 /** A fala do cartão numa linha só, com o comando no meio, para onde não cabe o código à parte. */

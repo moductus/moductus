@@ -33,7 +33,7 @@ function mensagem(id: string, parte: Partial<Mensagem> = {}): Mensagem {
     agenteId: null,
     conteudo: "oi",
     execucaoId: null,
-    erroDaExecucao: false,
+    falhaDoProvedor: null,
     criadoEm: "2026-10-09T12:00:00.000Z",
     ...parte,
   };
@@ -110,27 +110,40 @@ describe("a falha do provedor na conversa", () => {
     agenteId: "tula",
     execucaoId: "e1",
     conteudo: "O Claude Code recusou o login: Not logged in · Please run /login",
-    erroDaExecucao: true,
+    falhaDoProvedor: "credencial",
   });
+  const NO_PASSADO = { texto: "O Claude Code estava sem login." };
 
-  it("CLI sem login: o texto de login dos outros lugares, com o comando num campo próprio", () => {
+  it("a última fala, com o agente ainda dormindo por ela: o cartão do painel, com o comando e a hora", () => {
     expect(falhaNaConversa(cru, true, semLogin, CLAUDE, agora)).toEqual({
       texto: "O Claude Code está sem login. Entre no terminal com ",
       comando: { codigo: "claude", depois: " e tento de novo às 02:46." },
     });
-    expect(falhaNaConversa(cru, true, { ...semLogin, motivoSono: "fora_do_ar" }, CLAUDE, agora)).toEqual({
-      texto: "O Claude Code não respondeu. Nada foi alterado; tento de novo às 02:46.",
+    const foraDoAr = { ...cru, falhaDoProvedor: "fora_do_ar" } as const;
+    expect(falhaNaConversa(foraDoAr, true, { ...semLogin, motivoSono: "fora_do_ar" }, CLAUDE, agora)).toEqual(
+      {
+        texto: "O Claude Code não respondeu. Nada foi alterado; tento de novo às 02:46.",
+      },
+    );
+  });
+
+  it("fala antiga, agente acordado, dormindo por outro motivo ou no limite: a falha no passado, sem hora", () => {
+    expect(falhaNaConversa(cru, false, semLogin, CLAUDE, agora)).toEqual(NO_PASSADO);
+    const acordado: SituacaoAgente = { ...semLogin, estado: "ativo", motivoSono: null, dormeAte: null };
+    expect(falhaNaConversa(cru, true, acordado, CLAUDE, agora)).toEqual(NO_PASSADO);
+    expect(falhaNaConversa(cru, true, { ...semLogin, motivoSono: "fora_do_ar" }, CLAUDE, agora)).toEqual(
+      NO_PASSADO,
+    );
+    expect(falhaNaConversa(cru, true, undefined, CLAUDE, agora)).toEqual(NO_PASSADO);
+    const limite = { ...cru, falhaDoProvedor: "limite" } as const;
+    expect(falhaNaConversa(limite, true, { ...semLogin, motivoSono: "limite" }, CLAUDE, agora)).toEqual({
+      texto: "O Claude Code estava no limite de uso.",
     });
   });
 
-  it("a fala vale como foi gravada: resposta de verdade, fala antiga, agente acordado ou sono sem falha", () => {
-    expect(falhaNaConversa({ ...cru, erroDaExecucao: false }, true, semLogin, CLAUDE, agora)).toBeNull();
-    expect(falhaNaConversa(cru, false, semLogin, CLAUDE, agora)).toBeNull();
-    expect(
-      falhaNaConversa(cru, true, { ...semLogin, estado: "ativo", motivoSono: null }, CLAUDE, agora),
-    ).toBeNull();
-    expect(falhaNaConversa(cru, true, { ...semLogin, motivoSono: "limite" }, CLAUDE, agora)).toBeNull();
-    expect(falhaNaConversa(cru, true, undefined, CLAUDE, agora)).toBeNull();
+  it("resposta de verdade ou erro de outra causa (ferramenta, prazo): a fala como foi gravada", () => {
+    const outraCausa = { ...cru, conteudo: "a ferramenta financas.quebrar falhou", falhaDoProvedor: null };
+    expect(falhaNaConversa(outraCausa, true, semLogin, CLAUDE, agora)).toBeNull();
   });
 });
 
@@ -156,7 +169,11 @@ describe("como a lista escreve", () => {
       texto: "O Claude Code está sem login. Entre no terminal com ",
       comando: { codigo: "claude", depois: " e tento de novo às 15:05." },
     };
-    const daTula = mensagem("01C", { agenteId: "tula", conteudo: "Not logged in", erroDaExecucao: true });
+    const daTula = mensagem("01C", {
+      agenteId: "tula",
+      conteudo: "Not logged in",
+      falhaDoProvedor: "credencial",
+    });
     expect(previa(daTula, true, falha)).toBe(
       "Tula: O Claude Code está sem login. Entre no terminal com claude e tento de novo às 15:05.",
     );

@@ -10,6 +10,7 @@ import { m008 } from "./008-uso-respostas-contadas.ts";
 import { m009 } from "./009-execucoes-cobranca.ts";
 import { m010 } from "./010-agendador-disparos.ts";
 import { m011 } from "./011-agentes-sono.ts";
+import { m012 } from "./012-execucoes-falha-do-provedor.ts";
 
 /** Todas as migrações, em ordem. Migração publicada não muda: corrige-se com outra. */
 export const MIGRACOES: readonly Migracao[] = [
@@ -24,4 +25,5 @@ export const MIGRACOES: readonly Migracao[] = [
   m009,
   m010,
   m011,
+  m012,
 ];

@@ -313,7 +313,7 @@ export class Runtime {
       this.avisar(id, agente.id);
       if (!config) {
         sono = { motivo: "sem_modelo", ate: null };
-        fim = { estado: "erro", erro: MENSAGEM_SEM_MODELO(agente.nome), resumo: null };
+        fim = { estado: "erro", erro: MENSAGEM_SEM_MODELO(agente.nome), falhaDoProvedor: null, resumo: null };
       } else {
         const provedor = this.deps.provedores.obter(config);
         // A sessão não segue para outro provedor: a reserva, ou o modelo trocado na espera.
@@ -348,13 +348,14 @@ export class Runtime {
         }
         if (falha) {
           sono = sonoDaFalha(falha);
-          fim = { estado: "erro", erro: falha.mensagem, resumo: null };
+          fim = { estado: "erro", erro: falha.mensagem, falhaDoProvedor: falha.motivo, resumo: null };
         } else {
-          fim = { estado: "ok", erro: null, resumo: resumir(texto) };
+          fim = { estado: "ok", erro: null, falhaDoProvedor: null, resumo: resumir(texto) };
         }
       }
     } catch (erro) {
-      fim = { estado: "erro", erro: mensagemDe(erro, sinal), resumo: resumir(texto) };
+      // Exceção (ferramenta, prazo, cancelamento) não é falha do provedor: o motivo fica vazio.
+      fim = { estado: "erro", erro: mensagemDe(erro, sinal), falhaDoProvedor: null, resumo: resumir(texto) };
     } finally {
       this.ativas.delete(id);
       encerramento.abort(new Error("A execução terminou."));
