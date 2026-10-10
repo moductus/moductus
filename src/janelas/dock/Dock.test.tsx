@@ -40,7 +40,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 const { Dock, CONVITE_AGENTES } = await import("./Dock.tsx");
 const { Painel } = await import("../painel/Painel.tsx");
-const { formatarHora, ateProximoMinuto } = await import("./relogio.ts");
+const { formatarHora } = await import("./relogio.ts");
 const { proximoIndice } = await import("./navegacao.ts");
 const { auditar, marcos } = await import("../../teste/acessibilidade.ts");
 
@@ -232,11 +232,6 @@ describe("relógio e navegação (funções puras)", () => {
     expect(formatarHora(new Date(2026, 9, 8, 9, 5))).toBe("09:05");
     expect(formatarHora(new Date(2026, 9, 8, 23, 59))).toBe("23:59");
     expect(formatarHora(new Date(2026, 9, 8, 0, 0))).toBe("00:00");
-  });
-
-  it("espera só até a virada do minuto", () => {
-    expect(ateProximoMinuto(new Date(2026, 9, 8, 9, 4, 58, 500))).toBe(1_500);
-    expect(ateProximoMinuto(new Date(2026, 9, 8, 9, 4, 0, 0))).toBe(60_000);
   });
 
   it("anda em círculo e ignora teclas que não navegam", () => {

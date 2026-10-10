@@ -18,7 +18,8 @@ import {
   useConversas,
   type Interlocutor,
 } from "../../servico/conversas.ts";
-import { useSituacaoTime, type SituacaoTime } from "../../servico/time.ts";
+import { useTime, type ModelosDoTime, type SituacaoTime } from "../../servico/time.ts";
+import { useAgora } from "../tempo.ts";
 import { comArtigo, deAgente } from "./nomes.ts";
 
 interface PropsConversas {
@@ -43,7 +44,7 @@ const nomeDe = (com: Interlocutor) => (com === null ? NOME_TIME : DADOS_AGENTES[
  */
 export function Conversas({ canal, com, aoEscolher, aoAbrirPagina, aoAbrirMemoria }: PropsConversas) {
   const conversas = useConversas(canal, com);
-  const time = useSituacaoTime(canal);
+  const { situacoes: time, modelos } = useTime(canal);
   const { conectado, aberta } = conversas;
 
   return (
@@ -83,7 +84,7 @@ export function Conversas({ canal, com, aoEscolher, aoAbrirPagina, aoAbrirMemori
           aoAbrirPagina={aoAbrirPagina}
           aoAbrirMemoria={aoAbrirMemoria}
         />
-        <Mensagens com={com} time={time} conversas={conversas} />
+        <Mensagens com={com} time={time} modelos={modelos} conversas={conversas} />
         <Escrever
           key={chaveInterlocutor(com)}
           com={com}
@@ -254,6 +255,7 @@ function ItemConversa({ quem, ativo, time, ultima, aoEscolher }: PropsItemConver
 interface PropsMensagens {
   com: Interlocutor;
   time: SituacaoTime;
+  modelos: ModelosDoTime;
   conversas: EstadoDaConversa;
 }
 
@@ -264,7 +266,9 @@ const PERTO_DO_FIM = 48;
  * As falas na ordem em que foram ditas, depois as respostas em andamento e quem ainda não
  * começou a responder. A conversa desce sozinha enquanto você está no fim dela.
  */
-function Mensagens({ com, time, conversas }: PropsMensagens) {
+function Mensagens({ com, time, modelos, conversas }: PropsMensagens) {
+  // A frase de quem dorme diz uma hora: o relógio da tela a tira de lá quando ela chega.
+  const agora = useAgora();
   const lista = useRef<HTMLDivElement>(null);
   const noFim = useRef(true);
   const { mensagens, andamento, aguardando, aprovacoes, aberta, temAnteriores } = conversas;
@@ -318,7 +322,10 @@ function Mensagens({ com, time, conversas }: PropsMensagens) {
       {esperando.map((a) => {
         const situacao = time[a];
         // Dormindo ou pausado, a resposta espera na fila: diz até quando, em vez de "pensando".
-        const parado = situacao && situacao.estado !== "ativo" ? agoraDoAgente(situacao, null) : null;
+        const parado =
+          situacao && situacao.estado !== "ativo"
+            ? agoraDoAgente(situacao, null, agora, modelos[a] ?? null)
+            : null;
         return (
           <FalaAgente key={a} agente={a} estado={parado ? lerSituacao(situacao).expressao : "trabalhando"}>
             <span className="conversa-pensando">{parado ?? "pensando…"}</span>

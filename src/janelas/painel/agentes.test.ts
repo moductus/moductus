@@ -272,6 +272,47 @@ describe("cartões de estado (Estados.dc.html)", () => {
     expect(chave.texto).toBe("O OpenAI recusou a chave. Nada foi alterado; confira a chave em Modelos.");
   });
 
+  it("credencial recusada num CLI é falta de login: diz como entrar, não fala de chave", () => {
+    const [login] = cartoesDeEstado(
+      timeDoServico([
+        agente("alba", { estado: "dormindo", motivoSono: "credencial", dormeAte: local(8, 10, 5) }, "cli"),
+      ]),
+      PROVEDORES,
+      AGORA,
+    );
+    expect(login).toMatchObject({
+      tipo: "falha",
+      titulo: "Não consegui falar com o modelo",
+      texto: "O Claude Code está sem login. Entre no terminal com ",
+      comando: { codigo: "claude", depois: " e tento de novo às 10:05." },
+    });
+    const alba = agente("alba", { estado: "dormindo", motivoSono: "credencial", dormeAte: local(8, 10, 5) });
+    const modelo = { tipo: "claude-cli", nome: "Claude Code" } as const;
+    expect(
+      linhaDoAgente(
+        "alba",
+        alba,
+        lerSituacao(alba.situacao, AGORA, modelo),
+        undefined,
+        undefined,
+        AGORA,
+        modelo,
+      ),
+    ).toBe("Claude Code sem login, tenta de novo às 10:05");
+  });
+
+  it("a hora da nova tentativa passou e o agente segue em erro: o cartão não promete o passado", () => {
+    const depois = new Date(2026, 9, 8, 10, 7);
+    const [fora] = cartoesDeEstado(
+      timeDoServico([
+        agente("tula", { estado: "dormindo", motivoSono: "fora_do_ar", dormeAte: local(8, 10, 5) }),
+      ]),
+      PROVEDORES,
+      depois,
+    );
+    expect(fora!.texto).toBe("O Claude Code não respondeu. Nada foi alterado; estou tentando de novo.");
+  });
+
   it("teto sem valor (a moeda não foi decidida) e desligado não vira cartão", () => {
     const [teto, ...resto] = cartoesDeEstado(
       timeDoServico([

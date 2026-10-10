@@ -50,6 +50,21 @@ describe("Personagem", () => {
     }
   });
 
+  it("o nó da bandana da Faina cabe inteiro na cabeça: cortado, no dock ele se lê como o z do sono", () => {
+    const direitaDoNo = (svg: SVGSVGElement) => {
+      // O nó vai de x 76 a 86 no desenho; a cabeça o encolhe na largura a partir de x 76.
+      const transform = svg.querySelector("[data-no]")!.getAttribute("transform");
+      const escala = transform ? Number(/scale\(([\d.]+) 1\)/.exec(transform)![1]) : 1;
+      return 76 + 10 * escala;
+    };
+    const cabeca = desenhar({ agente: "faina", modo: "cabeca", tamanho: "dock", estado: "ocioso" });
+    const [x, , largura] = cabeca.getAttribute("viewBox")!.split(" ").map(Number) as [number, number, number];
+    expect(direitaDoNo(cabeca)).toBeLessThan(x + largura);
+    expect(cabeca.querySelector("[data-zz]")).toBeNull();
+    // O corpo inteiro mostra o nó como o canvas desenha.
+    expect(direitaDoNo(desenhar({ agente: "faina", modo: "inteiro" }))).toBe(86);
+  });
+
   it("os óculos são só da Tula", () => {
     expect(desenhar({ agente: "tula" }).querySelector('[data-traco="oculos"]')).not.toBeNull();
     expect(desenhar({ agente: "nuno" }).querySelector('[data-traco="oculos"]')).toBeNull();

@@ -7,7 +7,7 @@ import { useAgora } from "../../areas/tempo.ts";
 import { Botao } from "../../componentes/Botao.tsx";
 import { AGENTES, DADOS_AGENTES, type Agente } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
-import { lerSituacao } from "../../componentes/personagem/situacao.ts";
+import { lerSituacao, modeloDoAgente } from "../../componentes/personagem/situacao.ts";
 import { Selo } from "../../componentes/Selo.tsx";
 import { servico } from "../../servico/conexao.ts";
 import { usePedidosDoTerminal } from "../../servico/aprovacoes.ts";
@@ -67,7 +67,15 @@ function CartaoDeEstado({ cartao, aoDispensar }: { cartao: CartaoEstado; aoDispe
           <h3 id={idTitulo} className="estado-cartao-titulo">
             {cartao.titulo}
           </h3>
-          <p>{cartao.texto}</p>
+          <p>
+            {cartao.texto}
+            {cartao.comando && (
+              <>
+                <code>{cartao.comando.codigo}</code>
+                {cartao.comando.depois}
+              </>
+            )}
+          </p>
         </div>
       </div>
       {erro && (
@@ -183,9 +191,10 @@ export function PainelAgentes({ canal, abertura }: { canal: EstadoConexao; abert
 
   const linha = (id: Agente) => {
     const agente = time[id];
-    const leitura = lerSituacao(agente?.situacao, agora);
+    const modelo = modeloDoAgente(agente?.provedorId, provedores);
+    const leitura = lerSituacao(agente?.situacao, agora, modelo);
     if (id === "nuno" && doNuno && leitura.expressao === "ocioso") return doNuno;
-    return linhaDoAgente(id, agente, leitura, ultimas[id], pedidoDoAgente[id], agora);
+    return linhaDoAgente(id, agente, leitura, ultimas[id], pedidoDoAgente[id], agora, modelo);
   };
   const cartoes = cartoesDeEstado(time, provedores, agora).filter((c) => !dispensados.has(c.chave));
   const semNoticia = agentes === null;

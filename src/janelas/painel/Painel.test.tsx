@@ -95,12 +95,14 @@ const servidor: {
   sessoes: ListaSessoes;
   github: SituacaoGithub;
   conexoes: Conexao[];
+  provedores: Provedor[];
 } = {
   agentes: [],
   pendentes: [],
   sessoes: { projetos: [], sessoes: [] },
   github: { itens: [], atualizadoEm: null },
   conexoes: [],
+  provedores: [PROVEDOR],
 };
 const ouvintes = new Map<string, Set<(dados: unknown) => void>>();
 const pedir = vi.fn(async (metodo: string, _dados?: unknown): Promise<unknown> => {
@@ -108,7 +110,7 @@ const pedir = vi.fn(async (metodo: string, _dados?: unknown): Promise<unknown> =
     case "agentes.listar":
       return typeof servidor.agentes === "function" ? servidor.agentes() : servidor.agentes;
     case "provedores.listar":
-      return [PROVEDOR];
+      return servidor.provedores;
     case "execucoes.listar":
       return { itens: [], proximo: null };
     case "aprovacoes.pendentes":
@@ -225,6 +227,7 @@ beforeEach(() => {
   servidor.sessoes = SESSOES;
   servidor.github = { itens: [], atualizadoEm: null };
   servidor.conexoes = [conexao("hooks-claude-code"), conexao("github")];
+  servidor.provedores = [PROVEDOR];
   pedir.mockClear();
   chamadasCasca.length = 0;
 });
@@ -580,6 +583,31 @@ describe("painel Agentes: estados que pedem decisão (Estados.dc.html)", () => {
     );
     expect([...cartao!.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Trocar modelo"]);
     expect(linhaDo("tula").querySelector(".selo")?.textContent).toBe("erro");
+  });
+
+  it("CLI sem login: o cartão diz como entrar, com o comando como código, e a linha fala de login", async () => {
+    servidor.agentes = [agente("alba", { estado: "dormindo", motivoSono: "credencial" })];
+    await montar();
+    await abrir("agentes");
+    const [cartao] = estados();
+    expect(cartao!.querySelector("p")?.textContent).toBe(
+      "O Claude Code está sem login. Entre no terminal com claude e tento de novo em breve.",
+    );
+    expect(cartao!.querySelector("p code")?.textContent).toBe("claude");
+    expect(cartao!.textContent).not.toContain("chave");
+    expect(linhaDo("alba").textContent).toContain("Claude Code sem login, tenta de novo em breve");
+  });
+
+  it("crase no nome do provedor, que o usuário escolhe, não vira código nem corta a fala", async () => {
+    servidor.provedores = [{ ...PROVEDOR, nome: "Claude `trabalho`" }];
+    servidor.agentes = [agente("alba", { estado: "dormindo", motivoSono: "credencial" })];
+    await montar();
+    await abrir("agentes");
+    const [cartao] = estados();
+    expect(cartao!.querySelector("p")?.textContent).toBe(
+      "O Claude `trabalho` está sem login. Entre no terminal com claude e tento de novo em breve.",
+    );
+    expect([...cartao!.querySelectorAll("p code")].map((c) => c.textContent)).toEqual(["claude"]);
   });
 
   it("teto: sem valor inventado, leva aos Modelos para mudar o teto", async () => {
