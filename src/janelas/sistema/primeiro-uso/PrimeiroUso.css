@@ -374,6 +374,37 @@
   color: var(--texto-2);
 }
 
+/* ---------- 3. Modelo (Uso3Modelo.dc.html) ---------- */
+/* Os modelos são rádios em linha, um por cartão, com o estado num selo ao lado do nome. */
+.uso-opcoes--lista {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--esp-8);
+}
+
+.uso-opcoes--lista .uso-opcao {
+  gap: var(--esp-2);
+  padding: var(--esp-12) var(--esp-16);
+}
+
+.uso-opcoes--lista .uso-opcao-texto {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.uso-procurar {
+  display: flex;
+}
+
+.uso-api {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--esp-14);
+}
+
+.uso-numero {
+  font-family: var(--fonte-mono);
+}
+
 /* ---------- 4. Conhecer o time ---------- */
 .uso-time {
   display: grid;

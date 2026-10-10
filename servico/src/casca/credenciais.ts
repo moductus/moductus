@@ -4,6 +4,8 @@ import type { CanalCasca } from "./canal.ts";
 export interface Credenciais {
   ler(nome: string): Promise<string | null>;
   guardar(nome: string, valor: string): Promise<void>;
+  /** Apagar o que não existe não é erro. */
+  apagar(nome: string): Promise<void>;
 }
 
 /**
@@ -31,6 +33,15 @@ export function credenciaisPelaCasca(canal: Pick<CanalCasca, "pedir">): Credenci
       });
       if (r.erro) throw new Error(r.erro);
       if (r.ok !== true) throw new Error(`a casca não confirmou a credencial ${nome}`);
+    },
+    async apagar(nome) {
+      const r = await canal.pedir<{ ok?: boolean; erro?: string }>({
+        tipo: "credencial",
+        op: "apagar",
+        nome,
+      });
+      if (r.erro) throw new Error(r.erro);
+      if (r.ok !== true) throw new Error(`a casca não confirmou que apagou a credencial ${nome}`);
     },
   };
 }

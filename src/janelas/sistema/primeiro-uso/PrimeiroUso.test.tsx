@@ -33,6 +33,12 @@ const falso = vi.hoisted(() => {
     estado: null as unknown,
     config: null as unknown,
     pedidos: [] as [string, unknown][],
+    /** O que a detecção do serviço acha e os provedores que ele guarda. */
+    detectados: [] as unknown[],
+    provedores: [] as { id: string; tipo: string; nome: string }[],
+    criados: 0,
+    /** Como o teste de cada provedor termina. */
+    teste: (_id: string): unknown => null,
     emitir(nome: string, dados: unknown) {
       for (const fn of ouvintes.get(nome) ?? []) fn(dados);
     },
@@ -62,6 +68,20 @@ function estadoConfig() {
 function atender(metodo: string, dados: unknown): unknown {
   const estado = falso.estado as EstadoPrimeiroUso;
   switch (metodo) {
+    case "provedores.detectar":
+      return falso.detectados;
+    case "provedores.listar":
+      return falso.provedores;
+    case "provedores.criar": {
+      const novo = { id: `prov-${++falso.criados}`, ...(dados as { tipo: string; nome: string }) };
+      falso.provedores = [...falso.provedores, novo];
+      return novo;
+    }
+    case "provedores.remover":
+      falso.provedores = falso.provedores.filter((p) => p.id !== (dados as { id: string }).id);
+      return falso.provedores;
+    case "provedores.testar":
+      return falso.teste((dados as { id: string }).id);
     case "config.obter":
       return estadoConfig();
     case "config.definir":
@@ -132,6 +152,15 @@ beforeEach(() => {
   falso.pedidos = [];
   falso.estado = bancoNovo();
   falso.config = structuredClone(CONFIG_PADRAO);
+  falso.detectados = [];
+  falso.provedores = [];
+  falso.criados = 0;
+  falso.teste = (id) => ({
+    ok: true,
+    provedorId: id,
+    latenciaMs: 2100,
+    testadoEm: "2026-10-10T12:00:00.000Z",
+  });
 });
 afterEach(desmontar);
 
@@ -239,16 +268,13 @@ describe("primeiro uso", () => {
     );
   });
 
-  it("o passo do modelo não conecta nada: aponta para a fase 2 e segue com Depois", async () => {
-    await montar();
-    await clicar(botao("Começar"));
-    await clicar(botao("Continuar"));
-    expect(titulo()).toBe("Qual IA move os agentes");
-    expect(todos(".uso-lista .selo").every((s) => s.textContent === "fase 2")).toBe(true);
+  it("sem modelo testado, o passo segue com Depois e conta como pulado", async () => {
+    await noModelo();
     expect(botao("Continuar")).toBeUndefined();
     await clicar(botao("Depois"));
     expect(titulo()).toBe(TITULOS[3]);
     expect(falso.pedidos.map(([m]) => m)).not.toContain("primeiroUso.concluir");
+    expect(pedidosDe("provedores.testar")).toEqual([]);
   });
 
   it("concluir grava como cada passo terminou e abre o Início com os Primeiros passos", async () => {
@@ -302,6 +328,198 @@ describe("primeiro uso", () => {
     await montar();
     expect(por(".uso")).toBeNull();
     expect(por("main")!.dataset.area).toBe("inicio");
+  });
+});
+
+const CLAUDE = {
+  tipo: "claude-cli",
+  caminho: "C:\\bin\\claude.exe",
+  versao: "2.1.287",
+  logado: true,
+  atendido: true,
+  versaoMinima: null,
+};
+
+async function noModelo() {
+  await montar();
+  await clicar(botao("Começar"));
+  await clicar(botao("Continuar"));
+  expect(titulo()).toBe("Qual IA move os agentes");
+}
+
+/** Cada cartão de modelo: título, selo, texto e se dá para escolher. */
+const modelos = () =>
+  todos('input[name="modelo"]').map((r) => {
+    const cartao = r.closest("label")!;
+    return {
+      nome: cartao.querySelector(".uso-opcao-titulo")!.textContent,
+      selo: cartao.querySelector(".selo")?.textContent ?? null,
+      texto: cartao.querySelector(".uso-opcao-texto")!.textContent,
+      marcado: (r as HTMLInputElement).checked,
+      desativado: (r as HTMLInputElement).disabled,
+    };
+  });
+
+async function digitar(rotulo: string, valor: string) {
+  const campo = todos("label").find((l): l is HTMLLabelElement => l.textContent === rotulo);
+  const entrada = campo && recipiente.querySelector<HTMLInputElement>(`#${CSS.escape(campo.htmlFor)}`);
+  expect(entrada, `campo ${rotulo}`).toBeTruthy();
+  const definirValor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    definirValor.call(entrada, valor);
+    entrada!.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+describe("primeiro uso: modelo", () => {
+  it("mostra o que o serviço achou no PC: só o que dá para usar pode ser escolhido", async () => {
+    falso.detectados = [
+      CLAUDE,
+      {
+        ...CLAUDE,
+        tipo: "gemini-cli",
+        caminho: "C:\\npm\\gemini.cmd",
+        versao: "0.42.0",
+        logado: null,
+        atendido: false,
+      },
+    ];
+    await noModelo();
+    expect(pedidosDe("provedores.detectar")).toHaveLength(1);
+    expect(modelos()).toEqual([
+      {
+        nome: "Claude Code",
+        selo: "detectado · conectado",
+        texto: "CLI no PATH, versão 2.1.287 · login da assinatura",
+        marcado: true,
+        desativado: false,
+      },
+      {
+        nome: "Codex",
+        selo: "não encontrado",
+        texto: "Instale o Codex e volte aqui.",
+        marcado: false,
+        desativado: true,
+      },
+      {
+        nome: "Gemini CLI",
+        selo: "detectado",
+        texto: "CLI no PATH, versão 0.42.0 · esta versão do Moductus ainda não conecta a ele.",
+        marcado: false,
+        desativado: true,
+      },
+      {
+        nome: "OpenCode",
+        selo: "não encontrado",
+        texto: "Instale o OpenCode e volte aqui.",
+        marcado: false,
+        desativado: true,
+      },
+      {
+        nome: "Chave de API",
+        selo: null,
+        texto: "OpenAI ou compatível com OpenAI (Ollama, OpenRouter, LM Studio) · paga por uso",
+        marcado: false,
+        desativado: false,
+      },
+    ]);
+    // Nada chama o modelo sem o usuário pedir.
+    expect(pedidosDe("provedores.testar")).toEqual([]);
+
+    falso.detectados = [{ ...CLAUDE, versao: "2.1.100", versaoMinima: "2.1.257" }];
+    await clicar(botao("Procurar de novo"));
+    expect(modelos()[0]).toMatchObject({ selo: "desatualizado", desativado: true });
+  });
+
+  it("Testar conecta o CLI escolhido e mostra a latência real; aí o passo segue com Continuar", async () => {
+    falso.detectados = [CLAUDE];
+    await noModelo();
+    await clicar(botao("Testar"));
+
+    expect(pedidosDe("provedores.criar")).toEqual([{ tipo: "claude-cli", nome: "Claude Code" }]);
+    expect(pedidosDe("provedores.testar")).toEqual([{ id: "prov-1" }]);
+    const nota = por(".uso-nota")!;
+    expect(nota.querySelector(".uso-item-nome")!.textContent).toBe(
+      "Teste feito: Claude Code respondeu em 2,1 s",
+    );
+    expect(nota.textContent).toContain("Usa a sua assinatura.");
+    expect(nota.querySelector(".selo")!.textContent).toBe("funcionando");
+
+    await clicar(botao("Continuar"));
+    for (const nome of ["Continuar", "Concluir"]) await clicar(botao(nome));
+    expect(pedidosDe("primeiroUso.concluir")).toEqual([
+      {
+        passos: {
+          "boas-vindas": "feito",
+          "tema-dock": "feito",
+          modelo: "feito",
+          time: "feito",
+          conexoes: "feito",
+        },
+      },
+    ]);
+  });
+
+  it("o provedor que já existe é testado sem criar outro; voltar e seguir não perde o teste", async () => {
+    falso.detectados = [CLAUDE];
+    falso.provedores = [{ id: "ja-existia", tipo: "claude-cli", nome: "Claude Code" }];
+    await noModelo();
+    await clicar(botao("Testar"));
+    expect(pedidosDe("provedores.criar")).toEqual([]);
+    expect(pedidosDe("provedores.testar")).toEqual([{ id: "ja-existia" }]);
+
+    await clicar(botao("Voltar"));
+    await clicar(botao("Continuar"));
+    expect(por(".uso-nota .selo")!.textContent).toBe("funcionando");
+    expect(botao("Continuar")).toBeTruthy();
+  });
+
+  it("falha do teste diz o motivo do serviço e o passo continua como Depois", async () => {
+    falso.detectados = [CLAUDE];
+    falso.teste = (id) => ({
+      ok: false,
+      provedorId: id,
+      falha: { motivo: "limite", mensagem: "O limite de uso acabou.", voltaEm: null },
+      testadoEm: "2026-10-10T12:00:00.000Z",
+    });
+    await noModelo();
+    await clicar(botao("Testar"));
+
+    const nota = por(".uso-nota")!;
+    expect(nota.querySelector(".uso-item-nome")!.textContent).toBe("Claude Code não passou no teste");
+    expect(nota.textContent).toContain("O limite de uso acabou.");
+    expect(nota.querySelector(".selo")!.textContent).toBe("não funcionou");
+    expect(botao("Testar de novo")).toBeTruthy();
+    expect(botao("Depois")).toBeTruthy();
+  });
+
+  it("chave de API: o formulário vira o provedor, e o CLI testado antes neste passo sai", async () => {
+    falso.detectados = [CLAUDE];
+    await noModelo();
+    await clicar(botao("Testar"));
+    expect(falso.provedores.map((p) => p.id)).toEqual(["prov-1"]);
+
+    await clicar(todos('input[name="modelo"]').at(-1));
+    expect(botao("Depois")).toBeTruthy();
+    await clicar(por('[role="radiogroup"][aria-label="Provedor da chave"] [role="radio"]:last-child'));
+    await digitar("Endereço (base_url)", "http://localhost:11434/v1");
+    await digitar("Modelo", "qwen3:8b");
+    await digitar("Chave", "sk-local");
+    expect(por<HTMLInputElement>('input[type="password"]')!.value).toBe("sk-local");
+    await clicar(botao("Testar"));
+
+    expect(pedidosDe("provedores.remover")).toEqual([{ id: "prov-1" }]);
+    expect(pedidosDe("provedores.criar").at(-1)).toEqual({
+      tipo: "openai-compativel",
+      nome: "localhost:11434",
+      baseUrl: "http://localhost:11434/v1",
+      modelo: "qwen3:8b",
+      chave: "sk-local",
+    });
+    expect(pedidosDe("provedores.testar").at(-1)).toEqual({ id: "prov-2" });
+    expect(falso.provedores.map((p) => p.id)).toEqual(["prov-2"]);
+    expect(por(".uso-nota")!.textContent).toContain("Paga por uso");
+    expect(auditar(recipiente)).toEqual([]);
   });
 });
 

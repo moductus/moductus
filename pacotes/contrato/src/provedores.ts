@@ -84,12 +84,19 @@ export type MudancaProvedor = z.infer<typeof MudancaProvedor>;
 export const PedidoProvedor = z.object({ id: Id });
 export type PedidoProvedor = z.infer<typeof PedidoProvedor>;
 
-/** Um CLI achado no PATH (F2-08). `logado` é `null` quando o CLI não diz. */
+/**
+ * Um CLI achado no PATH (F2-08). `logado` é `null` quando o CLI não diz. A detecção só pergunta a
+ * versão e o login: não chama o modelo nem gasta a assinatura.
+ */
 export const ProvedorDetectado = z.object({
   tipo: TipoProvedorCli,
   caminho: z.string().min(1),
   versao: z.string().nullable(),
   logado: z.boolean().nullable(),
+  /** Esta versão do Moductus tem adaptador para ele (hoje, só o Claude Code). */
+  atendido: z.boolean(),
+  /** A versão que o Moductus pede, quando a achada é mais velha; `null` quando serve ou não dá para saber. */
+  versaoMinima: z.string().nullable(),
 });
 export type ProvedorDetectado = z.infer<typeof ProvedorDetectado>;
 

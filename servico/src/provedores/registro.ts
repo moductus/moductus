@@ -23,6 +23,11 @@ export class RegistroProvedores {
     return this;
   }
 
+  /** Se esta versão tem adaptador para o tipo; sem ele, o provedor só falha com `ausente`. */
+  atende(tipo: TipoProvedor): boolean {
+    return this.fabricas.has(tipo);
+  }
+
   obter(config: ConfigProvedor): Provedor {
     const criado = this.criados.get(config.id);
     if (criado && mesmaConfig(criado.config, config)) return criado.provedor;

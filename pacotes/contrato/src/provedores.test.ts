@@ -57,10 +57,20 @@ describe("provedor", () => {
   });
 
   test("detecção só de CLI", () => {
-    const claude = { tipo: "claude-cli", caminho: "C:\\bin\\claude.exe", versao: "2.1.3", logado: true };
+    const claude = {
+      tipo: "claude-cli",
+      caminho: "C:\\bin\\claude.exe",
+      versao: "2.1.3",
+      logado: true,
+      atendido: true,
+      versaoMinima: "2.1.257",
+    };
     expect(ProvedorDetectado.safeParse(claude).success).toBe(true);
     expect(ProvedorDetectado.safeParse({ ...claude, tipo: "openai" }).success).toBe(false);
-    expect(ProvedorDetectado.safeParse({ ...claude, logado: null }).success).toBe(true);
+    expect(ProvedorDetectado.safeParse({ ...claude, logado: null, versaoMinima: null }).success).toBe(true);
+    // Sem dizer se o Moductus fala com ele, a tela não sabe se oferece o CLI.
+    const { atendido: _, ...semAtendido } = claude;
+    expect(ProvedorDetectado.safeParse(semAtendido).success).toBe(false);
   });
 
   test("teste que falhou diz o motivo e quando volta", () => {

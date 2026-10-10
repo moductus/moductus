@@ -11,6 +11,10 @@ function cofre(inicial: Record<string, string> = {}) {
       valores.set(nome, valor);
       return Promise.resolve();
     },
+    apagar: (nome) => {
+      valores.delete(nome);
+      return Promise.resolve();
+    },
   };
   return { credenciais, valores };
 }
@@ -34,7 +38,12 @@ describe("token dos hooks", () => {
 describe("credenciais pela casca", () => {
   test("lê e guarda pelo canal, com o pedido que a casca entende", async () => {
     const pedidos: Record<string, unknown>[] = [];
-    const respostas: Record<string, unknown>[] = [{ valor: null }, { ok: true }, { valor: "guardado" }];
+    const respostas: Record<string, unknown>[] = [
+      { valor: null },
+      { ok: true },
+      { valor: "guardado" },
+      { ok: true },
+    ];
     const canal = {
       pedir: <T extends Record<string, unknown>>(pedido: Record<string, unknown>) => {
         pedidos.push(pedido);
@@ -45,11 +54,18 @@ describe("credenciais pela casca", () => {
     await expect(credenciais.ler("hooks")).resolves.toBeNull();
     await credenciais.guardar("hooks", "segredo");
     await expect(credenciais.ler("hooks")).resolves.toBe("guardado");
+    await credenciais.apagar("provedor-1");
     expect(pedidos).toEqual([
       { tipo: "credencial", op: "ler", nome: "hooks" },
       { tipo: "credencial", op: "guardar", nome: "hooks", valor: "segredo" },
       { tipo: "credencial", op: "ler", nome: "hooks" },
+      { tipo: "credencial", op: "apagar", nome: "provedor-1" },
     ]);
+  });
+
+  test("apagar sem a confirmação da casca é erro", async () => {
+    const canal = { pedir: <T extends Record<string, unknown>>() => Promise.resolve({} as T) };
+    await expect(credenciaisPelaCasca(canal).apagar("provedor-1")).rejects.toThrow("não confirmou");
   });
 
   test("erro da casca vira exceção, sem token sorteado no lugar", async () => {

@@ -35,7 +35,9 @@ import { RepositorioNotificacoes, ServicoNotificacoes } from "./notificacoes/not
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
 import { fabricaClaudeCli, rotaPreToolUse, type AberturaMcp } from "./provedores/claude-cli/claude-cli.ts";
+import { detectar } from "./provedores/deteccao.ts";
 import { fabricaOpenAiCompativel } from "./provedores/openai-compativel/openai-compativel.ts";
+import { RepositorioProvedores, ServicoProvedores } from "./provedores/provedores.ts";
 import { RegistroProvedores } from "./provedores/registro.ts";
 import { TRANSCRIPTS_DO_DISCO } from "./sessoes/contexto.ts";
 import { caminhoSettingsClaude, LigacaoClaudeCode } from "./sessoes/ligacao.ts";
@@ -245,6 +247,26 @@ const agentes = new ServicoAgentes(
 );
 // Pausar pela bandeja (F2-18): o menu do ícone mostra o estado de cada agente e se refaz quando muda.
 const bandeja = ligarBandeja({ agentes, canal });
+// Provedores (F2-08): detecção dos CLIs, configuração e o teste de verdade, pelo registro do runtime.
+const servicoProvedores = new ServicoProvedores(
+  new RepositorioProvedores(banco),
+  {
+    credenciais: credenciaisPelaCasca(canal),
+    registro: provedores,
+    detectar: () => detectar({ atende: (tipo) => provedores.atende(tipo) }),
+  },
+  {
+    provedores: (lista) => servidor?.emitir("provedores.mudou", lista),
+    agentesMudaram: (ids) => {
+      for (const id of ids) {
+        const agente = agentes.procurar(id);
+        if (agente) servidor?.emitir("agentes.mudou", agente);
+      }
+      bandeja.atualizar();
+    },
+    provedorVoltou: (ids) => ids.forEach((id) => runtime.estados.acordar(id)),
+  },
+);
 vigiaNuno = new VigiaNuno({
   executar: (pedido) => runtime.executar(pedido),
   githubConhecido: github.obter().itens,
@@ -320,17 +342,14 @@ servidor = await abrirServidorWs(token, {
   "notificacoes.listar": (pedido) => notificacoes.listar(pedido),
   "notificacoes.naoVistas": () => notificacoes.naoVistas(),
   "notificacoes.marcarVistas": (pedido) => notificacoes.marcarVistas(pedido),
+  "provedores.listar": () => servicoProvedores.listar(),
+  "provedores.detectar": () => servicoProvedores.detectar(),
+  "provedores.criar": (novo) => servicoProvedores.criar(novo),
+  "provedores.definir": (mudanca) => servicoProvedores.definir(mudanca),
+  "provedores.remover": (pedido) => servicoProvedores.remover(pedido),
+  "provedores.testar": (pedido) => servicoProvedores.testar(pedido),
   // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
-  ...semAtendente([
-    "agentes.definir",
-    "agentes.restaurarPadrao",
-    "provedores.listar",
-    "provedores.detectar",
-    "provedores.criar",
-    "provedores.definir",
-    "provedores.remover",
-    "provedores.testar",
-  ]),
+  ...semAtendente(["agentes.definir", "agentes.restaurarPadrao"]),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
 canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });

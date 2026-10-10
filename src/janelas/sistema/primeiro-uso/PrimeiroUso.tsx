@@ -7,17 +7,39 @@ import {
   type FimDoPasso,
   type MudancaConfig,
   type PassoPrimeiroUso,
+  type ProvedorDetectado,
   type Tema,
 } from "@moductus/contrato";
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type Dispatch,
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+  type SetStateAction,
+} from "react";
 import type { Destino } from "../../../areas/areas.ts";
 import { Botao } from "../../../componentes/Botao.tsx";
+import { Campo } from "../../../componentes/Campo.tsx";
 import { Icone } from "../../../componentes/Icone.tsx";
 import { Personagem } from "../../../componentes/personagem/Personagem.tsx";
 import type { Agente, EstadoPersonagem } from "../../../componentes/personagem/agentes.ts";
 import { Selo } from "../../../componentes/Selo.tsx";
 import { Seletor, type OpcaoSeletor } from "../../../componentes/Seletor.tsx";
 import { servico } from "../../../servico/conexao.ts";
+import {
+  CLIS,
+  formatarLatencia,
+  MODELO_INICIAL,
+  novoDaApi,
+  situacaoDoCli,
+  type EscolhaModelo,
+  type EstadoModelo,
+  type TipoApi,
+} from "./modelo.ts";
 import "./PrimeiroUso.css";
 
 /** Nome de cada passo na lateral (Uso1Boas…Uso5Conexoes.dc.html). */
@@ -49,6 +71,8 @@ export function PrimeiroUso({ aoConcluir }: PropsPrimeiroUso) {
   const [config, setConfig] = useState<Config | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [gravando, setGravando] = useState(false);
+  const [modelo, setModelo] = useState<EstadoModelo>(MODELO_INICIAL);
+  const modeloPronto = modelo.resultado.fase === "ok";
   const titulo = useRef<HTMLHeadingElement>(null);
   const idTitulo = useId();
 
@@ -80,8 +104,8 @@ export function PrimeiroUso({ aoConcluir }: PropsPrimeiroUso) {
 
   const avancar = () => {
     if (gravando) return;
-    // "Depois" no modelo: nada foi conectado, o passo conta como pulado.
-    const novos: Fins = { ...fins, [passo]: passo === "modelo" ? "pulado" : "feito" };
+    // "Depois" no modelo: nenhum passou no teste, o passo conta como pulado.
+    const novos: Fins = { ...fins, [passo]: passo === "modelo" && !modeloPronto ? "pulado" : "feito" };
     setFins(novos);
     if (passo === "boas-vindas" && origem === "outro-pc") {
       concluir(novos, { area: "configuracoes", secao: "outro-pc" });
@@ -129,7 +153,7 @@ export function PrimeiroUso({ aoConcluir }: PropsPrimeiroUso) {
       ? origem === "outro-pc"
         ? "Importar o arquivo"
         : "Começar"
-      : passo === "modelo"
+      : passo === "modelo" && !modeloPronto
         ? "Depois"
         : ultimo
           ? "Concluir"
@@ -177,7 +201,7 @@ export function PrimeiroUso({ aoConcluir }: PropsPrimeiroUso) {
         <div className="uso-corpo">
           {passo === "boas-vindas" && <BoasVindas {...cabecalho} origem={origem} aoMudar={setOrigem} />}
           {passo === "tema-dock" && <TemaDock {...cabecalho} config={config} definir={definir} />}
-          {passo === "modelo" && <Modelo {...cabecalho} />}
+          {passo === "modelo" && <Modelo {...cabecalho} estado={modelo} mudar={setModelo} />}
           {passo === "time" && <Time {...cabecalho} />}
           {passo === "conexoes" && <Conexoes {...cabecalho} />}
           {erro && (
@@ -299,10 +323,12 @@ interface PropsOpcao {
   desativada?: boolean;
   /** Prévia acima do título (os temas). */
   previa?: ReactNode;
+  /** Selo ao lado do título (o estado de cada modelo). */
+  selo?: ReactNode;
 }
 
 /** Cartão de opção com rádio de verdade: Tab entra no grupo, as setas trocam, Enter segue. */
-function Opcao({ nome, marcada, aoMarcar, titulo, texto, desativada, previa }: PropsOpcao) {
+function Opcao({ nome, marcada, aoMarcar, titulo, texto, desativada, previa, selo }: PropsOpcao) {
   const id = useId();
   return (
     <label className="uso-opcao" data-marcada={marcada}>
@@ -317,6 +343,7 @@ function Opcao({ nome, marcada, aoMarcar, titulo, texto, desativada, previa }: P
           aria-describedby={`${id}-texto`}
         />
         <span className="uso-opcao-titulo">{titulo}</span>
+        {selo}
       </span>
       <span id={`${id}-texto`} className="uso-opcao-texto">
         {texto}
@@ -451,45 +478,266 @@ function MiniTela({ tema }: { tema: Exclude<Tema, "automatico"> }) {
 
 /* ---------- 3. Modelo ---------- */
 
-const PROVEDORES: readonly { nome: string; texto: string }[] = [
-  { nome: "Claude Code", texto: "CLI da Anthropic, pela sua assinatura" },
-  { nome: "Codex", texto: "CLI da OpenAI" },
-  { nome: "Gemini CLI", texto: "CLI do Google, com a sua conta" },
-  { nome: "OpenCode", texto: "CLI aberto, com vários provedores" },
-  { nome: "Chave de API", texto: "Anthropic, OpenAI, Gemini ou compatível com OpenAI · paga por uso" },
+const TIPOS_API: readonly OpcaoSeletor<TipoApi>[] = [
+  { valor: "openai", rotulo: "OpenAI" },
+  { valor: "openai-compativel", rotulo: "Compatível com OpenAI" },
 ];
 
-function Modelo(cabecalho: PropsCabecalho) {
+interface PropsModelo extends PropsCabecalho {
+  estado: EstadoModelo;
+  mudar: Dispatch<SetStateAction<EstadoModelo>>;
+}
+
+/**
+ * Conectar um modelo (PRODUCT.md §5): os CLIs que o serviço achou no PC, ou uma chave de API, e um
+ * teste de verdade, só quando o usuário pede. O provedor que passa vai para os quatro agentes (o
+ * serviço faz isso); trocar de escolha e testar de novo tira o que este passo tinha criado.
+ */
+function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
+  const [detectados, setDetectados] = useState<ProvedorDetectado[] | null>(null);
+  const [erroDeteccao, setErroDeteccao] = useState<string | null>(null);
+  // Cada "Procurar de novo" é uma rodada: depois de instalar ou entrar no CLI, sem reabrir nada.
+  const [rodada, setRodada] = useState(0);
+  const { escolha, formulario, resultado } = estado;
+  const testando = resultado.fase === "testando";
+
+  useEffect(() => {
+    let vivo = true;
+    setDetectados(null);
+    setErroDeteccao(null);
+    servico
+      .pedir("provedores.detectar")
+      .then((achados) => {
+        if (!vivo) return;
+        setDetectados(achados);
+        // Sem escolha ainda, fica o primeiro CLI que dá para usar.
+        const pronto = CLIS.find(
+          (c) =>
+            situacaoDoCli(
+              c.nome,
+              achados.find((a) => a.tipo === c.tipo),
+            ).escolhivel,
+        );
+        if (pronto) mudar((e) => (e.escolha === null ? { ...e, escolha: pronto.tipo } : e));
+      })
+      .catch((e: unknown) => {
+        if (!vivo) return;
+        setDetectados([]);
+        setErroDeteccao(`Não deu para procurar os CLIs (${mensagem(e)}). Uma chave de API ainda funciona.`);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [rodada, mudar]);
+
+  const escolher = (nova: EscolhaModelo) =>
+    mudar((e) => (e.escolha === nova ? e : { ...e, escolha: nova, resultado: { fase: "parado" } }));
+  const mudarFormulario = (mudanca: Partial<EstadoModelo["formulario"]>) =>
+    mudar((e) => ({ ...e, formulario: { ...e.formulario, ...mudanca }, resultado: { fase: "parado" } }));
+
+  const nomeDaEscolha =
+    escolha === "api"
+      ? novoDaApi(formulario).nome
+      : (CLIS.find((c) => c.tipo === escolha)?.nome ?? "o modelo");
+
+  const testar = async () => {
+    if (!escolha || testando) return;
+    const nome = nomeDaEscolha;
+    mudar((e) => ({ ...e, resultado: { fase: "testando", nome } }));
+    try {
+      const anterior = estado.criadoAqui;
+      let id: string;
+      if (escolha === "api") {
+        // A chave vai junto do provedor novo; o de antes, deste passo, sai.
+        if (anterior) await servico.pedir("provedores.remover", { id: anterior });
+        id = (await servico.pedir("provedores.criar", novoDaApi(formulario))).id;
+      } else {
+        const existente = (await servico.pedir("provedores.listar")).find((p) => p.tipo === escolha);
+        if (anterior && anterior !== existente?.id)
+          await servico.pedir("provedores.remover", { id: anterior });
+        id = existente?.id ?? (await servico.pedir("provedores.criar", { tipo: escolha, nome })).id;
+      }
+      mudar((e) => ({ ...e, criadoAqui: id }));
+      const r = await servico.pedir("provedores.testar", { id });
+      mudar((e) => ({
+        ...e,
+        resultado: r.ok
+          ? { fase: "ok", nome, latenciaMs: r.latenciaMs, assinatura: escolha !== "api" }
+          : { fase: "falhou", nome, mensagem: r.falha.mensagem },
+      }));
+    } catch (e) {
+      mudar((atual) => ({ ...atual, resultado: { fase: "falhou", nome, mensagem: mensagem(e) } }));
+    }
+  };
+
   return (
     <>
       <Cabecalho {...cabecalho} rotulo="Modelo" titulo="Qual IA move os agentes">
-        Os quatro usam o mesmo modelo no começo; depois você troca por agente. Esta versão ainda não conecta
-        nenhum: a conexão chega na fase 2.
+        Os quatro usam o mesmo modelo no começo. Depois você troca por agente.{" "}
+        {detectados === null ? "Procurando no seu PC…" : "Achei estes no seu PC:"}
       </Cabecalho>
-      <ul className="uso-lista" aria-label="Modelos que o Moductus vai aceitar">
-        {PROVEDORES.map((p) => (
-          <li key={p.nome} className="uso-item">
-            <span className="uso-item-texto">
-              <span className="uso-item-linha">
-                <span className="uso-item-nome">{p.nome}</span>
-                <Selo>fase 2</Selo>
-              </span>
-              <span className="uso-rotulo">{p.texto}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-      <div className="uso-nota">
-        <Personagem agente="nuno" modo="cabeca" tamanho="painel" estado="ocioso" />
-        <span className="uso-item-texto">
-          <span className="uso-item-nome">Nada é conectado agora</span>
-          <span className="uso-rotulo">
-            Na fase 2 o Moductus procura esses CLIs no seu PC e faz um teste de verdade antes de seguir. Até
-            lá, os agentes ficam no dock sem agir. A escolha fica em Configurações, Modelos.
-          </span>
-        </span>
-      </div>
+      <fieldset className="uso-opcoes uso-opcoes--lista" aria-busy={detectados === null}>
+        <legend className="so-leitor">Modelo</legend>
+        {CLIS.map((c) => {
+          const situacao =
+            detectados === null
+              ? {
+                  estado: "procurando",
+                  tom: "neutro" as const,
+                  texto: "Procurando no PATH…",
+                  escolhivel: false,
+                }
+              : situacaoDoCli(
+                  c.nome,
+                  detectados.find((d) => d.tipo === c.tipo),
+                );
+          return (
+            <Opcao
+              key={c.tipo}
+              nome="modelo"
+              marcada={escolha === c.tipo}
+              desativada={!situacao.escolhivel || testando}
+              aoMarcar={() => escolher(c.tipo)}
+              titulo={c.nome}
+              selo={<Selo tom={situacao.tom}>{situacao.estado}</Selo>}
+              texto={situacao.texto}
+            />
+          );
+        })}
+        <Opcao
+          nome="modelo"
+          marcada={escolha === "api"}
+          desativada={testando}
+          aoMarcar={() => escolher("api")}
+          titulo="Chave de API"
+          texto="OpenAI ou compatível com OpenAI (Ollama, OpenRouter, LM Studio) · paga por uso"
+        />
+      </fieldset>
+      {erroDeteccao && (
+        <p className="uso-erro" role="alert">
+          {erroDeteccao}
+        </p>
+      )}
+      {detectados !== null && (
+        <div className="uso-procurar">
+          <Botao
+            variante="fantasma"
+            tamanho="pequeno"
+            disabled={testando}
+            onClick={() => setRodada((n) => n + 1)}
+          >
+            Procurar de novo
+          </Botao>
+        </div>
+      )}
+      {escolha === "api" && (
+        <div className="uso-api">
+          <div className="uso-ajuste">
+            <span className="uso-rotulo">Provedor</span>
+            <Seletor
+              rotulo="Provedor da chave"
+              opcoes={TIPOS_API}
+              valor={formulario.tipo}
+              aoMudar={(tipo) => mudarFormulario({ tipo })}
+            />
+          </div>
+          {formulario.tipo === "openai-compativel" && (
+            <Campo
+              rotulo="Endereço (base_url)"
+              placeholder="http://localhost:11434/v1"
+              value={formulario.baseUrl}
+              disabled={testando}
+              onChange={(e) => mudarFormulario({ baseUrl: e.target.value })}
+            />
+          )}
+          <Campo
+            rotulo="Modelo"
+            placeholder={formulario.tipo === "openai" ? "gpt-5-mini" : "qwen3:8b"}
+            value={formulario.modelo}
+            disabled={testando}
+            onChange={(e) => mudarFormulario({ modelo: e.target.value })}
+          />
+          <Campo
+            rotulo="Chave"
+            type="password"
+            autoComplete="off"
+            dica={
+              formulario.tipo === "openai"
+                ? "Fica no Gerenciador de Credenciais do Windows."
+                : "Opcional para modelo local. Fica no Gerenciador de Credenciais do Windows."
+            }
+            value={formulario.chave}
+            disabled={testando}
+            onChange={(e) => mudarFormulario({ chave: e.target.value })}
+          />
+        </div>
+      )}
+      <ResultadoDoTeste estado={estado} aoTestar={() => void testar()} />
     </>
+  );
+}
+
+/** A nota do Nuno embaixo da lista: o que testar, o teste rodando ou o que deu. */
+function ResultadoDoTeste({ estado, aoTestar }: { estado: EstadoModelo; aoTestar: () => void }) {
+  const { resultado, escolha } = estado;
+  const botao = (rotulo: string) => (
+    <Botao tamanho="pequeno" disabled={escolha === null} onClick={aoTestar}>
+      {rotulo}
+    </Botao>
+  );
+  return (
+    <div className="uso-nota" aria-live="polite">
+      {resultado.fase === "parado" && (
+        <>
+          <Personagem agente="nuno" modo="cabeca" tamanho="painel" estado="ocioso" />
+          <span className="uso-item-texto">
+            <span className="uso-item-nome">Um teste de verdade antes de seguir</span>
+            <span className="uso-rotulo">
+              Uma chamada curta ao modelo escolhido, para ver se ele responde. Só roda quando você pede.
+            </span>
+          </span>
+          {botao("Testar")}
+        </>
+      )}
+      {resultado.fase === "testando" && (
+        <>
+          <Personagem agente="nuno" modo="cabeca" tamanho="painel" estado="trabalhando" />
+          <span className="uso-item-texto">
+            <span className="uso-item-nome">Testando {resultado.nome}…</span>
+            <span className="uso-rotulo">Uma pergunta curta, esperando a resposta inteira.</span>
+          </span>
+          <Selo>testando</Selo>
+        </>
+      )}
+      {resultado.fase === "ok" && (
+        <>
+          <Personagem agente="nuno" modo="cabeca" tamanho="painel" estado="ocioso" />
+          <span className="uso-item-texto">
+            <span className="uso-item-nome">
+              Teste feito: {resultado.nome} respondeu em{" "}
+              <span className="uso-numero">{formatarLatencia(resultado.latenciaMs)}</span>
+            </span>
+            <span className="uso-rotulo">
+              {resultado.assinatura
+                ? "Usa a sua assinatura. Os agentes contam o uso no limite semanal dela, e o Nuno avisa quando chegar perto."
+                : "Paga por uso, na conta do provedor. O Nuno mostra o gasto estimado de cada agente."}
+            </span>
+          </span>
+          <Selo tom="sucesso">funcionando</Selo>
+        </>
+      )}
+      {resultado.fase === "falhou" && (
+        <>
+          <Personagem agente="nuno" modo="cabeca" tamanho="painel" estado="erro" />
+          <span className="uso-item-texto">
+            <span className="uso-item-nome">{resultado.nome} não passou no teste</span>
+            <span className="uso-rotulo">{resultado.mensagem}</span>
+          </span>
+          <Selo tom="perigo">não funcionou</Selo>
+          {botao("Testar de novo")}
+        </>
+      )}
+    </div>
   );
 }
 
