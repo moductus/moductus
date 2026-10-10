@@ -7,10 +7,11 @@ import type { TomSelo } from "../../../componentes/Selo.tsx";
  * aqui só se diz isso em texto.
  */
 
+/** Na ordem do quadro: Claude, Gemini, Codex e OpenCode. */
 export const CLIS: readonly { tipo: TipoProvedorCli; nome: string }[] = [
   { tipo: "claude-cli", nome: "Claude Code" },
-  { tipo: "codex-cli", nome: "Codex" },
   { tipo: "gemini-cli", nome: "Gemini CLI" },
+  { tipo: "codex-cli", nome: "Codex" },
   { tipo: "opencode-cli", nome: "OpenCode" },
 ];
 

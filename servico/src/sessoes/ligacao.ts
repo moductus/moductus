@@ -417,6 +417,23 @@ export class LigacaoClaudeCode {
     return this.opcoes.caminho;
   }
 
+  /** A porta do receptor que os hooks chamam. */
+  get porta(): number {
+    return this.opcoes.porta;
+  }
+
+  /**
+   * O nome da cópia de segurança mais recente do `settings.json`, para a tela de Conexões dizer
+   * onde está o arquivo de antes; `null` sem cópia ou sem como olhar a pasta.
+   */
+  ultimaCopia(): string | null {
+    try {
+      return this.copiasEm(this.pastaDasCopias()).at(-1)?.f ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   private ler(): Lido {
     const existe = existsSync(this.caminho);
     const texto = existe ? readFileSync(this.caminho, "utf8") : "";
@@ -613,17 +630,22 @@ export class LigacaoClaudeCode {
   }
 
   /** Copia o conteúdo do arquivo de verdade (nunca o link). Ficam a primeira cópia e as últimas. */
+  /** As cópias do `settings.json` na pasta, da mais antiga para a mais nova. */
+  private copiasEm(pasta: string): { f: string; carimbo: string; n: number }[] {
+    const nome = basename(this.caminho);
+    return readdirSync(pasta)
+      .flatMap((f) => {
+        const achado = f.startsWith(`${nome}.moductus-`) ? COPIA.exec(f) : null;
+        return achado ? [{ f, carimbo: achado[1] ?? "", n: Number(achado[2] ?? "1") }] : [];
+      })
+      .sort((a, b) => (a.carimbo === b.carimbo ? a.n - b.n : a.carimbo < b.carimbo ? -1 : 1));
+  }
+
   private copiar(origem: string): string {
     const pasta = this.pastaDasCopias();
     const nome = basename(this.caminho);
     const carimbo = this.agora().toISOString().replace(/[:.]/g, "-");
-    const lista = () =>
-      readdirSync(pasta)
-        .flatMap((f) => {
-          const achado = f.startsWith(`${nome}.moductus-`) ? COPIA.exec(f) : null;
-          return achado ? [{ f, carimbo: achado[1] ?? "", n: Number(achado[2] ?? "1") }] : [];
-        })
-        .sort((a, b) => (a.carimbo === b.carimbo ? a.n - b.n : a.carimbo < b.carimbo ? -1 : 1));
+    const lista = () => this.copiasEm(pasta);
     // Na colisão, o sufixo segue o maior do mesmo instante, nunca reaproveita um que saiu.
     const maior = Math.max(
       0,

@@ -389,3 +389,701 @@
   color: var(--sobre-destaque);
   font-weight: var(--peso-forte);
 }
+
+/* ---------- Pendente de decisão (moeda do teto) ---------- */
+/* Marcador tracejado do quadro: o que espera uma decisão do humano não parece valor. */
+.config-pendente {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--esp-6);
+  border: var(--espessura-borda) dashed var(--aviso);
+  border-radius: var(--raio-selo);
+  font-size: var(--tipo-11);
+  color: var(--aviso);
+  white-space: nowrap;
+}
+
+/* ---------- Tabela das seções (Modelos) ---------- */
+.config-tabela {
+  overflow-x: auto;
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+}
+
+.config-tabela table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.config-tabela th,
+.config-tabela td {
+  padding: var(--esp-10) var(--esp-12) var(--esp-10) 0;
+  font-weight: var(--peso-normal);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.config-tabela th:first-child,
+.config-tabela td:first-child {
+  padding-left: var(--esp-16);
+}
+
+.config-tabela th:last-child,
+.config-tabela td:last-child {
+  padding-right: var(--esp-16);
+}
+
+.config-tabela thead tr {
+  height: var(--altura-cabecalho-tabela);
+  background: var(--fundo-elevado);
+}
+
+.config-tabela thead th {
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-tabela tbody tr {
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+/* A linha de erro ou da chave nova fica junto da linha do provedor, sem borda entre as duas. */
+.config-tabela tr[data-com-extra] + .config-tabela-extra {
+  border-top: 0;
+}
+
+.config-tabela-extra > td {
+  padding-top: 0;
+}
+
+.config-tabela .config-tabela-estado {
+  width: var(--largura-col-modelo-estado);
+}
+
+.config-tabela .config-tabela-resposta {
+  width: var(--largura-col-modelo-resposta);
+}
+
+.config-tabela .config-tabela-lista {
+  width: calc(var(--largura-lista-modelo) + var(--esp-12));
+}
+
+.config-tabela .config-tabela-teto {
+  width: var(--largura-col-teto);
+}
+
+/* ---------- Modelos (ConfigModelos*.dc.html) ---------- */
+.config-modelos-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-12);
+}
+
+.config-modelos-botoes,
+.config-modelos-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--esp-8);
+}
+
+.config-modelos-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+}
+
+.config-modelos-rotulos,
+.config-modelos-pendencia {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-modelos-pendencia {
+  justify-content: flex-start;
+}
+
+.config-modelos-textos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  min-width: 0;
+}
+
+.config-modelos-nome {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-6);
+  font-weight: var(--peso-forte);
+  color: var(--texto);
+}
+
+.config-modelos-sub {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-modelos-sub[data-tom="perigo"] {
+  color: var(--perigo);
+}
+
+.config-modelos-sub[data-tom="aviso"] {
+  color: var(--aviso);
+}
+
+.config-modelos-texto {
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+  text-wrap: pretty;
+}
+
+.config-modelos-numero {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+  color: var(--texto);
+  white-space: nowrap;
+}
+
+.config-modelos-erro {
+  margin: 0;
+  padding: var(--esp-8) var(--esp-12);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-elevado);
+  font-size: var(--tipo-12);
+  color: var(--texto);
+}
+
+.config-modelos-estado {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-6);
+}
+
+/* O teste rodando: a barra corre no trilho até a resposta chegar; para com menos animação. */
+.config-modelos-trilho,
+.config-conexao-trilho {
+  position: relative;
+  display: block;
+  width: var(--largura-trilho-teste);
+  height: var(--altura-progresso);
+  overflow: hidden;
+  border-radius: var(--raio-progresso);
+  background: var(--fundo-trilho);
+}
+
+.config-modelos-trilho::after,
+.config-conexao-trilho::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--largura-barra-trabalho);
+  background: var(--destaque);
+  animation: config-correr var(--dur-correr) ease-in-out infinite;
+}
+
+@keyframes config-correr {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+.config-modelos-chave {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--esp-8);
+}
+
+.config-modelos-chave > .campo {
+  flex: 1;
+  min-width: var(--largura-min-dado-conexao);
+}
+
+/* O agente na tabela abre o painel de troca: o botão é a linha inteira da coluna. */
+.config-modelos-agente {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  width: 100%;
+  padding: var(--esp-2);
+  border: 0;
+  border-radius: var(--raio-controle);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.config-modelos-agente:hover .config-modelos-nome {
+  text-decoration: underline;
+}
+
+.config-lista--ponto select {
+  min-width: var(--largura-lista-modelo);
+  padding-left: calc(var(--esp-10) + var(--tamanho-ponto-estado) + var(--esp-8));
+}
+
+.config-lista-ponto {
+  position: absolute;
+  left: var(--esp-10);
+  width: var(--tamanho-ponto-estado);
+  height: var(--tamanho-ponto-estado);
+  border-radius: 50%;
+  background: var(--texto-3);
+  pointer-events: none;
+}
+
+.config-lista-ponto[data-tom="sucesso"] {
+  background: var(--sucesso);
+}
+
+.config-lista-ponto[data-tom="aviso"] {
+  background: var(--aviso);
+}
+
+.config-lista-ponto[data-tom="perigo"] {
+  background: var(--perigo);
+}
+
+.config-lista-ponto[data-tom="apagado"] {
+  border: var(--espessura-borda) solid var(--texto-3);
+  background: none;
+}
+
+.config-modelos-teto {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-4);
+}
+
+/* Nenhum modelo: o time dormindo no alto, os três caminhos e os CLIs achados. */
+.config-modelos-vazio {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-20);
+  padding: var(--esp-20) var(--esp-24);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-elevado);
+}
+
+.config-modelos-vazio-time {
+  display: flex;
+  flex: none;
+  gap: var(--esp-6);
+}
+
+.config-modelos-vazio-textos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  min-width: 0;
+}
+
+.config-modelos-vazio-titulo {
+  margin: 0;
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+}
+
+.config-modelos-caminhos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--largura-min-caminho)), 1fr));
+  gap: var(--esp-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.config-modelos-caminho {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+  padding: var(--esp-16);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-cartao);
+}
+
+.config-modelos-caminho-acao {
+  display: flex;
+  margin-top: auto;
+  padding-top: var(--esp-6);
+}
+
+.config-modelos-lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+}
+
+.config-modelos-linha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--largura-col-modelo-estado) var(--largura-col-modelo-resposta);
+  align-items: center;
+  gap: var(--esp-12);
+  padding: var(--esp-12) var(--esp-16);
+}
+
+.config-modelos-linha + .config-modelos-linha {
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.config-modelos-formulario {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-14);
+  padding: var(--esp-16);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-elevado);
+}
+
+.config-modelos-formulario-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--largura-min-caminho)), 1fr));
+  gap: var(--esp-14);
+  align-items: start;
+}
+
+.config-modelos-campo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-6);
+}
+
+/* O painel de troca de um agente (ConfigModelosAgente.dc.html): dentro da tabela, com a borda de
+   destaque à esquerda. */
+.config-modelos-painel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-16);
+  padding: var(--esp-6) 0 var(--esp-6) var(--esp-14);
+  border-left: var(--espessura-aba) solid var(--destaque);
+}
+
+.config-modelos-painel-topo {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-12);
+}
+
+.config-modelos-painel-topo > .config-modelos-textos {
+  flex: 1;
+}
+
+.config-modelos-painel-titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.config-modelos-painel-titulo h3 {
+  margin: 0;
+  font-size: var(--tipo-13);
+  font-weight: var(--peso-forte);
+}
+
+/* Principal mais largo que reserva e teto, como no quadro; sem largura, cada um desce. */
+.config-modelos-painel-grade {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-16);
+  align-items: flex-start;
+}
+
+.config-modelos-painel-grade > * {
+  flex: 2 1 var(--largura-min-caminho);
+}
+
+.config-modelos-painel-grade > .config-modelos-opcoes {
+  flex-grow: 3;
+}
+
+.config-modelos-opcoes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.config-modelos-opcoes > legend {
+  padding: 0 0 var(--esp-6);
+}
+
+.config-modelos-opcao {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--esp-10);
+  padding: var(--esp-10) var(--esp-12);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-cartao);
+  cursor: pointer;
+}
+
+.config-modelos-opcao[data-marcada="true"] {
+  border-color: var(--destaque);
+  box-shadow: var(--sombra-opcao-marcada) var(--destaque);
+}
+
+.config-modelos-opcao:has(input:focus-visible) {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco);
+}
+
+.config-modelos-opcao input {
+  margin: 0;
+  accent-color: var(--destaque);
+}
+
+.config-modelos-opcao input:focus-visible {
+  outline: 0;
+}
+
+.config-modelos-atual {
+  padding: 0 var(--esp-6);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-selo);
+  font-size: var(--tipo-11);
+  font-weight: var(--peso-normal);
+  color: var(--texto-3);
+}
+
+.config-modelos-coluna {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-8);
+}
+
+.config-modelos-painel-fala {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-12);
+  padding-top: var(--esp-14);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.config-modelos-escopo {
+  padding: var(--esp-10) var(--esp-14);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+}
+
+/* ---------- Conexões (ConfigConexoes*.dc.html) ---------- */
+.config-conexao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-14);
+  padding: var(--esp-16);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-cartao);
+}
+
+.config-conexao--fala {
+  border-color: var(--borda-forte);
+  background: var(--fundo-elevado);
+}
+
+.config-conexao-topo {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-12);
+}
+
+.config-conexao-textos {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-2);
+  min-width: 0;
+}
+
+.config-conexao-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.config-conexao-nome {
+  margin: 0;
+  font-size: var(--tipo-13);
+  font-weight: var(--peso-forte);
+}
+
+.config-conexao-quem {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-conexao-descricao {
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.config-conexao-acoes {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--esp-8);
+}
+
+.config-conexao-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-10);
+  padding-top: var(--esp-14);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.config-conexao-dados {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--largura-min-dado-conexao)), 1fr));
+  gap: var(--esp-12);
+  margin: 0;
+}
+
+.config-conexao-dado {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  min-width: 0;
+}
+
+.config-conexao-dado dt {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-conexao-dado dd {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-conexao-dado dd[data-mono] {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+}
+
+.config-conexao-erro {
+  margin: 0;
+  font-weight: var(--peso-forte);
+  color: var(--texto);
+}
+
+.config-conexao-comando {
+  align-self: flex-start;
+  padding: var(--esp-2) var(--esp-6);
+  border-radius: var(--raio-caixa);
+  background: var(--fundo-chip);
+  font-size: var(--tipo-12);
+  overflow-wrap: anywhere;
+}
+
+/* A prévia do Claude Code: fala do Nuno, o arquivo, os blocos antes e depois, o consentimento. */
+.config-previa {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-12);
+}
+
+.config-previa-arquivo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-6);
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-previa-blocos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--largura-min-coluna-notificacoes)), 1fr));
+  gap: var(--esp-12);
+}
+
+.config-previa-seguranca {
+  padding: var(--esp-10) var(--esp-12);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-elevado);
+}
+
+.config-bloco {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+  min-width: 0;
+  margin: 0;
+}
+
+.config-bloco-titulo {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-bloco-contagem {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+}
+
+.config-bloco-codigo {
+  height: var(--altura-bloco-hooks);
+  margin: 0;
+  padding: var(--esp-8) 0;
+  overflow: auto;
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-janela);
+  font-size: var(--tipo-11);
+}
+
+.config-bloco-linha {
+  display: block;
+  padding-right: var(--esp-10);
+  white-space: pre;
+}
+
+.config-bloco-linha[data-nova] {
+  background: color-mix(in srgb, var(--sucesso) 16%, transparent);
+}
+
+.config-bloco-marca {
+  display: inline-block;
+  width: var(--esp-20);
+  text-align: center;
+  color: var(--sucesso);
+}

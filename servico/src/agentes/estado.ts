@@ -211,6 +211,21 @@ export class EstadosAgentes {
   }
 
   /**
+   * O usuário trocou o modelo do agente (principal ou reserva). A espera e a ida à reserva vinham
+   * da falha do provedor de antes e não valem para o novo; quem dormia por causa de um provedor
+   * tenta de novo já. Quem dorme pelo teto do dia continua dormindo: trocar o modelo não muda o
+   * teto. A execução que está rodando não é tocada e termina no modelo de antes.
+   */
+  modeloMudou(agenteId: string): void {
+    this.falhasSeguidas.delete(agenteId);
+    this.principalForaAte.delete(agenteId);
+    const agente = this.deps.agentes.agente(agenteId);
+    if (agente?.estado === "dormindo" && agente.motivoSono !== "teto") {
+      this.mudar(agenteId, ATIVO, ["dormindo"], "usuario");
+    }
+  }
+
+  /**
    * Pausa um agente ou, sem `agenteId`, o time todo (os ligados), até `ate` ou até retomar. A pausa
    * vale por cima do sono: ao retomar, o agente que ainda está sem modelo dorme de novo na próxima
    * tentativa. Devolve quem ficou pausado.

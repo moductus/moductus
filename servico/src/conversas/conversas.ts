@@ -314,10 +314,11 @@ export const MENSAGEM_SEM_RESPOSTA = "Não consegui responder desta vez. Pode ma
 /** O aviso que segue o texto parcial de uma resposta que parou no meio. */
 export const AVISO_PAROU_NO_MEIO = (erro: string) => `A resposta parou no meio: ${erro}`;
 
-/** A sessão do provedor a continuar e a última mensagem da conversa que ela recebeu. */
+/** A sessão do provedor a continuar, a última mensagem da conversa que ela recebeu e de quem ela é. */
 interface Sessao {
   continuacao: string;
   ultimaRecebida: string;
+  provedorId: string;
 }
 
 export class ServicoConversas {
@@ -518,7 +519,13 @@ export class ServicoConversas {
     if (sinal.aborted || !this.deps.repo.conversa(conversaId)) return;
     const { agenteId } = destino;
     const chave = `${conversaId}:${agenteId}`;
-    const sessao = this.sessoes.get(chave);
+    // A sessão é do provedor que a abriu: trocado o modelo do agente, a próxima resposta começa
+    // sessão nova no modelo novo, com a conversa inteira (F2-32).
+    const guardada = this.sessoes.get(chave);
+    const sessao =
+      guardada && guardada.provedorId === this.deps.agentes.agente(agenteId)?.provedorId
+        ? guardada
+        : undefined;
     const nomes = new Map(this.deps.agentes.agentes().map((a) => [a.id, a.nome]));
     const conversa = this.deps.repo
       .historico(conversaId, gatilho.id, HISTORICO_CURTO.mensagens)
@@ -563,8 +570,12 @@ export class ServicoConversas {
     if (sinal.aborted || !this.deps.repo.conversa(conversaId)) return;
     // Com erro, a sessão fica onde estava: o que esta vez mandou vai de novo na próxima.
     if (execucao.estado === "ok") {
-      if (resultado.continuacao !== null) {
-        this.sessoes.set(chave, { continuacao: resultado.continuacao, ultimaRecebida: gatilho.id });
+      if (resultado.continuacao !== null && execucao.provedorId !== null) {
+        this.sessoes.set(chave, {
+          continuacao: resultado.continuacao,
+          ultimaRecebida: gatilho.id,
+          provedorId: execucao.provedorId,
+        });
       } else this.sessoes.delete(chave);
     }
 

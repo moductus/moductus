@@ -41,6 +41,8 @@ const falso = vi.hoisted(() => {
     recusarCriar: null as string | null,
     /** Como o teste de cada provedor termina. */
     teste: (_id: string): unknown => null,
+    /** As conexões do Nuno (Claude Code e GitHub). */
+    conexoes: [] as { tipo: string; estado: string }[],
     emitir(nome: string, dados: unknown) {
       for (const fn of ouvintes.get(nome) ?? []) fn(dados);
     },
@@ -67,6 +69,26 @@ vi.mock("../../../servico/conexao.ts", () => ({
     },
   },
 }));
+
+/** O bloco `hooks` que ligar grava: dois eventos do Moductus, como a prévia do serviço devolve. */
+const HOOKS = JSON.stringify(
+  Object.fromEntries(
+    ["SessionStart", "Stop"].map((evento) => [
+      evento,
+      [{ hooks: [{ type: "http", url: "http://127.0.0.1:47821/hooks/claude-code" }] }],
+    ]),
+  ),
+  null,
+  2,
+);
+
+const desligada = (tipo: string) => ({
+  tipo,
+  estado: "desligada",
+  conta: null,
+  ultimoErro: null,
+  conectadaEm: null,
+});
 
 function estadoConfig() {
   return { config: falso.config as Config, portable: false, falhasAtalhos: {} };
@@ -99,6 +121,24 @@ function atender(metodo: string, dados: unknown): unknown {
       if (resultado.ok) falso.provedores = falso.provedores.filter((p) => !substitui.includes(p.id));
       return resultado;
     }
+    case "conexoes.listar":
+      return falso.conexoes;
+    case "conexoes.previa":
+      return {
+        tipo: "hooks-claude-code",
+        arquivos: [
+          { caminho: "C:\\Users\\voce\\.claude\\settings.json", trecho: "hooks", antes: null, depois: HOOKS },
+        ],
+      };
+    case "conexoes.ligar": {
+      const { tipo } = dados as { tipo: string };
+      falso.conexoes = falso.conexoes.map((c) => (c.tipo === tipo ? { ...c, estado: "ligada" } : c));
+      return falso.conexoes.find((c) => c.tipo === tipo);
+    }
+    case "github.obter":
+      return { itens: [], atualizadoEm: null };
+    case "sessoes.listar":
+      return { projetos: [], sessoes: [] };
     case "config.obter":
       return estadoConfig();
     case "config.definir":
@@ -173,6 +213,7 @@ beforeEach(() => {
   falso.provedores = [];
   falso.criados = 0;
   falso.recusarCriar = null;
+  falso.conexoes = [desligada("hooks-claude-code"), desligada("github")];
   falso.teste = (id) => ({
     ok: true,
     provedorId: id,
@@ -314,6 +355,35 @@ describe("primeiro uso", () => {
     expect(por(".primeiros-passos h2")!.textContent).toBe("Primeiros passos");
   });
 
+  it("conexões do Nuno de verdade: a prévia do settings.json vem antes, e só o sim liga", async () => {
+    await montar();
+    for (const nome of ["Começar", "Continuar", "Depois", "Continuar"]) await clicar(botao(nome));
+    expect(titulo()).toBe(TITULOS[4]);
+    // As outras ainda chegam com a área de cada agente; a do Nuno conecta.
+    expect(todos(".uso-item .selo").map((s) => s.textContent)).toEqual(["fase 3", "fase 5", "fase 4"]);
+    await clicar(botao("Conectar"));
+    expect(pedidosDe("conexoes.ligar")).toEqual([]);
+
+    await clicar(botao("Ver o que muda"));
+    expect(pedidosDe("conexoes.previa")).toEqual([{ tipo: "hooks-claude-code" }]);
+    expect(por(".config-previa")!.textContent).toContain("C:\\Users\\voce\\.claude\\settings.json");
+    // Esc fecha só a prévia: o passo continua o mesmo.
+    await teclar(por(".config-previa")!, "Escape");
+    expect(por(".config-previa")).toBeNull();
+    expect(titulo()).toBe(TITULOS[4]);
+
+    await clicar(botao("Ver o que muda"));
+    await clicar(botao("Ligar 2 hooks no Claude Code"));
+    expect(pedidosDe("conexoes.ligar")).toEqual([{ tipo: "hooks-claude-code" }]);
+    expect(todos(".uso-item--nuno .uso-item-linha .selo").map((s) => s.textContent)).toEqual([
+      "1 de 2 ligada",
+    ]);
+    await clicar(botao("Conectar"));
+    expect(pedidosDe("conexoes.ligar")).toEqual([{ tipo: "hooks-claude-code" }, { tipo: "github" }]);
+    expect(todos(".uso-item--nuno .uso-item-linha .selo").map((s) => s.textContent)).toEqual(["conectado"]);
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
   it("pular a configuração no meio grava o que foi visto e vai ao Início", async () => {
     await montar();
     await clicar(botao("Começar"));
@@ -412,17 +482,18 @@ describe("primeiro uso: modelo", () => {
         marcado: true,
         desativado: false,
       },
-      {
-        nome: "Codex",
-        selo: "não encontrado",
-        texto: "Instale o Codex e volte aqui.",
-        marcado: false,
-        desativado: true,
-      },
+      // Na ordem do quadro (Uso3Modelo.dc.html): Claude, Gemini, Codex e OpenCode.
       {
         nome: "Gemini CLI",
         selo: "detectado",
         texto: "CLI no PATH, versão 0.42.0 · esta versão do Moductus ainda não conecta a ele.",
+        marcado: false,
+        desativado: true,
+      },
+      {
+        nome: "Codex",
+        selo: "não encontrado",
+        texto: "Instale o Codex e volte aqui.",
         marcado: false,
         desativado: true,
       },

@@ -132,6 +132,8 @@ const sessoes = new ServicoSessoes(
   (mudanca) => {
     servidor?.emitir("sessoes.mudou", mudanca);
     vigiaNuno?.aoMudarSessao(mudanca);
+    // A missão do Nuno nos Primeiros passos (F2-32): a primeira sessão do Claude Code que chega.
+    if (mudanca.sessao.ferramenta === "claude-code") primeiroUso.sessaoDoClaudeCode();
   },
   {
     transcripts: TRANSCRIPTS_DO_DISCO,
@@ -329,6 +331,13 @@ servidor = await abrirServidorWs(token, {
   "agentes.ligar": (pedido) => agentes.ligar(pedido),
   "agentes.pausar": (pedido) => agentes.pausar(pedido),
   "agentes.retomar": (pedido) => agentes.retomar(pedido),
+  // Configurações › Modelos (F2-32): vale na próxima execução; as janelas ficam sabendo pelo aviso.
+  "agentes.definir": (mudanca) => {
+    const agente = agentes.definir(mudanca);
+    servidor?.emitir("agentes.mudou", agente);
+    bandeja.atualizar();
+    return agente;
+  },
   "execucoes.listar": (pedido) => execucoes.listar(pedido),
   "execucoes.obter": (pedido) => execucoes.obter(pedido),
   "execucoes.desfazer": (pedido) => execucoes.desfazer(pedido),
@@ -351,7 +360,7 @@ servidor = await abrirServidorWs(token, {
   "provedores.remover": (pedido) => servicoProvedores.remover(pedido),
   "provedores.testar": (pedido) => servicoProvedores.testar(pedido),
   // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
-  ...semAtendente(["agentes.definir", "agentes.restaurarPadrao"]),
+  ...semAtendente(["agentes.restaurarPadrao"]),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
 canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });

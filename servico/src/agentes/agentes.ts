@@ -7,6 +7,7 @@ import {
   type EstadoAgente,
   type Gatilho,
   type MotivoSono,
+  type MudancaAgente,
   type PedidoAgente,
   type PedidoLigarAgente,
   type PedidoPausar,
@@ -15,6 +16,7 @@ import {
   type SituacaoAgente,
   type TipoProvedor,
 } from "@moductus/contrato";
+import { colunasDeOrigem, DO_USUARIO } from "../banco/tabela.ts";
 import type { Catalogo } from "../ferramentas/catalogo.ts";
 import type { ConfigProvedor } from "../provedores/provedor.ts";
 import type { EstadosAgentes } from "./estado.ts";
@@ -122,6 +124,27 @@ export class RepositorioAgentes {
     };
   }
 
+  /** Grava o modelo do agente (principal, reserva e teto), com o usuário como origem. */
+  definirModelo(id: string, modelo: ModeloAgente, agora: string): void {
+    const origem = colunasDeOrigem(DO_USUARIO);
+    this.db
+      .prepare(
+        `UPDATE agentes SET provedor_id = ?, provedor_reserva_id = ?, teto_diario_centavos = ?,
+                atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
+          WHERE id = ? AND apagado_em IS NULL`,
+      )
+      .run(
+        modelo.provedorId,
+        modelo.provedorReservaId,
+        modelo.tetoDiarioCentavos,
+        agora,
+        origem.origem,
+        origem.agente_id,
+        origem.execucao_id,
+        id,
+      );
+  }
+
   /**
    * Muda o estado guardado do agente, só se ele está num dos estados `de`: o sono que uma execução
    * pede não passa por cima da pausa nem do desligado. `pelo` diz quem mudou (o carimbo de origem):
@@ -167,16 +190,38 @@ export type EstadoGuardado =
 export type SituacaoDe = (agente: AgenteGuardado) => SituacaoAgente;
 
 /** Quem muda o estado guardado (estado.ts), soltando ou recusando quem espera a vez. */
-export type MudarEstados = Pick<EstadosAgentes, "ligar" | "pausar" | "retomar">;
+export type MudarEstados = Pick<EstadosAgentes, "ligar" | "pausar" | "retomar" | "modeloMudou">;
+
+/** O modelo de um agente: o provedor principal, a reserva e o teto de gasto por dia. */
+export type ModeloAgente = Pick<ConfigAgente, "provedorId" | "provedorReservaId" | "tetoDiarioCentavos">;
+
+/** Os campos que `agentes.definir` muda por enquanto (Configurações › Modelos, F2-32). */
+const CAMPOS_DO_MODELO: readonly string[] = ["provedorId", "provedorReservaId", "tetoDiarioCentavos"];
+
+/** Ditos ao usuário na tela de Modelos (AGENTS.md §2 Voz: o que houve e o que fazer). */
+export const MENSAGEM_SO_MODELO = "Por aqui só mudam o modelo, a reserva e o teto do agente.";
+export const MENSAGEM_PROVEDOR_SAIU = "Esse provedor não existe mais. Escolha outro.";
+export const MENSAGEM_RESERVA_IGUAL = "A reserva precisa ser outro provedor, não o principal.";
+export const MENSAGEM_RESERVA_SEM_PRINCIPAL = "Escolha o principal antes da reserva.";
+/**
+ * O teto fica desligado até a moeda dele ser decidida: o custo é medido em dólar e o teto em
+ * centavos de uma moeda que ainda não existe. Gravar um valor seria prometer um limite que não vale.
+ */
+export const MENSAGEM_TETO_SEM_MOEDA = "O teto por dia ainda não vale: falta decidir a moeda dele.";
 
 /** Os agentes como a interface vê: configuração, estado e o que estão fazendo agora. */
 export class ServicoAgentes {
+  private readonly agora: () => Date;
+
   constructor(
     private readonly repo: RepositorioAgentes,
     private readonly catalogo: Catalogo,
     private readonly situacao: SituacaoDe,
     private readonly estados: MudarEstados,
-  ) {}
+    agora?: () => Date,
+  ) {
+    this.agora = agora ?? (() => new Date());
+  }
 
   listar(): Agente[] {
     return this.repo.agentes().map((a) => this.comSituacao(a));
@@ -208,6 +253,42 @@ export class ServicoAgentes {
   /** Retoma um agente ou o time; a fila de cada um roda. Devolve quem retomou. */
   retomar(pedido: PedidoRetomar): Agente[] {
     return this.daLista(this.estados.retomar(pedido.agenteId));
+  }
+
+  /**
+   * Troca o modelo do agente: principal, reserva e teto por dia (Configurações › Modelos). Vale na
+   * próxima execução: o runtime lê a configuração na vez de cada pedido, e a que está rodando
+   * termina no modelo de antes. Trocar o principal ou a reserva esquece a falha do provedor de
+   * antes (estado.ts). O teto fica desligado enquanto a moeda dele não for decidida.
+   */
+  definir(mudanca: MudancaAgente): Agente {
+    const atual = this.repo.agente(mudanca.id);
+    if (!atual) throw new Error("agente não encontrado");
+    const fora = Object.keys(mudanca).filter((c) => c !== "id" && !CAMPOS_DO_MODELO.includes(c));
+    if (fora.length > 0) throw new Error(MENSAGEM_SO_MODELO);
+    const novo: ModeloAgente = {
+      provedorId: mudanca.provedorId === undefined ? atual.provedorId : mudanca.provedorId,
+      provedorReservaId:
+        mudanca.provedorReservaId === undefined ? atual.provedorReservaId : mudanca.provedorReservaId,
+      tetoDiarioCentavos:
+        mudanca.tetoDiarioCentavos === undefined ? atual.tetoDiarioCentavos : mudanca.tetoDiarioCentavos,
+    };
+    if (mudanca.tetoDiarioCentavos !== undefined && mudanca.tetoDiarioCentavos !== null) {
+      throw new Error(MENSAGEM_TETO_SEM_MOEDA);
+    }
+    // Só o que muda precisa existir: o de antes que saiu continua até o usuário trocar.
+    for (const id of [mudanca.provedorId, mudanca.provedorReservaId]) {
+      if (typeof id === "string" && !this.repo.provedor(id)) throw new Error(MENSAGEM_PROVEDOR_SAIU);
+    }
+    if (novo.provedorReservaId !== null) {
+      if (novo.provedorId === null) throw new Error(MENSAGEM_RESERVA_SEM_PRINCIPAL);
+      if (novo.provedorReservaId === novo.provedorId) throw new Error(MENSAGEM_RESERVA_IGUAL);
+    }
+    const trocouModelo =
+      novo.provedorId !== atual.provedorId || novo.provedorReservaId !== atual.provedorReservaId;
+    this.repo.definirModelo(atual.id, novo, this.agora().toISOString());
+    if (trocouModelo) this.estados.modeloMudou(atual.id);
+    return this.obter({ id: atual.id });
   }
 
   /** O recorte do catálogo que o agente enxerga, como a lista `/capacidades` mostra. */

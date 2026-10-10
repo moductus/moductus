@@ -3,7 +3,7 @@ import type { Conexao, EstadoLigacao, PedidoConexao, PreviaConexao, TipoConexao 
 import type { Origem } from "../banco/tabela.ts";
 import { novoId } from "../banco/ulid.ts";
 import type { AmbienteDoUsuario } from "../casca/ambiente.ts";
-import { VARIAVEL_TOKEN, type LigacaoClaudeCode } from "../sessoes/ligacao.ts";
+import { EVENTOS_LIGADOS, VARIAVEL_TOKEN, type LigacaoClaudeCode } from "../sessoes/ligacao.ts";
 import { CREDENCIAL_HOOKS } from "../sessoes/token.ts";
 
 /** Ditos ao usuário na tela de conexões (AGENTS.md §2 Voz: curto, o que fazer). */
@@ -243,7 +243,20 @@ export class ServicoConexoes {
     } catch (erro) {
       return { ...base, estado: "erro", ultimoErro: mensagem(erro) };
     }
-    if (situacao === "ligada") return { ...base, estado: "ligada", ultimoErro: null };
+    if (situacao === "ligada") {
+      const { ligacao } = this.deps;
+      return {
+        ...base,
+        estado: "ligada",
+        ultimoErro: null,
+        ligacao: {
+          caminho: ligacao.caminho,
+          eventos: EVENTOS_LIGADOS.length,
+          porta: ligacao.porta,
+          copia: ligacao.ultimaCopia(),
+        },
+      };
+    }
     if (situacao === "desatualizada") return { ...base, estado: "erro", ultimoErro: AVISO_DESATUALIZADA };
     if (linha?.estado === "ligada") return { ...base, estado: "erro", ultimoErro: AVISO_SAIU };
     return { ...base, estado: "desligada", ultimoErro: null, conectadaEm: null };

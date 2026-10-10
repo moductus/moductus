@@ -22,6 +22,8 @@ import {
   type SetStateAction,
 } from "react";
 import type { Destino } from "../../../areas/areas.ts";
+import { CartaoClaudeCode, CartaoGithub } from "../../../areas/configuracoes/Conexoes.tsx";
+import { useConexoes } from "../../../areas/configuracoes/useConexoes.ts";
 import { Botao } from "../../../componentes/Botao.tsx";
 import { Campo } from "../../../componentes/Campo.tsx";
 import { Icone } from "../../../componentes/Icone.tsx";
@@ -825,7 +827,14 @@ function Time(cabecalho: PropsCabecalho) {
 
 /* ---------- 5. Conexões ---------- */
 
-const CONEXOES: readonly { agente: Agente; quem: string; nome: string; texto: string; fase: string }[] = [
+/** As conexões que ainda não existem nesta versão: chegam junto com a área do agente. */
+const CONEXOES_DEPOIS: readonly {
+  agente: Agente;
+  quem: string;
+  nome: string;
+  texto: string;
+  fase: string;
+}[] = [
   {
     agente: "alba",
     quem: "Alba",
@@ -841,13 +850,6 @@ const CONEXOES: readonly { agente: Agente; quem: string; nome: string; texto: st
     fase: "fase 5",
   },
   {
-    agente: "nuno",
-    quem: "Nuno",
-    nome: "Sessões de IA e GitHub",
-    texto: "Instala os hooks do Claude Code e lê PRs, issues e CI dos seus repositórios.",
-    fase: "fase 2",
-  },
-  {
     agente: "tula",
     quem: "Tula",
     nome: "Primeiro extrato",
@@ -856,28 +858,77 @@ const CONEXOES: readonly { agente: Agente; quem: string; nome: string; texto: st
   },
 ];
 
+function ItemDepois({ conexao }: { conexao: (typeof CONEXOES_DEPOIS)[number] }) {
+  return (
+    <li className="uso-item">
+      <Personagem agente={conexao.agente} modo="cabeca" tamanho="dock" estado="ocioso" />
+      <span className="uso-item-texto">
+        <span className="uso-item-linha">
+          <span className="uso-item-nome">{conexao.nome}</span>
+          <span className="uso-rotulo">para {conexao.quem}</span>
+        </span>
+        <span className="uso-item-descricao">{conexao.texto}</span>
+      </span>
+      <Selo>{conexao.fase}</Selo>
+    </li>
+  );
+}
+
+/**
+ * Conexões por agente (Uso5Conexoes.dc.html). As do Nuno já são de verdade: "Conectar" abre os
+ * mesmos cartões de Configurações › Conexões, com a prévia do settings.json antes do sim e o
+ * GitHub pelo gh. As outras chegam com a área de cada agente.
+ */
 function Conexoes(cabecalho: PropsCabecalho) {
+  const conexoes = useConexoes();
+  const [aberto, setAberto] = useState(false);
+  const [depois, setDepois] = useState(false);
+  const ligadas = [conexoes.claude, conexoes.github].filter((c) => c?.estado === "ligada").length;
+  const [alba, faina, tula] = CONEXOES_DEPOIS;
   return (
     <>
       <Cabecalho {...cabecalho} rotulo="Conexões" titulo="O que cada agente pode alcançar">
-        Tudo opcional. Sem conexão, o agente trabalha só com o que você contar a ele. Cada conexão chega junto
-        com o seu agente e fica em Configurações, Conexões.
+        Tudo opcional. Sem conexão, o agente trabalha só com o que você contar a ele.
       </Cabecalho>
       <ul className="uso-lista" aria-label="Conexões por agente">
-        {CONEXOES.map((c) => (
-          <li key={c.nome} className="uso-item">
-            <Personagem agente={c.agente} modo="cabeca" tamanho="dock" estado="ocioso" />
+        {alba && <ItemDepois conexao={alba} />}
+        {faina && <ItemDepois conexao={faina} />}
+        <li className="uso-item uso-item--nuno">
+          <span className="uso-item-cabeca">
+            <Personagem agente="nuno" modo="cabeca" tamanho="dock" estado="ocioso" />
             <span className="uso-item-texto">
               <span className="uso-item-linha">
-                <span className="uso-item-nome">{c.nome}</span>
-                <span className="uso-rotulo">para {c.quem}</span>
+                <span className="uso-item-nome">Sessões de IA e GitHub</span>
+                <span className="uso-rotulo">para o Nuno</span>
+                {ligadas > 0 && <Selo tom="sucesso">{ligadas === 2 ? "conectado" : "1 de 2 ligada"}</Selo>}
               </span>
-              <span className="uso-item-descricao">{c.texto}</span>
+              <span className="uso-item-descricao">
+                Instala os hooks do Claude Code e lê PRs, issues e CI dos seus repositórios.
+              </span>
             </span>
-            <Selo>{c.fase}</Selo>
-          </li>
-        ))}
+            {!aberto && (
+              <span className="uso-item-acoes">
+                {!depois && ligadas === 0 && (
+                  <Botao variante="fantasma" onClick={() => setDepois(true)}>
+                    Agora não
+                  </Botao>
+                )}
+                <Botao onClick={() => setAberto(true)}>{ligadas === 2 ? "Ver conexões" : "Conectar"}</Botao>
+              </span>
+            )}
+          </span>
+          {aberto && (
+            <div className="uso-conexoes-nuno">
+              <CartaoClaudeCode conexoes={conexoes} />
+              <CartaoGithub conexoes={conexoes} />
+            </div>
+          )}
+        </li>
+        {tula && <ItemDepois conexao={tula} />}
       </ul>
+      <p className="uso-rotulo">
+        Tudo isso fica depois em Configurações, Conexões, e desligar desfaz o que mudou.
+      </p>
     </>
   );
 }

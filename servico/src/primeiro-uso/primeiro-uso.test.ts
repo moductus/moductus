@@ -95,6 +95,29 @@ describe("primeiro uso", () => {
     expect(Object.values(fim.missoes)).toEqual(Array(5).fill("feito"));
   });
 
+  test("a primeira sessão do Claude Code faz a missão do Nuno; as seguintes não gravam nem avisam", () => {
+    const { servico, eventos } = montar();
+    servico.concluir({ passos: {} });
+    const antes = eventos.length;
+    servico.sessaoDoClaudeCode();
+    expect(servico.obter().missoes["nuno-sessao"]).toBe("feito");
+    expect(eventos).toHaveLength(antes + 1);
+    expect(eventos.at(-1)!.missoes["nuno-sessao"]).toBe("feito");
+    servico.sessaoDoClaudeCode();
+    servico.sessaoDoClaudeCode();
+    expect(eventos).toHaveLength(antes + 1);
+  });
+
+  test("missão do Nuno já feita antes de reiniciar: a sessão não grava de novo", () => {
+    const primeiro = montar();
+    primeiro.servico.marcar({ alvo: "missao", missao: "nuno-sessao", estado: "feito" });
+    primeiro.db.close();
+    const depois = montar(primeiro.pasta);
+    depois.servico.sessaoDoClaudeCode();
+    expect(depois.eventos).toHaveLength(0);
+    expect(depois.servico.obter().missoes["nuno-sessao"]).toBe("feito");
+  });
+
   test("quem atualiza com preferências já gravadas não vê a configuração de novo", () => {
     const pasta = novaPasta();
     // Banco da versão anterior (só a migração 1), com uma preferência salva.

@@ -6,7 +6,7 @@ import { Conexao, PreviaConexao } from "@moductus/contrato";
 import { afterEach, describe, expect, test } from "vitest";
 import { abrirBanco } from "../banco/conexao.ts";
 import type { AmbienteDoUsuario } from "../casca/ambiente.ts";
-import { LigacaoClaudeCode, VARIAVEL_TOKEN } from "../sessoes/ligacao.ts";
+import { EVENTOS_LIGADOS, LigacaoClaudeCode, VARIAVEL_TOKEN } from "../sessoes/ligacao.ts";
 import { CREDENCIAL_HOOKS } from "../sessoes/token.ts";
 import { AVISO_DESATUALIZADA, AVISO_SAIU, RepositorioConexoes, ServicoConexoes } from "./conexoes.ts";
 import { GhAusente } from "./github/gh.ts";
@@ -113,6 +113,26 @@ describe("conexão com o Claude Code", () => {
       credencial: CREDENCIAL_HOOKS,
       estado: "ligada",
     });
+  });
+
+  test("ligada diz o arquivo, os eventos, a porta e a cópia de antes; desligada não diz", async () => {
+    const { servico, caminho } = montar();
+    const ligada = await servico.ligar(CLAUDE);
+    expect(ligada.ligacao).toEqual({
+      caminho,
+      eventos: EVENTOS_LIGADOS.length,
+      porta: 47821,
+      // Só o nome: a pasta é a do próprio arquivo.
+      copia: expect.stringMatching(/^settings\.json\.moductus-\d{4}-\d\d-\d\dT[\d-]+Z\.bak$/),
+    });
+    expect(servico.listar()[0]?.ligacao).toEqual(ligada.ligacao);
+    const desligada = await servico.desligar(CLAUDE);
+    expect(desligada.ligacao).toBeUndefined();
+  });
+
+  test("ligada num arquivo que não existia: sem cópia de antes", async () => {
+    const { servico } = montar(null);
+    expect((await servico.ligar(CLAUDE)).ligacao?.copia).toBeNull();
   });
 
   test("a prévia mostra o que muda e não grava nem publica nada", () => {

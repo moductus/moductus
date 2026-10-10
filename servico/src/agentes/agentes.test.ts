@@ -8,7 +8,15 @@ import { z } from "zod";
 import { abrirBanco } from "../banco/conexao.ts";
 import { Catalogo } from "../ferramentas/catalogo.ts";
 import { ferramenta } from "../ferramentas/ferramenta.ts";
-import { RepositorioAgentes, ServicoAgentes } from "./agentes.ts";
+import {
+  MENSAGEM_PROVEDOR_SAIU,
+  MENSAGEM_RESERVA_IGUAL,
+  MENSAGEM_RESERVA_SEM_PRINCIPAL,
+  MENSAGEM_SO_MODELO,
+  MENSAGEM_TETO_SEM_MOEDA,
+  RepositorioAgentes,
+  ServicoAgentes,
+} from "./agentes.ts";
 import { EstadosAgentes } from "./estado.ts";
 import { RepositorioExecucoes } from "./execucoes.ts";
 
@@ -56,8 +64,11 @@ function montar() {
       estado: a.estado,
       pausadoAte: a.pausadoAte,
       fila: a.id === "nuno" ? 2 : 0,
+      motivoSono: a.motivoSono,
+      dormeAte: a.dormeAte,
     }),
     estados,
+    () => new Date("2026-10-09T12:00:00.000Z"),
   );
   return { db, repo, servico };
 }
@@ -116,6 +127,66 @@ describe("agentes", () => {
     expect(servico.retomar({}).map((a) => a.id)).toEqual(["alba", "nuno"]);
     expect(servico.retomar({})).toEqual([]);
     expect(servico.ligar({ id: "faina", ligado: true }).situacao.estado).toBe("ativo");
+  });
+
+  test("definir troca principal e reserva, com o usuário como origem, e devolve o agente do contrato", () => {
+    const { db, servico } = montar();
+    db.exec(
+      `INSERT INTO provedores (id, tipo, nome) VALUES ('p1', 'claude-cli', 'Claude'), ('p2', 'openai', 'OpenAI')`,
+    );
+    const alba = servico.definir({ id: "alba", provedorId: "p1", provedorReservaId: "p2" });
+    expect(Agente.safeParse(alba).success).toBe(true);
+    expect(alba).toMatchObject({ provedorId: "p1", provedorReservaId: "p2", tetoDiarioCentavos: null });
+    expect(db.prepare("SELECT origem, atualizado_em FROM agentes WHERE id = 'alba'").get()).toEqual({
+      origem: "usuario",
+      atualizado_em: "2026-10-09T12:00:00.000Z",
+    });
+    // Parcial: só a reserva sai; o principal fica.
+    expect(servico.definir({ id: "alba", provedorReservaId: null })).toMatchObject({
+      provedorId: "p1",
+      provedorReservaId: null,
+    });
+  });
+
+  test("definir recusa provedor que não existe, reserva igual ou sem principal, outro campo e teto com valor", () => {
+    const { db, servico } = montar();
+    db.exec(`INSERT INTO provedores (id, tipo, nome) VALUES ('p1', 'claude-cli', 'Claude'), ('p2', 'openai', 'OpenAI');
+             UPDATE provedores SET apagado_em = '2026-10-01T00:00:00.000Z' WHERE id = 'p2';`);
+    expect(() => servico.definir({ id: "alba", provedorId: "p2" })).toThrow(MENSAGEM_PROVEDOR_SAIU);
+    expect(() => servico.definir({ id: "alba", provedorId: "p1", provedorReservaId: "p1" })).toThrow(
+      MENSAGEM_RESERVA_IGUAL,
+    );
+    expect(() => servico.definir({ id: "alba", provedorId: null, provedorReservaId: "p1" })).toThrow(
+      MENSAGEM_RESERVA_SEM_PRINCIPAL,
+    );
+    expect(() => servico.definir({ id: "alba", nome: "Alva" })).toThrow(MENSAGEM_SO_MODELO);
+    // A moeda do teto não foi decidida: nenhum valor vira limite. Tirar o teto continua valendo.
+    expect(() => servico.definir({ id: "alba", tetoDiarioCentavos: 500 })).toThrow(MENSAGEM_TETO_SEM_MOEDA);
+    expect(servico.definir({ id: "alba", tetoDiarioCentavos: null }).tetoDiarioCentavos).toBeNull();
+    expect(() => servico.definir({ id: "zeca", provedorId: "p1" })).toThrow("agente não encontrado");
+    // Nada do que foi recusado ficou gravado.
+    expect(servico.obter({ id: "alba" })).toMatchObject({
+      nome: "Alba",
+      provedorId: null,
+      provedorReservaId: null,
+    });
+  });
+
+  test("trocar o modelo acorda quem dormia pelo provedor; quem dorme pelo teto continua dormindo", () => {
+    const { db, servico } = montar();
+    db.exec(`INSERT INTO provedores (id, tipo, nome) VALUES ('p1', 'claude-cli', 'Claude'), ('p2', 'openai', 'OpenAI');
+             UPDATE agentes SET provedor_id = 'p1', estado = 'dormindo', motivo_sono = 'credencial',
+               dorme_ate = '2026-10-09T13:00:00.000Z' WHERE id = 'tula';
+             UPDATE agentes SET provedor_id = 'p1', estado = 'dormindo', motivo_sono = 'teto',
+               dorme_ate = '2026-10-10T03:00:00.000Z' WHERE id = 'nuno';`);
+    expect(servico.definir({ id: "tula", provedorId: "p2" }).situacao).toMatchObject({
+      estado: "ativo",
+      dormeAte: null,
+    });
+    expect(servico.definir({ id: "nuno", provedorId: "p2" }).situacao).toMatchObject({
+      estado: "dormindo",
+      dormeAte: "2026-10-10T03:00:00.000Z",
+    });
   });
 
   test("o provedor vem com a configuração para o registro; o da lixeira não", () => {

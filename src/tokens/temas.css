@@ -171,6 +171,17 @@
   --raio-toast: 8px;
   /* Silêncio e prévia lado a lado só com esta largura cada; abaixo, um embaixo do outro */
   --largura-min-coluna-notificacoes: 300px;
+  /* Modelos e Conexões (ConfigModelos*.dc.html, ConfigConexoes*.dc.html): colunas Estado,
+     Resposta e Teto, a lista do provedor, o trilho do teste, os caminhos do vazio lado a lado só
+     com esta largura cada, as colunas do resumo de uma conexão e a altura dos blocos da prévia */
+  --largura-col-modelo-estado: 168px;
+  --largura-col-modelo-resposta: 150px;
+  --largura-col-teto: 150px;
+  --largura-lista-modelo: 176px;
+  --largura-trilho-teste: 120px;
+  --largura-min-caminho: 220px;
+  --largura-min-dado-conexao: 160px;
+  --altura-bloco-hooks: 216px;
   /* A lista aberta de um <select> é desenhada pelo Windows: cores de sistema, que seguem o
      color-scheme do tema */
   --fundo-lista-nativa: Canvas;

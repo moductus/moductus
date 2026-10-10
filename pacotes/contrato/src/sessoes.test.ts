@@ -137,6 +137,28 @@ describe("conexões", () => {
     expect(Conexao.safeParse({ ...github, estado: "quebrada" }).success).toBe(false);
   });
 
+  test("Claude Code ligado diz o arquivo, os eventos, a porta e a cópia; sem cópia é null", () => {
+    const ligada = {
+      tipo: "hooks-claude-code",
+      estado: "ligada",
+      conta: null,
+      ultimoErro: null,
+      conectadaEm: "2026-10-10T12:00:00.000Z",
+      ligacao: {
+        caminho: "C:\\Users\\voce\\.claude\\settings.json",
+        eventos: 8,
+        porta: 47821,
+        copia: "settings.json.moductus-2026-10-10T12-00-00-000Z.bak",
+      },
+    };
+    expect(Conexao.safeParse(ligada).success).toBe(true);
+    expect(Conexao.safeParse({ ...ligada, ligacao: { ...ligada.ligacao, copia: null } }).success).toBe(true);
+    expect(Conexao.safeParse({ ...ligada, ligacao: { ...ligada.ligacao, porta: 70000 } }).success).toBe(
+      false,
+    );
+    expect(Conexao.safeParse({ ...ligada, ligacao: { ...ligada.ligacao, eventos: 0 } }).success).toBe(false);
+  });
+
   const hooks = {
     caminho: "C:\\Users\\voce\\.claude\\settings.json",
     trecho: "hooks",

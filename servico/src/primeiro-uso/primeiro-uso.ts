@@ -50,6 +50,9 @@ export class RepositorioPrimeiroUso {
  * feitas ou quando é pulado, e volta se pedido.
  */
 export class ServicoPrimeiroUso {
+  /** A missão do Nuno já foi vista feita neste processo. */
+  private nunoVisto = false;
+
   constructor(
     private readonly repo: RepositorioPrimeiroUso,
     private readonly emitir: (estado: EstadoPrimeiroUso) => void,
@@ -95,6 +98,19 @@ export class ServicoPrimeiroUso {
       this.repo.gravar([[TUTORIAL, "feito"]]);
     }
     return this.publicar();
+  }
+
+  /**
+   * Chegou evento de uma sessão do Claude Code pelos hooks: a missão do Nuno ("abra uma sessão do
+   * Claude Code") está feita de verdade. Grava e avisa só na primeira vez; depois, nem lê o banco,
+   * porque cada ferramenta usada na sessão manda um evento.
+   */
+  sessaoDoClaudeCode(): void {
+    if (this.nunoVisto) return;
+    if (this.obter().missoes["nuno-sessao"] === "pendente") {
+      this.marcar({ alvo: "missao", missao: "nuno-sessao", estado: "feito" });
+    }
+    this.nunoVisto = true;
   }
 
   private publicar(): EstadoPrimeiroUso {

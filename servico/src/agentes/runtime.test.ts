@@ -12,7 +12,7 @@ import { ferramenta } from "../ferramentas/ferramenta.ts";
 import { ProvedorFalso, roteiros } from "../provedores/falso.ts";
 import type { EventoAgente, MensagemModelo } from "../provedores/provedor.ts";
 import { RegistroProvedores } from "../provedores/registro.ts";
-import { RepositorioAgentes } from "./agentes.ts";
+import { RepositorioAgentes, ServicoAgentes } from "./agentes.ts";
 import { autorizarPorAprovacao, MENSAGEM_EXPIRADA, MENSAGEM_REGRA_NEGA } from "./autorizar.ts";
 import { RepositorioExecucoes, ServicoExecucoes } from "./execucoes.ts";
 import { HISTORICO_CURTO, VOZ_DA_FAMILIA } from "./pedido.ts";
@@ -168,6 +168,59 @@ const pedir = (agenteId: string, texto: string, mudanca: Partial<PedidoExecucao>
 
 const linhasRodando = (db: DatabaseSync) =>
   (db.prepare("SELECT count(*) AS n FROM execucoes WHERE estado = 'rodando'").get() as { n: number }).n;
+
+describe("runtime: trocar o modelo (F2-32)", () => {
+  test("vale na próxima execução; a que está rodando termina no modelo de antes", async () => {
+    const { db, runtime, falsos, porta } = montar();
+    const agentes = new ServicoAgentes(
+      new RepositorioAgentes(db),
+      new Catalogo([]),
+      (a) => runtime.situacao(a),
+      runtime.estados,
+    );
+    falsos["p-alba"]!.roteirizar([
+      { tipo: "ferramenta", nome: "teste__esperar", entrada: { chave: "a" } },
+      ...roteiros.resposta("pelo de antes"),
+    ]);
+    falsos["p-nuno"]!.roteirizar(roteiros.resposta("pelo novo"));
+
+    const rodando = runtime.executar(pedir("alba", "primeiro"));
+    await vi.waitFor(() => expect(porta.esperando.has("a")).toBe(true));
+    // Trocado no meio da execução: o pedido seguinte já entra na fila.
+    agentes.definir({ id: "alba", provedorId: "p-nuno" });
+    const seguinte = runtime.executar(pedir("alba", "segundo"));
+    porta.abrir("a");
+
+    const [r1, r2] = await Promise.all([rodando, seguinte]);
+    expect([r1.texto, r1.execucao.provedorId]).toEqual(["pelo de antes", "p-alba"]);
+    expect([r2.texto, r2.execucao.provedorId]).toEqual(["pelo novo", "p-nuno"]);
+    expect(falsos["p-alba"]!.pedidos.map((p) => p.mensagens.at(-1)?.texto)).toEqual(["primeiro"]);
+    expect(falsos["p-nuno"]!.pedidos.map((p) => p.mensagens.at(-1)?.texto)).toEqual(["segundo"]);
+  });
+
+  test("na reserva porque o principal caiu, trocar o principal faz o próximo pedido tentar o novo", async () => {
+    const { db, runtime, falsos } = montar();
+    db.exec(`INSERT INTO provedores (id, tipo, nome) VALUES ('p-reserva', 'claude-cli', 'Reserva');
+             UPDATE agentes SET provedor_reserva_id = 'p-reserva' WHERE id = 'alba';`);
+    const reserva = new ProvedorFalso("p-reserva", roteiros.resposta("pela reserva"));
+    falsos["p-reserva"] = reserva;
+    const agentes = new ServicoAgentes(
+      new RepositorioAgentes(db),
+      new Catalogo([]),
+      (a) => runtime.situacao(a),
+      runtime.estados,
+    );
+    falsos["p-alba"]!.roteirizar(roteiros.falha("fora_do_ar"));
+    expect((await runtime.executar(pedir("alba", "um"))).execucao.provedorId).toBe("p-reserva");
+    expect(runtime.estados.naReserva("alba")).toBe(true);
+
+    agentes.definir({ id: "alba", provedorId: "p-nuno" });
+    falsos["p-nuno"]!.roteirizar(roteiros.resposta("pelo novo"));
+    const r = await runtime.executar(pedir("alba", "dois"));
+    expect([r.texto, r.execucao.provedorId]).toEqual(["pelo novo", "p-nuno"]);
+    expect(reserva.pedidos).toHaveLength(1);
+  });
+});
 
 describe("runtime: fila por agente", () => {
   test("dois pedidos ao mesmo agente saem em ordem, um de cada vez", async () => {

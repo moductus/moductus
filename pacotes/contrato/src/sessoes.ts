@@ -151,6 +151,19 @@ export type TipoConexao = z.infer<typeof TipoConexao>;
 export const EstadoLigacao = z.enum(["ligada", "desligada", "erro"]);
 export type EstadoLigacao = z.infer<typeof EstadoLigacao>;
 
+/**
+ * Onde a ligação do Claude Code está (Configurações › Conexões, F2-32): o arquivo, quantos eventos
+ * passam a avisar o Moductus e em que porta, e o nome da cópia de segurança mais recente do
+ * arquivo (`null` quando não há: o arquivo não existia antes de ligar).
+ */
+export const DetalheLigacao = z.object({
+  caminho: z.string().min(1),
+  eventos: z.number().int().positive(),
+  porta: z.number().int().min(1).max(65_535),
+  copia: z.string().min(1).nullable(),
+});
+export type DetalheLigacao = z.infer<typeof DetalheLigacao>;
+
 export const Conexao = z.object({
   tipo: TipoConexao,
   estado: EstadoLigacao,
@@ -159,6 +172,8 @@ export const Conexao = z.object({
   /** O que impede de ligar, dito para o usuário ("Instale o gh", "Rode gh auth login"). */
   ultimoErro: z.string().nullable(),
   conectadaEm: Instante.nullable(),
+  /** Só a do Claude Code, ligada; ausente nas outras. */
+  ligacao: DetalheLigacao.optional(),
 });
 export type Conexao = z.infer<typeof Conexao>;
 
