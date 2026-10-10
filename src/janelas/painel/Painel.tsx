@@ -1,41 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
-import { Botao } from "../../componentes/Botao.tsx";
 import { Icone } from "../../componentes/Icone.tsx";
-import { AGENTES } from "../../componentes/personagem/agentes.ts";
-import { Personagem } from "../../componentes/personagem/Personagem.tsx";
 import { useConfiguracaoDock, useServico } from "../../nativo/eventos.ts";
-import { usePedidosDoTerminal } from "../../servico/aprovacoes.ts";
 import { useCanal } from "../../servico/conexao.ts";
 import { DADOS_AREAS, eAreaPainel, type AreaPainel } from "../areas.ts";
-import { PedidosSessoes } from "./PedidosSessoes.tsx";
+import { CabecalhoPainel } from "./Cabecalho.tsx";
+import { PainelAgentes } from "./PainelAgentes.tsx";
+import { PainelDev } from "./PainelDev.tsx";
 import "./Painel.css";
 
-/** Abre o Sistema na seção de modelos e fecha o painel: o convite do time leva para lá. */
-function abrirConfiguracoes() {
-  void invoke("sistema_abrir", { area: "configuracoes/modelos" });
-  void invoke("painel_fechar");
-}
-
+/** O estado vazio das áreas que ainda não leem o serviço. */
 function Vazio({ area }: { area: AreaPainel }) {
   const { vazio, icone } = DADOS_AREAS[area];
-  if (area === "agentes") {
-    return (
-      <div className="painel-vazio">
-        <div className="painel-time" aria-label="O time, dormindo" role="group">
-          {AGENTES.map((a) => (
-            <Personagem key={a} agente={a} modo="cabeca" tamanho="painel" estado="dormindo" moldura />
-          ))}
-        </div>
-        <h2 className="painel-vazio-titulo">{vazio.titulo}</h2>
-        <p className="painel-vazio-texto">{vazio.texto}</p>
-        <Botao variante="primario" onClick={abrirConfiguracoes}>
-          Abrir Configurações
-        </Botao>
-      </div>
-    );
-  }
   return (
     <div className="painel-vazio">
       <span className="painel-vazio-icone">
@@ -47,15 +24,16 @@ function Vazio({ area }: { area: AreaPainel }) {
   );
 }
 
-/** Painel lateral genérico: a casca diz qual área abrir; cada área mostra o próprio estado vazio. */
+/**
+ * Painel lateral: a casca diz qual área abrir. Agentes e Dev mostram os dados do serviço
+ * (Agentes.dc.html, PainelDev.dc.html); as outras áreas mostram o próprio estado vazio.
+ */
 export function Painel() {
   // O contador muda a cada abertura, mesmo quando a área é a mesma.
   const [abertura, setAbertura] = useState<{ area: string; n: number } | null>(null);
   const { lado } = useConfiguracaoDock();
   const canal = useCanal(useServico({ silencioso: true }));
   const area = abertura && eAreaPainel(abertura.area) ? abertura.area : null;
-  // Cada abertura relê os pedidos: os já respondidos da vez anterior saem da tela.
-  const pedidos = usePedidosDoTerminal(canal, abertura?.n);
 
   useEffect(() => {
     let n = 0;
@@ -84,20 +62,16 @@ export function Painel() {
   return (
     <main className="painel" data-lado={lado} aria-label={`Painel ${dados?.nome ?? ""}`.trim()}>
       <section className="painel-cartao">
-        <header className="painel-cabecalho">
-          {dados && <Icone nome={dados.icone} tamanho={20} />}
-          <h1 className="painel-titulo">{dados?.nome}</h1>
-          <Botao
-            variante="fantasma"
-            tamanho="pequeno"
-            icone="fechar"
-            aria-label="Fechar painel"
-            title="Fechar (Esc)"
-            onClick={() => void invoke("painel_fechar")}
-          />
-        </header>
-        {area === "agentes" && <PedidosSessoes pedidos={pedidos} />}
-        {area && <Vazio area={area} />}
+        {area === "agentes" ? (
+          <PainelAgentes canal={canal} abertura={abertura?.n ?? 0} />
+        ) : area === "dev" ? (
+          <PainelDev canal={canal} />
+        ) : (
+          <>
+            <CabecalhoPainel titulo={dados?.nome ?? ""} icone={dados?.icone} />
+            {area && <Vazio area={area} />}
+          </>
+        )}
       </section>
     </main>
   );

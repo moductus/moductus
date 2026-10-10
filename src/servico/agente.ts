@@ -15,6 +15,8 @@ import type {
 import { TIPOS_PROVEDOR_CLI } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
 import { useCallback, useEffect, useState } from "react";
+import { eFalhaDoProvedor, fraseDaSituacao, naFila } from "../componentes/personagem/situacao.ts";
+import type { TomSelo } from "../componentes/Selo.tsx";
 import { servico } from "./conexao.ts";
 import { mensagemDeErro } from "./conversas.ts";
 
@@ -142,58 +144,39 @@ export function descreverProvedor(provedor: Provedor): string {
   return `${nome} · ${cli ? "sua assinatura" : "por token"}`;
 }
 
-const HORA = new Intl.DateTimeFormat("pt-BR", { hour: "numeric", minute: "2-digit", hourCycle: "h23" });
-const DIA_SEMANA = new Intl.DateTimeFormat("pt-BR", { weekday: "short" });
-
 /**
- * "14:00" hoje, "sex 9:00" em outro dia. Montado em duas partes: junto, o pt-BR escreve
- * "sex., 09:00".
+ * O ponto do modelo na página do agente, com a mesma leitura do dock (Estados.dc.html): vermelho
+ * quando o provedor falhou (fora do ar, chave recusada, CLI ausente), aviso quando o limite
+ * acabou, verde no resto (o teto é do agente, não do modelo).
  */
-export function horaCurta(instante: string, agora: Date = new Date()): string {
-  const data = new Date(instante);
-  const hora = HORA.format(data);
-  if (data.toDateString() === agora.toDateString()) return hora;
-  return `${DIA_SEMANA.format(data).replace(".", "")} ${hora}`;
+export function tomDoModelo({ estado, motivoSono }: SituacaoAgente): TomSelo {
+  if (estado !== "dormindo") return "sucesso";
+  if (eFalhaDoProvedor(motivoSono)) return "perigo";
+  if (motivoSono === "limite") return "aviso";
+  return "sucesso";
 }
 
-const MOTIVO_SONO: Record<NonNullable<SituacaoAgente["motivoSono"]>, string> = {
-  limite: "o limite de uso acabou",
-  fora_do_ar: "o provedor está fora do ar",
-  credencial: "a credencial foi recusada",
-  ausente: "o CLI não foi encontrado",
-  teto: "chegou ao teto de gasto de hoje",
-  sem_modelo: "nenhum modelo escolhido",
-};
-
 /**
- * O que o agente está fazendo agora, numa linha: o trabalho em andamento, a espera por você, o
- * sono com o motivo e a hora de acordar, a pausa. A fila entra quando há pedido esperando.
+ * O que o agente está fazendo agora, numa linha. Parado (desligado, em pausa, dormindo), é a mesma
+ * frase do painel do dock e da conversa ({@link fraseDaSituacao}, Estados.dc.html); ativo, o
+ * trabalho em andamento ou a espera por você. A fila entra quando há pedido esperando.
  */
 export function agoraDoAgente(
   situacao: SituacaoAgente,
   rodando: Execucao | null,
   agora: Date = new Date(),
 ): string {
-  const fila = situacao.fila > 0 ? ` · ${situacao.fila} na fila` : "";
-  switch (situacao.estado) {
-    case "desligado":
-      return "Desligado: não trabalha nem responde.";
-    case "pausado":
-      return `Pausado ${situacao.pausadoAte ? `até ${horaCurta(situacao.pausadoAte, agora)}` : "até você retomar"}${fila}`;
-    case "dormindo": {
-      const motivo = situacao.motivoSono ? `: ${MOTIVO_SONO[situacao.motivoSono]}` : "";
-      const ate = situacao.dormeAte ? ` até ${horaCurta(situacao.dormeAte, agora)}` : "";
-      return `Dormindo${ate}${motivo}${fila}`;
-    }
-    case "ativo":
-      if (situacao.atividade === "esperando") return `Agora: esperando sua resposta num pedido${fila}`;
-      if (situacao.atividade === "trabalhando" || rodando) {
-        const oQue = rodando ? ROTULO_EM_ANDAMENTO[rodando.gatilho].toLowerCase() : "trabalhando";
-        return `Agora: ${oQue}${fila}`;
-      }
-      if (situacao.atividade === "erro") return `A última execução deu erro${fila}`;
-      return situacao.fila > 0 ? `${situacao.fila} na fila` : "Sem nada em andamento.";
+  const parado = fraseDaSituacao(situacao, agora);
+  if (parado !== null) return parado;
+  const fila = naFila(situacao.fila);
+  const comFila = (frase: string) => (fila ? `${frase} · ${fila}` : frase);
+  if (situacao.atividade === "esperando") return comFila("Agora: esperando sua resposta num pedido");
+  if (situacao.atividade === "trabalhando" || rodando) {
+    const oQue = rodando ? ROTULO_EM_ANDAMENTO[rodando.gatilho].toLowerCase() : "trabalhando";
+    return comFila(`Agora: ${oQue}`);
   }
+  if (situacao.atividade === "erro") return comFila("A última execução deu erro");
+  return fila ?? "Sem nada em andamento.";
 }
 
 /** "todo dia às 8:30", "a cada 15 min", "quando chega arquivo.chegou". */

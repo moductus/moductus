@@ -15,10 +15,14 @@ import {
   useServico,
   useTelaCheia,
 } from "../../nativo/eventos.ts";
+import { useDadosDev } from "../../areas/dev/dev.ts";
 import { useCanal } from "../../servico/conexao.ts";
 import { marcarVistasDe, usePontosTime } from "../../servico/notificacoes.ts";
 import { useSituacaoTime } from "../../servico/time.ts";
-import { AREAS_DOCK, DADOS_AREAS } from "../areas.ts";
+import { AREAS_DOCK, DADOS_AREAS, type AreaDock } from "../areas.ts";
+import { sessoesEsperando } from "../painel/agentes.ts";
+import { usePendentesDoTerminal } from "../painel/dados.ts";
+import { pontoDoAgente, rotuloDoAgente } from "./agentes.ts";
 import { proximoIndice } from "./navegacao.ts";
 import { useRelogio } from "./relogio.ts";
 import "./Dock.css";
@@ -53,6 +57,16 @@ export function Dock() {
   const canal = useCanal(servico);
   const time = useSituacaoTime(canal);
   const pontos = usePontosTime(canal);
+  // As sessões do terminal esperando você são do Nuno, que fica de olho nelas (Dock.dc.html).
+  const esperandoNoTerminal = sessoesEsperando(usePendentesDoTerminal(canal) ?? []);
+  const github = useDadosDev(canal);
+  // O badge do Dev conta o que precisa de você no GitHub; sem conexão, nada.
+  const contagens: Partial<Record<AreaDock, number>> = {
+    dev:
+      github.estado === "pronta"
+        ? github.dados.situacao.itens.filter((i) => i.estado === "aberto" && i.precisaDeMim).length
+        : 0,
+  };
   const config = useConfiguracaoDock();
   const aberta = useAreaAberta();
   const hora = useRelogio();
@@ -127,8 +141,8 @@ export function Dock() {
             onClick={() => void invoke("painel_abrir", { area: id })}
           >
             <Icone nome={area.icone} tamanho={20} />
-            {/* Fase 1: nada para contar ainda; zero não desenha o badge. */}
-            {area.contagem && <Contagem valor={0} rotulo={area.contagem} />}
+            {/* Área sem número ao vivo ainda conta zero, e zero não desenha o badge. */}
+            {area.contagem && <Contagem valor={contagens[id] ?? 0} rotulo={area.contagem} />}
           </button>
         );
       })}
@@ -143,12 +157,12 @@ export function Dock() {
       >
         {AGENTES.map((agente) => {
           // A cabeça segue o runtime: expressão, anel no tom do status e o status no rótulo.
-          const { expressao, moldura, texto, dica } = lerSituacao(time[agente]);
-          const nome = DADOS_AGENTES[agente].nome;
+          const leitura = lerSituacao(time[agente]);
+          const { expressao, moldura } = leitura;
           const avisos = pontos[agente] ?? 0;
-          const situacao = dica ? `${nome}, ${texto}. ${dica}` : `${nome}, ${texto}`;
-          const rotulo =
-            avisos > 0 ? `${situacao}. ${avisos} ${avisos === 1 ? "aviso novo" : "avisos novos"}` : situacao;
+          const esperando = agente === "nuno" ? esperandoNoTerminal : 0;
+          const rotulo = rotuloDoAgente(DADOS_AGENTES[agente].nome, leitura, avisos, esperando);
+          const ponto = pontoDoAgente(leitura, avisos, esperando);
           return (
             <button
               key={agente}
@@ -164,8 +178,10 @@ export function Dock() {
               }}
             >
               <Personagem agente={agente} modo="cabeca" tamanho="dock" estado={expressao} moldura={moldura} />
-              {/* Ponto de aviso (Dock.dc.html): o agente tem algo para você. */}
-              {avisos > 0 && <span className="dock-agente-ponto" data-ponto="" aria-hidden="true" />}
+              {/* Ponto no canto (Dock.dc.html, Estados.dc.html): algo para você, teto ou erro. */}
+              {ponto && (
+                <span className="dock-agente-ponto" data-ponto="" data-tom={ponto} aria-hidden="true" />
+              )}
             </button>
           );
         })}

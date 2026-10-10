@@ -198,6 +198,14 @@
   /* Segunda volta de borda da opção marcada (a cor vem junto, do tema): 2 sem mudar o tamanho */
   --sombra-opcao-marcada: inset 0 0 0 1px;
 
+  /* Painéis Agentes e Dev (Agentes.dc.html, PainelDev.dc.html): a barra que corre enquanto o
+     agente trabalha (2 px, 40% do trilho, 1,4 s) e o trilho do contexto de cada sessão (3 px) */
+  --altura-trilho-trabalho: 2px;
+  --largura-barra-trabalho: 40%;
+  --dur-correr: 1.4s;
+  --altura-trilho-sessao: 3px;
+  /* Selo dos PRs do painel Dev numa coluna só, para os títulos alinharem */
+  --largura-selo-pr: 66px;
   /* Agentes (Conversas.dc.html e AreaAgente.dc.html): lista de conversas, cabeçalho da conversa,
      balão do usuário com a ponta embaixo à direita, largura da fala, aba e coluna da hora */
   --largura-lista-conversas: 260px;
@@ -218,6 +226,7 @@
     --dur-saida: 0ms;
     --dur-respirar: 0ms;
     --dur-piscar: 0ms;
+    --dur-correr: 0ms;
   }
 }
 
@@ -226,6 +235,7 @@
   --dur-saida: 0ms;
   --dur-respirar: 0ms;
   --dur-piscar: 0ms;
+  --dur-correr: 0ms;
 }
 
 /* ---------- Grafite: escuro, sólido, dock colado ---------- */

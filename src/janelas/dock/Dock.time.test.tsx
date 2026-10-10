@@ -1,5 +1,12 @@
 // @vitest-environment happy-dom
-import type { Agente, Notificacao, SituacaoAgente } from "@moductus/contrato";
+import type {
+  Agente,
+  Aprovacao,
+  ItemGithub,
+  Notificacao,
+  SituacaoAgente,
+  SituacaoGithub,
+} from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -25,10 +32,14 @@ const canal: {
   estado: EstadoConexao;
   lista: () => Promise<Agente[]>;
   naoVistas: () => Promise<Notificacao[]>;
+  pendentes: () => Promise<Aprovacao[]>;
+  github: () => Promise<SituacaoGithub>;
 } = {
   estado: "conectado",
   lista: async () => [],
   naoVistas: async () => [],
+  pendentes: async () => [],
+  github: async () => ({ itens: [], atualizadoEm: null }),
 };
 const ouvintes = new Map<string, Set<(dados: unknown) => void>>();
 
@@ -44,6 +55,10 @@ vi.mock("../../servico/conexao.ts", () => ({
       if (metodo === "agentes.listar") return canal.lista();
       if (metodo === "notificacoes.naoVistas") return canal.naoVistas();
       if (metodo === "notificacoes.marcarVistas") return [];
+      if (metodo === "aprovacoes.pendentes") return canal.pendentes();
+      if (metodo === "sessoes.listar") return { projetos: [], sessoes: [] };
+      if (metodo === "github.obter") return canal.github();
+      if (metodo === "conexoes.listar") return [];
       throw new Error(`método ${metodo} sem atendente`);
     }),
   },
@@ -102,6 +117,8 @@ beforeEach(() => {
   canal.estado = "conectado";
   canal.lista = async () => [];
   canal.naoVistas = async () => [];
+  canal.pendentes = async () => [];
+  canal.github = async () => ({ itens: [], atualizadoEm: null });
   vi.mocked(servico.pedir).mockClear();
 });
 
@@ -280,5 +297,79 @@ describe("ponto de aviso no dock", () => {
     canal.estado = "desconectado";
     await act(async () => raiz!.render(<Dock />));
     expect(comPonto()).toEqual([]);
+  });
+});
+
+describe("estados e sessões no dock (Estados.dc.html, Dock.dc.html)", () => {
+  const tomDoPonto = (id: string) =>
+    recipiente.querySelector<HTMLElement>(`[data-agente="${id}"] [data-ponto]`)?.dataset.tom ?? null;
+
+  it("erro de provedor ganha ponto vermelho; teto, amarelo; limite e pausa, nenhum", async () => {
+    canal.lista = async () => [
+      agente("alba", { estado: "dormindo", motivoSono: "limite" }),
+      agente("tula", { estado: "dormindo", motivoSono: "fora_do_ar" }),
+      agente("faina", { estado: "pausado" }),
+      agente("nuno", { estado: "dormindo", motivoSono: "teto" }),
+    ];
+    await montar();
+    expect(["alba", "tula", "faina", "nuno"].map(tomDoPonto)).toEqual([null, "perigo", null, "aviso"]);
+    expect(cabecas()[0]!.rotulo).toBe("Alba, dormindo. Volta quando o limite renovar");
+    expect(cabecas()[1]).toEqual({
+      expressao: "erro",
+      rotulo: "Tula, erro. Modelo fora do ar, tenta de novo em breve",
+    });
+  });
+
+  it("sessão do terminal esperando você: o Nuno ganha o ponto e diz no rótulo", async () => {
+    canal.lista = async () => ["alba", "tula", "faina", "nuno"].map((id) => agente(id));
+    const pedido = (id: string, sessaoId: string): Aprovacao => ({
+      id,
+      fonte: "claude-code",
+      agenteId: null,
+      execucaoId: null,
+      sessaoId,
+      descricao: "Quer rodar o comando abaixo.",
+      acao: { ferramenta: "Bash", entrada: {}, rotulo: null, rotuloRecusar: null, desfazivel: false },
+      estado: "pendente",
+      criadoEm: "2026-10-09T12:00:00.000Z",
+      decididaEm: null,
+      regraCriadaId: null,
+      admiteSempre: true,
+    });
+    canal.pendentes = async () => [pedido("a1", "s1"), pedido("a2", "s1")];
+    await montar();
+    expect(comPonto()).toEqual(["nuno"]);
+    expect(cabecas()[3]!.rotulo).toBe("Nuno, ocioso. 1 sessão esperando você");
+    // Decidido o pedido, o ponto sai.
+    await act(async () => {
+      for (const id of ["a1", "a2"]) {
+        ouvintes.get("aprovacoes.mudou")?.forEach((fn) => fn({ ...pedido(id, "s1"), estado: "aprovada" }));
+      }
+    });
+    expect(comPonto()).toEqual([]);
+  });
+
+  it("o badge do Dev conta o que precisa de você no GitHub", async () => {
+    const item = (numero: number, precisaDeMim: boolean): ItemGithub => ({
+      id: `g${numero}`,
+      repositorio: "dono/repo",
+      numero,
+      tipo: "pr",
+      titulo: "t",
+      autor: null,
+      estado: "aberto",
+      meuPapel: "revisor",
+      precisaDeMim,
+      ciEstado: null,
+      atualizadoNoGithub: null,
+      url: "https://github.com/dono/repo/pull/1",
+    });
+    canal.github = async () => ({
+      itens: [item(1, true), item(2, true), item(3, false)],
+      atualizadoEm: null,
+    });
+    await montar();
+    const dev = recipiente.querySelector<HTMLElement>('[data-area="dev"]')!;
+    expect(dev.querySelector(".contagem")?.textContent).toBe("22 avisos de dev");
   });
 });

@@ -15,10 +15,10 @@ import {
   descreverGatilho,
   descreverProvedor,
   desfaziveis,
-  horaCurta,
   juntarExecucao,
   resumoDoDia,
   textoDaExecucao,
+  tomDoModelo,
   vigiasDoAgente,
 } from "./agente.ts";
 
@@ -161,10 +161,10 @@ describe("custo com a fonte dita", () => {
 });
 
 describe("o que o agente está fazendo", () => {
-  it("diz a pausa, o sono com o motivo e a hora, e a fila", () => {
-    expect(agoraDoAgente({ ...ATIVO, estado: "pausado" }, null, agora)).toBe("Pausado até você retomar");
+  it("parado, diz o mesmo texto do dock: pausa, sono com a hora de volta (Estados.dc.html) e a fila", () => {
+    expect(agoraDoAgente({ ...ATIVO, estado: "pausado" }, null, agora)).toBe("Em pausa até você retomar");
     expect(agoraDoAgente({ ...ATIVO, estado: "pausado", pausadoAte: as(16, 30), fila: 2 }, null, agora)).toBe(
-      "Pausado até 16:30 · 2 na fila",
+      "Em pausa até 16:30 · 2 pedidos na fila",
     );
     expect(
       agoraDoAgente(
@@ -172,9 +172,17 @@ describe("o que o agente está fazendo", () => {
         null,
         agora,
       ),
-    ).toBe("Dormindo até sáb 9:00: o limite de uso acabou");
+    ).toBe("Volta amanhã 9h");
+    // Falha do provedor é erro, não sono tranquilo.
+    expect(
+      agoraDoAgente(
+        { ...ATIVO, estado: "dormindo", motivoSono: "fora_do_ar", dormeAte: as(15, 5) },
+        null,
+        agora,
+      ),
+    ).toBe("Modelo fora do ar, tenta de novo às 15:05");
     expect(agoraDoAgente({ ...ATIVO, estado: "desligado" }, null, agora)).toBe(
-      "Desligado: não trabalha nem responde.",
+      "Desligado: não trabalha nem responde",
     );
   });
 
@@ -197,15 +205,24 @@ describe("o que o agente está fazendo", () => {
         agora,
       ),
     ).toBe("Agora: atendendo um aviso");
-    expect(agoraDoAgente({ ...ATIVO, atividade: "esperando" }, null, agora)).toBe(
-      "Agora: esperando sua resposta num pedido",
+    expect(agoraDoAgente({ ...ATIVO, atividade: "esperando", fila: 1 }, null, agora)).toBe(
+      "Agora: esperando sua resposta num pedido · 1 pedido na fila",
     );
     expect(agoraDoAgente(ATIVO, null, agora)).toBe("Sem nada em andamento.");
   });
 
-  it("hora curta: só a hora hoje, com o dia da semana em outro dia", () => {
-    expect(horaCurta(as(9, 2), agora)).toBe("9:02");
-    expect(horaCurta(as(9, 0, 10), agora)).toBe("sáb 9:00");
+  it("o ponto do modelo: vermelho na falha do provedor, aviso no limite, verde no resto", () => {
+    const dormindo = (motivoSono: SituacaoAgente["motivoSono"]) => ({
+      ...ATIVO,
+      estado: "dormindo" as const,
+      motivoSono,
+    });
+    expect(tomDoModelo(dormindo("fora_do_ar"))).toBe("perigo");
+    expect(tomDoModelo(dormindo("credencial"))).toBe("perigo");
+    expect(tomDoModelo(dormindo("ausente"))).toBe("perigo");
+    expect(tomDoModelo(dormindo("limite"))).toBe("aviso");
+    expect(tomDoModelo(dormindo("teto"))).toBe("sucesso");
+    expect(tomDoModelo(ATIVO)).toBe("sucesso");
   });
 });
 

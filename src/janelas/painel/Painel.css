@@ -33,27 +33,69 @@
 
 .painel-cabecalho {
   display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  color: var(--texto-3);
+}
+
+.painel-cabecalho-linha {
+  display: flex;
   align-items: center;
   gap: var(--esp-10);
-  color: var(--texto-3);
 }
 
 .painel-titulo {
   flex: 1;
+  min-width: 0;
   margin: 0;
   color: var(--texto);
   font-size: var(--tipo-17);
   font-weight: var(--peso-forte);
 }
 
-/* ---------- pedidos das sessões (Agentes.dc.html, "Sessões de IA") ---------- */
-.pedidos {
+.painel-subtitulo {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+/* "Abrir no sistema" é link do quadro: texto miúdo, sem caixa, com o atalho ao lado. */
+.painel-abrir {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--esp-6);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--texto-3);
+  font: inherit;
+  font-size: var(--tipo-12);
+  cursor: pointer;
+}
+
+.painel-abrir:hover {
+  color: var(--texto);
+}
+
+/* O conteúdo rola dentro do cartão; o cabeçalho fica parado. */
+.painel-corpo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-18);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ---------- seções (Agentes.dc.html: "Seu time", "Sessões de IA") ---------- */
+.painel-secao {
   display: flex;
   flex-direction: column;
   gap: var(--esp-8);
 }
 
-.pedidos-cabecalho {
+.painel-secao-cabecalho {
   display: flex;
   justify-content: space-between;
   gap: var(--esp-8);
@@ -61,18 +103,326 @@
   color: var(--texto-3);
 }
 
-.pedidos-titulo {
+.painel-secao-titulo {
   margin: 0;
   font: inherit;
-  color: inherit;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
 }
 
-.pedidos-projeto {
+.painel-secao-vazia {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-8);
+  padding: var(--esp-12);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+  color: var(--texto-2);
+  font-size: var(--tipo-12);
+}
+
+.painel-secao-vazia p {
+  margin: 0;
+}
+
+/* O que o serviço disse da conexão em erro, acima do que ainda está no cache. */
+.painel-secao-erro {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--perigo);
+}
+
+.painel-secao > .botao--fantasma {
+  align-self: flex-start;
+}
+
+/* ---------- o time ---------- */
+.time-lista {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.time-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-12);
+  padding: var(--esp-8) 0;
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.time-cabeca {
+  display: flex;
+  flex: none;
+}
+
+.time-corpo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-2);
+  min-width: 0;
+}
+
+.time-nome {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.time-nome-texto {
   font-weight: var(--peso-forte);
   color: var(--texto);
 }
 
-.pedidos-ferramenta {
+.time-acao {
+  overflow: hidden;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A barra que corre enquanto o agente trabalha (Agentes.dc.html); para com menos animação. */
+.time-correndo {
+  position: relative;
+  height: var(--altura-trilho-trabalho);
+  margin-top: var(--esp-4);
+  overflow: hidden;
+  border-radius: var(--raio-progresso);
+  background: var(--fundo-trilho);
+}
+
+.time-correndo::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--largura-barra-trabalho);
+  background: var(--destaque);
+  animation: time-correr var(--dur-correr) ease-in-out infinite;
+}
+
+@keyframes time-correr {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+/* ---------- cartões de estado (Estados.dc.html) ---------- */
+.estado-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-12);
+  padding: var(--esp-14);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-elevado);
+}
+
+.estado-cartao-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+}
+
+.estado-cartao-quem {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.estado-cartao-fala {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--esp-14);
+}
+
+.estado-cartao-corpo {
+  display: flex;
+  flex: none;
+}
+
+.estado-cartao-texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-6);
+  min-width: 0;
+  padding-bottom: var(--esp-6);
+  color: var(--texto-2);
+}
+
+.estado-cartao-texto p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.estado-cartao-titulo {
+  margin: 0;
+  font-size: var(--tipo-13);
+  font-weight: var(--peso-forte);
+  color: var(--texto);
+}
+
+.estado-cartao-erro {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--perigo);
+}
+
+.estado-cartao-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--esp-8);
+}
+
+/* ---------- sessões de IA (Agentes.dc.html, PainelDev.dc.html) ---------- */
+.sessao-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+  padding: var(--esp-12);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+}
+
+/* Contexto acima de 80%: o cartão sobe, como o do pedido. */
+.sessao-cartao[data-alto] {
+  border-color: var(--borda-forte);
+  background: var(--fundo-elevado);
+}
+
+.sessao-cartao .progresso {
+  height: var(--altura-trilho-sessao);
+}
+
+.sessao-cabeca {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--esp-8);
+  min-width: 0;
+}
+
+.sessao-ponto {
+  flex: none;
+  width: var(--tamanho-ponto-status);
+  height: var(--tamanho-ponto-status);
+  border-radius: 50%;
+  background: var(--texto-apagado);
+}
+
+.sessao-ponto[data-tom="sucesso"] {
+  background: var(--sucesso);
+}
+
+.sessao-ponto[data-tom="aviso"] {
+  background: var(--aviso);
+}
+
+.sessao-ponto[data-tom="perigo"] {
+  background: var(--perigo);
+}
+
+.sessao-projeto {
+  overflow: hidden;
+  font-weight: var(--peso-forte);
+  color: var(--texto);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessao-ferramenta {
+  flex: none;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.sessao-direita {
+  flex: none;
+  margin-left: auto;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.sessao-direita[data-tom="aviso"] {
+  color: var(--aviso);
+}
+
+.sessao-numero {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  font-variant-numeric: tabular-nums;
+}
+
+.sessao-acao {
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- PRs (PainelDev.dc.html) ---------- */
+.prs-lista {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pr-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  padding: var(--esp-7) 0;
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.pr-selo {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  width: var(--largura-selo-pr);
+}
+
+.pr-corpo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pr-titulo {
+  overflow: hidden;
+  color: var(--texto);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pr-meta {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+/* ---------- rodapé: o modelo do time ---------- */
+.painel-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  padding-top: var(--esp-12);
+  border-top: var(--espessura-borda) solid var(--borda);
   font-size: var(--tipo-12);
   color: var(--texto-3);
 }

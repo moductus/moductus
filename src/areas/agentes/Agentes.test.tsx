@@ -469,7 +469,7 @@ describe("página do agente", () => {
     await act(async () => botao("Pausar a Tula").click());
     expect(pedidosDe("agentes.pausar")).toEqual([{ agenteId: "tula", ate: null }]);
     expect(botao("Retomar a Tula")).toBeDefined();
-    expect(recipiente.textContent).toContain("Pausado até você retomar");
+    expect(recipiente.textContent).toContain("Em pausa até você retomar");
 
     await act(async () => botao("Conversar").click());
     expect(idas).toEqual([{ area: "agentes", secao: "tula" }]);
