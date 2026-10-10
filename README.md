@@ -9,7 +9,7 @@ Um sistema pessoal para Windows, open source: fica sempre à mão num dock later
 
 ---
 
-> **Status: alfa da casca (`v0.5.0-alpha`).** O Moductus está deixando de ser uma suíte de utilitários para virar um sistema pessoal com agentes. A fase 1 entregou a casca: o dock que reserva espaço na lateral, os painéis, o Sistema com as 12 áreas navegáveis, a captura rápida, mídia, microfone, manter acordado, os três temas, atalhos, autostart e as configurações. Os agentes e os dados das áreas chegam a partir da fase 2. Quem quer a suíte de utilitários usa a tag [`v0.4.0`](https://github.com/moductus/moductus/tree/v0.4.0), que guarda o código .NET.
+> **Status: alfa dos agentes (fase 2).** A última versão publicada é a `v0.5.0-alpha`, a casca; a `v0.6.0-alpha` sai com o PR da fase 2. O Moductus está deixando de ser uma suíte de utilitários para virar um sistema pessoal com agentes. A fase 1 entregou a casca: o dock que reserva espaço na lateral, os painéis, o Sistema com as 12 áreas navegáveis, a captura rápida, mídia, microfone, manter acordado, os três temas, atalhos, autostart e as configurações. A fase 2 ligou os agentes: o **Nuno** acompanha as sessões do Claude Code e o GitHub, e você aprova os pedidos de permissão pelo dock; os quatro agentes conversam com o modelo que você conectar (o Claude Code, com a sua assinatura, ou uma API compatível com a da OpenAI), dormem quando o modelo acaba e só agem fora do Moductus com o seu sim. Tarefas, finanças, notas, arquivos e memória, com os dados de cada área, chegam a partir da fase 3. Quem quer a suíte de utilitários usa a tag [`v0.4.0`](https://github.com/moductus/moductus/tree/v0.4.0), que guarda o código .NET.
 
 ## Instalar
 
@@ -33,6 +33,8 @@ pnpm install
 node scripts/preparar-sidecar.mjs
 pnpm tauri dev
 ```
+
+Os agentes pedem duas coisas do seu PC, e só se você for usá-los de verdade: o Claude Code (`claude`) com login, para o Moductus usar a sua assinatura, e o [GitHub CLI](https://cli.github.com) (`gh`) com `gh auth login`, para o Nuno ler os seus PRs. Para desenvolver e testar nenhum dos dois faz falta: os testes usam um provedor falso e nunca chamam modelo nem rede.
 
 O `preparar-sidecar.mjs` copia o seu `node.exe` para `src-tauri/binaries/` (fora do Git, ~80 MB): o Tauri exige o binário do sidecar para compilar, mesmo em desenvolvimento. Basta rodar uma vez, ou de novo ao trocar de versão do Node. O `pnpm tauri dev` gera o serviço, sobe o Vite em `http://localhost:1420` e abre o app; em desenvolvimento a casca roda o serviço com o `node` do PATH.
 
@@ -72,7 +74,7 @@ pnpm tauri build --debug --no-bundle
 pwsh -File scripts/verificar.ps1 -Roteiro appbar
 ```
 
-Os roteiros são `appbar`, `modos`, `telacheia`, `janelas`, `atalhos`, `inicio`, `midia`, `controles`, `servico`, `teclado` e `acessibilidade`; sem `-Roteiro`, roda todos. O `scripts/medir.ps1` mede memória, tempo até o dock e abertura do painel no build de release, sem mexer no mouse (mas abre e fecha o app algumas vezes); os números estão no [ARCHITECTURE.md](docs/ARCHITECTURE.md#medições-da-fase-1).
+Os roteiros são `appbar`, `modos`, `telacheia`, `janelas`, `atalhos`, `inicio`, `midia`, `controles`, `servico`, `teclado` e `acessibilidade`; sem `-Roteiro`, roda todos. O `scripts/medir.ps1` mede memória, tempo até o dock e abertura do painel no build de release, sem mexer no mouse (mas abre e fecha o app algumas vezes); os números estão no [ARCHITECTURE.md](docs/ARCHITECTURE.md#medições-da-fase-1), e os da fase 2 em [medições da fase 2](docs/ARCHITECTURE.md#medições-da-fase-2).
 
 ## O que é
 
@@ -93,11 +95,13 @@ Entre os dois, a **captura rápida** transforma uma frase solta em tarefa, gasto
 | **Foco** | Pomodoro ligado à tarefa, com histórico |
 | **Finanças** | Contas, lançamentos, orçamento, recorrentes, importação de extrato |
 | **Dev** | PRs esperando você, reviews a atender, issues atribuídas, CI quebrado |
-| **Sessões de IA** | O que o Claude Code, o Codex e afins estão fazendo em cada projeto, com aprovação pelo dock |
+| **Sessões de IA** | O que o Claude Code e o OpenCode estão fazendo em cada projeto, com aprovação do Claude Code pelo dock |
 | **Notas** | Markdown que salva sozinho |
 | **Arquivos** | Caixa de entrada que os agentes resumem, classificam e lançam |
 | **Memória** | O que você e os agentes precisam lembrar |
 | **Ferramentas** | Os utilitários da suíte original: Freeze, Ports, Links, Kill, Peek, Awake, Mic |
+
+Na fase 2 funcionam Sessões de IA e Dev, a conversa com os agentes e as configurações de modelos, conexões e notificações; as demais áreas chegam nas fases 3 a 6.
 
 ## Os agentes
 
@@ -106,11 +110,11 @@ Entre os dois, a **captura rápida** transforma uma frase solta em tarefa, gasto
 | **Alba** | Cuida do seu dia | Agenda, tarefas, lembretes e rotina; briefing da manhã e fechamento do dia |
 | **Tula** | Cuida do seu dinheiro | Gastos, dívidas, planos de economia e orçamento |
 | **Faina** | Faz o serviço pesado | Organizar, limpar e criar arquivos e documentos no PC, com prévia e desfazer |
-| **Nuno** | Fica de olho nas suas IAs e no seu código | Sessões do Claude Code, Codex, OpenCode e afins, com contexto, gasto e limites; PRs e issues |
+| **Nuno** | Fica de olho nas suas IAs e no seu código | Sessões do Claude Code e do OpenCode (Codex e outros: previstos), com contexto e gasto; PRs e issues |
 
-Os quatro vêm de fábrica; no futuro, você cria os seus.
+Os quatro vêm de fábrica; no futuro, você cria os seus. Na fase 2 só o Nuno tem ferramentas e trabalha sozinho; Alba, Tula e Faina conversam e ganham as delas com as áreas.
 
-Cada agente escolhe o próprio modelo: um agente CLI com a assinatura que você já tem (Claude Code, Codex, Gemini, OpenCode) ou uma API (Anthropic, OpenAI ou qualquer endpoint compatível, inclusive modelo local).
+Cada agente escolhe o próprio modelo. Hoje: o Claude Code, com a assinatura que você já tem, ou uma API compatível com a da OpenAI (a própria OpenAI, OpenRouter, Ollama e outros, inclusive modelo local). Codex, Gemini CLI e as APIs da Anthropic e do Gemini são previstos.
 
 ## Princípios
 

@@ -2,7 +2,7 @@
 
 > O que cada área guarda e como. O produto está em [PRODUCT.md](PRODUCT.md); onde o banco mora e quem acessa, em [ARCHITECTURE.md](ARCHITECTURE.md#5-dados); os agentes, em [AGENTS.md](AGENTS.md).
 
-**Status:** as seções 5 a 7 (agentes, sessões de IA, GitHub, conexões e notificações) descrevem as migrações 003, 004 e 005, entregues na fase 2; os nomes de coluna valem como estão lá. As seções 2 a 4 ainda são o desenho da fase 0: cada fase cria as tabelas da sua área por migração, e campos podem mudar na implementação, mas as regras da seção 1 não mudam.
+**Status:** as seções 5 a 7 (agentes, sessões de IA, GitHub, conexões, notificações e agendador) descrevem as migrações 003 a 011, entregues na fase 2; os nomes de coluna valem como estão lá. As seções 2 a 4 ainda são o desenho da fase 0: cada fase cria as tabelas da sua área por migração, e campos podem mudar na implementação, mas as regras da seção 1 não mudam.
 
 ---
 
@@ -155,7 +155,7 @@ Migração `008-uso-respostas-contadas`. As respostas de modelo cujo uso já ent
 
 ### `github_itens`
 Cache do que o Nuno acompanha no GitHub. PR e issue dividem a numeração, então `repositorio` e `numero` são únicos.
-`id`, `repositorio`, `numero`, `tipo` (`pr`, `issue`), `titulo`, `autor`, `estado`, `meu_papel` (`autor`, `revisor`, `atribuido`), `precisa_de_mim`, `ci_estado`, `atualizado_no_github`, `etag`, `url`.
+`id`, `repositorio`, `numero`, `tipo` (`pr`, `issue`), `titulo`, `autor`, `estado`, `meu_papel` (`autor`, `revisor`, `atribuido`), `precisa_de_mim`, `ci_estado`, `atualizado_no_github`, `etag` (sempre vazio: as buscas que o Nuno usa não devolvem ETag; ADR-0022), `url`.
 `estado` e `ci_estado` são texto livre no banco; os valores que a interface entende são os enums do contrato (`pacotes/contrato/src/sessoes.ts`).
 
 ---
@@ -166,7 +166,7 @@ Migração `003-agentes`. Nas colunas abaixo, `do_agente_id` e `da_execucao_id` 
 
 ### `agentes`
 Tem lixeira.
-`id`, `nome`, `funcao`, `instrucoes`, `personagem` (JSON objeto: silhueta, traço, tom), `ferramentas` (JSON lista), `provedor_id`, `provedor_reserva_id` (diferente do principal), `gatilhos` (JSON lista; vazia até o agendador), `escopos_memoria` (JSON lista), `teto_diario_centavos`, `estado` (`ativo`, `pausado`, `dormindo`, `desligado`), `dorme_ate` (só com `dormindo`; vazio é "até o provedor voltar"), `motivo_sono` (`limite`, `fora_do_ar`, `credencial`, `ausente`, `teto`; só com `dormindo`; migração `011-agentes-sono`; agente sem modelo não guarda motivo, aparece como `sem_modelo` pela falta de `provedor_id`), `pausado_ate` (só com `pausado`; vazio é "até retomar"; migração `011-agentes-sono`), `de_fabrica`.
+`id`, `nome`, `funcao`, `instrucoes`, `personagem` (JSON objeto: silhueta, traço, tom), `ferramentas` (JSON lista), `provedor_id`, `provedor_reserva_id` (diferente do principal), `gatilhos` (JSON lista; vazia até o agendador), `escopos_memoria` (JSON lista), `teto_diario_centavos` (vazio: o serviço recusa gravar valor até a moeda do teto ser decidida), `estado` (`ativo`, `pausado`, `dormindo`, `desligado`), `dorme_ate` (só com `dormindo`; vazio é "até o provedor voltar"), `motivo_sono` (`limite`, `fora_do_ar`, `credencial`, `ausente`, `teto`; só com `dormindo`; migração `011-agentes-sono`; agente sem modelo não guarda motivo, aparece como `sem_modelo` pela falta de `provedor_id`), `pausado_ate` (só com `pausado`; vazio é "até retomar"; migração `011-agentes-sono`), `de_fabrica`.
 Os quatro de fábrica vêm semeados na migração, com os ids `alba`, `tula`, `faina` e `nuno`, sem provedor (o primeiro uso conecta um modelo e o atribui aos quatro).
 
 ### `provedores`
@@ -204,17 +204,23 @@ Chave e valor (JSON). Tema, dock (lado, forma, modo), atalhos, fuso, idioma, hor
 
 ### `conexoes`
 Tem lixeira. Migração `004-sessoes-dev`.
-`id`, `tipo` (`google-agenda`, `outlook`, `github`, `hooks-claude-code`, `hooks-opencode`…), `conta` (e-mail ou usuário), `escopos` (JSON lista), `credencial` (nome no Gerenciador de Credenciais), `estado`, `ultimo_erro`, `conectada_em`.
-`estado` é texto livre no banco; os valores chegam com a tela de conexões.
+`id`, `tipo` (hoje `github` e `hooks-claude-code`; `google-agenda`, `outlook`, `hooks-opencode`… chegam com as áreas), `conta` (e-mail ou usuário), `escopos` (JSON lista), `credencial` (nome no Gerenciador de Credenciais), `estado`, `ultimo_erro`, `conectada_em`.
+`estado` é texto livre no banco; os valores que a interface entende são `ligada`, `desligada` e `erro` (contrato `EstadoLigacao`).
 `lida_em` (migração `006-conexoes-lida-em`): a última leitura que deu certo, mesmo sem item nenhum; é a idade do cache que a conexão alimenta (`github_itens`). Situação deste PC, como `estado`, `ultimo_erro` e `conectada_em`: não vai para outro PC.
+O detalhe da ligação do Claude Code que a tela de Conexões mostra (`Conexao.ligacao` no contrato: o arquivo, quantos eventos avisam o Moductus, em que porta e a cópia de segurança mais recente) **não é coluna**: o serviço o monta na hora, lendo o `settings.json` e o arquivo `ligacao-claude-code.json` da pasta de dados, e só existe com a conexão ligada.
 
 ### `notificacoes_preferencias`
-Configuração, sem lixeira: tirar a preferência é voltar ao padrão. Migração `005-notificacoes`. Uma por agente e tipo.
+Configuração, sem lixeira: tirar a preferência é voltar ao padrão. Migração `005-notificacoes`. Uma por agente e tipo (índice único, com o vazio contando como valor). O padrão de fábrica não é gravado: sem linha, vale "só o que precisa de mim" no Windows e no dock, e o Nuno vale "tudo" (`preferenciaPadrao` no contrato).
 `id`, `do_agente_id` (vazio vale para todos; a do agente vence a geral), `tipo` (`aprovacao`, `lembrete`, `erro`, `aviso`, `rotina`), `nivel` (`tudo`, `so_o_que_precisa`, `nada`), `canal` (`windows`, `dock`, `ambos`).
 
 ### `notificacoes`
 O que foi avisado, para o histórico e para não repetir. Sem lixeira.
-`id`, `do_agente_id`, `tipo`, `titulo`, `corpo`, `referencia` (o que gerou o aviso), `vista_em`, `canal`. A data do aviso é o `criado_em`.
+`id`, `do_agente_id` (vazio é aviso do próprio app), `tipo`, `titulo`, `corpo`, `referencia` (o que gerou o aviso, como `aprovacao:<id>`; um aviso novo da mesma referência não repete enquanto o anterior não foi visto), `vista_em`, `canal`. A data do aviso é o `criado_em`.
+Aviso que a preferência não deixa passar (nível `nada`, ou um tipo que "só o que precisa de mim" não cobre, como o `aviso` de contexto de 80% do Nuno quando ele está em "só o que precisa de mim") é gravado já visto (`vista_em` = `criado_em`): fica no histórico, sem ponto no dock e sem aviso do Windows. O horário de silêncio e o silêncio em tela cheia e em foco não são tabela: moram em `config` (`silencio`, desligado de fábrica, 22:00 a 07:30) e só calam o aviso do Windows; o ponto no dock e o registro continuam.
+
+### `agendador_disparos`
+Controle deste PC, sem lixeira. Migração `010-agendador-disparos`. Até onde o agendador já contou cada gatilho de horário e de intervalo, para o serviço que reinicia não repetir um disparo nem perder o que venceu com ele parado. Uma linha por agente e gatilho.
+`id`, `do_agente_id`, `gatilho` (o JSON do gatilho como está na configuração do agente; mudar o gatilho começa uma contagem nova), `referencia` (no horário, a ocorrência que disparou ou quando o gatilho apareceu; no intervalo, de onde conta o próximo), `disparado_em` (vazio se ainda não disparou). A referência é gravada antes de o runtime ser chamado. Não vai para outro PC.
 
 ### `onboarding`
 `passo`, `estado` (`feito`, `pulado`, `pendente`), `concluido_em`. Inclui as missões do tutorial.
@@ -225,7 +231,7 @@ O que foi avisado, para o histórico e para não repetir. Sem lixeira.
 
 | Vai em "só configurações" | Vai só em "configurações e dados" | Nunca vai |
 |---|---|---|
-| `config`, `agentes`, `provedores` (sem credencial), `conexoes` (sem credencial e sem estado), `notificacoes_preferencias`, `regras_permissao` (as que ainda valem), `perfis_importacao`, `regras_categoria`, `categorias`, `listas`, `etiquetas`, `rotinas`, `pastas_autorizadas` (como sugestão, reconfirmada no PC novo) | Todas as demais tabelas de dados, entre elas `execucoes`, `chamadas_ferramenta`, `aprovacoes`, `conversas`, `mensagens`, `projetos`, `sessoes_ia`, `eventos_sessao`, `uso_ia`, `github_itens`, `notificacoes` e `onboarding` | Credenciais, `transcript_caminho` e a posição da leitura dele (`transcript_lido_bytes`), `uso_ia_mensagens`, caminhos absolutos que não existem no PC novo, `operacoes_arquivo`, o que está na lixeira |
+| `config`, `agentes`, `provedores` (sem credencial), `conexoes` (sem credencial e sem estado), `notificacoes_preferencias`, `regras_permissao` (as que ainda valem), `perfis_importacao`, `regras_categoria`, `categorias`, `listas`, `etiquetas`, `rotinas`, `pastas_autorizadas` (como sugestão, reconfirmada no PC novo) | Todas as demais tabelas de dados, entre elas `execucoes`, `chamadas_ferramenta`, `aprovacoes`, `conversas`, `mensagens`, `projetos`, `sessoes_ia`, `eventos_sessao`, `uso_ia`, `github_itens`, `notificacoes` e `onboarding` | Credenciais, `transcript_caminho` e a posição da leitura dele (`transcript_lido_bytes`), `uso_ia_mensagens`, `agendador_disparos`, caminhos absolutos que não existem no PC novo, `operacoes_arquivo`, o que está na lixeira |
 
 A marcação de cada tabela mora em `servico/src/outro-pc/tabelas.ts`, e um teste reprova tabela nova sem marcação (na dúvida, é dado). O que "só configurações" tira, além das tabelas de dado:
 

@@ -11,9 +11,9 @@ O código .NET da suíte saiu da árvore na fase 1; ele fica na tag [`v0.4.0`](h
 ## Regras não negociáveis
 
 - **Regra de negócio mora no serviço, não na interface nem no prompt.** A interface e o agente chamam a mesma função da área; nada que importa depende de o modelo acertar uma conta ou um formato. Até a configuração nativa (dock, atalhos, autostart) passa pelo serviço, que valida e só então pede à casca para aplicar. A casca em Rust só fala com o Windows.
-- **Ação externa sempre com aprovação.** Ferramenta com efeito fora do Moductus é declarada como `externo` e passa pelo cartão de aprovação. Sem exceção.
+- **Ação externa sempre com aprovação.** Ferramenta com efeito fora do Moductus é declarada como `externo`, declara o texto do cartão e passa pela aprovação. Sem exceção. A ferramenta `interno` declara como se desfaz; o catálogo recusa a que não declara.
 - **Nenhum valor visual literal fora de `src/tokens`.** Cor, tamanho, raio, sombra, fonte e duração vêm dos tokens de [DESIGN.md](docs/DESIGN.md); o `pnpm lint` reprova o resto (`scripts/lint-visual.mjs`). Componente não conhece o nome do tema. Se falta um token, o PR discute o token antes de usar um número solto.
-- **Rede só para provedor e conexões ligadas pelo usuário.** Nenhuma telemetria, nenhum serviço de terceiros por padrão.
+- **Rede só para provedor e conexões ligadas pelo usuário.** Nenhuma telemetria, nenhum serviço de terceiros por padrão. O CLI de IA e o `gh` rodam com a conta do usuário, sem shell e sem janela, e o Moductus nunca lê o token deles.
 - **Segredo só no Gerenciador de Credenciais do Windows.** Chave e token nunca no banco, em arquivo de configuração, em variável persistente ou em log; o serviço pede à casca na hora do uso.
 - **Dependência nova com justificativa no PR e no commit.** "Facilita" não é justificativa.
 - **Um assunto por PR.**
@@ -53,9 +53,12 @@ Mudou algo que depende do Windows de verdade (dock, foco, atalhos, tela cheia, a
 ## Testes
 
 - **Regra de área e de agente:** teste no serviço, com Vitest. Provedor de modelo é sempre falso nos testes; nenhum teste chama rede.
+- **Saída real de CLI ou de hook** entra como fixture gravada por versão (`fixtures/<versão>/`), sem dado pessoal e com ids sintéticos. Comportamento que só o CLI real mostra (o formato do `stream-json`, os hooks) é conferido à mão, poucas vezes e com chamadas curtas, e vira fixture.
+- **Ligação com o Claude Code:** nenhum teste nem roteiro mexe no seu `~/.claude/settings.json`. Aponte `CLAUDE_CONFIG_DIR` para uma pasta temporária.
 - **Casca nativa:** `cargo test` no que der para separar da API do Windows; o resto, num roteiro do `verificar.ps1`.
 - **Interface:** Vitest com `happy-dom` nos componentes, incluindo nome acessível em todo controle (`src/teste/acessibilidade.ts`). Fluxos na tela real (captura, troca de tema, teclado) ficam nos roteiros com UI Automation.
-- **Orçamentos:** mudança que pesa em memória ou tempo de abertura mede de novo com `scripts/medir.ps1` no build de release e atualiza a [tabela do ARCHITECTURE.md](docs/ARCHITECTURE.md#medições-da-fase-1).
+- **Orçamentos:** mudança que pesa em memória ou tempo de abertura mede de novo com `scripts/medir.ps1` no build de release e atualiza as tabelas do ARCHITECTURE.md ([fase 1](docs/ARCHITECTURE.md#medições-da-fase-1) e [fase 2](docs/ARCHITECTURE.md#medições-da-fase-2)). O `node.exe` do serviço tem meta própria: até 40 MB a mais que os 32,1 MB da fase 1.
+- **Visual:** o lint visual também reprova classe CSS declarada sozinha em mais de um arquivo (as janelas carregam um bundle só e a última regra vence nas duas telas); use o prefixo da área.
 
 ## Commits
 
