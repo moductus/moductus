@@ -289,8 +289,8 @@ O serviço abre um endpoint HTTP local (`127.0.0.1`, porta fixa configurável, t
 |---|---|---|
 | **Claude Code** | Hooks do tipo `http` no `settings.json` do usuário, apontando direto para o endpoint, com o token no cabeçalho `Authorization` lido de variável de ambiente (`allowedEnvVars`): `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PermissionRequest`, `Notification`, `Stop`, `SessionEnd`. Nenhum script intermediário | Projeto (`cwd`), sessão, ferramenta e comando em uso, pedido de permissão, fim de turno, ociosidade (`Notification` com `idle_prompt`) |
 | **Aprovar pelo dock** | O hook `PermissionRequest` segura a resposta HTTP até você decidir no dock e devolve `decision.behavior` `allow` ou `deny`, com mensagem | Aprovar ou negar sem voltar ao terminal. Validado (seção 5.1) |
-| **Codex** | `notify` na configuração do Codex chama o comando do Moductus ao fim de cada turno **(validar se há eventos mais finos)** | Projeto, fim de turno, última mensagem |
-| **OpenCode** | Sistema de plugins e eventos do OpenCode **(validar)** | Projeto, estado da sessão, ferramenta em uso |
+| **Codex** | Sem ligação própria. O `notify` só avisa o fim de cada turno (`agent-turn-complete`, com `cwd`, `thread-id` e a última mensagem) e roda um comando, nunca HTTP. Os hooks do Codex (`PreToolUse`, `PermissionRequest`, `Stop` e outros) também rodam só comando, com o JSON na entrada padrão, e exigem que você revise e confie neles no `/hooks`; sem um script intermediário que o Moductus teria de instalar e manter, não há como chegar ao endpoint. Fica pela varredura de processos | Só "está rodando neste projeto"
+| **OpenCode** | Plugin de um arquivo em `~/.config/opencode/plugins/moductus.js`, que o OpenCode carrega sozinho. Traduz os eventos dele para os dos hooks e posta em `/hooks/opencode` com o token da variável de ambiente. Validado no OpenCode 1.18.29 (eventos `session.*`, `permission.asked`, `message.part.updated`). Só informa: aprovar pelo dock não vale para ele, e sessão filha (subagente) não vira sessão | Projeto, sessão, estado, ferramenta e comando em uso, pedido de permissão, fim de turno
 | **Outros** | Varredura de processos (`claude`, `codex`, `gemini`) com diretório de trabalho | Só "está rodando neste projeto" |
 
 ### Estados mostrados
@@ -318,7 +318,7 @@ Feito em 06/10/2026 com o Claude Code 2.1, hooks `http` apontando para um servid
 
 - **Uso de tokens (Claude Code):** o hook informa o `transcript_path`, e o transcript registra o uso de cada resposta do modelo (`message.usage`: entrada, saída e cache). O Moductus lê o arquivo de forma incremental, só dentro da pasta `projects` do Claude Code, conta cada resposta uma vez no PC (cópias de histórico por `--fork-session` não contam de novo) e soma por dia, ferramenta, modelo e projeto em `uso_ia`, com `fonte` = `ferramenta`. Custo fica vazio na assinatura. As execuções dos próprios agentes do Moductus não entram por aqui: o CLI delas não recebe o token dos hooks.
 - **Contexto:** os tokens que a última resposta leu, e depois de uma compactação o tamanho que o Claude Code anotou nela. A janela vem da própria ferramenta quando ela informa no transcript; sem isso, de uma tabela por modelo versionada no serviço, conferida na documentação de modelos da Anthropic. Modelo fora da tabela fica sem janela: a área diz que não sabe e o aviso dos 80% não sai.
-- **Limites de uso** (janela de 5 horas, limite semanal): o Claude Code não expõe por hook nem por arquivo local, e ficam fora até existir uma fonte estável. Codex, Gemini e Antigravity **(validar)**. Sem fonte confiável, a área não inventa número.
+- **Limites de uso** (janela de 5 horas, limite semanal): o Claude Code não expõe por hook nem por arquivo local, e ficam fora até existir uma fonte estável. Para Codex, OpenCode, Gemini e Antigravity não há fonte validada, então ficam fora também. Sem fonte confiável, a área não inventa número.
 
 ---
 

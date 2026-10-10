@@ -15,8 +15,15 @@ export function portaDosHooks(env: NodeJS.ProcessEnv = process.env): number {
 /** Corpo maior que isto é recusado: o `PostToolUse` traz a saída da ferramenta, que pode ser grande. */
 export const CORPO_MAXIMO = 8 * 1024 * 1024;
 
-/** Uma rota por ferramenta, que a ligação grava na configuração dela; a F2-27 acrescenta as outras. */
-export const ROTAS_HOOKS: Record<string, FerramentaSessao> = { "/hooks/claude-code": "claude-code" };
+/**
+ * Uma rota por ferramenta, que a ligação grava na configuração dela. O plugin do OpenCode traduz
+ * os eventos dele para o corpo dos hooks do Claude Code (AGENTS.md §5). O Codex não tem rota: os
+ * hooks dele só rodam comando, então ele entra pela varredura de processos.
+ */
+export const ROTAS_HOOKS: Record<string, FerramentaSessao> = {
+  "/hooks/claude-code": "claude-code",
+  "/hooks/opencode": "opencode",
+};
 
 /** Explica no próprio Claude Code (e no log dele) por que o evento foi recusado. */
 export const RECUSA_TOKEN =
