@@ -169,6 +169,31 @@ describe("Conexões", () => {
     expect(botao("Ver o que muda")).toBeTruthy();
   });
 
+  it("Esc durante o Ligando… não fecha a prévia: o arquivo já está sendo escrito", async () => {
+    servico();
+    await montar();
+    await clicar("Ver o que muda");
+    const responder = falso.responder;
+    let terminar: () => void = () => undefined;
+    falso.responder = (metodo, dados) =>
+      metodo === "conexoes.ligar"
+        ? new Promise((ok) => {
+            terminar = () => ok(responder(metodo, dados));
+          })
+        : responder(metodo, dados);
+    await clicar("Ligar 2 hooks no Claude Code");
+    expect(botao("Ligando…")).toBeTruthy();
+    await act(async () => {
+      por(".config-previa")!.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    expect(por(".config-previa")).not.toBeNull();
+    await act(async () => terminar());
+    expect(por(".config-previa")).toBeNull();
+    expect(cartao("Claude Code").textContent).toContain("ligada");
+  });
+
   it("GitHub com erro diz o motivo, mostra o comando e conecta de novo", async () => {
     servico(
       conexao("hooks-claude-code"),

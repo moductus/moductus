@@ -46,8 +46,14 @@ export interface PedidoExecucao {
   /** Sessão do provedor a continuar (`--resume`); devolvida no resultado da execução anterior. */
   continuarDe?: string | null;
   /**
-   * A conversa inteira, para quando `continuarDe` não vale: a sessão é do provedor principal, e na
-   * reserva o pedido começa outra. Sem ele, valem as `mensagens`.
+   * O provedor que abriu a sessão de `continuarDe`. O provedor é escolhido na vez do pedido, depois
+   * do sono ou da pausa: se o modelo do agente foi trocado enquanto o pedido esperava, a sessão é
+   * de outro e não vale (F2-32). Sem ele, a sessão vale para o principal.
+   */
+  sessaoDe?: string | null;
+  /**
+   * A conversa inteira, para quando `continuarDe` não vale: na reserva, ou com o provedor trocado
+   * (`sessaoDe`), o pedido começa outra sessão. Sem ele, valem as `mensagens`.
    */
   mensagensSemSessao?: readonly MensagemModelo[];
   /**
@@ -310,17 +316,19 @@ export class Runtime {
         fim = { estado: "erro", erro: MENSAGEM_SEM_MODELO(agente.nome), resumo: null };
       } else {
         const provedor = this.deps.provedores.obter(config);
+        // A sessão não segue para outro provedor: a reserva, ou o modelo trocado na espera.
+        const semSessao = naReserva || (pedido.sessaoDe != null && pedido.sessaoDe !== config.id);
         const eventos = provedor.executar(
           {
             agenteId: agente.id,
             execucaoId: id,
             instrucoes: pedido.instrucoes ?? montarInstrucoes(agente),
             mensagens: historicoCurto(
-              naReserva ? (pedido.mensagensSemSessao ?? pedido.mensagens) : pedido.mensagens,
+              semSessao ? (pedido.mensagensSemSessao ?? pedido.mensagens) : pedido.mensagens,
             ),
             ferramentas: pedido.semFerramentas ? [] : escopo.oferecidas(),
             executarFerramenta: executar,
-            continuarDe: naReserva ? null : (pedido.continuarDe ?? null),
+            continuarDe: semSessao ? null : (pedido.continuarDe ?? null),
             // Fora da fila, a execução é a própria fila no adaptador: não espera nem segura ninguém.
             ...(pedido.foraDaFila ? { fila: id } : {}),
           },

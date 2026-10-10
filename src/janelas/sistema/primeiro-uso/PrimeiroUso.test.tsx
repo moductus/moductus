@@ -135,6 +135,11 @@ function atender(metodo: string, dados: unknown): unknown {
       falso.conexoes = falso.conexoes.map((c) => (c.tipo === tipo ? { ...c, estado: "ligada" } : c));
       return falso.conexoes.find((c) => c.tipo === tipo);
     }
+    case "conexoes.desligar": {
+      const { tipo } = dados as { tipo: string };
+      falso.conexoes = falso.conexoes.map((c) => (c.tipo === tipo ? { ...c, estado: "desligada" } : c));
+      return falso.conexoes.find((c) => c.tipo === tipo);
+    }
     case "github.obter":
       return { itens: [], atualizadoEm: null };
     case "sessoes.listar":
@@ -382,6 +387,15 @@ describe("primeiro uso", () => {
     expect(pedidosDe("conexoes.ligar")).toEqual([{ tipo: "hooks-claude-code" }, { tipo: "github" }]);
     expect(todos(".uso-item--nuno .uso-item-linha .selo").map((s) => s.textContent)).toEqual(["conectado"]);
     expect(auditar(recipiente)).toEqual([]);
+
+    // Conectado, como no quadro: "Desconectar" desfaz as duas.
+    await clicar(botao("Desconectar"));
+    expect(pedidosDe("conexoes.desligar")).toEqual([{ tipo: "hooks-claude-code" }, { tipo: "github" }]);
+    // "Agora não" fecha os cartões e deixa para depois, sem ligar nada.
+    await clicar(botao("Agora não"));
+    expect(por(".uso-conexoes-nuno")).toBeNull();
+    expect(todos(".uso-item--nuno .uso-item-linha .selo").map((s) => s.textContent)).toEqual(["depois"]);
+    expect(botao("Conectar")).toBeTruthy();
   });
 
   it("pular a configuração no meio grava o que foi visto e vai ao Início", async () => {

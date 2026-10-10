@@ -8,7 +8,11 @@ import {
   type ProvedorDetectado,
 } from "@moductus/contrato";
 import type { TomSelo } from "../../componentes/Selo.tsx";
-import { eFalhaDoProvedor } from "../../componentes/personagem/situacao.ts";
+import {
+  comandoDoCli,
+  eFalhaDoProvedor,
+  type FalhaDoProvedor,
+} from "../../componentes/personagem/situacao.ts";
 import { formatarLatencia } from "../../janelas/sistema/primeiro-uso/modelo.ts";
 import { haQuanto } from "../tempo.ts";
 
@@ -35,6 +39,8 @@ export interface EstadoProvedor {
   quando: string | null;
   /** O que deu errado, dito ao usuário (a mensagem do serviço). */
   erro: string | null;
+  /** O comando para rodar no terminal (o login do CLI), mostrado como código depois do erro. */
+  comando?: string;
 }
 
 const ehCli = (tipo: Provedor["tipo"]) => (TIPOS_PROVEDOR_CLI as readonly string[]).includes(tipo);
@@ -48,12 +54,31 @@ export const temChaveTrocavel = (provedor: Provedor) =>
 
 const HORA = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-/** O que a falha diz ao usuário quando o agente dorme por ela e a tela não testou nada. */
-const FALHA_DO_AGENTE: Readonly<Record<string, string>> = {
-  fora_do_ar: "O provedor não respondeu na última execução. Teste de novo para conferir.",
-  credencial: "A chave foi recusada na última execução. Troque a chave e teste de novo.",
-  ausente: "O CLI não foi encontrado na última execução. Instale de novo e teste.",
-};
+/**
+ * O que a falha diz ao usuário quando o agente dorme por ela e a tela não testou nada. Credencial
+ * num CLI é login, não chave (o CLI roda com a conta do usuário): diz o comando para entrar.
+ */
+function falhaDoAgente(
+  motivo: FalhaDoProvedor,
+  provedor: Provedor,
+): Pick<EstadoProvedor, "erro" | "comando"> {
+  switch (motivo) {
+    case "fora_do_ar":
+      return { erro: `O ${provedor.nome} não respondeu na última execução. Teste de novo para conferir.` };
+    case "ausente":
+      return { erro: `O ${provedor.nome} não foi encontrado na última execução. Instale de novo e teste.` };
+    case "credencial": {
+      const comando = comandoDoCli(provedor);
+      if (comando) {
+        return {
+          erro: `O ${provedor.nome} está sem login. Entre no terminal com o comando abaixo e teste de novo.`,
+          comando,
+        };
+      }
+      return { erro: "A chave foi recusada na última execução. Troque a chave e teste de novo." };
+    }
+  }
+}
 
 /**
  * O estado de um provedor na tabela, do mais novo para o mais velho: o teste desta tela (rodando,
@@ -94,14 +119,9 @@ export function estadoDoProvedor(
       a.situacao.estado === "dormindo" &&
       eFalhaDoProvedor(a.situacao.motivoSono),
   );
-  if (caiu?.situacao.motivoSono) {
-    return {
-      texto: "erro",
-      tom: "perigo",
-      resposta: "—",
-      quando: null,
-      erro: FALHA_DO_AGENTE[caiu.situacao.motivoSono] ?? null,
-    };
+  const motivo = caiu?.situacao.motivoSono ?? null;
+  if (eFalhaDoProvedor(motivo)) {
+    return { texto: "erro", tom: "perigo", resposta: "—", quando: null, ...falhaDoAgente(motivo, provedor) };
   }
   if (provedor.testadoEm) {
     return {
@@ -143,20 +163,39 @@ export function descreverProvedor(provedor: Provedor, detectado?: ProvedorDetect
   return partes.join(" · ");
 }
 
-/**
- * O pedido de trocar o principal. Escolher como principal o que era a reserva troca os dois de
- * lugar: o de antes vira a reserva, em vez de o agente perder a reserva sem pedir.
- */
-export function trocarPrincipal(agente: Agente, novo: string): MudancaAgente {
-  if (novo === agente.provedorReservaId) {
-    return { id: agente.id, provedorId: novo, provedorReservaId: agente.provedorId };
-  }
-  return { id: agente.id, provedorId: novo };
+/** O que o usuário escolheu numa lista da tabela, antes de confirmar no painel do agente. */
+export interface EscolhaModelo {
+  principal?: string;
+  /** `null` é nenhuma reserva. */
+  reserva?: string | null;
 }
 
-/** O pedido de trocar a reserva; `null` é nenhuma. */
-export function trocarReserva(agente: Agente, nova: string | null): MudancaAgente {
-  return { id: agente.id, provedorReservaId: nova };
+/** O principal e a reserva que o painel mostra marcados. */
+export interface ModeloEscolhido {
+  principal: string | null;
+  reserva: string | null;
+}
+
+/**
+ * Como o painel abre: o que está gravado, com a escolha feita na tabela por cima. Escolher como
+ * principal o que era a reserva troca os dois de lugar (o de antes vira a reserva), em vez de o
+ * agente perder a reserva sem pedir; a reserva nunca é o próprio principal.
+ */
+export function escolhaInicial(agente: Agente, escolha: EscolhaModelo = {}): ModeloEscolhido {
+  const principal = escolha.principal ?? agente.provedorId;
+  let reserva = escolha.reserva === undefined ? agente.provedorReservaId : escolha.reserva;
+  if (escolha.principal !== undefined && escolha.principal === agente.provedorReservaId) {
+    reserva = agente.provedorId;
+  }
+  return { principal, reserva: reserva === principal ? null : reserva };
+}
+
+/** O pedido de gravar o que o painel tem marcado; `null` quando nada mudou ou falta o principal. */
+export function mudancaDoPainel(agente: Agente, escolhido: ModeloEscolhido): MudancaAgente | null {
+  if (!escolhido.principal) return null;
+  if (escolhido.principal === agente.provedorId && escolhido.reserva === agente.provedorReservaId)
+    return null;
+  return { id: agente.id, provedorId: escolhido.principal, provedorReservaId: escolhido.reserva };
 }
 
 /** "14 execuções", "1 execução", "nenhuma"; acima do que a tela leu, "200 ou mais". */

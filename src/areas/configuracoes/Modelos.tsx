@@ -5,14 +5,14 @@ import {
   type ProvedorDetectado,
   type TipoProvedorCli,
 } from "@moductus/contrato";
-import { useEffect, useId, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { Campo } from "../../componentes/Campo.tsx";
 import { FalaAgente } from "../../componentes/FalaAgente.tsx";
 import { Icone } from "../../componentes/Icone.tsx";
 import { eAgente, type Agente as IdAgente } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
-import { fraseDaSituacao, lerSituacao } from "../../componentes/personagem/situacao.ts";
+import { fraseDaSituacao, lerSituacao, modeloDoAgente } from "../../componentes/personagem/situacao.ts";
 import { Seletor, type OpcaoSeletor } from "../../componentes/Seletor.tsx";
 import { Selo, type TomSelo } from "../../componentes/Selo.tsx";
 import {
@@ -32,8 +32,9 @@ import {
   execucoesEmTexto,
   falaDaTroca,
   temChaveTrocavel,
-  trocarPrincipal,
-  trocarReserva,
+  escolhaInicial,
+  mudancaDoPainel,
+  type EscolhaModelo,
   type EstadoProvedor,
 } from "./modelos.ts";
 import { Aviso, Carregando } from "./Partes.tsx";
@@ -60,6 +61,12 @@ const ehCli = (tipo: string): tipo is TipoProvedorCli =>
 const emAgente = (agente: Agente) => (eAgente(agente.id) ? `n${comArtigo(agente.id)}` : `em ${agente.nome}`);
 const doAgente = (agente: Agente) => (eAgente(agente.id) ? deAgente(agente.id) : `de ${agente.nome}`);
 
+/** O painel de troca aberto: de qual agente e o que foi escolhido na tabela antes de abrir. */
+interface PainelAberto {
+  agenteId: string;
+  escolha: EscolhaModelo;
+}
+
 /**
  * Configurações › Modelos (ConfigModelos, ConfigModelosAgente e ConfigModelosVazio.dc.html): os
  * provedores conectados com o teste de verdade, e o principal, a reserva e o teto de cada agente.
@@ -68,7 +75,8 @@ const doAgente = (agente: Agente) => (eAgente(agente.id) ? deAgente(agente.id) :
 export function SecaoModelos() {
   const m = useModelos();
   const agora = useAgora();
-  const [painel, setPainel] = useState<string | null>(null);
+  // O agente com o painel aberto e o que foi escolhido na tabela; grava só com o sim no painel.
+  const [painel, setPainel] = useState<PainelAberto | null>(null);
   const [formulario, setFormulario] = useState<TipoApi | null>(null);
   const vazio = m.provedores !== null && m.provedores.length === 0;
   const { procurar } = m;
@@ -516,7 +524,12 @@ function LinhaProvedor({
       {extra && (
         <tr className="config-tabela-extra">
           <td colSpan={4}>
-            {estado.erro && <p className="config-modelos-erro">{estado.erro}</p>}
+            {estado.erro && (
+              <p className="config-modelos-erro">
+                {estado.erro}
+                {estado.comando && <code className="config-conexao-comando">{estado.comando}</code>}
+              </p>
+            )}
             {trocando && (
               <div className="config-modelos-chave">
                 <Campo
@@ -560,8 +573,8 @@ function TabelaAgentes({
   provedores: readonly Provedor[];
   agentes: readonly Agente[];
   agora: Date;
-  painel: string | null;
-  aoAbrir: (id: string | null) => void;
+  painel: PainelAberto | null;
+  aoAbrir: (aberto: PainelAberto | null) => void;
 }) {
   const tomDe = (id: string | null) => tomDoProvedor(id, provedores, modelos, agora, agentes);
   const travado = !modelos.conectado;
@@ -594,7 +607,7 @@ function TabelaAgentes({
           </thead>
           <tbody>
             {agentes.map((a) =>
-              painel === a.id ? (
+              painel?.agenteId === a.id ? (
                 <tr key={a.id} className="config-tabela-extra">
                   <td colSpan={5}>
                     <PainelAgente
@@ -602,6 +615,7 @@ function TabelaAgentes({
                       provedores={provedores}
                       modelos={modelos}
                       agora={agora}
+                      escolha={painel.escolha}
                       aoFechar={() => aoAbrir(null)}
                     />
                   </td>
@@ -609,7 +623,12 @@ function TabelaAgentes({
               ) : (
                 <tr key={a.id}>
                   <th scope="row">
-                    <CabecaAgente agente={a} agora={agora} aoAbrir={() => aoAbrir(a.id)} />
+                    <CabecaAgente
+                      agente={a}
+                      provedores={provedores}
+                      agora={agora}
+                      aoAbrir={() => aoAbrir({ agenteId: a.id, escolha: {} })}
+                    />
                   </th>
                   <td>
                     <ListaProvedor
@@ -618,8 +637,10 @@ function TabelaAgentes({
                       provedores={provedores}
                       tom={tomDe(a.provedorId)}
                       desativada={travado}
+                      // Escolher não grava (a seta numa lista nativa muda a cada toque): abre o
+                      // painel do agente com a escolha, e só o sim lá grava.
                       aoMudar={(id) => {
-                        if (id) void modelos.definir(trocarPrincipal(a, id));
+                        if (id) aoAbrir({ agenteId: a.id, escolha: { principal: id } });
                       }}
                     />
                   </td>
@@ -631,7 +652,7 @@ function TabelaAgentes({
                       tom={tomDe(a.provedorReservaId)}
                       nenhuma
                       desativada={travado || a.provedorId === null}
-                      aoMudar={(id) => void modelos.definir(trocarReserva(a, id))}
+                      aoMudar={(id) => aoAbrir({ agenteId: a.id, escolha: { reserva: id } })}
                     />
                   </td>
                   <td>
@@ -651,9 +672,21 @@ function TabelaAgentes({
 }
 
 /** A cabeça, o nome e o papel; parado (sem modelo, dormindo, pausado), a frase do estado. */
-function CabecaAgente({ agente, agora, aoAbrir }: { agente: Agente; agora: Date; aoAbrir: () => void }) {
-  const leitura = lerSituacao(agente.situacao, agora);
-  const parado = fraseDaSituacao(agente.situacao, agora);
+function CabecaAgente({
+  agente,
+  provedores,
+  agora,
+  aoAbrir,
+}: {
+  agente: Agente;
+  provedores: readonly Provedor[];
+  agora: Date;
+  aoAbrir: () => void;
+}) {
+  // O modelo diz se a credencial recusada é login no terminal (CLI) ou chave (API).
+  const modelo = modeloDoAgente(agente.provedorId, provedores);
+  const leitura = lerSituacao(agente.situacao, agora, modelo);
+  const parado = fraseDaSituacao(agente.situacao, agora, modelo);
   return (
     <button
       type="button"
@@ -755,32 +788,40 @@ function PainelAgente({
   provedores,
   modelos,
   agora,
+  escolha,
   aoFechar,
 }: {
   agente: Agente;
   provedores: readonly Provedor[];
   modelos: ModelosDaSecao;
   agora: Date;
+  /** O que foi escolhido numa lista da tabela, já marcado ao abrir. */
+  escolha: EscolhaModelo;
   aoFechar: () => void;
 }) {
   const idTitulo = useId();
-  const [principal, setPrincipal] = useState<string | null>(agente.provedorId);
-  const [reserva, setReserva] = useState<string | null>(agente.provedorReservaId);
+  const [inicial] = useState(() => escolhaInicial(agente, escolha));
+  const [principal, setPrincipal] = useState<string | null>(inicial.principal);
+  const [reserva, setReserva] = useState<string | null>(inicial.reserva);
   const [gravando, setGravando] = useState(false);
-  const leitura = lerSituacao(agente.situacao, agora);
-  const parado = fraseDaSituacao(agente.situacao, agora);
+  const marcado = useRef<HTMLInputElement>(null);
+  const modelo = modeloDoAgente(agente.provedorId, provedores);
+  const leitura = lerSituacao(agente.situacao, agora, modelo);
+  const parado = fraseDaSituacao(agente.situacao, agora, modelo);
   const nome = (id: string | null) => provedores.find((p) => p.id === id)?.nome ?? null;
+  // A lista da tabela saiu de cena ao abrir: o foco vem para a escolha marcada no painel.
+  useEffect(() => marcado.current?.focus(), []);
   // A reserva não pode ser o principal: escolher o principal que era a reserva troca os dois.
   const escolherPrincipal = (id: string) => {
     if (id === reserva) setReserva(principal);
     setPrincipal(id);
   };
+  const mudanca = mudancaDoPainel(agente, { principal, reserva });
   const mudouPrincipal = principal !== agente.provedorId;
-  const mudouReserva = reserva !== agente.provedorReservaId;
   const confirmar = async () => {
-    if (!principal) return;
+    if (!mudanca) return;
     setGravando(true);
-    const ok = await modelos.definir({ id: agente.id, provedorId: principal, provedorReservaId: reserva });
+    const ok = await modelos.definir(mudanca);
     setGravando(false);
     if (ok) aoFechar();
   };
@@ -835,6 +876,7 @@ function PainelAgente({
             return (
               <label key={p.id} className="config-modelos-opcao" data-marcada={principal === p.id}>
                 <input
+                  ref={principal === p.id ? marcado : undefined}
                   type="radio"
                   name={`principal-${agente.id}`}
                   checked={principal === p.id}
@@ -885,7 +927,7 @@ function PainelAgente({
           </span>
         </div>
       </div>
-      {(mudouPrincipal || mudouReserva) && principal && (
+      {mudanca && principal && (
         <div className="config-modelos-painel-fala">
           {eAgente(agente.id) ? (
             <FalaAgente agente={agente.id} tamanho="fala">

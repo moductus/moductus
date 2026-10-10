@@ -106,6 +106,10 @@ describe("primeiro uso", () => {
     servico.sessaoDoClaudeCode();
     servico.sessaoDoClaudeCode();
     expect(eventos).toHaveLength(antes + 1);
+    // Voltou a pendente: a próxima sessão faz a missão de novo.
+    servico.marcar({ alvo: "missao", missao: "nuno-sessao", estado: "pendente" });
+    servico.sessaoDoClaudeCode();
+    expect(servico.obter().missoes["nuno-sessao"]).toBe("feito");
   });
 
   test("missão do Nuno já feita antes de reiniciar: a sessão não grava de novo", () => {

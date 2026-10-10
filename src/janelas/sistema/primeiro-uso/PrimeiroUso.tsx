@@ -883,7 +883,13 @@ function Conexoes(cabecalho: PropsCabecalho) {
   const conexoes = useConexoes();
   const [aberto, setAberto] = useState(false);
   const [depois, setDepois] = useState(false);
-  const ligadas = [conexoes.claude, conexoes.github].filter((c) => c?.estado === "ligada").length;
+  const doNuno = [conexoes.claude, conexoes.github].filter((c) => c !== null);
+  const ligadas = doNuno.filter((c) => c.estado === "ligada").length;
+  const ocupado = Object.values(conexoes.andamento).some((a) => a !== undefined);
+  // Desconectar desfaz as duas: os hooks saem do settings.json e o GitHub para de ser lido.
+  const desconectar = async () => {
+    for (const c of doNuno) if (c.estado === "ligada") await conexoes.desligar(c.tipo);
+  };
   const [alba, faina, tula] = CONEXOES_DEPOIS;
   return (
     <>
@@ -901,21 +907,37 @@ function Conexoes(cabecalho: PropsCabecalho) {
                 <span className="uso-item-nome">Sessões de IA e GitHub</span>
                 <span className="uso-rotulo">para o Nuno</span>
                 {ligadas > 0 && <Selo tom="sucesso">{ligadas === 2 ? "conectado" : "1 de 2 ligada"}</Selo>}
+                {ligadas === 0 && depois && <Selo>depois</Selo>}
               </span>
               <span className="uso-item-descricao">
                 Instala os hooks do Claude Code e lê PRs, issues e CI dos seus repositórios.
               </span>
             </span>
-            {!aberto && (
-              <span className="uso-item-acoes">
-                {!depois && ligadas === 0 && (
-                  <Botao variante="fantasma" onClick={() => setDepois(true)}>
-                    Agora não
-                  </Botao>
-                )}
-                <Botao onClick={() => setAberto(true)}>{ligadas === 2 ? "Ver conexões" : "Conectar"}</Botao>
-              </span>
-            )}
+            {/* Como no Uso5Conexoes.dc.html: "Agora não" e "Conectar"; conectado, "Desconectar". */}
+            <span className="uso-item-acoes">
+              {ligadas > 0 && (
+                <Botao variante="fantasma" disabled={ocupado} onClick={() => void desconectar()}>
+                  Desconectar
+                </Botao>
+              )}
+              {(ligadas === 0 || aberto) && (
+                <Botao
+                  variante="fantasma"
+                  disabled={ocupado}
+                  onClick={() => {
+                    setAberto(false);
+                    if (ligadas === 0) setDepois(true);
+                  }}
+                >
+                  Agora não
+                </Botao>
+              )}
+              {ligadas < 2 && !aberto && (
+                <Botao disabled={ocupado} onClick={() => setAberto(true)}>
+                  Conectar
+                </Botao>
+              )}
+            </span>
           </span>
           {aberto && (
             <div className="uso-conexoes-nuno">

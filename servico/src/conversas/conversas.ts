@@ -519,13 +519,7 @@ export class ServicoConversas {
     if (sinal.aborted || !this.deps.repo.conversa(conversaId)) return;
     const { agenteId } = destino;
     const chave = `${conversaId}:${agenteId}`;
-    // A sessão é do provedor que a abriu: trocado o modelo do agente, a próxima resposta começa
-    // sessão nova no modelo novo, com a conversa inteira (F2-32).
-    const guardada = this.sessoes.get(chave);
-    const sessao =
-      guardada && guardada.provedorId === this.deps.agentes.agente(agenteId)?.provedorId
-        ? guardada
-        : undefined;
+    const sessao = this.sessoes.get(chave);
     const nomes = new Map(this.deps.agentes.agentes().map((a) => [a.id, a.nome]));
     const conversa = this.deps.repo
       .historico(conversaId, gatilho.id, HISTORICO_CURTO.mensagens)
@@ -548,8 +542,10 @@ export class ServicoConversas {
         gatilho: "mensagem",
         mensagens: historico,
         continuarDe: sessao?.continuacao ?? null,
-        // Na reserva a sessão não vale: vai a conversa inteira.
-        ...(sessao ? { mensagensSemSessao: paraOModelo(conversa) } : {}),
+        // A sessão é do provedor que a abriu. Quem escolhe o provedor é o runtime, na vez do
+        // pedido: na reserva ou com o modelo trocado enquanto o pedido esperava (F2-32), ela não
+        // vale e vai a conversa inteira.
+        ...(sessao ? { sessaoDe: sessao.provedorId, mensagensSemSessao: paraOModelo(conversa) } : {}),
         sinal,
         aoEvento: (evento, execucaoId) => {
           if (sinal.aborted) return;

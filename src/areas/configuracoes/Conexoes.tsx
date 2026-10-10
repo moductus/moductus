@@ -230,7 +230,8 @@ export function PreviaClaudeCode({ previa, ocupado, ligando, erro, aoCancelar, a
       e.preventDefault();
       // O Esc fecha só a prévia: no primeiro uso, não volta um passo.
       e.stopPropagation();
-      aoCancelar();
+      // Ligando, o arquivo já está sendo escrito: o Esc não finge que cancelou.
+      if (!ligando) aoCancelar();
     }
   };
   return (

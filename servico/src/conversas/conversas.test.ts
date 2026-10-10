@@ -505,6 +505,36 @@ describe("conversa com um agente", () => {
     ]);
   });
 
+  test("modelo trocado enquanto a fala esperava o agente acordar: a sessão de antes não vai ao novo", async () => {
+    const { db, servico, falsos, runtime } = montar();
+    falsos.nuno.roteirizar([
+      { tipo: "texto", texto: "2 sessões ativas." },
+      { tipo: "fim", continuacao: "sessao-nuno" },
+    ]);
+    falsos.alba.roteirizar(roteiros.resposta("O #142 passou."));
+    const nuno = servico.abrir({ agenteId: "nuno" });
+    await servico.enviar({ conversaId: nuno.id, conteudo: "como estão as sessões?" });
+    await servico.ocioso();
+
+    // O Nuno dorme pela chave recusada: a fala nova espera na porta, já com a sessão escolhida.
+    db.exec(`UPDATE agentes SET estado = 'dormindo', motivo_sono = 'credencial',
+               dorme_ate = '2026-10-09T18:00:00.000Z' WHERE id = 'nuno'`);
+    await servico.enviar({ conversaId: nuno.id, conteudo: "e o CI?" });
+    await vi.waitFor(() => expect(runtime.estados.naPorta("nuno")).toBe(1));
+    // O que Configurações › Modelos faz: grava o provedor novo e avisa os estados, que o acordam.
+    db.exec("UPDATE agentes SET provedor_id = 'p-alba' WHERE id = 'nuno'");
+    runtime.estados.modeloMudou("nuno");
+    await servico.ocioso();
+
+    expect(falsos.alba.pedidos).toHaveLength(1);
+    expect(falsos.alba.pedidos[0]!.continuarDe).toBeNull();
+    expect(falsos.alba.pedidos[0]!.mensagens.map((m) => m.texto)).toEqual([
+      "como estão as sessões?",
+      "2 sessões ativas.",
+      "e o CI?",
+    ]);
+  });
+
   test("falha do provedor fica na conversa e não perde a sessão a continuar", async () => {
     const { servico, falsos } = montar();
     falsos.tula.roteirizar(

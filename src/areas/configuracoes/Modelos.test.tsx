@@ -181,23 +181,37 @@ describe("Modelos", () => {
     expect(auditar(recipiente)).toEqual([]);
   });
 
-  it("trocar o principal grava pelo serviço; escolher a reserva troca os dois de lugar", async () => {
+  it("escolher na lista da tabela não grava: abre o painel com a escolha, e o sim grava", async () => {
     servico();
     await montar();
     await escolher("Principal da Tula", "p2");
-    expect(pedidosDe("agentes.definir")).toEqual([{ id: "tula", provedorId: "p2" }]);
+    expect(pedidosDe("agentes.definir")).toEqual([]);
+    const radios = todos('input[name="principal-tula"]') as HTMLInputElement[];
+    expect(radios.map((r) => r.checked)).toEqual([false, true]);
+    // A lista saiu de cena: o foco vai à escolha marcada no painel.
+    expect(document.activeElement).toBe(radios[1]);
+    await act(async () => botao("Usar Ollama neste PC na Tula").click());
+    expect(pedidosDe("agentes.definir")).toEqual([{ id: "tula", provedorId: "p2", provedorReservaId: null }]);
     expect(escolhido("Principal da Tula")).toBe("Ollama neste PC");
 
+    // A reserva escolhida como principal troca os dois de lugar.
     await escolher("Principal da Alba", "p2");
+    expect(escolhido("Reserva da Alba")).toBe("Claude Code");
+    await act(async () => botao("Usar Ollama neste PC na Alba").click());
     expect(pedidosDe("agentes.definir").at(-1)).toEqual({
       id: "alba",
       provedorId: "p2",
       provedorReservaId: "p1",
     });
-    expect(escolhido("Reserva da Alba")).toBe("Claude Code");
 
-    await escolher("Reserva da Faina", "");
-    expect(pedidosDe("agentes.definir").at(-1)).toEqual({ id: "faina", provedorReservaId: null });
+    await escolher("Reserva da Faina", "p1");
+    expect(pedidosDe("agentes.definir")).toHaveLength(2);
+    await act(async () => botao("Guardar a reserva").click());
+    expect(pedidosDe("agentes.definir").at(-1)).toEqual({
+      id: "faina",
+      provedorId: "p2",
+      provedorReservaId: "p1",
+    });
   });
 
   it("o painel de um agente só grava com o sim, e o botão diz o que vai acontecer", async () => {

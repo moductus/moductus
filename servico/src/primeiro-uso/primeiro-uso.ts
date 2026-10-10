@@ -93,6 +93,8 @@ export class ServicoPrimeiroUso {
       return this.publicar();
     }
     this.repo.gravar([[missao(pedido.missao), pedido.estado]]);
+    // A missão do Nuno voltou a valer: a próxima sessão do Claude Code a faz de novo.
+    if (pedido.missao === "nuno-sessao" && pedido.estado === "pendente") this.nunoVisto = false;
     const { missoes, tutorial } = this.obter();
     if (tutorial === "pendente" && Object.values(missoes).every((e) => e === "feito")) {
       this.repo.gravar([[TUTORIAL, "feito"]]);

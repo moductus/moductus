@@ -7,8 +7,8 @@ import {
   execucoesEmTexto,
   falaDaTroca,
   temChaveTrocavel,
-  trocarPrincipal,
-  trocarReserva,
+  escolhaInicial,
+  mudancaDoPainel,
 } from "./modelos.ts";
 
 const AGORA = new Date(2026, 9, 10, 14, 5);
@@ -88,11 +88,20 @@ describe("estado do provedor", () => {
   it("sem teste aqui: o agente que dorme porque o principal falhou marca o erro, sem número inventado", () => {
     const p = provedor({ testadoEm: new Date(2026, 9, 10, 14, 2).toISOString() });
     const caiu = agente({}, { estado: "dormindo", motivoSono: "credencial" });
+    // CLI recusado é login, não chave: diz o comando para entrar.
     expect(estadoDoProvedor(p, undefined, [caiu], AGORA)).toMatchObject({
       texto: "erro",
       resposta: "—",
+      erro: "O Claude Code está sem login. Entre no terminal com o comando abaixo e teste de novo.",
+      comando: "claude",
+    });
+    const api = provedor({ tipo: "openai", nome: "OpenAI", temChave: true });
+    const daApi = estadoDoProvedor(api, undefined, [caiu], AGORA);
+    expect(daApi).toMatchObject({
+      texto: "erro",
       erro: "A chave foi recusada na última execução. Troque a chave e teste de novo.",
     });
+    expect(daApi.comando).toBeUndefined();
     // Limite de uso é sono tranquilo, não erro do provedor.
     const limite = agente({}, { estado: "dormindo", motivoSono: "limite" });
     expect(estadoDoProvedor(p, undefined, [limite], AGORA)).toEqual({
@@ -139,11 +148,25 @@ describe("descrição e chave", () => {
 });
 
 describe("trocar o modelo de um agente", () => {
-  it("escolher como principal a reserva troca os dois de lugar; o resto muda só o principal", () => {
+  it("o painel abre com a escolha da tabela; a reserva escolhida como principal troca de lugar", () => {
     const nuno = agente({ provedorId: "p1", provedorReservaId: "p2" });
-    expect(trocarPrincipal(nuno, "p2")).toEqual({ id: "nuno", provedorId: "p2", provedorReservaId: "p1" });
-    expect(trocarPrincipal(nuno, "p3")).toEqual({ id: "nuno", provedorId: "p3" });
-    expect(trocarReserva(nuno, null)).toEqual({ id: "nuno", provedorReservaId: null });
+    expect(escolhaInicial(nuno)).toEqual({ principal: "p1", reserva: "p2" });
+    expect(escolhaInicial(nuno, { principal: "p2" })).toEqual({ principal: "p2", reserva: "p1" });
+    expect(escolhaInicial(nuno, { principal: "p3" })).toEqual({ principal: "p3", reserva: "p2" });
+    expect(escolhaInicial(nuno, { reserva: null })).toEqual({ principal: "p1", reserva: null });
+    // A reserva nunca é o próprio principal.
+    expect(escolhaInicial(nuno, { reserva: "p1" })).toEqual({ principal: "p1", reserva: null });
+  });
+
+  it("o pedido só sai quando algo mudou e há principal", () => {
+    const nuno = agente({ provedorId: "p1", provedorReservaId: "p2" });
+    expect(mudancaDoPainel(nuno, { principal: "p1", reserva: "p2" })).toBeNull();
+    expect(mudancaDoPainel(nuno, { principal: null, reserva: null })).toBeNull();
+    expect(mudancaDoPainel(nuno, { principal: "p2", reserva: "p1" })).toEqual({
+      id: "nuno",
+      provedorId: "p2",
+      provedorReservaId: "p1",
+    });
   });
 
   it("a fala diz que vale na próxima execução e que a de agora termina no modelo de antes", () => {
