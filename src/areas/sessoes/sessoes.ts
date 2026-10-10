@@ -11,9 +11,10 @@ import {
   type UsoIa,
 } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { TomSelo } from "../../componentes/Selo.tsx";
 import { servico } from "../../servico/conexao.ts";
+import type { Leitura } from "../leitura.ts";
 import { diaLocal, haQuanto } from "../tempo.ts";
 
 /**
@@ -165,25 +166,27 @@ export interface GastoMostrado {
 }
 
 /**
- * O gasto de hoje da sessão, pelo `uso_ia` do projeto e da ferramenta dela: custo quando todas as
- * linhas têm preço (sempre estimativa, pela tabela do serviço); senão, os tokens. Assinatura e
- * modelo sem preço ficam sem custo, nunca com zero.
+ * O gasto de hoje do projeto da sessão, na ferramenta dela (`uso_ia` não separa por sessão: duas
+ * sessões do mesmo projeto mostram o mesmo número, e o rótulo diz que é do projeto). Custo quando
+ * todas as linhas têm preço (sempre estimativa, pela tabela do serviço); senão, os tokens.
+ * Assinatura e modelo sem preço ficam sem custo, nunca com zero.
  */
 export function gastoDeHoje(uso: readonly UsoIa[], sessao: SessaoIa, hoje: string): GastoMostrado {
   const linhas = uso.filter(
     (u) => u.dia === hoje && u.ferramenta === sessao.ferramenta && u.projetoId === sessao.projetoId,
   );
-  if (linhas.length === 0) return { texto: "sem uso", rotulo: "sem uso registrado hoje", vazio: true };
+  if (linhas.length === 0)
+    return { texto: "sem uso", rotulo: "sem uso do projeto registrado hoje", vazio: true };
   const comCusto = linhas.every((u) => u.custoEstimadoMicrodolares !== null);
   if (comCusto) {
     const custo = formatarDolares(linhas.reduce((s, u) => s + (u.custoEstimadoMicrodolares ?? 0), 0));
-    return { texto: `≈ ${custo}`, rotulo: `cerca de ${custo}, estimativa`, vazio: false };
+    return { texto: `≈ ${custo}`, rotulo: `cerca de ${custo} hoje no projeto, estimativa`, vazio: false };
   }
   const tokens = `${formatarTokens(linhas.reduce((s, u) => s + totalDe(u), 0))} tokens`;
   const estimativa = linhas.some((u) => u.fonte === "estimativa");
   return estimativa
-    ? { texto: `≈ ${tokens}`, rotulo: `cerca de ${tokens}, estimativa`, vazio: false }
-    : { texto: tokens, rotulo: tokens, vazio: false };
+    ? { texto: `≈ ${tokens}`, rotulo: `cerca de ${tokens} hoje no projeto, estimativa`, vazio: false }
+    : { texto: tokens, rotulo: `${tokens} hoje no projeto`, vazio: false };
 }
 
 const DIA_DA_SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
@@ -276,21 +279,28 @@ export const ESPERA_USO_MS = 3000;
  * As sessões, o uso da semana e a ligação do Claude Code, pelo canal: a lista ao conectar e cada
  * mudança depois (`sessoes.mudou`, `conexoes.mudou`). O uso não tem aviso próprio: muda quando o
  * serviço lê o transcript, que sempre vem com uma sessão mudando. Mudança que chega enquanto a
- * lista está a caminho é aplicada de novo sobre ela. Sem conexão, `null`.
+ * lista está a caminho é aplicada de novo sobre ela, e a ligação avisada nesse meio vale mais que
+ * a da lista. Sem conexão, esperando; pedido recusado, falhou (com o tentar de novo).
  */
-export function useDadosSessoes(canal: EstadoConexao, agora: Date): DadosSessoes | null {
+export function useDadosSessoes(canal: EstadoConexao, agora: Date): Leitura<DadosSessoes> {
   const [lista, setLista] = useState<ListaSessoes | null>(null);
   const [uso, setUso] = useState<UsoIa[]>([]);
   const [conexao, setConexao] = useState<Conexao | null>(null);
+  const [falhou, setFalhou] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
   const [releituraUso, setReleituraUso] = useState(0);
-  const durante = useRef<MudancaSessao[] | null>(null);
+  const durante = useRef<{ mudancas: MudancaSessao[]; conexao: boolean } | null>(null);
   const espera = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoje = diaLocal(agora);
+  const tentarDeNovo = useCallback(() => {
+    setFalhou(false);
+    setTentativa((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     const paradas = [
       servico.ouvir("sessoes.mudou", (mudanca) => {
-        durante.current?.push(mudanca);
+        durante.current?.mudancas.push(mudanca);
         setLista((l) => (l ? juntarSessao(l, mudanca) : l));
         if (espera.current === null) {
           espera.current = setTimeout(() => {
@@ -300,7 +310,9 @@ export function useDadosSessoes(canal: EstadoConexao, agora: Date): DadosSessoes
         }
       }),
       servico.ouvir("conexoes.mudou", (c) => {
-        if (c.tipo === "hooks-claude-code") setConexao(c);
+        if (c.tipo !== "hooks-claude-code") return;
+        if (durante.current) durante.current.conexao = true;
+        setConexao(c);
       }),
     ];
     return () => {
@@ -313,26 +325,29 @@ export function useDadosSessoes(canal: EstadoConexao, agora: Date): DadosSessoes
   useEffect(() => {
     if (canal !== "conectado") return;
     let vivo = true;
-    const mudancas: MudancaSessao[] = [];
-    durante.current = mudancas;
+    const carga = { mudancas: [] as MudancaSessao[], conexao: false };
+    durante.current = carga;
     Promise.all([servico.pedir("sessoes.listar"), servico.pedir("conexoes.listar")])
-      .then(([carga, conexoes]) => {
+      .then(([lida, conexoes]) => {
         if (!vivo) return;
-        setLista(mudancas.reduce(juntarSessao, carga));
-        setConexao(conexoes.find((c) => c.tipo === "hooks-claude-code") ?? null);
+        setLista(carga.mudancas.reduce(juntarSessao, lida));
+        if (!carga.conexao) setConexao(conexoes.find((c) => c.tipo === "hooks-claude-code") ?? null);
       })
       .catch(() => {
-        if (vivo) setLista(null);
+        if (!vivo) return;
+        setLista(null);
+        setFalhou(true);
       })
       .finally(() => {
-        if (durante.current === mudancas) durante.current = null;
+        if (durante.current === carga) durante.current = null;
       });
     return () => {
       vivo = false;
-      if (durante.current === mudancas) durante.current = null;
+      if (durante.current === carga) durante.current = null;
       setLista(null);
+      setFalhou(false);
     };
-  }, [canal]);
+  }, [canal, tentativa]);
 
   useEffect(() => {
     if (canal !== "conectado") return;
@@ -348,5 +363,7 @@ export function useDadosSessoes(canal: EstadoConexao, agora: Date): DadosSessoes
     };
   }, [canal, hoje, releituraUso]);
 
-  return canal === "conectado" && lista ? { lista, uso, conexao } : null;
+  if (canal !== "conectado") return { estado: "esperando" };
+  if (lista) return { estado: "pronta", dados: { lista, uso, conexao } };
+  return falhou ? { estado: "falhou", tentarDeNovo } : { estado: "esperando" };
 }

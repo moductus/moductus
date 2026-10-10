@@ -165,7 +165,7 @@ describe("Dev com dados", () => {
       { nome: "Issues para você", cartoes: ["moductus #31: Dock some"] },
     ]);
     expect(por(".dev-leitura")?.textContent).toBe("3 repositórios · atualizado há 2 min");
-    expect(por(".dev-fala-texto")?.textContent).toBe(
+    expect(por(".faixa-nuno-texto")?.textContent).toBe(
       "O api-pedidos #412 espera seu review. Mais 2 itens precisam de você.",
     );
     const selos = [...recipiente.querySelectorAll(".dev-item .selo")].map((s) => s.textContent);
@@ -187,8 +187,8 @@ describe("Dev com dados", () => {
       conexao("erro", "O gh não está logado. Rode gh auth login."),
     );
     await montar();
-    expect(por(".dev-fala")?.getAttribute("role")).toBe("alert");
-    expect(por(".dev-fala-texto")?.textContent).toBe("O gh não está logado. Rode gh auth login.");
+    expect(por(".faixa-nuno")?.getAttribute("role")).toBe("alert");
+    expect(por(".faixa-nuno-texto")?.textContent).toBe("O gh não está logado. Rode gh auth login.");
     act(() => botao("Abrir Conexões")!.click());
     expect(ir).toHaveBeenCalledWith({ area: "configuracoes", secao: "conexoes" });
   });
@@ -204,5 +204,21 @@ describe("Dev com dados", () => {
     expect(por(".estado-vazio-titulo")?.textContent).toBe("Nada esperando você no GitHub");
     // A área não manda o serviço ir ao GitHub: quem lê é o vigia.
     expect(falso.pedidos).not.toContain("github.atualizar");
+  });
+});
+
+describe("Dev quando a leitura falha", () => {
+  it("diz que não conseguiu ler e tenta de novo, em vez de esperar para sempre", async () => {
+    falso.servidor = { "conexoes.listar": [conexao("ligada")] };
+    await montar();
+    expect(por(".estado-vazio-titulo")?.textContent).toBe("O serviço não respondeu");
+    expect(por(".estado-vazio-texto")?.textContent).toBe(
+      "Não consegui ler o que o Nuno guardou do GitHub agora. Nada foi perdido: tente de novo.",
+    );
+    expect(por('[role="status"]')).toBeNull();
+    responder({ itens: ITENS, atualizadoEm: null }, conexao("ligada"));
+    await act(async () => botao("Tentar de novo")!.click());
+    expect(colunas()).toHaveLength(3);
+    expect(auditar(recipiente)).toEqual([]);
   });
 });

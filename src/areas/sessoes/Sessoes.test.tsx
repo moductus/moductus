@@ -209,10 +209,17 @@ describe("Sessões de IA com dados", () => {
         "Claude Code",
         "trabalhando",
         "não sei",
-        "12,4 mil tokens12,4 mil tokens",
+        "12,4 mil tokens12,4 mil tokens hoje no projeto",
         "Editando src-tauri/src/appbar.rs",
       ],
-      ["api-pedidos", "Claude Code", "esperando você", "84%", "sem usosem uso registrado hoje", "—"],
+      [
+        "api-pedidos",
+        "Claude Code",
+        "esperando você",
+        "84%",
+        "sem usosem uso do projeto registrado hoje",
+        "—",
+      ],
     ]);
     // Acima dos 80%, número e barra em aviso; sem número, nenhuma barra inventada.
     const contextos = [...recipiente.querySelectorAll<HTMLElement>(".sessao-contexto")];
@@ -268,5 +275,49 @@ describe("Sessões de IA com dados", () => {
     await montar();
     act(() => botao("Ajustar")!.click());
     expect(ir).toHaveBeenCalledWith({ area: "configuracoes", secao: "notificacoes" });
+  });
+});
+
+describe("Sessões de IA quando algo dá errado", () => {
+  it("com sessões na tela e a ligação em erro, o Nuno diz o que houve e leva às Conexões", async () => {
+    const erro = "O Moductus saiu do settings.json do Claude Code. Ligue de novo em Conexões.";
+    responder({ conexoes: [conexao("erro", erro)] });
+    await montar();
+    expect(linhas()).toHaveLength(2);
+    expect(por(".faixa-nuno")?.getAttribute("role")).toBe("alert");
+    expect(por(".faixa-nuno-texto")?.textContent).toBe(erro);
+    act(() => botao("Abrir Conexões")!.click());
+    expect(ir).toHaveBeenCalledWith({ area: "configuracoes", secao: "conexoes" });
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("ligada, sem faixa de erro", async () => {
+    responder();
+    await montar();
+    expect(por(".faixa-nuno")).toBeNull();
+  });
+
+  it("a leitura recusada diz que falhou e tenta de novo, em vez de esperar para sempre", async () => {
+    responder();
+    delete falso.servidor["sessoes.listar"];
+    await montar();
+    expect(por(".estado-vazio-titulo")?.textContent).toBe("O serviço não respondeu");
+    expect(por(".estado-vazio-texto")?.textContent).toBe(
+      "Não consegui ler as sessões agora. Nada foi perdido: tente de novo.",
+    );
+    expect(por('[role="status"]')).toBeNull();
+    responder();
+    await act(async () => botao("Tentar de novo")!.click());
+    expect(linhas()).toHaveLength(2);
+  });
+
+  it("a ligação avisada enquanto a lista está a caminho vale mais que a da lista", async () => {
+    responder();
+    let entregar!: (lista: ListaSessoes) => void;
+    falso.servidor["sessoes.listar"] = new Promise<ListaSessoes>((r) => (entregar = r));
+    await montar();
+    emitir("conexoes.mudou", conexao("erro", "A ligação ficou desatualizada."));
+    await act(async () => entregar(LISTA));
+    expect(por(".faixa-nuno-texto")?.textContent).toBe("A ligação ficou desatualizada.");
   });
 });

@@ -1,8 +1,9 @@
 import type { Conexao, ItemGithub, SituacaoGithub } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { TomSelo } from "../../componentes/Selo.tsx";
 import { servico } from "../../servico/conexao.ts";
+import type { Leitura } from "../leitura.ts";
 import { haQuanto } from "../tempo.ts";
 
 /**
@@ -139,11 +140,18 @@ export interface DadosDev {
 /**
  * O cache do GitHub e a conexão dele, pelo canal: ao conectar (`github.obter`, `conexoes.listar`)
  * e a cada mudança (`github.mudou`, `conexoes.mudou`). A área não manda o serviço ir ao GitHub:
- * o vigia lê a cada 15 min. Sem conexão com o serviço, `null`.
+ * o vigia lê a cada 15 min. Sem conexão com o serviço, esperando; pedido recusado, falhou (com o
+ * tentar de novo).
  */
-export function useDadosDev(canal: EstadoConexao): DadosDev | null {
+export function useDadosDev(canal: EstadoConexao): Leitura<DadosDev> {
   const [situacao, setSituacao] = useState<SituacaoGithub | null>(null);
   const [conexao, setConexao] = useState<Conexao | null>(null);
+  const [falhou, setFalhou] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
+  const tentarDeNovo = useCallback(() => {
+    setFalhou(false);
+    setTentativa((n) => n + 1);
+  }, []);
   // Aviso que chega com a carga a caminho é mais novo que ela: a carga não o desfaz.
   const chegou = useRef({ situacao: false, conexao: false });
 
@@ -174,13 +182,18 @@ export function useDadosDev(canal: EstadoConexao): DadosDev | null {
         if (!durante.conexao) setConexao(conexoes.find((c) => c.tipo === "github") ?? null);
       })
       .catch(() => {
-        if (vivo) setSituacao(null);
+        if (!vivo) return;
+        setSituacao(null);
+        setFalhou(true);
       });
     return () => {
       vivo = false;
       setSituacao(null);
+      setFalhou(false);
     };
-  }, [canal]);
+  }, [canal, tentativa]);
 
-  return canal === "conectado" && situacao ? { situacao, conexao } : null;
+  if (canal !== "conectado") return { estado: "esperando" };
+  if (situacao) return { estado: "pronta", dados: { situacao, conexao } };
+  return falhou ? { estado: "falhou", tentarDeNovo } : { estado: "esperando" };
 }

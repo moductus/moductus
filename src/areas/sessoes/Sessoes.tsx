@@ -16,6 +16,7 @@ import {
   type PedidosDoTerminal,
 } from "../../servico/aprovacoes.ts";
 import { useCanal } from "../../servico/conexao.ts";
+import { AbrirConexoes, FaixaNuno, LeituraPendente } from "../FaixaNuno.tsx";
 import { EstadoVazio, Pagina } from "../Pagina.tsx";
 import { diaLocal, useAgora } from "../tempo.ts";
 import {
@@ -39,23 +40,26 @@ const ROTULO = "Nuno · sessões de agentes de código";
 /**
  * Sessões de IA (AreaSessoes.dc.html): o uso da semana, os pedidos que esperam você, a tabela das
  * sessões por projeto e os avisos do Nuno. Sem a ligação do Claude Code e sem sessão, o vazio diz
- * como ligar.
+ * como ligar; com sessões na tela e a ligação em erro, o Nuno diz o que houve no alto.
  */
 export function Sessoes() {
   const canal = useCanal(useServico({ silencioso: true }));
   const agora = useAgora();
-  const dados = useDadosSessoes(canal, agora);
+  const leitura = useDadosSessoes(canal, agora);
   const pedidos = usePedidosDoTerminal(canal, null);
 
-  if (!dados) {
+  if (leitura.estado !== "pronta") {
     return (
       <Pagina titulo={TITULO} rotulo={ROTULO}>
-        <p className="area-carregando" role="status">
-          Esperando o serviço responder.
-        </p>
+        <LeituraPendente
+          oQue="as sessões"
+          tentarDeNovo={leitura.estado === "falhou" ? leitura.tentarDeNovo : undefined}
+        />
       </Pagina>
     );
   }
+
+  const dados = leitura.dados;
 
   if (dados.lista.sessoes.length === 0) {
     return (
@@ -66,12 +70,15 @@ export function Sessoes() {
   }
 
   const ferramentas = ferramentasAcompanhadas(dados).map((f) => NOME_FERRAMENTA[f]);
+  // A ligação caiu ou ficou velha (conexoes.ts): as sessões novas param de chegar, e o Nuno diz.
+  const erro = dados.conexao?.estado === "erro" ? dados.conexao.ultimoErro : null;
   return (
     <Pagina
       titulo={TITULO}
       rotulo={ROTULO}
       acao={<span className="sessoes-ferramentas">{ferramentas.join(" · ")}</span>}
     >
+      {erro && <FaixaNuno texto={erro} erro />}
       <div className="sessoes-alto" data-com-pedidos={pedidos.aprovacoes.length > 0}>
         <UsoDaSemana dados={dados} agora={agora} />
         <Pedidos pedidos={pedidos} />
@@ -84,7 +91,6 @@ export function Sessoes() {
 
 /** O vazio: sem ligação, como ligar; ligado, como fazer a primeira sessão aparecer. */
 function SemSessoes({ conexao }: { conexao: Conexao | null }) {
-  const { ir } = useAcoesSistema();
   if (claudeCodeLigado(conexao)) {
     return (
       <EstadoVazio
@@ -103,11 +109,7 @@ function SemSessoes({ conexao }: { conexao: Conexao | null }) {
         erro ??
         "Ligue em Configurações › Conexões e o Nuno passa a ver cada sessão do Claude Code: projeto, estado, contexto, pedidos para aprovar e consumo."
       }
-      acoes={
-        <Botao variante="primario" onClick={() => ir({ area: "configuracoes", secao: "conexoes" })}>
-          Abrir Conexões
-        </Botao>
-      }
+      acoes={<AbrirConexoes variante="primario" />}
     />
   );
 }
@@ -218,7 +220,9 @@ function TabelaSessoes({ dados, agora }: { dados: DadosSessoes; agora: Date }) {
             <th scope="col">Ferramenta</th>
             <th scope="col">Estado</th>
             <th scope="col">Contexto</th>
-            <th scope="col">Gasto hoje</th>
+            <th scope="col" title="Do projeto na ferramenta, somando as sessões dele">
+              Gasto hoje
+            </th>
             <th scope="col">Última ação</th>
           </tr>
         </thead>
@@ -285,7 +289,7 @@ function LinhaSessao({ sessao, projeto, caminho, dados, hoje, agora }: PropsLinh
         </span>
       </td>
       <td>
-        <span className="sessao-numero" data-vazio={gasto.vazio}>
+        <span className="sessao-numero" data-vazio={gasto.vazio} title={gasto.rotulo}>
           <span aria-hidden="true">{gasto.texto}</span>
           <span className="so-leitor">{gasto.rotulo}</span>
         </span>

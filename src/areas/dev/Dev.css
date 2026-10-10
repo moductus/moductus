@@ -4,19 +4,6 @@
   color: var(--texto-3);
 }
 
-.dev-fala {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--esp-12);
-}
-
-.dev-fala-texto {
-  flex: 1;
-  margin: 0;
-  color: var(--texto-2);
-  text-wrap: pretty;
-}
-
 .dev-colunas {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

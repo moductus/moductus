@@ -1,12 +1,10 @@
 import type { Conexao, ItemGithub } from "@moductus/contrato";
 import { useId } from "react";
-import { Botao } from "../../componentes/Botao.tsx";
 import { Cartao } from "../../componentes/Cartao.tsx";
 import { Selo } from "../../componentes/Selo.tsx";
-import { Personagem } from "../../componentes/personagem/Personagem.tsx";
-import { useAcoesSistema } from "../../janelas/sistema/primeiro-uso/estado.ts";
 import { useServico } from "../../nativo/eventos.ts";
 import { useCanal } from "../../servico/conexao.ts";
+import { AbrirConexoes, FaixaNuno, LeituraPendente } from "../FaixaNuno.tsx";
 import { EstadoVazio, Pagina } from "../Pagina.tsx";
 import { useAgora } from "../tempo.ts";
 import {
@@ -32,19 +30,20 @@ const ROTULO = "Nuno · GitHub";
 export function Dev() {
   const canal = useCanal(useServico({ silencioso: true }));
   const agora = useAgora();
-  const dados = useDadosDev(canal);
+  const leitura = useDadosDev(canal);
 
-  if (!dados) {
+  if (leitura.estado !== "pronta") {
     return (
       <Pagina titulo={TITULO} rotulo={ROTULO}>
-        <p className="area-carregando" role="status">
-          Esperando o serviço responder.
-        </p>
+        <LeituraPendente
+          oQue="o que o Nuno guardou do GitHub"
+          tentarDeNovo={leitura.estado === "falhou" ? leitura.tentarDeNovo : undefined}
+        />
       </Pagina>
     );
   }
 
-  const { situacao, conexao } = dados;
+  const { situacao, conexao } = leitura.dados;
   const colunas = colunasDoGithub(situacao.itens);
   const vazio = colunas.every((c) => c.itens.length === 0);
   const erro = conexao?.estado === "erro" ? conexao.ultimoErro : null;
@@ -64,26 +63,13 @@ export function Dev() {
       rotulo={ROTULO}
       acao={<span className="dev-leitura">{situacaoDaLeitura(situacao, agora)}</span>}
     >
-      {fala && <FalaDoNuno texto={fala} erro={erro !== null} />}
+      {fala && <FaixaNuno texto={fala} erro={erro !== null} />}
       <div className="dev-colunas">
         {colunas.map((c) => (
           <Coluna key={c.id} coluna={c} agora={agora} />
         ))}
       </div>
     </Pagina>
-  );
-}
-
-function AbrirConexoes({ variante }: { variante: "primario" | "secundario" }) {
-  const { ir } = useAcoesSistema();
-  return (
-    <Botao
-      variante={variante}
-      tamanho={variante === "primario" ? "normal" : "pequeno"}
-      onClick={() => ir({ area: "configuracoes", secao: "conexoes" })}
-    >
-      Abrir Conexões
-    </Botao>
   );
 }
 
@@ -115,23 +101,6 @@ function SemItens({ conexao }: { conexao: Conexao | null }) {
       texto="Conecte em Configurações › Conexões, com o gh instalado e logado. O Nuno passa a juntar os PRs que esperam seu review, os seus e as issues atribuídas a você."
       acoes={<AbrirConexoes variante="primario" />}
     />
-  );
-}
-
-/** A linha do Nuno no alto: o mais urgente, ou o que deu errado na última leitura. */
-function FalaDoNuno({ texto, erro }: { texto: string; erro: boolean }) {
-  return (
-    <Cartao variante="elevado" className="dev-fala" role={erro ? "alert" : undefined}>
-      <Personagem
-        agente="nuno"
-        modo="cabeca"
-        tamanho="faixa"
-        estado={erro ? "erro" : "esperando"}
-        rotulo="Nuno"
-      />
-      <p className="dev-fala-texto">{texto}</p>
-      {erro && <AbrirConexoes variante="secundario" />}
-    </Cartao>
   );
 }
 

@@ -107,7 +107,7 @@ describe("gasto de hoje", () => {
     const linhas = [uso(), uso({ modelo: "claude-haiku-4-5", tokensSaida: 800 }), uso({ dia: "2026-10-08" })];
     expect(gastoDeHoje(linhas, s, "2026-10-09")).toEqual({
       texto: "3 mil tokens",
-      rotulo: "3 mil tokens",
+      rotulo: "3 mil tokens hoje no projeto",
       vazio: false,
     });
   });
@@ -116,7 +116,7 @@ describe("gasto de hoje", () => {
     const linhas = [uso({ projetoId: "p2" }), uso({ ferramenta: "codex" })];
     expect(gastoDeHoje(linhas, s, "2026-10-09")).toEqual({
       texto: "sem uso",
-      rotulo: "sem uso registrado hoje",
+      rotulo: "sem uso do projeto registrado hoje",
       vazio: true,
     });
   });
@@ -124,7 +124,11 @@ describe("gasto de hoje", () => {
   it("estimativa sai marcada; custo só quando todas as linhas têm preço", () => {
     expect(gastoDeHoje([uso({ fonte: "estimativa" })], s, "2026-10-09").texto).toBe("≈ 1,2 mil tokens");
     const comPreco = [uso({ custoEstimadoMicrodolares: 1_860_000 })];
-    expect(gastoDeHoje(comPreco, s, "2026-10-09")).toMatchObject({ texto: "≈ US$ 1,86" });
+    expect(gastoDeHoje(comPreco, s, "2026-10-09")).toEqual({
+      texto: "≈ US$ 1,86",
+      rotulo: "cerca de US$ 1,86 hoje no projeto, estimativa",
+      vazio: false,
+    });
     const misturado = [...comPreco, uso({ modelo: "sem-tabela" })];
     expect(gastoDeHoje(misturado, s, "2026-10-09").texto).toBe("2,4 mil tokens");
   });
