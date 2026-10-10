@@ -5,9 +5,11 @@ import {
   Mensagem,
   PaginaMensagens,
   PedidoAbrirConversa,
+  PedidoApagarConversa,
   PedidoEnviar,
   ResultadoEnviar,
 } from "./conversas.ts";
+import { METODOS } from "./metodos.ts";
 
 const time = {
   id: "01K79Z6N7Q4W3J5XG2B8C1D0ER",
@@ -38,6 +40,12 @@ describe("conversa", () => {
     expect(PedidoAbrirConversa.safeParse({}).success).toBe(true);
     expect(PedidoAbrirConversa.safeParse({ agenteId: "nuno" }).success).toBe(true);
     expect(PedidoAbrirConversa.safeParse({ agenteId: "" }).success).toBe(false);
+  });
+
+  test("apagar pede a conversa e devolve a lista que ficou", () => {
+    expect(PedidoApagarConversa.safeParse({ id: time.id }).success).toBe(true);
+    expect(PedidoApagarConversa.safeParse({}).success).toBe(false);
+    expect(METODOS["conversas.apagar"].saida.safeParse([time]).success).toBe(true);
   });
 });
 

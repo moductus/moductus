@@ -206,6 +206,16 @@
   --altura-trilho-sessao: 3px;
   /* Selo dos PRs do painel Dev numa coluna só, para os títulos alinharem */
   --largura-selo-pr: 66px;
+  /* Agentes (Conversas.dc.html e AreaAgente.dc.html): lista de conversas, cabeçalho da conversa,
+     balão do usuário com a ponta embaixo à direita, largura da fala, aba e coluna da hora */
+  --largura-lista-conversas: 260px;
+  --altura-cabecalho-conversa: 60px;
+  --largura-balao: 520px;
+  --largura-fala: 620px;
+  --raio-balao: 14px;
+  --raio-balao-ponta: 4px;
+  --espessura-aba: 2px;
+  --largura-hora: 40px;
 }
 
 /* Menos animação no Windows: pela mídia do WebView ou pelo "Efeitos de animação" que a casca
