@@ -1,7 +1,7 @@
 {
   "name": "@moductus/servico",
   "private": true,
-  "version": "0.5.0-alpha",
+  "version": "0.6.0-alpha",
   "type": "module",
   "scripts": {
     "build": "esbuild src/main.ts --bundle --platform=node --target=node24 --format=esm --outfile=dist/servico.mjs \"--banner:js=import { createRequire as __moductusRequire } from 'node:module'; const require = __moductusRequire(import.meta.url);\"",
