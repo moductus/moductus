@@ -25,6 +25,7 @@ import {
   Mensagem,
   PaginaMensagens,
   PedidoAbrirConversa,
+  PedidoApagarConversa,
   PedidoArquivarConversa,
   PedidoEnviar,
   PedidoMensagens,
@@ -98,6 +99,7 @@ export const METODOS = {
   "conversas.mensagens": metodo(PedidoMensagens, PaginaMensagens),
   "conversas.enviar": metodo(PedidoEnviar, ResultadoEnviar),
   "conversas.arquivar": metodo(PedidoArquivarConversa, Conversa),
+  "conversas.apagar": metodo(PedidoApagarConversa, z.array(Conversa)),
 
   "aprovacoes.pendentes": metodo(z.undefined(), z.array(Aprovacao)),
   "aprovacoes.decidir": metodo(PedidoDecidir, Aprovacao),

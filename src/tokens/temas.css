@@ -180,6 +180,17 @@
   --largura-progresso-tutorial: 120px;
   /* Segunda volta de borda da opção marcada (a cor vem junto, do tema): 2 sem mudar o tamanho */
   --sombra-opcao-marcada: inset 0 0 0 1px;
+
+  /* Agentes (Conversas.dc.html e AreaAgente.dc.html): lista de conversas, cabeçalho da conversa,
+     balão do usuário com a ponta embaixo à direita, largura da fala, aba e coluna da hora */
+  --largura-lista-conversas: 260px;
+  --altura-cabecalho-conversa: 60px;
+  --largura-balao: 520px;
+  --largura-fala: 620px;
+  --raio-balao: 14px;
+  --raio-balao-ponta: 4px;
+  --espessura-aba: 2px;
+  --largura-hora: 40px;
 }
 
 /* Menos animação no Windows: pela mídia do WebView ou pelo "Efeitos de animação" que a casca

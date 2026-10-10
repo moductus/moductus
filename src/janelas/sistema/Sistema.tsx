@@ -141,7 +141,7 @@ function ConteudoArea({ destino, ir, primeiroUso }: PropsConteudoArea) {
         />
       );
     case "agentes":
-      return <Agentes />;
+      return <Agentes secao={destino.secao} ir={ir} />;
     case "sessoes":
       return <Sessoes />;
     case "tarefas":

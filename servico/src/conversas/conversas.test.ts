@@ -609,6 +609,36 @@ describe("mensagens", () => {
     };
     expect(restam.n).toBe(0);
   });
+
+  test("apagar pelo canal devolve as que ficaram, e a resposta que ainda rodava não volta", async () => {
+    const { servico, falsos, eventos } = montar();
+    falsos.tula.roteirizar([
+      { tipo: "texto", texto: "Lendo" },
+      { tipo: "pausa", ms: 200 },
+      { tipo: "texto", texto: " o extrato." },
+      { tipo: "fim", continuacao: "sessao-tula" },
+    ]);
+    const time = servico.abrir({});
+    const tula = servico.abrir({ agenteId: "tula" });
+    await servico.enviar({ conversaId: tula.id, conteudo: "lê o extrato" });
+    await vi.waitFor(() => expect(eventos.parciais.some((p) => p.conversaId === tula.id)).toBe(true), {
+      interval: 1,
+    });
+
+    expect(servico.apagar({ id: tula.id }).map((c) => c.id)).toEqual([time.id]);
+    await servico.ocioso();
+    // Só a fala do usuário foi gravada; a resposta terminou sem conversa onde ficar.
+    expect(eventos.mensagens.map((m) => m.agenteId)).toEqual([null]);
+    expect(() => servico.apagar({ id: tula.id })).toThrow("não encontrada");
+
+    // A conversa nova com a Tula começa do zero, sem continuar a sessão da apagada.
+    falsos.tula.roteirizar(roteiros.resposta("Oi."));
+    const nova = servico.abrir({ agenteId: "tula" });
+    expect(nova.id).not.toBe(tula.id);
+    await servico.enviar({ conversaId: nova.id, conteudo: "oi" });
+    await servico.ocioso();
+    expect(falsos.tula.pedidos.map((p) => p.continuarDe)).toEqual([null, null]);
+  });
 });
 
 describe("o que vai ao modelo", () => {

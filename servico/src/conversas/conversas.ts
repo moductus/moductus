@@ -5,6 +5,7 @@ import type {
   Mensagem,
   PaginaMensagens,
   PedidoAbrirConversa,
+  PedidoApagarConversa,
   PedidoArquivarConversa,
   PedidoEnviar,
   PedidoMensagens,
@@ -160,8 +161,7 @@ export class RepositorioConversas {
 
   /**
    * Manda a conversa para a lixeira com as mensagens dela: mensagem viva seguraria a conversa na
-   * limpeza dos 30 dias (migração 003). Nenhum método do canal apaga conversa ainda; a área
-   * Agentes (F2-31) usa daqui.
+   * limpeza dos 30 dias (migração 003).
    */
   apagar(id: string, agora: string): void {
     const origem = colunasDeOrigem(DO_USUARIO);
@@ -369,6 +369,20 @@ export class ServicoConversas {
     const conversa = this.exigir(pedido.id);
     this.avisos.conversa(conversa);
     return conversa;
+  }
+
+  /**
+   * Manda a conversa para a lixeira com as mensagens e devolve as que ficaram. Resposta que ainda
+   * roda nela termina sem gravar (`rodar` confere a conversa antes), e a sessão do provedor dela
+   * é esquecida: uma conversa nova nunca continua de uma apagada.
+   */
+  apagar(pedido: PedidoApagarConversa): Conversa[] {
+    this.exigir(pedido.id);
+    this.deps.repo.apagar(pedido.id, this.agora().toISOString());
+    for (const chave of this.sessoes.keys()) {
+      if (chave.startsWith(`${pedido.id}:`)) this.sessoes.delete(chave);
+    }
+    return this.listar();
   }
 
   /**
