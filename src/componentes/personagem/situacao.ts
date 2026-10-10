@@ -1,4 +1,11 @@
-import type { MotivoSono, SituacaoAgente } from "@moductus/contrato";
+import {
+  COMANDOS_CLI,
+  TIPOS_PROVEDOR_CLI,
+  type MotivoSono,
+  type Provedor,
+  type SituacaoAgente,
+  type TipoProvedorCli,
+} from "@moductus/contrato";
 import type { TomSelo } from "../Selo.tsx";
 import type { EstadoPersonagem, TomMoldura } from "./agentes.ts";
 import { ateQuando, quando } from "./quando.ts";
@@ -53,6 +60,87 @@ export function eFalhaDoProvedor(motivo: MotivoSono | null): motivo is FalhaDoPr
   return motivo !== null && Object.hasOwn(DICA_FALHA, motivo);
 }
 
+/**
+ * O modelo (provedor principal) de um agente, para dizer a falha do jeito dele: um CLI entra com
+ * login no terminal, uma API usa chave.
+ */
+export type ModeloDoAgente = Pick<Provedor, "tipo" | "nome">;
+
+/** O modelo do agente pela lista de provedores; `null` sem modelo ou sem a lista ainda. */
+export function modeloDoAgente(
+  provedorId: string | null | undefined,
+  provedores: readonly Provedor[] | null | undefined,
+): ModeloDoAgente | null {
+  const provedor = provedorId ? provedores?.find((p) => p.id === provedorId) : undefined;
+  return provedor ? { tipo: provedor.tipo, nome: provedor.nome } : null;
+}
+
+/** O comando do CLI no terminal ("claude"); `null` quando o modelo é por API ou não se sabe qual. */
+export function comandoDoCli(modelo: ModeloDoAgente | null): string | null {
+  if (!modelo || !(TIPOS_PROVEDOR_CLI as readonly string[]).includes(modelo.tipo)) return null;
+  return COMANDOS_CLI[modelo.tipo as TipoProvedorCli];
+}
+
+/**
+ * O que falhou, curto, para o dock e as linhas. Credencial num CLI é login, não chave: o CLI roda
+ * com a conta do usuário ("Not logged in"). Sem saber o modelo, não se fala de chave nem de login.
+ */
+function oQueFalhou(motivo: FalhaDoProvedor, modelo: ModeloDoAgente | null): string {
+  if (motivo !== "credencial") return DICA_FALHA[motivo];
+  if (!modelo) return "Modelo recusou o acesso";
+  return comandoDoCli(modelo) ? `${modelo.nome} sem login` : DICA_FALHA.credencial;
+}
+
+const MINUTO_MS = 60_000;
+
+/**
+ * A hora de tentar de novo já chegou: passou, ou cai no minuto que o relógio mostra (à 1:13,
+ * "tenta de novo às 1:13" já soa passado). O serviço acorda o agente nessa hora e tenta; até a
+ * notícia chegar, o texto diz que está tentando, em vez de prometer uma hora que já foi.
+ */
+export function jaTentando(dormeAte: string | null, agora: Date): boolean {
+  const volta = dormeAte === null ? Number.NaN : Date.parse(dormeAte);
+  if (Number.isNaN(volta)) return false;
+  return Math.floor(volta / MINUTO_MS) <= Math.floor(agora.getTime() / MINUTO_MS);
+}
+
+/** "tenta de novo às 14:05", "tenta de novo em breve" ou, com a hora chegada, "tentando de novo". */
+function tentaDeNovo(dormeAte: string | null, agora: Date): string {
+  if (jaTentando(dormeAte, agora)) return "tentando de novo";
+  return `tenta de novo ${quandoVolta(dormeAte, agora) ?? "em breve"}`;
+}
+
+/**
+ * A fala do cartão "Erro de provedor" no painel (Estados.dc.html), na voz de quem dormiu ("tento",
+ * ou "tentamos" quando são vários). CLI sem login diz como entrar; chave recusada pede para
+ * conferir a chave, porque tentar de novo com a mesma não adianta.
+ */
+export function falaDaFalha(
+  motivo: FalhaDoProvedor,
+  modelo: ModeloDoAgente | null,
+  dormeAte: string | null,
+  agora: Date,
+  varios: boolean,
+): string {
+  const nome = modelo?.nome ?? "modelo";
+  const volta = dormeAte ? quando(dormeAte, agora, "longa") : null;
+  const tento = jaTentando(dormeAte, agora)
+    ? `${varios ? "estamos" : "estou"} tentando de novo`
+    : `${varios ? "tentamos" : "tento"} de novo ${volta ?? "em breve"}`;
+  switch (motivo) {
+    case "credencial": {
+      const comando = comandoDoCli(modelo);
+      if (comando) return `O ${nome} está sem login. Entre no terminal com \`${comando}\` e ${tento}.`;
+      if (!modelo) return "O modelo recusou o acesso. Nada foi alterado; confira o modelo em Modelos.";
+      return `O ${nome} recusou a chave. Nada foi alterado; confira a chave em Modelos.`;
+    }
+    case "ausente":
+      return `Não achei o ${nome} neste PC. Nada foi alterado; ${tento}.`;
+    case "fora_do_ar":
+      return `O ${nome} não respondeu. Nada foi alterado; ${tento}.`;
+  }
+}
+
 /** "2 pedidos na fila"; `null` sem fila. */
 export function naFila(fila: number): string | null {
   if (fila <= 0) return null;
@@ -65,7 +153,11 @@ export function naFila(fila: number): string | null {
  * estado, o mesmo no painel do dock, na página do agente e na conversa. Ativo, `null`: quem
  * mostra diz o que ele está fazendo.
  */
-export function fraseDaSituacao(situacao: SituacaoAgente, agora: Date = new Date()): string | null {
+export function fraseDaSituacao(
+  situacao: SituacaoAgente,
+  agora: Date = new Date(),
+  modelo: ModeloDoAgente | null = null,
+): string | null {
   const comFila = (frase: string) => {
     const fila = naFila(situacao.fila);
     return fila ? `${frase} · ${fila}` : frase;
@@ -78,7 +170,7 @@ export function fraseDaSituacao(situacao: SituacaoAgente, agora: Date = new Date
       return comFila(`Em pausa ${ate ?? "até você retomar"}`);
     }
     case "dormindo":
-      return comFila(lerSituacao(situacao, agora).dica ?? "Dormindo");
+      return comFila(lerSituacao(situacao, agora, modelo).dica ?? "Dormindo");
     case "ativo":
       return null;
   }
@@ -94,13 +186,15 @@ function quandoVolta(dormeAte: string | null, agora: Date): string | null {
  * A situação que o runtime manda (contrato `SituacaoAgente`) vira expressão, anel e status
  * (DESIGN.md §6 e Estados.dc.html). Pausa, desligamento e sono ganham da atividade: um agente
  * pausado no meio de uma execução já não está trabalhando para você. O sono por falha do provedor
- * (fora do ar, chave recusada, CLI ausente) é o "Erro de provedor" do quadro: cara preocupada,
- * anel e ponto vermelhos até o modelo voltar. O limite de uso é sono tranquilo, com a hora de
- * volta na dica. Teto de gasto pede uma decisão sua: cara preocupada, mas anel e ponto de aviso.
+ * (fora do ar, chave recusada ou CLI sem login, CLI ausente) é o "Erro de provedor" do quadro:
+ * cara preocupada, anel e ponto vermelhos até o modelo voltar; o `modelo` diz se a credencial é
+ * login ou chave. O limite de uso é sono tranquilo, com a hora de volta na dica. Teto de gasto
+ * pede uma decisão sua: cara preocupada, mas anel e ponto de aviso.
  */
 export function lerSituacao(
   situacao: SituacaoAgente | null | undefined,
   agora: Date = new Date(),
+  modelo: ModeloDoAgente | null = null,
 ): LeituraSituacao {
   if (!situacao) return SEM_SITUACAO;
   switch (situacao.estado) {
@@ -127,7 +221,7 @@ export function lerSituacao(
           moldura: "perigo",
           texto: "erro",
           tom: "perigo",
-          dica: `${DICA_FALHA[motivo]}, tenta de novo ${volta ?? "em breve"}`,
+          dica: `${oQueFalhou(motivo, modelo)}, ${tentaDeNovo(situacao.dormeAte, agora)}`,
           ponto: "perigo",
         };
       }

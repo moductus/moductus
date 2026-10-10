@@ -15,7 +15,12 @@ import type {
 import { TIPOS_PROVEDOR_CLI } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
 import { useCallback, useEffect, useState } from "react";
-import { eFalhaDoProvedor, fraseDaSituacao, naFila } from "../componentes/personagem/situacao.ts";
+import {
+  eFalhaDoProvedor,
+  fraseDaSituacao,
+  naFila,
+  type ModeloDoAgente,
+} from "../componentes/personagem/situacao.ts";
 import type { TomSelo } from "../componentes/Selo.tsx";
 import { servico } from "./conexao.ts";
 import { mensagemDeErro } from "./conversas.ts";
@@ -165,8 +170,9 @@ export function agoraDoAgente(
   situacao: SituacaoAgente,
   rodando: Execucao | null,
   agora: Date = new Date(),
+  modelo: ModeloDoAgente | null = null,
 ): string {
-  const parado = fraseDaSituacao(situacao, agora);
+  const parado = fraseDaSituacao(situacao, agora, modelo);
   if (parado !== null) return parado;
   const fila = naFila(situacao.fila);
   const comFila = (frase: string) => (fila ? `${frase} · ${fila}` : frase);

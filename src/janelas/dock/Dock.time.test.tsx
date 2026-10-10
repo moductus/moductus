@@ -4,6 +4,7 @@ import type {
   Aprovacao,
   ItemGithub,
   Notificacao,
+  Provedor,
   SituacaoAgente,
   SituacaoGithub,
 } from "@moductus/contrato";
@@ -34,12 +35,14 @@ const canal: {
   naoVistas: () => Promise<Notificacao[]>;
   pendentes: () => Promise<Aprovacao[]>;
   github: () => Promise<SituacaoGithub>;
+  provedores: () => Promise<Provedor[]>;
 } = {
   estado: "conectado",
   lista: async () => [],
   naoVistas: async () => [],
   pendentes: async () => [],
   github: async () => ({ itens: [], atualizadoEm: null }),
+  provedores: async () => [],
 };
 const ouvintes = new Map<string, Set<(dados: unknown) => void>>();
 
@@ -59,6 +62,7 @@ vi.mock("../../servico/conexao.ts", () => ({
       if (metodo === "sessoes.listar") return { projetos: [], sessoes: [] };
       if (metodo === "github.obter") return canal.github();
       if (metodo === "conexoes.listar") return [];
+      if (metodo === "provedores.listar") return canal.provedores();
       throw new Error(`método ${metodo} sem atendente`);
     }),
   },
@@ -77,7 +81,11 @@ const ATIVO: SituacaoAgente = {
   fila: 0,
 };
 
-function agente(id: string, situacao: Partial<SituacaoAgente> = {}): Agente {
+function agente(
+  id: string,
+  situacao: Partial<SituacaoAgente> = {},
+  provedorId: string | null = null,
+): Agente {
   return {
     id,
     nome: id,
@@ -85,7 +93,7 @@ function agente(id: string, situacao: Partial<SituacaoAgente> = {}): Agente {
     instrucoes: "",
     personagem: { silhueta: "ovo", traco: "raios", tom: "ambar" },
     ferramentas: [],
-    provedorId: null,
+    provedorId,
     provedorReservaId: null,
     gatilhos: [],
     escoposMemoria: [],
@@ -119,6 +127,7 @@ beforeEach(() => {
   canal.naoVistas = async () => [];
   canal.pendentes = async () => [];
   canal.github = async () => ({ itens: [], atualizadoEm: null });
+  canal.provedores = async () => [];
   vi.mocked(servico.pedir).mockClear();
 });
 
@@ -318,6 +327,74 @@ describe("estados e sessões no dock (Estados.dc.html, Dock.dc.html)", () => {
       expressao: "erro",
       rotulo: "Tula, erro. Modelo fora do ar, tenta de novo em breve",
     });
+  });
+
+  it("ocioso tem olhos abertos e nenhum z; só quem dorme ou está em pausa tem", async () => {
+    canal.lista = async () => [
+      agente("alba"),
+      agente("tula", { estado: "pausado" }),
+      agente("faina"),
+      agente("nuno"),
+    ];
+    await montar();
+    const comZ = [...recipiente.querySelectorAll<HTMLElement>(".dock-agente")]
+      .filter((b) => b.querySelector("[data-zz]"))
+      .map((b) => b.dataset.agente);
+    expect(comZ).toEqual(["tula"]);
+    expect(cabecas()[2]).toEqual({ expressao: "ocioso", rotulo: "Faina, ocioso" });
+    expect(cabecas()[3]).toEqual({ expressao: "ocioso", rotulo: "Nuno, ocioso" });
+  });
+
+  it("credencial recusada num CLI é falta de login; numa API, a chave", async () => {
+    const provedor = (id: string, nome: string, tipo: Provedor["tipo"]): Provedor => ({
+      id,
+      tipo,
+      nome,
+      modelo: null,
+      baseUrl: null,
+      temChave: tipo === "openai",
+      testadoEm: null,
+    });
+    canal.lista = async () => [
+      agente("alba", { estado: "dormindo", motivoSono: "credencial" }, "cli"),
+      agente("tula", { estado: "dormindo", motivoSono: "credencial" }, "api"),
+    ];
+    canal.provedores = async () => [
+      provedor("cli", "Claude Code", "claude-cli"),
+      provedor("api", "OpenAI", "openai"),
+    ];
+    await montar();
+    expect(cabecas()[0]!.rotulo).toBe("Alba, erro. Claude Code sem login, tenta de novo em breve");
+    expect(cabecas()[1]!.rotulo).toBe("Tula, erro. Chave do modelo recusada, tenta de novo em breve");
+  });
+
+  it("a hora da nova tentativa chega com o agente ainda em erro: o rótulo não promete o passado", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    try {
+      vi.setSystemTime(new Date(2026, 9, 10, 1, 12, 40));
+      const dormeAte = new Date(2026, 9, 10, 1, 13, 20).toISOString();
+      canal.lista = async () => [agente("alba", { estado: "dormindo", motivoSono: "fora_do_ar", dormeAte })];
+      await montar();
+      expect(cabecas()[0]!.rotulo).toBe("Alba, erro. Modelo fora do ar, tenta de novo às 1:13");
+      // O relógio do dock vira para 1:13: "às 1:13" já soaria passado, mesmo 20 s antes da hora.
+      await act(async () => vi.advanceTimersByTime(20_000));
+      expect(cabecas()[0]!.rotulo).toBe("Alba, erro. Modelo fora do ar, tentando de novo");
+      // Passou da hora e o serviço ainda não mandou notícia: continua "tentando", sem hora velha.
+      await act(async () => vi.advanceTimersByTime(5 * 60_000));
+      expect(cabecas()[0]!.rotulo).toBe("Alba, erro. Modelo fora do ar, tentando de novo");
+      // O serviço tentou, falhou de novo e deu a próxima hora: o rótulo diz a nova.
+      const proxima = new Date(2026, 9, 10, 1, 20).toISOString();
+      await act(async () => {
+        ouvintes
+          .get("agentes.mudou")
+          ?.forEach((fn) =>
+            fn(agente("alba", { estado: "dormindo", motivoSono: "fora_do_ar", dormeAte: proxima })),
+          );
+      });
+      expect(cabecas()[0]!.rotulo).toBe("Alba, erro. Modelo fora do ar, tenta de novo às 1:20");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("sessão do terminal esperando você: o Nuno ganha o ponto e diz no rótulo", async () => {

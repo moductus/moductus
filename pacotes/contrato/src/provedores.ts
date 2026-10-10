@@ -25,6 +25,17 @@ export const TipoProvedorCli = z.enum(TIPOS_PROVEDOR_CLI);
 export type TipoProvedorCli = z.infer<typeof TipoProvedorCli>;
 
 /**
+ * O nome de cada CLI no PATH: o serviço procura por ele, e a interface diz qual rodar no terminal
+ * quando o CLI está sem login.
+ */
+export const COMANDOS_CLI: Readonly<Record<TipoProvedorCli, string>> = {
+  "claude-cli": "claude",
+  "codex-cli": "codex",
+  "gemini-cli": "gemini",
+  "opencode-cli": "opencode",
+};
+
+/**
  * Como o uso de um provedor é pago (F2-09): `assinatura` (CLI com a conta do usuário: não há custo
  * por token a mostrar) ou `por_token` (API: custo estimado pela tabela de preços do serviço,
  * vazio quando o modelo não está nela).

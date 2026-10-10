@@ -24,12 +24,31 @@ export function diaLocal(data: Date): string {
   return `${data.getFullYear()}-${mes}-${dia}`;
 }
 
-/** O relógio da tela, de minuto em minuto: "há 2 min" anda sem esperar o próximo evento. */
+/** Milissegundos até a próxima virada do intervalo (a do minuto, no padrão), no relógio. */
+export function ateAProximaVirada(agora: Date, intervaloMs = MINUTO): number {
+  return intervaloMs - (agora.getTime() % intervaloMs);
+}
+
+/**
+ * O relógio da tela, de minuto em minuto: "há 2 min" anda sem esperar o próximo evento. Acorda na
+ * virada do minuto, junto com o relógio do dock: "tenta de novo às 14:05" some às 14:05, não até
+ * um minuto depois.
+ */
 export function useAgora(intervaloMs = MINUTO): Date {
   const [agora, setAgora] = useState(() => new Date());
   useEffect(() => {
-    const relogio = setInterval(() => setAgora(new Date()), intervaloMs);
-    return () => clearInterval(relogio);
+    let relogio: ReturnType<typeof setTimeout>;
+    const agendar = () => {
+      relogio = setTimeout(
+        () => {
+          setAgora(new Date());
+          agendar();
+        },
+        ateAProximaVirada(new Date(), intervaloMs),
+      );
+    };
+    agendar();
+    return () => clearTimeout(relogio);
   }, [intervaloMs]);
   return agora;
 }

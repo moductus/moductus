@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diaLocal, haQuanto } from "./tempo.ts";
+import { ateAProximaVirada, diaLocal, haQuanto } from "./tempo.ts";
 
 const AGORA = new Date("2026-10-09T14:00:00");
 const antes = (ms: number) => new Date(AGORA.getTime() - ms);
@@ -29,5 +29,13 @@ describe("haQuanto", () => {
 describe("diaLocal", () => {
   it("o dia é o local, com zeros, como o uso_ia do serviço", () => {
     expect(diaLocal(new Date(2026, 0, 5, 23, 59))).toBe("2026-01-05");
+  });
+});
+
+describe("ateAProximaVirada", () => {
+  it("o relógio da tela acorda na virada do minuto, como o do dock", () => {
+    expect(ateAProximaVirada(new Date("2026-10-09T14:00:40"))).toBe(20_000);
+    expect(ateAProximaVirada(new Date("2026-10-09T14:00:59.990"))).toBe(10);
+    expect(ateAProximaVirada(new Date("2026-10-09T14:01:00"))).toBe(MIN);
   });
 });

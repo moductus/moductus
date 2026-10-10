@@ -582,6 +582,19 @@ describe("painel Agentes: estados que pedem decisão (Estados.dc.html)", () => {
     expect(linhaDo("tula").querySelector(".selo")?.textContent).toBe("erro");
   });
 
+  it("CLI sem login: o cartão diz como entrar, com o comando como código, e a linha fala de login", async () => {
+    servidor.agentes = [agente("alba", { estado: "dormindo", motivoSono: "credencial" })];
+    await montar();
+    await abrir("agentes");
+    const [cartao] = estados();
+    expect(cartao!.querySelector("p")?.textContent).toBe(
+      "O Claude Code está sem login. Entre no terminal com claude e tento de novo em breve.",
+    );
+    expect(cartao!.querySelector("p code")?.textContent).toBe("claude");
+    expect(cartao!.textContent).not.toContain("chave");
+    expect(linhaDo("alba").textContent).toContain("Claude Code sem login, tenta de novo em breve");
+  });
+
   it("teto: sem valor inventado, leva aos Modelos para mudar o teto", async () => {
     servidor.agentes = [agente("nuno", { estado: "dormindo", motivoSono: "teto" })];
     await montar();

@@ -3,10 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
   CONVITE_MODELO,
   SEM_SITUACAO,
+  comandoDoCli,
   eFalhaDoProvedor,
+  falaDaFalha,
   fraseDaSituacao,
+  jaTentando,
   lerSituacao,
+  modeloDoAgente,
   naFila,
+  type ModeloDoAgente,
 } from "./situacao.ts";
 
 const ATIVO: SituacaoAgente = {
@@ -22,6 +27,8 @@ const ATIVO: SituacaoAgente = {
 const AGORA = new Date(2026, 9, 8, 10, 0);
 const local = (dia: number, hora: number, minuto = 0) => new Date(2026, 9, dia, hora, minuto).toISOString();
 const DORMINDO = { ...ATIVO, estado: "dormindo" } as const;
+const CLAUDE: ModeloDoAgente = { tipo: "claude-cli", nome: "Claude Code" };
+const OPENAI: ModeloDoAgente = { tipo: "openai", nome: "OpenAI" };
 
 describe("lerSituacao: do runtime para o personagem", () => {
   it("sem notícia do serviço, o time dorme sem anel e convida a conectar um modelo", () => {
@@ -91,8 +98,40 @@ describe("lerSituacao: do runtime para o personagem", () => {
       dica: "Modelo fora do ar, tenta de novo às 10:05",
       ponto: "perigo",
     });
-    expect(falha("credencial", null).dica).toBe("Chave do modelo recusada, tenta de novo em breve");
     expect(falha("ausente", local(9, 8)).dica).toBe("CLI do modelo não encontrado, tenta de novo amanhã 8h");
+  });
+
+  it("credencial recusada: num CLI é falta de login, numa API é a chave; sem saber o modelo, nenhum dos dois", () => {
+    const credencial = { ...DORMINDO, motivoSono: "credencial", dormeAte: local(8, 10, 5) } as const;
+    expect(lerSituacao(credencial, AGORA, CLAUDE).dica).toBe("Claude Code sem login, tenta de novo às 10:05");
+    expect(lerSituacao(credencial, AGORA, OPENAI).dica).toBe(
+      "Chave do modelo recusada, tenta de novo às 10:05",
+    );
+    expect(lerSituacao(credencial, AGORA).dica).toBe("Modelo recusou o acesso, tenta de novo às 10:05");
+    expect(fraseDaSituacao({ ...credencial, fila: 2 }, AGORA, CLAUDE)).toBe(
+      "Claude Code sem login, tenta de novo às 10:05 · 2 pedidos na fila",
+    );
+    // Login só pesa na credencial: o CLI fora do ar continua "fora do ar".
+    expect(lerSituacao({ ...credencial, motivoSono: "fora_do_ar" }, AGORA, CLAUDE).dica).toBe(
+      "Modelo fora do ar, tenta de novo às 10:05",
+    );
+  });
+
+  it("a hora de tentar de novo chegou (passou, ou é o minuto do relógio): diz que está tentando", () => {
+    const falha = { ...DORMINDO, motivoSono: "fora_do_ar", dormeAte: local(8, 10, 5) } as const;
+    const em = (h: number, m: number, s = 0) => new Date(2026, 9, 8, h, m, s);
+    expect(lerSituacao(falha, em(10, 4, 59)).dica).toBe("Modelo fora do ar, tenta de novo às 10:05");
+    // Às 10:05:00, com a volta marcada para 10:05:30, "às 10:05" já soa passado.
+    const comSegundos = { ...falha, dormeAte: new Date(2026, 9, 8, 10, 5, 30).toISOString() };
+    expect(lerSituacao(comSegundos, em(10, 5)).dica).toBe("Modelo fora do ar, tentando de novo");
+    expect(lerSituacao(falha, em(10, 6)).dica).toBe("Modelo fora do ar, tentando de novo");
+    expect(lerSituacao(falha, em(13, 0), CLAUDE).dica).toBe("Modelo fora do ar, tentando de novo");
+    expect(jaTentando(null, em(10, 6))).toBe(false);
+    expect(jaTentando("ontem", em(10, 6))).toBe(false);
+    // O limite não é tentativa: a volta passada continua dizendo que volta quando renovar.
+    expect(lerSituacao({ ...falha, motivoSono: "limite" }, em(10, 6)).dica).toBe(
+      "Volta quando o limite renovar",
+    );
   });
 
   it("teto de gasto: cara preocupada, mas anel e ponto de aviso; vermelho é só erro (Estados.dc.html)", () => {
@@ -148,5 +187,58 @@ describe("lerSituacao: do runtime para o personagem", () => {
     });
     // Dormindo por limite com uma execução marcada como erro continua dormindo.
     expect(lerSituacao({ ...DORMINDO, atividade: "erro", motivoSono: "limite" }).expressao).toBe("dormindo");
+  });
+});
+
+describe("o modelo do agente e a fala do cartão de erro de provedor", () => {
+  const provedor = (id: string, nome: string, tipo: ModeloDoAgente["tipo"]) => ({
+    id,
+    tipo,
+    nome,
+    modelo: null,
+    baseUrl: null,
+    temChave: false,
+    testadoEm: null,
+  });
+
+  it("acha o modelo pelo provedor do agente e o comando quando é CLI", () => {
+    const lista = [provedor("p1", "Claude Code", "claude-cli"), provedor("p2", "OpenAI", "openai")];
+    expect(modeloDoAgente("p1", lista)).toEqual(CLAUDE);
+    expect(modeloDoAgente("p3", lista)).toBeNull();
+    expect(modeloDoAgente(null, lista)).toBeNull();
+    expect(modeloDoAgente("p1", null)).toBeNull();
+    expect(comandoDoCli(CLAUDE)).toBe("claude");
+    expect(comandoDoCli({ tipo: "codex-cli", nome: "Codex" })).toBe("codex");
+    expect(comandoDoCli(OPENAI)).toBeNull();
+    expect(comandoDoCli(null)).toBeNull();
+  });
+
+  it("CLI sem login diz como entrar e quando tenta; chave recusada manda conferir a chave", () => {
+    const volta = local(8, 10, 5);
+    expect(falaDaFalha("credencial", CLAUDE, volta, AGORA, false)).toBe(
+      "O Claude Code está sem login. Entre no terminal com `claude` e tento de novo às 10:05.",
+    );
+    expect(falaDaFalha("credencial", CLAUDE, null, AGORA, true)).toBe(
+      "O Claude Code está sem login. Entre no terminal com `claude` e tentamos de novo em breve.",
+    );
+    expect(falaDaFalha("credencial", OPENAI, volta, AGORA, false)).toBe(
+      "O OpenAI recusou a chave. Nada foi alterado; confira a chave em Modelos.",
+    );
+    expect(falaDaFalha("credencial", null, volta, AGORA, false)).toBe(
+      "O modelo recusou o acesso. Nada foi alterado; confira o modelo em Modelos.",
+    );
+    expect(falaDaFalha("fora_do_ar", null, volta, AGORA, false)).toBe(
+      "O modelo não respondeu. Nada foi alterado; tento de novo às 10:05.",
+    );
+  });
+
+  it("com a hora chegada, o cartão diz que está tentando em vez da hora que passou", () => {
+    const passou = new Date(2026, 9, 8, 10, 20);
+    expect(falaDaFalha("fora_do_ar", CLAUDE, local(8, 10, 5), passou, false)).toBe(
+      "O Claude Code não respondeu. Nada foi alterado; estou tentando de novo.",
+    );
+    expect(falaDaFalha("credencial", CLAUDE, local(8, 10, 5), passou, true)).toBe(
+      "O Claude Code está sem login. Entre no terminal com `claude` e estamos tentando de novo.",
+    );
   });
 });

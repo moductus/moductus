@@ -18,7 +18,7 @@ import {
 import { useDadosDev } from "../../areas/dev/dev.ts";
 import { useCanal } from "../../servico/conexao.ts";
 import { marcarVistasDe, usePontosTime } from "../../servico/notificacoes.ts";
-import { useSituacaoTime } from "../../servico/time.ts";
+import { useTime } from "../../servico/time.ts";
 import { AREAS_DOCK, DADOS_AREAS, type AreaDock } from "../areas.ts";
 import { sessoesEsperando } from "../painel/agentes.ts";
 import { usePendentesDoTerminal } from "../painel/dados.ts";
@@ -55,7 +55,7 @@ export function Dock() {
   const awake = useAwake();
   const servico = useServico();
   const canal = useCanal(servico);
-  const time = useSituacaoTime(canal);
+  const { situacoes: time, modelos } = useTime(canal);
   const pontos = usePontosTime(canal);
   // As sessões do terminal esperando você são do Nuno, que fica de olho nelas (Dock.dc.html).
   const esperandoNoTerminal = sessoesEsperando(usePendentesDoTerminal(canal) ?? []);
@@ -156,8 +156,9 @@ export function Dock() {
         data-ativo={aberta === "agentes" || undefined}
       >
         {AGENTES.map((agente) => {
-          // A cabeça segue o runtime: expressão, anel no tom do status e o status no rótulo.
-          const leitura = lerSituacao(time[agente]);
+          // A cabeça segue o runtime: expressão, anel no tom do status e o status no rótulo. O
+          // relógio do dock acorda na virada do minuto, e a hora da dica anda com ele.
+          const leitura = lerSituacao(time[agente], new Date(), modelos[agente] ?? null);
           const { expressao, moldura } = leitura;
           const avisos = pontos[agente] ?? 0;
           const esperando = agente === "nuno" ? esperandoNoTerminal : 0;

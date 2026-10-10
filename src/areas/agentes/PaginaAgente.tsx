@@ -23,6 +23,7 @@ import {
   type DadosAgente,
 } from "../../servico/agente.ts";
 import { EstadoVazio } from "../Pagina.tsx";
+import { useAgora } from "../tempo.ts";
 import { comArtigo, deAgente } from "./nomes.ts";
 
 const ABAS = [
@@ -48,6 +49,8 @@ interface PropsPaginaAgente {
  */
 export function PaginaAgente({ canal, agente, aoConversar, aoTrocarModelo }: PropsPaginaAgente) {
   const dados = useAgente(canal, agente);
+  // A frase de quem dorme diz uma hora: o relógio da tela a tira de lá quando ela chega.
+  const agora = useAgora();
   const [aba, setAba] = useState<Aba>("geral");
   const idAbas = useId();
   const { agente: doServico, conectado } = dados;
@@ -70,7 +73,9 @@ export function PaginaAgente({ canal, agente, aoConversar, aoTrocarModelo }: Pro
           </div>
           <span className="pagina-agente-funcao">{doServico?.funcao ?? DADOS_AGENTES[agente].funcao}</span>
           <span className="pagina-agente-rotulo">
-            {situacao ? agoraDoAgente(situacao, rodando) : "Sem notícia do serviço agora."}
+            {situacao
+              ? agoraDoAgente(situacao, rodando, agora, dados.provedor)
+              : "Sem notícia do serviço agora."}
           </span>
         </div>
         <div className="pagina-agente-acoes">

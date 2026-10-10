@@ -1,7 +1,12 @@
 import { spawn } from "node:child_process";
 import { statSync } from "node:fs";
 import { join } from "node:path";
-import type { ProvedorDetectado, TipoProvedor, TipoProvedorCli } from "@moductus/contrato";
+import {
+  COMANDOS_CLI,
+  type ProvedorDetectado,
+  type TipoProvedor,
+  type TipoProvedorCli,
+} from "@moductus/contrato";
 import { ambienteDoCli } from "./claude-cli/claude-cli.ts";
 
 /**
@@ -9,14 +14,6 @@ import { ambienteDoCli } from "./claude-cli/claude-cli.ts";
  * pergunta a versão e, quando o CLI tem como dizer, se há login. Nada aqui chama o modelo nem
  * gasta a assinatura: o teste de verdade é o `testar` dos provedores, só quando o usuário pede.
  */
-
-/** O nome de cada CLI no PATH. */
-export const COMANDOS_CLI: Readonly<Record<TipoProvedorCli, string>> = {
-  "claude-cli": "claude",
-  "codex-cli": "codex",
-  "gemini-cli": "gemini",
-  "opencode-cli": "opencode",
-};
 
 /**
  * A versão mais velha com que o adaptador funciona. A do Claude Code vem da flag mais nova que o

@@ -11,9 +11,12 @@ import { AGENTES, DADOS_AGENTES, type Agente } from "../../componentes/personage
 import { ateQuando, quando } from "../../componentes/personagem/quando.ts";
 import {
   eFalhaDoProvedor,
+  falaDaFalha,
   fraseDaSituacao,
+  modeloDoAgente,
   naFila,
   type LeituraSituacao,
+  type ModeloDoAgente,
 } from "../../componentes/personagem/situacao.ts";
 import type { TomSelo } from "../../componentes/Selo.tsx";
 import { contextoDaSessao } from "../../areas/sessoes/sessoes.ts";
@@ -121,7 +124,8 @@ function trabalhando(execucao: Execucao | undefined, fila: number): string {
 
 /**
  * A linha de cada agente no "Seu time": o que está fazendo, o que espera de você ou quando volta.
- * Ocioso, mostra o resumo do último trabalho; sem nenhum, a função dele.
+ * Ocioso, mostra o resumo do último trabalho; sem nenhum, a função dele. O `modelo` diz se a
+ * falha de credencial é login (CLI) ou chave (API).
  */
 export function linhaDoAgente(
   id: Agente,
@@ -130,12 +134,13 @@ export function linhaDoAgente(
   execucao: Execucao | undefined,
   pedido: Aprovacao | undefined,
   agora: Date,
+  modelo: ModeloDoAgente | null = null,
 ): string {
   const funcao = DADOS_AGENTES[id].funcao;
   const s = agente?.situacao;
   if (!s) return leitura.dica ?? funcao;
   // Parado: a mesma frase da página do agente e da conversa (fraseDaSituacao).
-  const parado = fraseDaSituacao(s, agora);
+  const parado = fraseDaSituacao(s, agora, modelo);
   if (parado !== null) return parado;
   switch (s.atividade) {
     case "trabalhando":
@@ -167,6 +172,7 @@ export interface CartaoEstado {
   /** O status no selo, como no quadro: "pausado", "dormindo", "erro", "parado". */
   estado: { texto: string; tom: TomSelo };
   titulo: string;
+  /** A fala; o que vai entre crases é comando do terminal (`claude`) e aparece como código. */
   texto: string;
   primaria: { texto: string; acao: AcaoEstado };
   secundaria?: { texto: string; acao: AcaoEstado };
@@ -191,7 +197,6 @@ export function cartoesDeEstado(
   provedores: readonly Provedor[],
   agora: Date,
 ): CartaoEstado[] {
-  const nomeDoProvedor = (id: string | null) => provedores.find((p) => p.id === id)?.nome ?? null;
   const grupos = new Map<string, { tipo: TipoEstado; agentes: Agente[]; modelo: AgenteServico }>();
   const juntar = (chave: string, tipo: TipoEstado, id: Agente, agente: AgenteServico) => {
     const grupo = grupos.get(chave);
@@ -218,7 +223,7 @@ export function cartoesDeEstado(
     .map(([chave, { tipo, agentes, modelo }]) => {
       const varios = agentes.length > 1;
       const s = modelo.situacao;
-      const provedor = nomeDoProvedor(modelo.provedorId);
+      const provedor = modeloDoAgente(modelo.provedorId, provedores);
       const base = { chave, tipo, agentes, quem: listaDeNomes(agentes) };
       switch (tipo) {
         case "pausa": {
@@ -245,27 +250,20 @@ export function cartoesDeEstado(
           return {
             ...base,
             estado: { texto: "dormindo", tom: "neutro" },
-            titulo: `O limite ${provedor ? `do ${provedor}` : "do modelo"} acabou`,
+            titulo: `O limite ${provedor ? `do ${provedor.nome}` : "do modelo"} acabou`,
             texto: `${varios ? "Voltamos" : "Volto"} ${quandoVolta}. O que não precisa de modelo continua.`,
             primaria: { texto: "Usar outro modelo", acao: { tipo: "modelos" } },
             secundaria: { texto: "Esperar", acao: { tipo: "dispensar" } },
           };
         }
         case "falha": {
-          const volta = s.dormeAte ? quando(s.dormeAte, agora, "longa") : null;
-          const nome = provedor ?? "modelo";
-          const tento = `${varios ? "tentamos" : "tento"} de novo ${volta ?? "em breve"}`;
-          const texto =
-            s.motivoSono === "credencial"
-              ? `O ${nome} recusou a chave. Nada foi alterado; confira a chave em Modelos.`
-              : s.motivoSono === "ausente"
-                ? `Não achei o ${nome} neste PC. Nada foi alterado; ${tento}.`
-                : `O ${nome} não respondeu. Nada foi alterado; ${tento}.`;
+          // A chave do grupo leva o motivo: todos caíram pela mesma falha (a guarda é para o tipo).
+          const motivo = eFalhaDoProvedor(s.motivoSono) ? s.motivoSono : "fora_do_ar";
           return {
             ...base,
             estado: { texto: "erro", tom: "perigo" },
             titulo: "Não consegui falar com o modelo",
-            texto,
+            texto: falaDaFalha(motivo, provedor, s.dormeAte, agora, varios),
             primaria: { texto: "Trocar modelo", acao: { tipo: "modelos" } },
           };
         }
