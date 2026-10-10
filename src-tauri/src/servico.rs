@@ -7,8 +7,9 @@
 //! Canal com o serviço pelo stdio, em linhas JSON: o serviço avisa `pronto` com a porta
 //! e pede credenciais (`{"tipo":"credencial","id",…}`), variáveis do usuário
 //! (`{"tipo":"ambiente","id",…}`) e avisos do Windows (`{"tipo":"notificacao","id",…}`),
-//! respondidos no stdin. Pelo stdin também vão avisos da casca sem id, como a retomada da
-//! suspensão (`{"tipo":"retomou"}`) e o clique num aviso do Windows (`notificacao-clique`).
+//! respondidos no stdin; o menu do time na bandeja (`{"tipo":"bandeja",…}`) vem sem id. Pelo
+//! stdin também vão avisos da casca sem id, como a retomada da suspensão (`{"tipo":"retomou"}`),
+//! o clique num aviso do Windows (`notificacao-clique`) e num item da bandeja (`bandeja-clique`).
 
 use std::{
     io::{BufRead, BufReader, Write},
@@ -188,6 +189,8 @@ fn ouvir(app: &AppHandle, saida: std::process::ChildStdout, token: &str) {
                 crate::registro::info(&format!("servico pronto na porta {porta}"));
                 definir(app, Estado::Pronto { porta, token: token.to_string() });
             }
+            // O menu do time na bandeja (pausar), pronto: a casca só redesenha.
+            ("bandeja", _) => crate::bandeja::atualizar(app, &linha),
             ("aplicar", Some(id)) => {
                 let resposta = serde_json::from_str::<crate::config_nativa::PedidoAplicar>(&linha)
                     .map(|p| crate::config_nativa::aplicar(app, p))
@@ -243,6 +246,8 @@ pub fn iniciar(app: AppHandle, pasta: PathBuf) {
             if SAINDO.load(Ordering::SeqCst) {
                 break;
             }
+            // Sem serviço, pausar pela bandeja não teria quem atender.
+            crate::bandeja::sem_servico(&app);
             // Ficou de pé um bom tempo: a queda é nova, recomeça a espera do início.
             tentativa = if inicio.elapsed() > Duration::from_secs(60) { 1 } else { tentativa + 1 };
             let espera = espera(tentativa);

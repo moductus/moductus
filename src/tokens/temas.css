@@ -159,6 +159,23 @@
   --largura-rotulo-mudanca: 148px;
   /* Prévia do aviso do Windows em Notificações: a largura de um toast (AreaNotificacoes.dc.html) */
   --largura-previa-aviso: 364px;
+  /* Sessões de IA (AreaSessoes.dc.html): pedidos à direita, gráfico da semana e tabela */
+  --largura-coluna-pedidos: 340px;
+  --altura-grafico-uso: 110px;
+  /* O maior dia: o gráfico menos o número em cima e o dia embaixo */
+  --altura-barra-uso: 64px;
+  --largura-barra-uso: 40px;
+  --altura-barra-minima: 2px;
+  --raio-barra-uso: 4px;
+  --opacidade-barra-passada: 0.5;
+  --altura-cabecalho-tabela: 36px;
+  --altura-linha-tabela: 46px;
+  --largura-col-projeto: 170px;
+  --largura-col-ferramenta: 110px;
+  --largura-col-estado: 130px;
+  --largura-col-contexto: 150px;
+  --largura-col-gasto: 120px;
+  --largura-trilho-contexto: 70px;
   /* Fechar no padrão do Windows 11: vermelho do sistema, igual nos três temas */
   --fundo-fechar: #c42b1c;
   --texto-fechar: #ffffff;
