@@ -128,6 +128,8 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 | Prévia da Faina antes de organizar | ✓ (tweak de tema) | ✓ | ✓ |
 | Sistema: Tarefas, Finanças, Notas, Sessões de IA, Dev, Memória, página do agente | ✓ (tweak de tema) | ✓ | ✓ |
 | Configurações: notificações e levar para outro PC | ✓ (tweak de tema) | ✓ | ✓ |
+| Configurações › Modelos: provedores, principal e reserva por agente, teto por dia, trocar o modelo, nenhum conectado | ✓ (tweak de tema) | ✓ | ✓ |
+| Configurações › Conexões: Claude Code e GitHub, prévia do `settings.json` com consentimento, conectando, erros, nenhuma ligada | ✓ (tweak de tema) | ✓ | ✓ |
 
 O cartão de aprovação traz três ações: **Negar**, **Sempre neste projeto** e **Permitir**. A do meio vira uma regra de permissão do Claude Code para aquele projeto, registrada pelo hook.
 
@@ -139,8 +141,11 @@ Padrões que saíram dessas telas e valem para o resto:
 - **Status nunca só por cor:** ponto + texto ("esperando você", "CI falhou").
 - **Seleção:** caixa marcada no destaque com ✓; tarefa feita fica apagada e riscada.
 - **Configurações:** sub-navegação própria à esquerda; cada seção numa página.
+- **Estado de uma conexão ou provedor:** ponto + texto ao lado do nome (`funcionando`, `testando`, `erro`, `desligada`, `em breve`); testando ganha uma barra indeterminada embaixo e o botão vira "Cancelar"; o erro vem numa linha abaixo, com impacto, motivo e saída.
+- **Prévia de arquivo antes de mexer:** o agente diz numa fala o que muda e o tamanho; ao lado, o trecho antes e depois em mono, linhas novas marcadas com `+` no tom de sucesso; uma linha diz onde fica a cópia e como desfazer; o botão primário é verbo com objeto ("Ligar 8 hooks no Claude Code").
+- **Valor pendente de decisão:** marcador tracejado no tom de aviso ("moeda a decidir") no lugar do símbolo, até a decisão ser registrada.
 
-**A desenhar:** Foco e Ferramentas no Sistema, instruções e ferramentas na página do agente, criar agente (fase 7), demais seções de Configurações (Geral, Modelos, Conexões, Atalhos, Privacidade) e o instalador.
+**A desenhar:** Foco e Ferramentas no Sistema, instruções e ferramentas na página do agente, criar agente (fase 7), demais seções de Configurações (Geral, Atalhos, Privacidade) e o instalador.
 
 **Ícones da marca:** em [design/marca/](design/marca/): `moductus.ico` (16 a 256 px, Grafite), `app-*.png` (32 a 512), ícones da bandeja claro e escuro (16 e 32) e `marca.svg` em `currentColor`.
 
