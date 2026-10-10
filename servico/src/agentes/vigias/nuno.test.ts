@@ -6,14 +6,22 @@ import type { Execucao, ItemGithub, MudancaSessao, SessaoIa } from "@moductus/co
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { abrirBanco } from "../../banco/conexao.ts";
+import { CLIQUE_NA_BANDEJA, ligarBandeja } from "../../bandeja/bandeja.ts";
+import { CanalCasca } from "../../casca/canal.ts";
 import { Catalogo } from "../../ferramentas/catalogo.ts";
 import { ferramenta } from "../../ferramentas/ferramenta.ts";
 import { ProvedorFalso, roteiros } from "../../provedores/falso.ts";
 import { RegistroProvedores } from "../../provedores/registro.ts";
-import { RepositorioAgentes } from "../agentes.ts";
+import { RepositorioAgentes, ServicoAgentes } from "../agentes.ts";
 import { RepositorioExecucoes } from "../execucoes.ts";
 import { Runtime, type PedidoExecucao, type ResultadoExecucao } from "../runtime.ts";
-import { INTERVALO_MINIMO_MS, JANELA_SESSAO_MS, VigiaNuno, type AvisoDoNuno } from "./nuno.ts";
+import {
+  INTERVALO_MINIMO_MS,
+  JANELA_SESSAO_MS,
+  PRAZO_DESPERTAR_MS,
+  VigiaNuno,
+  type AvisoDoNuno,
+} from "./nuno.ts";
 
 const pastas: string[] = [];
 const bancos: DatabaseSync[] = [];
@@ -354,6 +362,72 @@ describe("despertar sem ferramentas, com prazo e com o GitHub como dado", () => 
     vigia.aoLerGithub({ itens: [item(7)], atualizadoEm: null });
     await vi.advanceTimersByTimeAsync(0);
     expect(pedidos).toHaveLength(2);
+    vigia.parar();
+  });
+
+  test("Nuno pausado pela bandeja: o despertar que passa do prazo na porta não é falha, e retomar confere a pauta sem evento novo", async () => {
+    const pasta = mkdtempSync(join(tmpdir(), "moductus-vigia-pausa-"));
+    pastas.push(pasta);
+    const db = abrirBanco(pasta);
+    bancos.push(db);
+    db.exec(`
+      INSERT INTO provedores (id, tipo, nome) VALUES ('p-nuno', 'claude-cli', 'Falso do Nuno');
+      UPDATE agentes SET provedor_id = 'p-nuno' WHERE id = 'nuno';
+    `);
+    const falso = new ProvedorFalso("p-nuno");
+    falso.roteirizar(roteiros.resposta("O #412 vem primeiro."));
+    const repo = new RepositorioAgentes(db);
+    const catalogo = new Catalogo([]);
+    const avisos: AvisoDoNuno[] = [];
+    // Ligado como no main.ts: cada mudança de agente chega ao vigia e à bandeja.
+    let vigia: VigiaNuno | null = null;
+    let agentes: ServicoAgentes | null = null;
+    const runtime = new Runtime(
+      {
+        agentes: repo,
+        execucoes: new RepositorioExecucoes(db),
+        provedores: new RegistroProvedores().registrar("claude-cli", () => falso),
+        catalogo,
+      },
+      {
+        execucao: () => {},
+        agente: (agenteId) => {
+          const agente = agentes?.procurar(agenteId);
+          if (agente) vigia?.aoMudarAgente(agente);
+        },
+      },
+    );
+    agentes = new ServicoAgentes(repo, catalogo, (a) => runtime.situacao(a), runtime.estados);
+    vigia = new VigiaNuno({
+      executar: (p) => runtime.executar(p),
+      githubConhecido: [],
+      avisar: (a) => avisos.push(a),
+    });
+    const canal = new CanalCasca({ write: () => {} });
+    ligarBandeja({ agentes, canal });
+    const clicar = (id: string) => canal.receber(JSON.stringify({ tipo: CLIQUE_NA_BANDEJA, item: id }));
+    const erros = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    clicar("pausar:nuno:1h");
+    vigia.aoLerGithub({ itens: [item(412)], atualizadoEm: null });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(runtime.situacao(repo.agente("nuno")!).fila).toBe(1);
+
+    // O despertar espera na porta e passa do prazo: o modelo não foi chamado e a pauta fica.
+    await vi.advanceTimersByTimeAsync(PRAZO_DESPERTAR_MS);
+    await vigia.ocioso();
+    expect(falso.pedidos).toHaveLength(0);
+    expect(vigia.anotados()).toEqual(["github:loja/api#412"]);
+    expect(erros).toHaveBeenCalledWith(expect.stringContaining("despertar não saiu"));
+
+    // Retomar pela bandeja basta: sem leitura nova do GitHub, sem esperar o intervalo de falha.
+    clicar("retomar:nuno");
+    await vi.advanceTimersByTimeAsync(0);
+    await vigia.ocioso();
+    expect(falso.pedidos).toHaveLength(1);
+    expect(avisos.map((a) => a.corpo)).toEqual(["O #412 vem primeiro."]);
+    expect(vigia.anotados()).toEqual([]);
+    erros.mockRestore();
     vigia.parar();
   });
 
