@@ -341,6 +341,23 @@ mod testes {
         assert_eq!(largura_janela_painel(2.0), 824);
     }
 
+    /// Com sombra, o Windows põe uma moldura invisível de redimensionar em volta da janela sem
+    /// decoração, e ela sai da área do WebView: a janela de 412 px dava 396 úteis e o cartão
+    /// ficava com 384. O dock e o painel são posicionados pelo retângulo externo, então a área útil
+    /// tem de ser a janela inteira; a sombra do cartão vem do CSS (`--sombra-painel`).
+    #[test]
+    fn janelas_encostadas_no_dock_nao_tem_moldura_do_windows() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let janelas = conf["app"]["windows"].as_array().unwrap();
+        for rotulo in ["dock", "painel"] {
+            let janela = janelas.iter().find(|j| j["label"] == rotulo).unwrap();
+            assert_eq!(janela["shadow"], false, "janela {rotulo} com sombra do Windows");
+            assert_eq!(janela["decorations"], false, "janela {rotulo} com decoração");
+        }
+        let painel = janelas.iter().find(|j| j["label"] == "painel").unwrap();
+        assert_eq!(painel["width"].as_f64(), Some(LARGURA_PAINEL + MARGEM_PAINEL));
+    }
+
     #[test]
     fn sistema_abre_so_nas_doze_areas() {
         assert_eq!(area_sistema("configuracoes"), "configuracoes");
