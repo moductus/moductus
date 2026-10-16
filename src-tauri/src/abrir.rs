@@ -8,8 +8,10 @@
 //!
 //! Raízes: a pasta de dados do Moductus, o `settings.json` do Claude Code e as cópias de segurança
 //! dele (só esses arquivos, nunca o resto da pasta, que guarda o login), e as pastas de projeto que
-//! o serviço informa, desde que não sejam pastas do sistema. Executável nunca abre, nem dentro
-//! delas. O registro leva o endereço sem a query, que pode carregar código de autorização.
+//! o serviço informa, desde que não fiquem dentro nem acima de uma pasta do sistema, da pasta do
+//! Claude Code ou da pasta do usuário inteira. Executável nunca abre, nem dentro delas: pela lista
+//! daqui, pelo `PATHEXT` e pelo que o Windows marca como perigoso. O registro leva o endereço sem a
+//! query, que pode carregar código de autorização, e o recusado só com esquema e servidor.
 
 use std::{
     ffi::OsStr,
@@ -24,7 +26,7 @@ use windows::{
     Win32::{
         System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE},
         UI::{
-            Shell::{ShellExecuteExW, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW},
+            Shell::{AssocIsDangerous, ShellExecuteExW, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW},
             WindowsAndMessaging::SW_SHOWNORMAL,
         },
     },
@@ -41,13 +43,14 @@ const LIMITE_ENDERECO: usize = 2048;
 const PONTUACAO_DE_ENDERECO: &str = "-._~:/?#[]@!$&'()*+,;=%";
 
 /// Extensões que executam algo ao abrir, ou levam a outro programa (atalho, instalador, script).
-/// Somam-se as do `PATHEXT` da máquina.
+/// Somam-se as do `PATHEXT` da máquina e as que o Windows marca como perigosas (`AssocIsDangerous`).
 const EXECUTAVEIS: &[&str] = &[
     "exe", "com", "bat", "cmd", "ps1", "psm1", "psd1", "ps1xml", "psc1", "vbs", "vbe", "js", "jse", "wsf", "wsh",
-    "ws", "msc", "msi", "msp", "mst", "scr", "lnk", "url", "pif", "hta", "cpl", "reg", "jar", "appref-ms",
-    "application", "inf", "scf", "sct", "shs", "gadget", "msix", "msixbundle", "appx", "appxbundle",
-    "appinstaller", "library-ms", "search-ms", "searchconnector-ms", "settingcontent-ms", "diagcab", "xll",
-    "py", "pyw", "dll", "ocx", "sys", "drv", "chm", "hlp", "website", "job",
+    "ws", "msc", "msi", "msp", "mst", "msu", "scr", "lnk", "url", "pif", "hta", "cpl", "reg", "jar", "jnlp",
+    "appref-ms", "application", "xbap", "inf", "scf", "sct", "shs", "gadget", "msix", "msixbundle", "appx",
+    "appxbundle", "appinstaller", "ppkg", "library-ms", "search-ms", "searchconnector-ms", "settingcontent-ms",
+    "diagcab", "xll", "py", "pyw", "pyz", "pyzw", "pyc", "pyo", "dll", "ocx", "sys", "drv", "chm", "hlp",
+    "website", "job", "theme", "themepack", "deskthemepack", "rdp", "wsb",
 ];
 
 /// Pastas que nunca viram raiz de projeto: abrir algo ali é mexer no sistema (PRODUCT §11).
@@ -64,13 +67,42 @@ pub enum Alvo {
     Caminho(PathBuf),
 }
 
+/// Pastas que pasta de projeto não pode tocar.
+#[derive(Debug, Default)]
+pub struct Protegidas {
+    /// Do sistema (Windows, Program Files, ProgramData, AppData): projeto não fica dentro nem acima
+    /// delas, e arquivo resolvido dentro delas não abre por pasta de projeto.
+    pub sistema: Vec<PathBuf>,
+    /// A do usuário: projeto não é ela inteira nem fica acima dela; dentro dela, pode.
+    pub usuario: Option<PathBuf>,
+    /// A do `settings.json` do Claude Code, que guarda o login: dela só abrem ele e as cópias de
+    /// segurança, por qualquer raiz, e projeto não fica dentro nem acima dela.
+    pub claude: Option<PathBuf>,
+}
+
+impl Protegidas {
+    pub fn da_maquina() -> Self {
+        Protegidas {
+            sistema: PASTAS_DO_SISTEMA.iter().filter_map(std::env::var_os).map(PathBuf::from).collect(),
+            usuario: std::env::var_os("USERPROFILE").map(PathBuf::from),
+            claude: pasta_do_claude(),
+        }
+    }
+}
+
 /// Onde um arquivo pode estar para abrir.
 #[derive(Debug, Default)]
 pub struct Raizes {
-    /// Pastas inteiras: a de dados do Moductus e as de projeto.
-    pub pastas: Vec<PathBuf>,
-    /// Pasta do `settings.json` do Claude Code; dela só abrem ele e as cópias de segurança.
-    pub claude: Option<PathBuf>,
+    /// A pasta de dados do Moductus, que abre inteira (fica no AppData de propósito).
+    pub dados: Option<PathBuf>,
+    /// As pastas de projeto que passaram por [`raiz_de_projeto`].
+    pub projetos: Vec<PathBuf>,
+    pub protegidas: Protegidas,
+}
+
+/// Algum caminho da lista, resolvido, contém `real` (ou é ele).
+fn dentro_de<'a>(real: &Path, pastas: impl IntoIterator<Item = &'a PathBuf>) -> bool {
+    pastas.into_iter().filter_map(|p| std::fs::canonicalize(p).ok()).any(|p| real.starts_with(p))
 }
 
 pub fn iniciar(pasta: PathBuf) {
@@ -107,6 +139,22 @@ pub fn sem_query(endereco: &str) -> &str {
     endereco.split(['?', '#']).next().unwrap_or_default()
 }
 
+/// O endereço recusado, para o registro: só esquema e servidor, sem o usuário e a senha que
+/// vêm antes do `@`. Sem `://`, só o esquema; nem isso, nada do que veio.
+pub fn recusado_para_o_registro(endereco: &str) -> String {
+    let curto = |texto: &str| texto.chars().take(80).collect::<String>();
+    if let Some((esquema, resto)) = endereco.split_once("://") {
+        let servidor = resto.split(['/', '?', '#', '\\']).next().unwrap_or_default();
+        let servidor = servidor.rsplit_once('@').map_or(servidor, |(_, depois)| depois);
+        return format!("{}://{}", curto(esquema), curto(servidor));
+    }
+    let so_esquema = |e: &str| !e.is_empty() && e.chars().all(|c| c.is_ascii_alphanumeric() || "+-.".contains(c));
+    match endereco.split_once(':') {
+        Some((esquema, _)) if so_esquema(esquema) => format!("{}:", curto(esquema)),
+        _ => "(sem esquema)".into(),
+    }
+}
+
 /* ---------- Arquivo ou pasta ---------- */
 
 /// Caminho completo numa unidade (`C:\…`), sem `..`, sem rede (`\\servidor`), sem `\\?\` e sem
@@ -137,7 +185,14 @@ fn extensoes_executaveis() -> Vec<String> {
 
 pub fn executavel(caminho: &Path) -> bool {
     let Some(extensao) = caminho.extension().and_then(OsStr::to_str) else { return false };
-    extensoes_executaveis().contains(&extensao.to_ascii_lowercase())
+    let extensao = extensao.to_ascii_lowercase();
+    extensoes_executaveis().contains(&extensao) || perigosa_para_o_windows(&extensao)
+}
+
+/// Segunda barreira: a extensão que a lista não conhece e um programa instalado registrou, e o
+/// Windows marca como perigosa ao abrir.
+fn perigosa_para_o_windows(extensao: &str) -> bool {
+    unsafe { AssocIsDangerous(&HSTRING::from(format!(".{extensao}"))).as_bool() }
 }
 
 /// `settings.json` ou uma cópia de segurança dele (`settings.json.moductus-2026-10-09T12-00-00-000Z.bak`,
@@ -180,10 +235,19 @@ pub fn validar_caminho(caminho: &str, raizes: &Raizes) -> Result<PathBuf, String
     if arquivo && (executavel(pedido) || executavel(&real)) {
         return Err("programa não abre pelo Moductus".into());
     }
-    let numa_pasta =
-        raizes.pastas.iter().filter_map(|r| std::fs::canonicalize(r).ok()).any(|raiz| real.starts_with(&raiz));
-    let do_claude = arquivo && raizes.claude.as_deref().is_some_and(|pasta| e_do_claude(pedido, pasta));
-    if !numa_pasta && !do_claude {
+    let protegidas = &raizes.protegidas;
+    // O settings.json e as cópias: o que abre da pasta do Claude Code.
+    if arquivo && protegidas.claude.as_deref().is_some_and(|pasta| e_do_claude(pedido, pasta)) {
+        return Ok(sem_prefixo_verbatim(real));
+    }
+    // O resto dela guarda o login: não abre por raiz nenhuma, nem por um projeto que a contenha.
+    if dentro_de(&real, &protegidas.claude) {
+        return Err("da pasta do Claude Code só o settings.json abre".into());
+    }
+    let nos_dados = dentro_de(&real, &raizes.dados);
+    // A pasta de projeto foi conferida ao entrar; o arquivo resolvido ainda não cai no sistema.
+    let no_projeto = dentro_de(&real, &raizes.projetos) && !dentro_de(&real, &protegidas.sistema);
+    if !nos_dados && !no_projeto {
         return Err("fora das pastas que o Moductus pode abrir".into());
     }
     Ok(sem_prefixo_verbatim(real))
@@ -191,15 +255,10 @@ pub fn validar_caminho(caminho: &str, raizes: &Raizes) -> Result<PathBuf, String
 
 /* ---------- Pastas de projeto ---------- */
 
-pub fn pastas_do_sistema() -> Vec<PathBuf> {
-    let mut pastas: Vec<PathBuf> = PASTAS_DO_SISTEMA.iter().filter_map(std::env::var_os).map(PathBuf::from).collect();
-    pastas.extend(std::env::var_os("USERPROFILE").map(PathBuf::from));
-    pastas
-}
-
-/// Pasta de projeto que pode virar raiz: existe, não é a raiz de uma unidade, não é a pasta do
-/// usuário inteira e não fica dentro de uma pasta do sistema.
-pub fn raiz_de_projeto(caminho: &str, proibidas: &[PathBuf]) -> Option<PathBuf> {
+/// Pasta de projeto que pode virar raiz: existe, não é a raiz de uma unidade, não fica dentro
+/// nem acima de uma pasta do sistema ou da pasta do Claude Code, e não é a pasta do usuário
+/// inteira nem fica acima dela (`C:\Users`). Abaixo da pasta do usuário, pode.
+pub fn raiz_de_projeto(caminho: &str, protegidas: &Protegidas) -> Option<PathBuf> {
     let pedido = Path::new(caminho);
     caminho_local(pedido).ok()?;
     let real = std::fs::canonicalize(pedido).ok().filter(|r| r.is_dir())?;
@@ -207,19 +266,21 @@ pub fn raiz_de_projeto(caminho: &str, proibidas: &[PathBuf]) -> Option<PathBuf> 
     if real.components().count() < 3 {
         return None;
     }
-    let usuario = std::env::var_os("USERPROFILE").and_then(|p| std::fs::canonicalize(p).ok());
-    let do_sistema = proibidas
+    let resolvida = |p: &PathBuf| std::fs::canonicalize(p).ok();
+    let encosta = protegidas
+        .sistema
         .iter()
-        .filter_map(|p| std::fs::canonicalize(p).ok())
-        // A pasta do usuário só é proibida inteira; o que fica dentro dela pode ser projeto.
-        .any(|p| if Some(&p) == usuario.as_ref() { real == p } else { real.starts_with(&p) });
-    (!do_sistema).then(|| sem_prefixo_verbatim(real))
+        .chain(&protegidas.claude)
+        .filter_map(resolvida)
+        .any(|p| real.starts_with(&p) || p.starts_with(&real));
+    let acima_do_usuario = protegidas.usuario.as_ref().and_then(resolvida).is_some_and(|u| u.starts_with(&real));
+    (!encosta && !acima_do_usuario).then(|| sem_prefixo_verbatim(real))
 }
 
 /// Troca as pastas de projeto pelas que o serviço mandou; as recusadas ficam de fora e vão ao log.
 pub fn definir_projetos(pastas: &[String]) -> usize {
-    let proibidas = pastas_do_sistema();
-    let aceitas: Vec<PathBuf> = pastas.iter().filter_map(|p| raiz_de_projeto(p, &proibidas)).collect();
+    let protegidas = Protegidas::da_maquina();
+    let aceitas: Vec<PathBuf> = pastas.iter().filter_map(|p| raiz_de_projeto(p, &protegidas)).collect();
     if aceitas.len() < pastas.len() {
         crate::registro::info(&format!("abrir: {} pasta(s) de projeto recusada(s)", pastas.len() - aceitas.len()));
     }
@@ -238,9 +299,11 @@ pub fn pasta_do_claude() -> Option<PathBuf> {
 }
 
 fn raizes() -> Raizes {
-    let mut pastas: Vec<PathBuf> = DADOS.get().cloned().into_iter().collect();
-    pastas.extend(PROJETOS.lock().unwrap().iter().cloned());
-    Raizes { pastas, claude: pasta_do_claude() }
+    Raizes {
+        dados: DADOS.get().cloned(),
+        projetos: PROJETOS.lock().unwrap().clone(),
+        protegidas: Protegidas::da_maquina(),
+    }
 }
 
 /* ---------- Abrir no Windows ---------- */
@@ -287,8 +350,8 @@ fn recusado(o_que: &str, motivo: String) -> String {
 }
 
 pub fn abrir_endereco_validado(endereco: &str) -> Result<(), String> {
-    let validado =
-        validar_endereco(endereco).map_err(|m| recusado(&format!("o endereço {}", sem_query(endereco)), m))?;
+    let validado = validar_endereco(endereco)
+        .map_err(|m| recusado(&format!("o endereço {}", recusado_para_o_registro(endereco)), m))?;
     abrir(Alvo::Endereco(validado))
 }
 
@@ -328,6 +391,23 @@ pub fn atender(pedido: Pedido) -> Resposta {
     resultado.map(|_| Resposta::Ok { ok: true }).unwrap_or_else(|erro| Resposta::Erro { erro })
 }
 
+fn em_json(pedido: Pedido) -> serde_json::Value {
+    serde_json::to_value(atender(pedido)).unwrap_or_default()
+}
+
+/// Uma linha `abrir` do canal. A lista de projetos troca aqui mesmo, na thread do leitor, para
+/// valer na ordem em que o serviço mandou (A e depois A+B termina em A+B). Endereço e arquivo vão
+/// numa thread: o Windows pode demorar a abrir o navegador, e o canal não espera.
+pub fn receber(linha: &str, responder: impl FnOnce(serde_json::Value) + Send + 'static) {
+    match serde_json::from_str::<Pedido>(linha) {
+        Ok(pedido @ Pedido::Projetos { .. }) => responder(em_json(pedido)),
+        Ok(pedido) => {
+            thread::spawn(move || responder(em_json(pedido)));
+        }
+        Err(e) => responder(serde_json::json!({ "erro": format!("pedido inválido: {e}") })),
+    }
+}
+
 // Assíncronos para o `ShellExecuteExW` não segurar a thread das janelas.
 
 #[tauri::command]
@@ -362,6 +442,19 @@ mod testes {
 
     fn texto(p: &Path) -> String {
         p.to_string_lossy().into_owned()
+    }
+
+    /// Só uma pasta de projeto, sem pasta protegida: a pasta temporária fica no AppData.
+    fn so_projeto(raiz: &Path) -> Raizes {
+        Raizes { projetos: vec![raiz.to_path_buf()], ..Default::default() }
+    }
+
+    fn protegidas(sistema: &[&Path], usuario: Option<&Path>, claude: Option<&Path>) -> Protegidas {
+        Protegidas {
+            sistema: sistema.iter().map(|p| p.to_path_buf()).collect(),
+            usuario: usuario.map(Path::to_path_buf),
+            claude: claude.map(Path::to_path_buf),
+        }
     }
 
     #[test]
@@ -427,12 +520,25 @@ mod testes {
     }
 
     #[test]
+    fn recusado_vai_ao_registro_sem_usuario_nem_senha() {
+        let registro = recusado_para_o_registro;
+        assert_eq!(registro("https://usuario:senha@github.com/a?code=x"), "https://github.com");
+        assert_eq!(registro("http://token@a@outro.site:8080/x"), "http://outro.site:8080");
+        assert_eq!(registro("https://github.com\\a"), "https://github.com");
+        assert_eq!(registro("javascript:alert(document.cookie)"), "javascript:");
+        assert_eq!(registro("mailto:a@b.c"), "mailto:");
+        assert_eq!(registro("segredo@github.com"), "(sem esquema)");
+        assert_eq!(registro(""), "(sem esquema)");
+        assert_eq!(registro(&format!("https://{}@a.com", "z".repeat(500))), "https://a.com");
+    }
+
+    #[test]
     fn arquivo_e_pasta_dentro_da_raiz_abrem() {
         let raiz = pasta("dentro");
         fs::create_dir_all(raiz.join("exportacoes")).unwrap();
         fs::write(raiz.join("exportacoes").join("casa.moductus"), "x").unwrap();
         fs::write(raiz.join("moductus.log"), "x").unwrap();
-        let raizes = Raizes { pastas: vec![raiz.clone()], claude: None };
+        let raizes = so_projeto(&raiz);
         assert_eq!(validar_caminho(&texto(&raiz.join("moductus.log")), &raizes), Ok(raiz.join("moductus.log")));
         assert_eq!(validar_caminho(&texto(&raiz.join("exportacoes")), &raizes), Ok(raiz.join("exportacoes")));
         assert_eq!(validar_caminho(&texto(&raiz), &raizes), Ok(raiz.clone()));
@@ -448,7 +554,7 @@ mod testes {
         let fora = pasta("fora");
         fs::write(fora.join("nota.txt"), "x").unwrap();
         fs::create_dir_all(raiz.join("sub")).unwrap();
-        let raizes = Raizes { pastas: vec![raiz.clone()], claude: None };
+        let raizes = so_projeto(&raiz);
         assert!(validar_caminho(&texto(&fora.join("nota.txt")), &raizes).is_err());
         assert!(validar_caminho(&texto(&fora), &raizes).is_err());
         // Subir com .. não sai da raiz, nem quando o destino existe.
@@ -471,7 +577,7 @@ mod testes {
     fn recusa_caminho_relativo_de_rede_ou_que_nao_existe() {
         let raiz = pasta("forma");
         fs::write(raiz.join("nota.txt"), "x").unwrap();
-        let raizes = Raizes { pastas: vec![raiz.clone()], claude: None };
+        let raizes = so_projeto(&raiz);
         for caminho in [
             "nota.txt".to_string(),
             ".\\nota.txt".to_string(),
@@ -491,10 +597,19 @@ mod testes {
     #[test]
     fn recusa_executavel_mesmo_dentro_da_raiz() {
         let raiz = pasta("executavel");
-        let raizes = Raizes { pastas: vec![raiz.clone()], claude: None };
-        for nome in ["a.exe", "b.CMD", "c.bat", "d.ps1", "e.lnk", "f.vbs", "g.msi", "h.url", "i.hta", "j.scr", "k.reg"] {
+        let raizes = so_projeto(&raiz);
+        for nome in [
+            "a.exe", "b.CMD", "c.bat", "d.ps1", "e.lnk", "f.vbs", "g.msi", "h.url", "i.hta", "j.scr", "k.reg", "l.pyz",
+            "m.PYZW", "n.pyc", "o.pyo", "p.theme", "q.themepack", "r.deskthemepack", "s.msu", "t.ppkg", "u.xbap",
+            "v.rdp", "w.wsb", "x.jnlp",
+        ] {
             fs::write(raiz.join(nome), "x").unwrap();
             assert!(validar_caminho(&texto(&raiz.join(nome)), &raizes).is_err(), "deveria recusar {nome}");
+        }
+        // O que o Moductus abre de verdade não é perigoso para o Windows.
+        for nome in ["nota.txt", "dados.json", "moductus.log", "leia.md", "casa.moductus", "foto.png", "nota.pdf"] {
+            fs::write(raiz.join(nome), "x").unwrap();
+            assert!(validar_caminho(&texto(&raiz.join(nome)), &raizes).is_ok(), "deveria abrir {nome}");
         }
         // O Windows tira o ponto do fim: "a.exe." é o a.exe.
         assert!(validar_caminho(&format!("{}.", texto(&raiz.join("a.exe"))), &raizes).is_err());
@@ -517,7 +632,8 @@ mod testes {
         ] {
             fs::write(claude.join(nome), "{}").unwrap();
         }
-        let raizes = Raizes { pastas: vec![], claude: Some(claude.clone()) };
+        let raizes =
+            Raizes { protegidas: protegidas(&[], None, Some(&claude)), ..Default::default() };
         let pode = |nome: &str| validar_caminho(&texto(&claude.join(nome)), &raizes).is_ok();
         assert!(pode("settings.json"));
         assert!(pode("SETTINGS.JSON"));
@@ -537,6 +653,52 @@ mod testes {
         }
     }
 
+    /// Mesmo que a pasta do Claude Code fique dentro de uma raiz ativa (projeto ou dados, ela
+    /// mesma ou uma pasta acima), o login não abre.
+    #[test]
+    fn o_login_do_claude_nao_abre_por_raiz_nenhuma() {
+        let casa = pasta("claude-dentro");
+        let claude = casa.join(".claude");
+        fs::create_dir_all(claude.join("projects")).unwrap();
+        fs::write(claude.join(".credentials.json"), "{}").unwrap();
+        fs::write(claude.join("settings.json"), "{}").unwrap();
+        fs::write(claude.join("projects").join("sessao.jsonl"), "{}").unwrap();
+        let guarda = protegidas(&[], None, Some(&claude));
+        for raizes in [
+            Raizes { projetos: vec![claude.clone()], protegidas: protegidas(&[], None, Some(&claude)), ..Default::default() },
+            Raizes { projetos: vec![casa.clone()], protegidas: protegidas(&[], None, Some(&claude)), ..Default::default() },
+            Raizes { dados: Some(casa.clone()), protegidas: guarda, ..Default::default() },
+        ] {
+            let pode = |p: &Path| validar_caminho(&texto(p), &raizes).is_ok();
+            assert!(!pode(&claude.join(".credentials.json")), "o login nunca abre: {raizes:?}");
+            assert!(!pode(&claude.join("projects").join("sessao.jsonl")));
+            assert!(!pode(&claude));
+            assert!(pode(&claude.join("settings.json")));
+        }
+        let _ = fs::remove_dir_all(&casa);
+    }
+
+    /// A pasta de dados fica no AppData de propósito e abre; pela pasta de projeto, o arquivo
+    /// resolvido numa pasta do sistema não abre.
+    #[test]
+    fn arquivo_em_pasta_do_sistema_so_abre_pelos_dados() {
+        let base = pasta("sistema-dentro");
+        let sistema = base.join("AppData");
+        fs::create_dir_all(sistema.join("Moductus")).unwrap();
+        fs::write(sistema.join("Moductus").join("moductus.log"), "x").unwrap();
+        let log = sistema.join("Moductus").join("moductus.log");
+        let pelo_projeto =
+            Raizes { projetos: vec![base.clone()], protegidas: protegidas(&[&sistema], None, None), ..Default::default() };
+        assert!(validar_caminho(&texto(&log), &pelo_projeto).is_err());
+        let pelos_dados = Raizes {
+            dados: Some(sistema.join("Moductus")),
+            protegidas: protegidas(&[&sistema], None, None),
+            ..Default::default()
+        };
+        assert!(validar_caminho(&texto(&log), &pelos_dados).is_ok());
+        let _ = fs::remove_dir_all(&base);
+    }
+
     #[test]
     fn nome_da_copia_de_seguranca() {
         assert!(arquivo_do_claude("settings.json.moductus-2026-10-09T12-00-00-000Z.bak"));
@@ -553,29 +715,63 @@ mod testes {
         let sistema = pasta("sistema");
         let projeto = pasta("projeto");
         fs::create_dir_all(sistema.join("dentro")).unwrap();
-        let proibidas = vec![sistema.clone()];
+        let proibidas = protegidas(&[&sistema], None, None);
+        let nenhuma = Protegidas::default();
         assert_eq!(raiz_de_projeto(&texto(&projeto), &proibidas), Some(projeto.clone()));
         assert_eq!(raiz_de_projeto(&texto(&sistema), &proibidas), None);
         assert_eq!(raiz_de_projeto(&texto(&sistema.join("dentro")), &proibidas), None);
-        assert_eq!(raiz_de_projeto("C:\\", &[]), None, "a unidade inteira não é projeto");
-        assert_eq!(raiz_de_projeto("projeto", &[]), None);
-        assert_eq!(raiz_de_projeto(&texto(&projeto.join("nao-existe")), &[]), None);
+        assert_eq!(raiz_de_projeto("C:\\", &nenhuma), None, "a unidade inteira não é projeto");
+        assert_eq!(raiz_de_projeto("projeto", &nenhuma), None);
+        assert_eq!(raiz_de_projeto(&texto(&projeto.join("nao-existe")), &nenhuma), None);
         fs::write(projeto.join("arquivo.txt"), "x").unwrap();
-        assert_eq!(raiz_de_projeto(&texto(&projeto.join("arquivo.txt")), &[]), None, "projeto é pasta");
+        assert_eq!(raiz_de_projeto(&texto(&projeto.join("arquivo.txt")), &nenhuma), None, "projeto é pasta");
         for p in [sistema, projeto] {
             let _ = fs::remove_dir_all(p);
         }
     }
 
+    /// Uma sessão do CLI aberta numa pasta acima de uma protegida (`C:\Users`, `C:\Users\<u>`,
+    /// `…\AppData`) ou na pasta do Claude Code não vira raiz: liberaria o que está dentro.
+    #[test]
+    fn pasta_de_projeto_nao_contem_pasta_protegida() {
+        let base = pasta("acima");
+        let usuarios = base.join("Users");
+        let usuario = usuarios.join("ana");
+        let claude = usuario.join(".claude");
+        let appdata = usuario.join("AppData");
+        let roaming = appdata.join("Roaming");
+        let projeto = usuario.join("Projetos").join("site");
+        for p in [&claude.join("projects"), &roaming, &projeto] {
+            fs::create_dir_all(p).unwrap();
+        }
+        let guarda = protegidas(&[&roaming], Some(&usuario), Some(&claude));
+        let raiz = |p: &Path| raiz_de_projeto(&texto(p), &guarda);
+        assert_eq!(raiz(&claude), None, "a pasta do Claude Code guarda o login");
+        assert_eq!(raiz(&claude.join("projects")), None, "nem o que fica dentro dela");
+        assert_eq!(raiz(&usuario), None, "a pasta do usuário inteira");
+        assert_eq!(raiz(&usuarios), None, "a pasta acima da do usuário");
+        assert_eq!(raiz(&appdata), None, "a pasta acima do AppData\\Roaming");
+        assert_eq!(raiz(&base), None);
+        assert_eq!(raiz(&projeto), Some(projeto.clone()), "o projeto dentro da pasta do usuário pode");
+        // A pasta do Claude Code fora da do usuário (CLAUDE_CONFIG_DIR) também protege quem está acima.
+        let outra = base.join("config");
+        fs::create_dir_all(outra.join("claude")).unwrap();
+        let so_claude = protegidas(&[], None, Some(&outra.join("claude")));
+        assert_eq!(raiz_de_projeto(&texto(&outra), &so_claude), None);
+        let _ = fs::remove_dir_all(&base);
+    }
+
     #[test]
     fn as_pastas_do_windows_estao_entre_as_proibidas() {
-        let proibidas = pastas_do_sistema();
+        let proibidas = Protegidas::da_maquina();
         let windows = std::env::var_os("SystemRoot").map(PathBuf::from).unwrap();
         assert!(raiz_de_projeto(&texto(&windows), &proibidas).is_none());
         assert!(raiz_de_projeto(&texto(&windows.join("System32")), &proibidas).is_none());
-        // A pasta do usuário inteira não vira projeto.
+        // A pasta do usuário inteira não vira projeto, nem a de cima, nem o AppData.
         let usuario = std::env::var_os("USERPROFILE").map(PathBuf::from).unwrap();
         assert!(raiz_de_projeto(&texto(&usuario), &proibidas).is_none());
+        assert!(raiz_de_projeto(&texto(usuario.parent().unwrap()), &proibidas).is_none());
+        assert!(raiz_de_projeto(&texto(&usuario.join("AppData")), &proibidas).is_none());
     }
 
     #[test]
@@ -604,5 +800,32 @@ mod testes {
             serde_json::to_value(Resposta::Erro { erro: "x".into() }).unwrap(),
             serde_json::json!({ "erro": "x" })
         );
+    }
+
+    /// A lista de projetos troca antes de `receber` voltar: duas linhas seguidas do canal valem
+    /// na ordem em que chegaram. Nada abre aqui (as pastas são do Windows e ficam de fora).
+    #[test]
+    fn lista_de_projetos_troca_na_thread_do_leitor() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        let respostas = Arc::new(AtomicUsize::new(0));
+        for linha in [
+            r#"{"tipo":"abrir","id":1,"op":"projetos","pastas":["C:\\Windows"]}"#,
+            r#"{"tipo":"abrir","id":2,"op":"projetos","pastas":["C:\\Windows","C:\\Windows\\System32"]}"#,
+        ] {
+            let antes = respostas.load(Ordering::SeqCst);
+            let contador = Arc::clone(&respostas);
+            receber(linha, move |r| {
+                assert_eq!(r, serde_json::json!({ "ok": true }));
+                contador.fetch_add(1, Ordering::SeqCst);
+            });
+            assert_eq!(respostas.load(Ordering::SeqCst), antes + 1, "respondeu antes de voltar");
+        }
+        let erro = Arc::new(Mutex::new(None));
+        let guarda = Arc::clone(&erro);
+        receber(r#"{"tipo":"abrir","id":3,"op":"projetos"}"#, move |r| *guarda.lock().unwrap() = Some(r));
+        assert!(erro.lock().unwrap().as_ref().is_some_and(|r| r["erro"].as_str().unwrap().contains("pedido inválido")));
     }
 }

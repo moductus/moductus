@@ -211,17 +211,8 @@ fn ouvir(app: &AppHandle, saida: std::process::ChildStdout, token: &str) {
                     .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
                 responder(id, resposta);
             }
-            // Numa thread: o Windows pode demorar a abrir o navegador, e o canal não espera.
-            ("abrir", Some(id)) => {
-                let linha = linha.clone();
-                thread::spawn(move || {
-                    let resposta = serde_json::from_str::<crate::abrir::Pedido>(&linha)
-                        .map(crate::abrir::atender)
-                        .map(|r| serde_json::to_value(r).unwrap_or_default())
-                        .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
-                    responder(id, resposta);
-                });
-            }
+            // A lista de projetos troca aqui, na ordem do canal; endereço e arquivo vão numa thread.
+            ("abrir", Some(id)) => crate::abrir::receber(&linha, move |resposta| responder(id, resposta)),
             ("ambiente", Some(id)) => {
                 let resposta = serde_json::from_str::<ambiente::Pedido>(&linha)
                     .map(ambiente::atender)
