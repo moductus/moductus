@@ -6,8 +6,8 @@
 //!
 //! Canal com o serviço pelo stdio, em linhas JSON: o serviço avisa `pronto` com a porta
 //! e pede credenciais (`{"tipo":"credencial","id",…}`), variáveis do usuário
-//! (`{"tipo":"ambiente","id",…}`) e avisos do Windows (`{"tipo":"notificacao","id",…}`),
-//! respondidos no stdin; o menu do time na bandeja (`{"tipo":"bandeja",…}`) vem sem id. Pelo
+//! (`{"tipo":"ambiente","id",…}`), avisos do Windows (`{"tipo":"notificacao","id",…}`) e
+//! abrir endereço ou arquivo (`{"tipo":"abrir","id",…}`), respondidos no stdin; o menu do time na bandeja (`{"tipo":"bandeja",…}`) vem sem id. Pelo
 //! stdin também vão avisos da casca sem id, como a retomada da suspensão (`{"tipo":"retomou"}`),
 //! o clique num aviso do Windows (`notificacao-clique`) e num item da bandeja (`bandeja-clique`).
 
@@ -210,6 +210,17 @@ fn ouvir(app: &AppHandle, saida: std::process::ChildStdout, token: &str) {
                     .map(|r| serde_json::to_value(r).unwrap_or_default())
                     .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
                 responder(id, resposta);
+            }
+            // Numa thread: o Windows pode demorar a abrir o navegador, e o canal não espera.
+            ("abrir", Some(id)) => {
+                let linha = linha.clone();
+                thread::spawn(move || {
+                    let resposta = serde_json::from_str::<crate::abrir::Pedido>(&linha)
+                        .map(crate::abrir::atender)
+                        .map(|r| serde_json::to_value(r).unwrap_or_default())
+                        .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
+                    responder(id, resposta);
+                });
             }
             ("ambiente", Some(id)) => {
                 let resposta = serde_json::from_str::<ambiente::Pedido>(&linha)

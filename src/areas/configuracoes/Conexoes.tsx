@@ -5,6 +5,7 @@ import { FalaAgente } from "../../componentes/FalaAgente.tsx";
 import { Icone } from "../../componentes/Icone.tsx";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
 import { Selo, type TomSelo } from "../../componentes/Selo.tsx";
+import { abrirSettingsClaude, useAbrir } from "../../nativo/abrir.ts";
 import { useAgora } from "../tempo.ts";
 import {
   comandoDoErro,
@@ -124,6 +125,7 @@ const DESCRICAO_CLAUDE =
 export function CartaoClaudeCode({ conexoes }: { conexoes: ConexoesDaTela }) {
   const agora = useAgora();
   const [vendo, setVendo] = useState(false);
+  const arquivo = useAbrir();
   const { claude, previa, andamento } = conexoes;
   if (!claude) return null;
   const ocupado = andamento["hooks-claude-code"] !== undefined || !conexoes.conectado;
@@ -192,18 +194,27 @@ export function CartaoClaudeCode({ conexoes }: { conexoes: ConexoesDaTela }) {
     );
   }
 
+  // Com erro (ConfigConexoesErros.dc.html), o settings.json abre no editor para corrigir.
   return (
     <CartaoConexao
       nome="Claude Code"
       estado={estado}
       descricao={DESCRICAO_CLAUDE}
       acoes={
-        <Botao variante="primario" disabled={ocupado} onClick={() => void conexoes.verPrevia()}>
-          {claude.estado === "erro" ? "Tentar de novo" : "Ver o que muda"}
-        </Botao>
+        <>
+          {erro && <Botao onClick={() => arquivo.abrir(abrirSettingsClaude)}>Abrir o arquivo</Botao>}
+          <Botao variante="primario" disabled={ocupado} onClick={() => void conexoes.verPrevia()}>
+            {claude.estado === "erro" ? "Tentar de novo" : "Ver o que muda"}
+          </Botao>
+        </>
       }
     >
       {erro && <p className="config-conexao-erro">{erro}</p>}
+      {arquivo.erro && (
+        <p role="alert" className="config-conexao-erro">
+          {arquivo.erro}
+        </p>
+      )}
     </CartaoConexao>
   );
 }

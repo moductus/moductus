@@ -14,6 +14,7 @@ import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.t
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ligarBandeja } from "./bandeja/bandeja.ts";
+import { abrirPelaCasca, projetosNaCasca } from "./casca/abrir.ts";
 import { ambientePelaCasca } from "./casca/ambiente.ts";
 import { avisosPelaCasca, CLIQUE_NO_AVISO, lerClique } from "./casca/avisos.ts";
 import { CanalCasca } from "./casca/canal.ts";
@@ -127,10 +128,14 @@ canal.aoAvisar(CLIQUE_NO_AVISO, (aviso) => {
     .catch((erro: unknown) => console.error(`notificações: clique no aviso falhou: ${String(erro)}`));
 });
 const avisarContextoAoUsuario = avisarContexto(notificacoes);
+// A casca só abre arquivo de projeto que conhece (ADR-0038): ela recebe as pastas ao subir e quando
+// chega sessão de projeto novo.
+const projetosDaCasca = projetosNaCasca(abrirPelaCasca(canal), () => sessoes.projetos());
 const sessoes = new ServicoSessoes(
   new RepositorioSessoes(banco),
   (mudanca) => {
     servidor?.emitir("sessoes.mudou", mudanca);
+    projetosDaCasca.aoMudarSessao(mudanca.sessao.projetoId);
     vigiaNuno?.aoMudarSessao(mudanca);
     // A missão do Nuno nos Primeiros passos (F2-32): a primeira sessão do Claude Code que chega.
     if (mudanca.sessao.ferramenta === "claude-code") primeiroUso.sessaoDoClaudeCode();
@@ -144,6 +149,7 @@ const sessoes = new ServicoSessoes(
     },
   },
 );
+projetosDaCasca.mandar();
 const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {
   aprovacao: (aprovacao) => {
     servidor?.emitir("aprovacoes.mudou", aprovacao);

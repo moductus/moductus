@@ -436,6 +436,26 @@
   color: var(--texto-3);
 }
 
+/* Opção com botão ao lado (Uso3Modelo.dc.html, "Como instalar"): o botão fica dentro da moldura,
+   à direita, mas fora do rótulo: não entra no nome do rádio e não apaga quando a opção está
+   desativada. */
+.uso-opcao-moldura {
+  position: relative;
+  display: grid;
+}
+
+.uso-opcao-moldura > .uso-opcao {
+  padding-inline-end: var(--largura-acao-opcao);
+}
+
+.uso-opcao-acao {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--esp-16);
+  display: flex;
+  align-items: center;
+}
+
 .uso-procurar {
   display: flex;
 }

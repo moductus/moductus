@@ -15,10 +15,13 @@ import { Personagem } from "../../componentes/personagem/Personagem.tsx";
 import { fraseDaSituacao, lerSituacao, modeloDoAgente } from "../../componentes/personagem/situacao.ts";
 import { Seletor, type OpcaoSeletor } from "../../componentes/Seletor.tsx";
 import { Selo, type TomSelo } from "../../componentes/Selo.tsx";
+import { abrirEndereco, useAbrir } from "../../nativo/abrir.ts";
 import {
   CLIS,
+  COMO_INSTALAR,
   FORMULARIO_API_VAZIO,
   novoDaApi,
+  precisaInstalar,
   situacaoDoCli,
   type FormularioApi,
   type TipoApi,
@@ -259,6 +262,7 @@ function Detectados({
   travado: boolean;
   aoConectar: (tipo: TipoProvedorCli, nome: string) => void;
 }) {
+  const { erro, abrir } = useAbrir();
   return (
     <section className="config-modelos-grupo" aria-label="CLIs no PC" aria-busy={detectados === null}>
       <div className="config-modelos-rotulos">
@@ -298,11 +302,26 @@ function Detectados({
                     Conectar
                   </Botao>
                 )}
+                {detectados !== null && precisaInstalar(achado) && (
+                  <Botao
+                    tamanho="pequeno"
+                    variante="fantasma"
+                    aria-label={`Como instalar o ${c.nome}`}
+                    onClick={() => abrir(() => abrirEndereco(COMO_INSTALAR[c.tipo]))}
+                  >
+                    Como instalar
+                  </Botao>
+                )}
               </span>
             </li>
           );
         })}
       </ul>
+      {erro && (
+        <p role="alert" className="config-modelos-erro">
+          {erro}
+        </p>
+      )}
     </section>
   );
 }

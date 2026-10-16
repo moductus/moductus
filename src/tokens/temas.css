@@ -220,6 +220,8 @@
   --espaco-uso-vertical: 40px;
   --espaco-uso-lateral: 48px;
   --largura-texto-uso: 560px;
+  /* Espaço guardado à direita de uma opção com botão ao lado ("Como instalar" no passo Modelo). */
+  --largura-acao-opcao: 132px;
   --altura-passo-uso: 34px;
   --tamanho-marca-passo: 22px;
   --altura-previa-tema: 120px;
