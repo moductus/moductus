@@ -110,7 +110,15 @@ describe("levar para outro PC: só configurações", () => {
     const caminho = join(pasta(), "casa.moductus");
     await casa.outro.exportar({ caminho });
     const conteudo = unzipSync(new Uint8Array(readFileSync(caminho)));
-    const tabelas = ["agentes", "conexoes", "notificacoes_preferencias", "provedores", "regras_permissao"];
+    const tabelas = [
+      "agentes",
+      "conexoes",
+      "etiquetas",
+      "listas",
+      "notificacoes_preferencias",
+      "provedores",
+      "regras_permissao",
+    ];
     expect(Object.keys(conteudo).sort()).toEqual(
       ["config.json", "manifesto.json", ...tabelas.map((t) => `${t}.json`)].sort(),
     );
@@ -131,6 +139,8 @@ describe("levar para outro PC: só configurações", () => {
       expect.objectContaining({ id: "c1", tipo: "github", conta: "gustavo" }),
     ]);
     expect(ler("regras_permissao")).toEqual([]);
+    expect(ler("listas").map((l) => l.nome)).toEqual(["Entrada", "Pessoal", "Trabalho"]);
+    expect(ler("etiquetas")).toEqual([]);
     for (const nome of Object.keys(conteudo)) {
       expect(strFromU8(conteudo[nome]!), nome).not.toContain("moductus:");
     }

@@ -17,8 +17,11 @@ export const COLUNA_LIXEIRA = "apagado_em";
 /** Agora em ISO 8601 UTC com milissegundos, igual ao `toISOString()` do JavaScript. */
 export const AGORA_SQL = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
-/** O formato de AGORA_SQL, exato: só assim a comparação como texto da limpeza vale como data. */
-const FORMATO_DATA_GLOB =
+/**
+ * O formato de AGORA_SQL, exato: só assim a comparação como texto da limpeza vale como data. Serve
+ * também às colunas de instante que o serviço compara como texto (o `quando` do lembrete).
+ */
+export const FORMATO_DATA_GLOB =
   "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9]Z";
 
 export const COLUNAS_ORIGEM = [
