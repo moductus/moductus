@@ -17,6 +17,7 @@ import {
   MENSAGEM_ACORDAR_NO_LIMITE,
   MENSAGEM_ACORDAR_NO_TETO,
   MENSAGEM_ACORDAR_PAUSADO,
+  MENSAGEM_ACORDAR_SEM_MOTIVO,
   MENSAGEM_DESLIGADO,
   PROVA_DO_PRINCIPAL_MS,
   type ConverterCusto,
@@ -355,6 +356,16 @@ describe("tentar agora", () => {
     runtime.estados.ligar("tula", false);
     expect(() => runtime.estados.tentarAgora("tula")).toThrow(AgenteDesligado);
     expect(() => runtime.estados.tentarAgora("ninguem")).toThrow("agente não encontrado");
+  });
+
+  test("dormindo sem motivo guardado recusa em vez de acordar no escuro", () => {
+    const { db, runtime, guardado } = montar();
+    const depois = as(INICIO + 60_000);
+    db.exec(
+      `UPDATE agentes SET estado = 'dormindo', motivo_sono = NULL, dorme_ate = '${depois}' WHERE id = 'alba'`,
+    );
+    expect(() => runtime.estados.tentarAgora("alba")).toThrow(MENSAGEM_ACORDAR_SEM_MOTIVO("Alba"));
+    expect(guardado("alba")).toMatchObject({ estado: "dormindo", motivo_sono: null, dorme_ate: depois });
   });
 });
 

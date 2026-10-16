@@ -55,6 +55,9 @@ export const MENSAGEM_ACORDAR_NO_LIMITE = (nome: string) =>
 export const MENSAGEM_ACORDAR_NO_TETO = (nome: string) =>
   `${nome} chegou ao teto de hoje e volta amanhã. Para seguir antes, mude o teto em Modelos.`;
 export const MENSAGEM_ACORDAR_PAUSADO = (nome: string) => `${nome} está em pausa: retome para voltar.`;
+/** Dormindo sem motivo guardado não devia acontecer: recusa em vez de acordar no escuro. */
+export const MENSAGEM_ACORDAR_SEM_MOTIVO = (nome: string) =>
+  `${nome} dorme sem motivo guardado: espere o despertador ou pause e retome.`;
 
 /**
  * Converte o custo do dia (microdólares) para a moeda do teto (centavos); `null` quando não há
@@ -243,6 +246,9 @@ export class EstadosAgentes {
       case "credencial":
       case "ausente":
         this.mudar(agenteId, ATIVO, ["dormindo"], "usuario");
+        return;
+      default:
+        throw new Error(MENSAGEM_ACORDAR_SEM_MOTIVO(agente.nome));
     }
   }
 
