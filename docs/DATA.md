@@ -171,7 +171,7 @@ Os quatro de fábrica vêm semeados na migração, com os ids `alba`, `tula`, `f
 
 ### `provedores`
 Tem lixeira.
-`id`, `tipo` (`claude-cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic`, `openai`, `openai-compativel`, `gemini`), `nome`, `modelo`, `base_url`, `credencial` (nome no Gerenciador de Credenciais, nunca a chave), `testado_em`.
+`id`, `tipo` (`claude-cli`, `codex-cli`, `gemini-cli`, `opencode-cli`, `anthropic`, `openai`, `openai-compativel`, `gemini`), `nome`, `modelo`, `base_url`, `credencial` (nome no Gerenciador de Credenciais, nunca a chave), `testado_em`, `caminho` (onde a detecção achou o CLI neste PC, inclusive o `.cmd` do npm; só em provedor de CLI; migração `016-provedores-caminho`).
 
 ### `conversas` e `mensagens`
 Têm lixeira. Quem apaga a conversa manda as mensagens junto: mensagem viva segura a conversa na limpeza.
@@ -236,7 +236,7 @@ Controle deste PC, sem lixeira. Migração `010-agendador-disparos`. Até onde o
 A marcação de cada tabela mora em `servico/src/outro-pc/tabelas.ts`, e um teste reprova tabela nova sem marcação (na dúvida, é dado). O que "só configurações" tira, além das tabelas de dado:
 
 - **Credencial:** a coluna `credencial` (o nome no Gerenciador de Credenciais) não sai de nenhuma tabela; no PC novo a conexão e o provedor são refeitos.
-- **Situação deste PC:** `conexoes` vai sem `estado`, `ultimo_erro` e `conectada_em`; chega desligada no PC novo.
+- **Situação deste PC:** `conexoes` vai sem `estado`, `ultimo_erro` e `conectada_em`; chega desligada no PC novo. `provedores` vai sem `caminho`: no PC novo, a detecção acha o CLI de lá.
 - **Regras vencidas:** `regras_permissao` com `expira_em` no passado não saem. As de escopo `projeto` viajam, e a importação descarta as de projeto que não existe no PC novo.
 - **Lixeira:** linha com `apagado_em` não sai.
 

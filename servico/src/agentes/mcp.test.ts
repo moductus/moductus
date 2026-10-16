@@ -221,6 +221,7 @@ describe("runtime pelo MCP do Moductus", () => {
       mensagens: [{ papel: "usuario", texto: "publica no #8" }],
     });
     const cartao = await cartaoQuando((a) => a.estado === "pendente");
+    expect(repositorioAprovacoes.pendentes().map((a) => a.id)).toEqual([cartao.id]);
     // O CLI cai no meio da chamada, sem esperar a resposta do MCP.
     writeFileSync(cair, "");
     const r = await execucao;

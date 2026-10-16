@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process";
-import { statSync } from "node:fs";
-import { join } from "node:path";
 import {
   COMANDOS_CLI,
   type ProvedorDetectado,
@@ -8,6 +6,9 @@ import {
   type TipoProvedorCli,
 } from "@moductus/contrato";
 import { ambienteDoCli } from "./claude-cli/claude-cli.ts";
+import { acharNoPath, alvoDoCli, type AlvoCli } from "./executavel.ts";
+
+export { acharNoPath } from "./executavel.ts";
 
 /**
  * Detecção dos CLIs de IA no PC (F2-08; PRODUCT.md §5 "Primeiro uso"): procura cada um no PATH,
@@ -46,32 +47,6 @@ export interface OpcoesDeteccao {
   /** Onde o comando está; sem isso, a busca no PATH do processo. */
   achar?: (comando: string) => string | null;
   ambiente?: NodeJS.ProcessEnv;
-}
-
-/**
- * O caminho do comando como o Windows acharia: cada pasta do PATH, em ordem, com cada extensão do
- * PATHEXT. No Windows o nome sem extensão não vale: o npm deixa ao lado do `.cmd` um script de
- * shell sem extensão, que não roda fora do bash.
- */
-export function acharNoPath(
-  comando: string,
-  ambiente: NodeJS.ProcessEnv = process.env,
-  windows = process.platform === "win32",
-  eArquivo: (caminho: string) => boolean = arquivoExiste,
-): string | null {
-  const caminho = valorDe(ambiente, "PATH") ?? "";
-  const pastas = caminho.split(windows ? ";" : ":").filter((p) => p.trim() !== "");
-  const extensoes = windows
-    ? (valorDe(ambiente, "PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean)
-    : [""];
-  for (const pasta of pastas) {
-    const limpa = pasta.trim().replace(/^"(.*)"$/, "$1");
-    for (const extensao of extensoes) {
-      const candidato = join(limpa, comando + extensao.toLowerCase());
-      if (eArquivo(candidato)) return candidato;
-    }
-  }
-  return null;
 }
 
 /** A primeira versão no formato `1.2.3` que o CLI escreveu (`2.1.287 (Claude Code)`). */
@@ -133,7 +108,7 @@ export async function detectar(opcoes: OpcoesDeteccao): Promise<ProvedorDetectad
         caminho,
         versao,
         logado: comLogin ? loginDoClaude(comLogin) : null,
-        impedimento: impedimentoDe(tipo, caminho, opcoes.atende),
+        impedimento: impedimentoDe(tipo, alvoDoCli(caminho, ambiente), opcoes.atende),
         versaoMinima: versao && minima && compararVersoes(versao, minima) < 0 ? minima : null,
       };
     }),
@@ -142,23 +117,25 @@ export async function detectar(opcoes: OpcoesDeteccao): Promise<ProvedorDetectad
 }
 
 /**
- * Por que o Moductus não usa o CLI achado. O adaptador do Claude Code inicia o executável sem
- * shell, e o `.cmd` do npm só roda pelo `cmd.exe`: aceitar o `.cmd` aqui seria mostrar
- * "conectado" e falhar no Testar. Passar o caminho achado ao adaptador fica para depois.
+ * Por que o Moductus não usa o CLI achado. O adaptador do Claude Code inicia o programa sem shell
+ * (ADR-0037): o `.cmd` do npm serve quando o serviço acha nele o programa que ele chama (`alvo`).
+ * Sem alvo, ele só rodaria pelo `cmd.exe`, e aceitá-lo aqui seria mostrar "conectado" e falhar no
+ * Testar.
  */
 export function impedimentoDe(
   tipo: TipoProvedorCli,
-  caminho: string,
+  alvo: AlvoCli | null,
   atende: (tipo: TipoProvedor) => boolean,
 ): ProvedorDetectado["impedimento"] {
   if (!atende(tipo)) return "sem_adaptador";
-  if (tipo === "claude-cli" && /\.(cmd|bat)$/i.test(caminho)) return "instalado_pelo_npm";
+  if (tipo === "claude-cli" && alvo === null) return "instalado_pelo_npm";
   return null;
 }
 
 /**
- * Roda o CLI sem janela, com prazo. `.cmd` e `.bat` (instalação pelo npm) só rodam pelo `cmd.exe`:
- * o comando vai inteiro numa linha, com o caminho entre aspas e só argumentos fixos deste arquivo.
+ * Roda o CLI sem janela, com prazo. O shim do npm roda pelo programa que ele chama, sem shell
+ * (`alvoDoCli`). `.cmd` ou `.bat` que não é shim legível só roda pelo `cmd.exe`: o comando vai
+ * inteiro numa linha, com o caminho entre aspas e só argumentos fixos deste arquivo.
  *
  * O prazo vale de verdade: pelo `cmd.exe`, matar o processo mata só o `cmd`, e o node que ele
  * abriu segura a saída aberta (o `close` só viria quando ele terminasse). No prazo, a árvore
@@ -178,10 +155,10 @@ export function rodarComPrazo(
   prazo: AbortSignal,
 ): Promise<RespostaCli> {
   return new Promise((resolve, reject) => {
-    const peloCmd = /\.(cmd|bat)$/i.test(caminho);
-    const processo = peloCmd
-      ? spawn(`"${caminho}" ${argumentos.join(" ")}`, { shell: true, env: ambiente, windowsHide: true })
-      : spawn(caminho, [...argumentos], { env: ambiente, windowsHide: true });
+    const alvo = alvoDoCli(caminho, ambiente);
+    const processo = alvo
+      ? spawn(alvo.executavel, [...alvo.antes, ...argumentos], { env: ambiente, windowsHide: true })
+      : spawn(`"${caminho}" ${argumentos.join(" ")}`, { shell: true, env: ambiente, windowsHide: true });
     let saida = "";
     let terminou = false;
     const terminar = (fazer: () => void) => {
@@ -219,14 +196,4 @@ function derrubarArvore(pid: number | undefined, soOProcesso: () => void): void 
     stdio: "ignore",
   });
   taskkill.once("error", soOProcesso);
-}
-
-function arquivoExiste(caminho: string): boolean {
-  return statSync(caminho, { throwIfNoEntry: false })?.isFile() ?? false;
-}
-
-/** Variável de ambiente sem diferenciar caixa, como o Windows lê (`Path`, `PATH`). */
-function valorDe(ambiente: NodeJS.ProcessEnv, nome: string): string | undefined {
-  const chave = Object.keys(ambiente).find((k) => k.toUpperCase() === nome);
-  return chave === undefined ? undefined : ambiente[chave];
 }

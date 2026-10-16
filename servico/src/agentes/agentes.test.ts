@@ -233,16 +233,18 @@ describe("agentes", () => {
 
   test("o provedor vem com a configuração para o registro; o da lixeira não", () => {
     const { db, repo } = montar();
-    db.exec(`INSERT INTO provedores (id, tipo, nome, modelo, credencial) VALUES
-               ('p1', 'claude-cli', 'Claude', 'haiku', NULL),
-               ('p2', 'openai-compativel', 'Ollama', 'llama', 'moductus/ollama');
+    db.exec(`INSERT INTO provedores (id, tipo, nome, modelo, credencial, caminho) VALUES
+               ('p1', 'claude-cli', 'Claude', 'haiku', NULL, 'C:\\npm\\claude.cmd'),
+               ('p2', 'openai-compativel', 'Ollama', 'llama', 'moductus/ollama', NULL);
              UPDATE provedores SET apagado_em = '2026-10-01T00:00:00.000Z' WHERE id = 'p2';`);
+    // O caminho que a detecção guardou vai ao adaptador, que o roda em vez do `claude` do PATH.
     expect(repo.provedor("p1")).toEqual({
       id: "p1",
       tipo: "claude-cli",
       modelo: "haiku",
       baseUrl: null,
       credencial: null,
+      caminho: "C:\\npm\\claude.cmd",
     });
     expect(repo.provedor("p2")).toBeNull();
   });

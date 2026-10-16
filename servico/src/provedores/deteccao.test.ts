@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { ProvedorDetectado } from "@moductus/contrato";
@@ -146,7 +146,7 @@ describe("detectar", () => {
     expect(chamadas).toEqual([]);
   });
 
-  test("o Claude Code do npm (.cmd) aparece, mas o Moductus não o usa", async () => {
+  test("o Claude Code do npm (.cmd) que não dá para ler aparece, mas o Moductus não o usa", async () => {
     const { rodar } = cli({
       "C:\\npm\\claude.cmd --version": { codigo: 0, saida: "2.1.287 (Claude Code)" },
       "C:\\npm\\claude.cmd auth status --json": { codigo: 0, saida: STATUS_LOGADO },
@@ -157,6 +157,99 @@ describe("detectar", () => {
       achar: (c) => (c === "claude" ? "C:\\npm\\claude.cmd" : null),
     });
     expect(claude).toMatchObject({ logado: true, impedimento: "instalado_pelo_npm" });
+  });
+});
+
+describe("Claude Code instalado pelo npm", () => {
+  const pastas: string[] = [];
+  afterEach(() => {
+    for (const p of pastas.splice(0)) rmSync(p, { recursive: true, force: true });
+  });
+
+  /**
+   * Uma pasta como a `%APPDATA%\npm`: o `claude.cmd` no formato que o npm grava e, se `comPacote`,
+   * o script do pacote, que responde versão e login como a 2.1.287 e, a qualquer outra coisa, os
+   * argumentos que recebeu. O node é o do PATH do ambiente devolvido: o deste teste.
+   */
+  function npmDeExemplo(comPacote: boolean) {
+    const pasta = mkdtempSync(join(tmpdir(), "moductus-npm-"));
+    pastas.push(pasta);
+    const shim = join(pasta, "claude.cmd");
+    writeFileSync(
+      shim,
+      [
+        "@ECHO off",
+        "GOTO start",
+        ":find_dp0",
+        "SET dp0=%~dp0",
+        "EXIT /b",
+        ":start",
+        "SETLOCAL",
+        "CALL :find_dp0",
+        "",
+        'IF EXIST "%dp0%\\node.exe" (',
+        '  SET "_prog=%dp0%\\node.exe"',
+        ") ELSE (",
+        '  SET "_prog=node"',
+        "  SET PATHEXT=%PATHEXT:;.JS;=;%",
+        ")",
+        "",
+        'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\node_modules\\@anthropic-ai\\claude-code\\cli.js" %*',
+        "",
+      ].join("\r\n"),
+    );
+    if (comPacote) {
+      const pacote = join(pasta, "node_modules", "@anthropic-ai", "claude-code");
+      mkdirSync(pacote, { recursive: true });
+      writeFileSync(
+        join(pacote, "cli.js"),
+        [
+          "const args = process.argv.slice(2);",
+          "if (args[0] === '--version') process.stdout.write('2.1.287 (Claude Code)\\n');",
+          `else if (args[0] === 'auth') process.stdout.write(${JSON.stringify(STATUS_LOGADO)});`,
+          "else process.stdout.write(JSON.stringify(args));",
+        ].join("\n"),
+      );
+    }
+    const ambiente = { SystemRoot: process.env.SystemRoot, PATH: dirname(process.execPath) };
+    return { shim, ambiente };
+  }
+
+  test.runIf(process.platform === "win32")(
+    "o shim de exemplo roda pelo node, sem shell, e a detecção marca o Claude Code como atendido",
+    async () => {
+      const { shim, ambiente } = npmDeExemplo(true);
+
+      const [claude] = await detectar({ atende: () => true, achar: () => shim, ambiente });
+
+      expect(claude).toEqual({
+        tipo: "claude-cli",
+        caminho: shim,
+        versao: "2.1.287",
+        logado: true,
+        impedimento: null,
+        versaoMinima: null,
+      });
+      // Sem shell, o argumento chega inteiro: `&` não separa comandos e o vazio não some.
+      const resposta = await rodarComPrazo(
+        shim,
+        ["a & echo b", "", '"%PATH%"'],
+        ambiente,
+        new AbortController().signal,
+      );
+      expect(resposta.codigo).toBe(0);
+      expect(JSON.parse(resposta.saida)).toEqual(["a & echo b", "", '"%PATH%"']);
+    },
+    20_000,
+  );
+
+  test("o shim sem o pacote que ele chama continua instalado pelo npm", async () => {
+    const { shim, ambiente } = npmDeExemplo(false);
+    const rodar: RodarCli = () => Promise.resolve({ codigo: 0, saida: "2.1.287 (Claude Code)" });
+
+    const [claude] = await detectar({ atende: () => true, rodar, achar: () => shim, ambiente });
+
+    expect(claude).toMatchObject({ caminho: shim, impedimento: "instalado_pelo_npm" });
   });
 });
 

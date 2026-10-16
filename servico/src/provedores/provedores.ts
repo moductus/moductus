@@ -32,9 +32,11 @@ interface LinhaProvedor {
   base_url: string | null;
   credencial: string | null;
   testado_em: string | null;
+  /** Onde a detecção achou o CLI neste PC (migração 016); vazio até a primeira detecção. */
+  caminho: string | null;
 }
 
-const COLUNAS = "id, tipo, nome, modelo, base_url, credencial, testado_em";
+const COLUNAS = "id, tipo, nome, modelo, base_url, credencial, testado_em, caminho";
 
 /** O nome da chave do provedor no Gerenciador de Credenciais (fica "Moductus/provedor-<id>"). */
 export const credencialDoProvedor = (id: string) => `provedor-${id}`;
@@ -75,9 +77,9 @@ export class RepositorioProvedores {
     const origem = colunasDeOrigem(DO_USUARIO);
     this.db
       .prepare(
-        `INSERT INTO provedores (id, tipo, nome, modelo, base_url, credencial, testado_em,
+        `INSERT INTO provedores (id, tipo, nome, modelo, base_url, credencial, testado_em, caminho,
            criado_em, atualizado_em, origem, agente_id, execucao_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         linha.id,
@@ -87,6 +89,7 @@ export class RepositorioProvedores {
         linha.base_url,
         linha.credencial,
         linha.testado_em,
+        linha.caminho,
         agora,
         agora,
         origem.origem,
@@ -115,6 +118,17 @@ export class RepositorioProvedores {
         origem.execucao_id,
         linha.id,
       );
+  }
+
+  /**
+   * Guarda onde a detecção achou o CLI nos provedores vivos desse tipo. É situação deste PC, como o
+   * `testado_em`: não conta como mudança do usuário, e o carimbo de origem fica como estava. O
+   * adaptador muda junto: o registro monta outro quando a configuração lida tem outro caminho.
+   */
+  gravarCaminho(tipo: TipoProvedor, caminho: string): void {
+    this.db
+      .prepare("UPDATE provedores SET caminho = ? WHERE tipo = ? AND apagado_em IS NULL AND caminho IS NOT ?")
+      .run(caminho, tipo, caminho);
   }
 
   /**
@@ -266,7 +280,11 @@ export class RepositorioProvedores {
 /** O que o adaptador usa: com isso igual, o teste feito vale para a linha de agora. */
 function mesmaConfig(a: LinhaProvedor, b: LinhaProvedor): boolean {
   return (
-    a.tipo === b.tipo && a.modelo === b.modelo && a.base_url === b.base_url && a.credencial === b.credencial
+    a.tipo === b.tipo &&
+    a.modelo === b.modelo &&
+    a.base_url === b.base_url &&
+    a.credencial === b.credencial &&
+    a.caminho === b.caminho
   );
 }
 
@@ -317,8 +335,11 @@ export class ServicoProvedores {
     return this.repositorio.listar().map(paraProvedor);
   }
 
-  detectar(): Promise<ProvedorDetectado[]> {
-    return this.deps.detectar();
+  /** Os CLIs no PC; o caminho de cada um fica guardado nos provedores do tipo dele (ADR-0037). */
+  async detectar(): Promise<ProvedorDetectado[]> {
+    const detectados = await this.deps.detectar();
+    this.guardarCaminhos(detectados);
+    return detectados;
   }
 
   async criar(novo: NovoProvedor): Promise<Provedor> {
@@ -338,6 +359,7 @@ export class ServicoProvedores {
       base_url: baseUrl,
       credencial,
       testado_em: null,
+      caminho: null,
     };
     this.repositorio.inserir(linha, this.agora().toISOString());
     this.mudou();
@@ -402,9 +424,11 @@ export class ServicoProvedores {
    * time fica com um modelo só quando o primeiro uso troca de escolha) e vai aos agentes sem modelo.
    */
   async testar(pedido: PedidoTesteProvedor): Promise<ResultadoTesteProvedor> {
-    const linha = this.obter(pedido.id);
-    const impedimento = ehCli(linha.tipo) ? await this.impedimentoDoCli(linha) : null;
-    const medido = impedimento ? { falha: impedimento } : await this.chamar(linha);
+    const configurado = this.obter(pedido.id);
+    const cli = ehCli(configurado.tipo) ? await this.conferirCli(configurado) : null;
+    // O teste roda o CLI que a detecção acabou de achar, e é para esse caminho que ele vale.
+    const linha = cli && "caminho" in cli ? { ...configurado, caminho: cli.caminho } : configurado;
+    const medido = cli && "falha" in cli ? cli : await this.chamar(linha);
     const testadoEm = this.agora().toISOString();
     if ("falha" in medido) return { ok: false, provedorId: linha.id, falha: medido.falha, testadoEm };
 
@@ -439,8 +463,16 @@ export class ServicoProvedores {
     return lista;
   }
 
-  /** A detecção tem prazo próprio: um CLI travado não segura o teste nem a tela. */
-  private async impedimentoDoCli(linha: LinhaProvedor): Promise<FalhaProvedor | null> {
+  /** Cada CLI achado deixa o caminho nos provedores do tipo dele. */
+  private guardarCaminhos(detectados: readonly ProvedorDetectado[]): void {
+    for (const achado of detectados) this.repositorio.gravarCaminho(achado.tipo, achado.caminho);
+  }
+
+  /**
+   * A detecção tem prazo próprio: um CLI travado não segura o teste nem a tela. Ela guarda o
+   * caminho de cada CLI achado e, sem impedimento, devolve onde está o deste provedor.
+   */
+  private async conferirCli(linha: LinhaProvedor): Promise<{ falha: FalhaProvedor } | { caminho: string }> {
     const prazoMs = this.deps.prazoDeteccaoMs ?? PRAZO_DETECCAO_MS;
     let prazo: ReturnType<typeof setTimeout> | undefined;
     const estourou = new Promise<"prazo">((resolve) => {
@@ -450,38 +482,18 @@ export class ServicoProvedores {
       clearTimeout(prazo),
     );
     if (detectados === "prazo") {
-      return falha(
-        "fora_do_ar",
-        `${linha.nome} não respondeu à versão nem ao login em ${Math.ceil(prazoMs / 1000)} s.`,
-      );
+      return {
+        falha: falha(
+          "fora_do_ar",
+          `${linha.nome} não respondeu à versão nem ao login em ${Math.ceil(prazoMs / 1000)} s.`,
+        ),
+      };
     }
+    this.guardarCaminhos(detectados);
     const achado = detectados.find((d) => d.tipo === linha.tipo);
-    if (!achado) {
-      return falha("ausente", `${linha.nome} não está no PATH deste PC. Instale e teste de novo.`);
-    }
-    if (achado.impedimento === "instalado_pelo_npm") {
-      return falha(
-        "ausente",
-        `${linha.nome} foi instalado pelo npm, e o Moductus usa o do instalador nativo. Instale por ele e teste de novo.`,
-      );
-    }
-    if (achado.impedimento === "sem_adaptador") {
-      return falha("ausente", `Esta versão do Moductus ainda não conecta ao ${linha.nome}.`);
-    }
-    if (achado.versaoMinima) {
-      const qual = achado.versao ? `${linha.nome} ${achado.versao}` : linha.nome;
-      return falha(
-        "ausente",
-        `${qual} é mais velho do que o Moductus pede (${achado.versaoMinima} ou mais novo). Atualize e teste de novo.`,
-      );
-    }
-    if (achado.logado === false) {
-      return falha(
-        "credencial",
-        `${linha.nome} está sem login. Abra um terminal, entre com a sua conta e teste de novo.`,
-      );
-    }
-    return null;
+    if (!achado) return { falha: falhaSemCli(linha) };
+    const impedimento = impedimentoDoAchado(linha, achado);
+    return impedimento ? { falha: impedimento } : { caminho: achado.caminho };
   }
 
   /** A chamada curta, pelo adaptador do registro, com prazo; o cancelamento por prazo é falha. */
@@ -492,6 +504,7 @@ export class ServicoProvedores {
       modelo: linha.modelo,
       baseUrl: linha.base_url,
       credencial: linha.credencial,
+      caminho: linha.caminho,
     };
     const prazoMs = this.deps.prazoTesteMs ?? PRAZO_TESTE_MS;
     const controle = new AbortController();
@@ -529,6 +542,37 @@ export class ServicoProvedores {
       clearTimeout(prazo);
     }
   }
+}
+
+/** Por que o CLI achado não serve para o teste; `null` quando serve. */
+function impedimentoDoAchado(linha: LinhaProvedor, achado: ProvedorDetectado): FalhaProvedor | null {
+  if (achado.impedimento === "instalado_pelo_npm") {
+    return falha(
+      "ausente",
+      `${linha.nome} foi instalado pelo npm, e o Moductus usa o do instalador nativo. Instale por ele e teste de novo.`,
+    );
+  }
+  if (achado.impedimento === "sem_adaptador") {
+    return falha("ausente", `Esta versão do Moductus ainda não conecta ao ${linha.nome}.`);
+  }
+  if (achado.versaoMinima) {
+    const qual = achado.versao ? `${linha.nome} ${achado.versao}` : linha.nome;
+    return falha(
+      "ausente",
+      `${qual} é mais velho do que o Moductus pede (${achado.versaoMinima} ou mais novo). Atualize e teste de novo.`,
+    );
+  }
+  if (achado.logado === false) {
+    return falha(
+      "credencial",
+      `${linha.nome} está sem login. Abra um terminal, entre com a sua conta e teste de novo.`,
+    );
+  }
+  return null;
+}
+
+function falhaSemCli(linha: LinhaProvedor): FalhaProvedor {
+  return falha("ausente", `${linha.nome} não está no PATH deste PC. Instale e teste de novo.`);
 }
 
 /**

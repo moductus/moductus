@@ -6,6 +6,7 @@ import { Provedor, ResultadoTesteProvedor, type ProvedorDetectado } from "@moduc
 import { afterEach, describe, expect, test } from "vitest";
 import { abrirBanco } from "../banco/conexao.ts";
 import { ProvedorFalso } from "./falso.ts";
+import type { ConfigProvedor } from "./provedor.ts";
 import {
   credencialDoProvedor,
   INSTRUCOES_TESTE,
@@ -49,10 +50,15 @@ function montar(
   bancos.push(db);
   const cofre = new Map<string, string>();
   const falso = new ProvedorFalso("falso");
+  /** Com que configuração o registro montou o adaptador do CLI, a cada vez. */
+  const configsDoCli: ConfigProvedor[] = [];
   const registro = new RegistroProvedores()
     .registrar("openai-compativel", () => falso)
     .registrar("openai", () => falso)
-    .registrar("claude-cli", () => falso);
+    .registrar("claude-cli", (config) => {
+      configsDoCli.push(config);
+      return falso;
+    });
   const avisos = { provedores: [] as Provedor[][], agentes: [] as string[][], voltou: [] as string[][] };
   let deteccoes = 0;
   const tempos = [1000, 3100];
@@ -93,7 +99,7 @@ function montar(
     };
   const linha = (id: string) =>
     db.prepare("SELECT * FROM provedores WHERE id = ?").get(id) as Record<string, unknown>;
-  return { db, servico, cofre, falso, avisos, agente, linha, deteccoes: () => deteccoes };
+  return { db, servico, cofre, falso, avisos, agente, linha, configsDoCli, deteccoes: () => deteccoes };
 }
 
 const ollama = { tipo: "openai-compativel", nome: "Ollama", modelo: "qwen3:8b" } as const;
@@ -398,6 +404,32 @@ describe("testar provedor", () => {
       falha: { motivo: "fora_do_ar", mensagem: "Claude Code não respondeu à versão nem ao login em 1 s." },
     });
     expect(falso.pedidos).toEqual([]);
+  });
+
+  test("a detecção guarda onde está o CLI nos provedores do tipo, e o teste roda o desse caminho", async () => {
+    const doNpm = { ...CLAUDE, caminho: "C:\\Users\\x\\AppData\\Roaming\\npm\\claude.cmd" };
+    let detectados = [CLAUDE];
+    const { servico, falso, linha, configsDoCli } = montar({ detectar: () => Promise.resolve(detectados) });
+    const claude = await servico.criar({ tipo: "claude-cli", nome: "Claude Code" });
+    const api = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    expect(linha(claude.id).caminho).toBeNull();
+
+    await servico.detectar();
+    expect(linha(claude.id).caminho).toBe(CLAUDE.caminho);
+    expect(linha(api.id).caminho).toBeNull();
+
+    // Reinstalado pelo npm: o teste detecta de novo, guarda o caminho novo e chama o CLI de lá.
+    detectados = [doNpm];
+    falso.roteirizar([{ tipo: "fim" }]);
+    await expect(servico.testar({ id: claude.id })).resolves.toMatchObject({ ok: true });
+    expect(configsDoCli.at(-1)?.caminho).toBe(doNpm.caminho);
+    // O teste vale para o caminho que rodou: gravou, mesmo o caminho tendo mudado no meio.
+    expect(linha(claude.id)).toMatchObject({
+      caminho: doNpm.caminho,
+      testado_em: "2026-10-10T12:00:00.000Z",
+    });
+    // O caminho é deste PC e não sai pelo canal.
+    expect(servico.listar().find((p) => p.id === claude.id)).not.toHaveProperty("caminho");
   });
 
   test("CLI pronto faz a chamada; API não passa pela detecção", async () => {

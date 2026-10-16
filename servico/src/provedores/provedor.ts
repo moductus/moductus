@@ -87,6 +87,11 @@ export interface ConfigProvedor {
   modelo: string | null;
   baseUrl: string | null;
   credencial: string | null;
+  /**
+   * Onde a detecção achou o CLI neste PC (migração `016-provedores-caminho`); sem ele, o adaptador
+   * procura o comando no PATH. Só os provedores de CLI têm.
+   */
+  caminho?: string | null;
 }
 
 /** Até quando o agente dorme por causa de uma falha do provedor. */
