@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import type { Aprovacao } from "@moductus/contrato";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "../aprovacoes/aprovacoes.ts";
@@ -57,6 +58,28 @@ const publicar = ferramenta({
 });
 
 /**
+ * Os avisos de cartão que as janelas receberiam. `quando` espera o primeiro que satisfaz, já
+ * recebido ou ainda por vir: o teste segue pelo evento, não por quanto o CLI falso demora.
+ */
+function avisosDeCartao() {
+  const recebidos: Aprovacao[] = [];
+  const esperas: { satisfaz: (a: Aprovacao) => boolean; resolver: (a: Aprovacao) => void }[] = [];
+  return {
+    aviso: (aprovacao: Aprovacao) => {
+      recebidos.push(aprovacao);
+      for (const espera of esperas.filter((e) => e.satisfaz(aprovacao))) {
+        esperas.splice(esperas.indexOf(espera), 1);
+        espera.resolver(aprovacao);
+      }
+    },
+    quando: (satisfaz: (a: Aprovacao) => boolean): Promise<Aprovacao> => {
+      const ja = recebidos.find(satisfaz);
+      return ja ? Promise.resolve(ja) : new Promise((resolver) => esperas.push({ satisfaz, resolver }));
+    },
+  };
+}
+
+/**
  * O runtime com a Alba num CLI falso que fala com o MCP e o hook de verdade, e com o cartão de
  * aprovação de verdade. `falso` são os argumentos do falso antes do `--`.
  */
@@ -72,7 +95,11 @@ async function montarComCli(ferramentas: Ferramenta[], falso: string[]) {
   const servidor = await abrirServidorMcp(0, [rotaPreToolUse]);
   servidores.push(servidor);
   const repositorioAprovacoes = new RepositorioAprovacoes(db);
-  const aprovacoes = new ServicoAprovacoes(repositorioAprovacoes, { aprovacao: () => {}, regras: () => {} });
+  const cartoes = avisosDeCartao();
+  const aprovacoes = new ServicoAprovacoes(repositorioAprovacoes, {
+    aprovacao: cartoes.aviso,
+    regras: () => {},
+  });
   const execucoes = new RepositorioExecucoes(db);
   const provedores = new RegistroProvedores().registrar(
     "claude-cli",
@@ -94,7 +121,7 @@ async function montarComCli(ferramentas: Ferramenta[], falso: string[]) {
     { execucao: () => {}, agente: () => {} },
   );
   const historico = new ServicoExecucoes(execucoes, new Catalogo(ferramentas));
-  return { runtime, aprovacoes, repositorioAprovacoes, historico };
+  return { runtime, aprovacoes, repositorioAprovacoes, historico, cartaoQuando: cartoes.quando };
 }
 
 describe("runtime pelo MCP do Moductus", () => {
@@ -155,7 +182,7 @@ describe("runtime pelo MCP do Moductus", () => {
   }, 20_000);
 
   test("externo pelo CLI: o PreToolUse deixa passar e a chamada espera o cartão do dock", async () => {
-    const { runtime, aprovacoes, repositorioAprovacoes, historico } = await montarComCli(
+    const { runtime, aprovacoes, repositorioAprovacoes, historico, cartaoQuando } = await montarComCli(
       [publicar],
       [JSON.stringify({ alvo: "#7" })],
     );
@@ -165,8 +192,8 @@ describe("runtime pelo MCP do Moductus", () => {
       gatilho: "mensagem",
       mensagens: [{ papel: "usuario", texto: "publica no #7" }],
     });
-    await vi.waitFor(() => expect(repositorioAprovacoes.pendentes()).toHaveLength(1));
-    const cartao = repositorioAprovacoes.pendentes()[0]!;
+    const cartao = await cartaoQuando((a) => a.estado === "pendente");
+    expect(repositorioAprovacoes.pendentes().map((a) => a.id)).toEqual([cartao.id]);
     expect(cartao).toMatchObject({ agenteId: "alba", descricao: "Vou publicar em #7." });
     // O hook já respondeu e o CLI está parado na chamada, esperando o cartão: nada rodou.
     expect(publicados).toEqual([]);
@@ -183,7 +210,7 @@ describe("runtime pelo MCP do Moductus", () => {
     const gatilhos = mkdtempSync(join(tmpdir(), "moductus-cli-cai-"));
     pastas.push(gatilhos);
     const cair = join(gatilhos, "cair");
-    const { runtime, aprovacoes, repositorioAprovacoes, historico } = await montarComCli(
+    const { runtime, aprovacoes, repositorioAprovacoes, historico, cartaoQuando } = await montarComCli(
       [publicar],
       [JSON.stringify({ alvo: "#8" }), "", cair],
     );
@@ -193,20 +220,16 @@ describe("runtime pelo MCP do Moductus", () => {
       gatilho: "mensagem",
       mensagens: [{ papel: "usuario", texto: "publica no #8" }],
     });
-    await vi.waitFor(() => expect(repositorioAprovacoes.pendentes()).toHaveLength(1));
-    const cartao = repositorioAprovacoes.pendentes()[0]!;
+    const cartao = await cartaoQuando((a) => a.estado === "pendente");
     // O CLI cai no meio da chamada, sem esperar a resposta do MCP.
     writeFileSync(cair, "");
     const r = await execucao;
     expect(r.execucao.estado).toBe("erro");
-    await vi.waitFor(() => expect(repositorioAprovacoes.aprovacao(cartao.id)?.estado).toBe("expirada"));
+    await cartaoQuando((a) => a.id === cartao.id && a.estado === "expirada");
+    expect(repositorioAprovacoes.aprovacao(cartao.id)?.estado).toBe("expirada");
 
-    // O sim que chega depois encontra o cartão expirado e não roda nada.
-    expect(await aprovacoes.decidir({ id: cartao.id, decisao: "permitir" })).toMatchObject({
-      estado: "expirada",
-    });
-    await new Promise((pronto) => setTimeout(pronto, 50));
-    expect(publicados).toEqual([]);
+    // A chamada largada fica no histórico como cancelada: o executor dela terminou sem rodar a
+    // ferramenta. O registro vem logo depois de o cartão expirar, sem processo no meio.
     await vi.waitFor(() =>
       expect(historico.obter({ id: r.execucao.id }).chamadas).toEqual([
         expect.objectContaining({
@@ -216,6 +239,11 @@ describe("runtime pelo MCP do Moductus", () => {
         }),
       ]),
     );
+    // O sim que chega depois encontra o cartão expirado e não roda nada.
+    expect(await aprovacoes.decidir({ id: cartao.id, decisao: "permitir" })).toMatchObject({
+      estado: "expirada",
+    });
+    expect(publicados).toEqual([]);
   }, 20_000);
 
   test("Bash pedido pelo CLI é negado pelo PreToolUse com o motivo, e nada roda", async () => {

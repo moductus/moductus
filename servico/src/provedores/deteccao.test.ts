@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { ProvedorDetectado } from "@moductus/contrato";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   acharNoPath,
   compararVersoes,
@@ -166,21 +166,67 @@ describe("rodar o CLI", () => {
     for (const p of pastas.splice(0)) rmSync(p, { recursive: true, force: true });
   });
 
+  /** O pid que o neto escreveu no arquivo; `null` enquanto o arquivo não existe ou está vazio. */
+  function pidEscrito(arquivo: string): number | null {
+    const texto = existsSync(arquivo) ? readFileSync(arquivo, "utf8") : "";
+    return texto === "" ? null : Number(texto);
+  }
+
+  /** Resolve com o pid quando o neto o escreve: pelo aviso da pasta, conferido também de saída. */
+  function quandoOPidChegar(arquivo: string): Promise<number> {
+    return new Promise((resolve) => {
+      const conferir = () => {
+        const pid = pidEscrito(arquivo);
+        if (pid === null) return;
+        vigia.close();
+        resolve(pid);
+      };
+      const vigia = watch(dirname(arquivo), conferir);
+      conferir();
+    });
+  }
+
+  function vivo(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // Um .cmd que abre um node que não sai, como o do npm: matar o cmd.exe não fecharia a saída.
-  // O prazo folgado deixa o `echo` sair mesmo com a máquina carregada (com 500 ms, o cmd.exe às
-  // vezes nem tinha escrito); o que o teste prova é a resposta chegar muito antes do neto acabar.
+  // O prazo é disparado pelo teste quando o neto avisa que está de pé, e não por relógio: o `echo`
+  // já saiu antes de o cmd.exe abrir o neto, com a máquina carregada ou não. O neto dura 120 s e
+  // o teste tem 30 s: esperar o `close` estouraria o teste, e `codigo: null` diz que foi o prazo.
+  // O teste só acaba com o neto morto: sem isso, o worker do vitest podia sair antes de o
+  // `taskkill` terminar, e o neto ficava órfão até o fim dos 120 s.
   test.runIf(process.platform === "win32")(
     "o prazo vale para o .cmd: a árvore cai e a resposta sai sem esperar o neto",
     async () => {
       const pasta = mkdtempSync(join(tmpdir(), "moductus-sonda-"));
       pastas.push(pasta);
       const cmd = join(pasta, "travado.cmd");
-      writeFileSync(cmd, `@echo 1.2.3\r\n@"${process.execPath}" -e "setTimeout(() => {}, 120000)"\r\n`);
-      const inicio = Date.now();
-      const resposta = await rodarComPrazo(cmd, ["--version"], process.env, 3000);
-      expect(resposta).toEqual({ codigo: null, saida: "1.2.3\r\n" });
-      expect(Date.now() - inicio).toBeLessThan(20_000);
+      const dePe = join(pasta, "neto-de-pe");
+      const neto = `require('node:fs').writeFileSync(process.argv[1], String(process.pid)); setTimeout(() => {}, 120000)`;
+      writeFileSync(cmd, `@echo 1.2.3\r\n@"${process.execPath}" -e "${neto}" "${dePe}"\r\n`);
+      const prazo = new AbortController();
+      const pidDoNeto = quandoOPidChegar(dePe);
+
+      const resposta = rodarComPrazo(cmd, ["--version"], process.env, prazo.signal);
+      const pid = await pidDoNeto;
+      prazo.abort();
+
+      expect(await resposta).toEqual({ codigo: null, saida: "1.2.3\r\n" });
+      await vi.waitFor(() => expect(vivo(pid)).toBe(false), { timeout: 25_000 });
     },
     30_000,
   );
+
+  // O sinal já vencido é atendido na hora, antes de qualquer saída do CLI: `codigo: null` e saída
+  // vazia, mesmo que o `--version` responda e saia sozinho logo depois.
+  test("prazo já vencido responde na hora, sem esperar o CLI", async () => {
+    const resposta = await rodarComPrazo(process.execPath, ["--version"], process.env, AbortSignal.abort());
+    expect(resposta).toEqual({ codigo: null, saida: "" });
+  });
 });

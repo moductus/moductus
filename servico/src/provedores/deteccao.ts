@@ -165,13 +165,17 @@ export function impedimentoDe(
  * inteira cai (`taskkill /T /F`), a saída é largada e a resposta sai sem esperar o `close`.
  */
 export const rodarCli: RodarCli = (caminho, argumentos, ambiente) =>
-  rodarComPrazo(caminho, argumentos, ambiente, PRAZO_SONDA_MS);
+  rodarComPrazo(caminho, argumentos, ambiente, AbortSignal.timeout(PRAZO_SONDA_MS));
 
+/**
+ * O prazo é um sinal: na detecção, o relógio de {@link PRAZO_SONDA_MS}; no teste, um evento que
+ * o próprio teste dispara, para não depender de quanto a máquina demora.
+ */
 export function rodarComPrazo(
   caminho: string,
   argumentos: readonly string[],
   ambiente: NodeJS.ProcessEnv,
-  prazoMs: number,
+  prazo: AbortSignal,
 ): Promise<RespostaCli> {
   return new Promise((resolve, reject) => {
     const peloCmd = /\.(cmd|bat)$/i.test(caminho);
@@ -183,25 +187,24 @@ export function rodarComPrazo(
     const terminar = (fazer: () => void) => {
       if (terminou) return;
       terminou = true;
-      clearTimeout(prazo);
+      prazo.removeEventListener("abort", estourar);
       fazer();
     };
+    const estourar = () =>
+      terminar(() => {
+        derrubarArvore(processo.pid, () => processo.kill());
+        processo.stdout.destroy();
+        processo.stderr.destroy();
+        resolve({ codigo: null, saida });
+      });
     processo.stdout.setEncoding("utf8");
     processo.stdout.on("data", (pedaco: string) => (saida = (saida + pedaco).slice(-20_000)));
     processo.stderr.resume();
     processo.stdin.end();
-    const prazo = setTimeout(
-      () =>
-        terminar(() => {
-          derrubarArvore(processo.pid, () => processo.kill());
-          processo.stdout.destroy();
-          processo.stderr.destroy();
-          resolve({ codigo: null, saida });
-        }),
-      prazoMs,
-    );
     processo.once("error", (erro) => terminar(() => reject(erro)));
     processo.once("close", (codigo) => terminar(() => resolve({ codigo, saida })));
+    if (prazo.aborted) estourar();
+    else prazo.addEventListener("abort", estourar, { once: true });
   });
 }
 
