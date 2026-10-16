@@ -41,13 +41,18 @@ export interface PersonagemProps {
   moldura?: boolean | TomMoldura;
 }
 
-/** Diferenças de desenho entre os quatro: braços e o quanto o rosto desce no corpo. */
-const FORMA: Record<Agente, { bracoE: number; bracoD: number; dy: number; topo: number }> = {
-  alba: { bracoE: 21, bracoD: 79, dy: 2, topo: 14 },
-  tula: { bracoE: 20, bracoD: 80, dy: 2, topo: 18 },
-  faina: { bracoE: 21, bracoD: 79, dy: 6, topo: 14 },
-  nuno: { bracoE: 27, bracoD: 73, dy: -2, topo: 16 },
-};
+/**
+ * Diferenças de desenho entre os quatro: braços, o quanto o rosto desce no corpo e onde começa o
+ * recorte da cabeça. O nó da bandana da Faina vai até x 86: o recorte dela começa em x 19 e
+ * termina em 87, para o nó caber inteiro e não virar o "z" de quem dorme no dock.
+ */
+const FORMA: Record<Agente, { bracoE: number; bracoD: number; dy: number; topo: number; esquerda: number }> =
+  {
+    alba: { bracoE: 21, bracoD: 79, dy: 2, topo: 14, esquerda: 16 },
+    tula: { bracoE: 20, bracoD: 80, dy: 2, topo: 18, esquerda: 16 },
+    faina: { bracoE: 21, bracoD: 79, dy: 6, topo: 14, esquerda: 19 },
+    nuno: { bracoE: 27, bracoD: 73, dy: -2, topo: 16, esquerda: 16 },
+  };
 
 interface Expressao {
   olhos: "abertos" | "fechados";
@@ -113,19 +118,8 @@ function alturaEmPx(tamanho: TamanhoPersonagem | number | undefined, modo: ModoP
   return Math.min(TAMANHO_PERSONAGEM_MAX, Math.max(TAMANHO_PERSONAGEM_MIN, Math.round(bruto)));
 }
 
-/** Borda direita do recorte da cabeça (`16 + 68` no viewBox). */
-const DIREITA_DA_CABECA = 84;
-
-/**
- * O nó da bandana da Faina vai até x 86 e o recorte da cabeça corta em 84: cortado, o nó vira um
- * zigue-zague no canto, que no dock se lê como o "z" de quem dorme. Na cabeça ele encolhe na
- * largura a partir de onde sai da bandana (x 76) e cabe inteiro; no corpo inteiro fica como no
- * canvas.
- */
-const NO_NA_CABECA = `translate(76 0) scale(${(DIREITA_DA_CABECA - 1 - 76) / 10} 1) translate(-76 0)`;
-
 /** O traço próprio de cada um, que diz quem é mesmo a 16 px. */
-function Traco({ agente, modo }: { agente: Agente; modo: ModoPersonagem }) {
+function Traco({ agente }: { agente: Agente }) {
   switch (agente) {
     case "alba":
       return (
@@ -144,11 +138,7 @@ function Traco({ agente, modo }: { agente: Agente; modo: ModoPersonagem }) {
       return (
         <g data-traco="bandana" className="personagem-cor-acessorio">
           <rect x="24" y="40" width="52" height="9" />
-          <path
-            data-no=""
-            d="M76 43l10-6-2 9zM76 46l9 6-8 2z"
-            transform={modo === "cabeca" ? NO_NA_CABECA : undefined}
-          />
+          <path data-no="" d="M76 43l10-6-2 9zM76 46l9 6-8 2z" />
         </g>
       );
     case "nuno":
@@ -271,7 +261,7 @@ export function Personagem({
 
   const altura = alturaEmPx(tamanho, modo);
   const largura = modo === "cabeca" ? altura : Math.round((altura * 100) / 120);
-  const caixa = modo === "cabeca" ? `16 ${forma.topo} 68 68` : "0 0 100 120";
+  const caixa = modo === "cabeca" ? `${forma.esquerda} ${forma.topo} 68 68` : "0 0 100 120";
   // Tamanho vem da prop (já preso à faixa dos tokens); o CSS lê as variáveis.
   const medidas = {
     "--personagem-largura": `${largura}px`,
@@ -295,9 +285,9 @@ export function Personagem({
         <ellipse className="personagem-cor-sombra" cx={forma.bracoE} cy="78" rx="6" ry="10" />
         <ellipse className="personagem-cor-sombra" cx={forma.bracoD} cy="78" rx="6" ry="10" />
         {/* O coque da Tula fica atrás da cabeça; os outros traços vão por cima do corpo. */}
-        {agente === "tula" && <Traco agente={agente} modo={modo} />}
+        {agente === "tula" && <Traco agente={agente} />}
         <Corpo agente={agente} />
-        {agente !== "tula" && <Traco agente={agente} modo={modo} />}
+        {agente !== "tula" && <Traco agente={agente} />}
         <Rosto agente={agente} e={e} />
       </g>
       {e.zz && (

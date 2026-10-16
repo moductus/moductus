@@ -263,7 +263,7 @@ export interface DadosAgente {
   /** O detalhe (as chamadas) das execuções que a tela pediu. */
   detalhes: Readonly<Record<string, ExecucaoDetalhada>>;
   conectado: boolean;
-  /** O último pedido recusado (pausar, retomar, ligar), como o serviço disse. */
+  /** O último pedido recusado (pausar, retomar, ligar, restaurar), como o serviço disse. */
   erro: string | null;
 }
 
@@ -271,6 +271,8 @@ export interface AcoesAgente {
   pausar: () => Promise<void>;
   retomar: () => Promise<void>;
   ligar: () => Promise<void>;
+  /** Volta o agente de fábrica ao padrão; devolve se deu certo (o erro fica em `erro`). */
+  restaurar: () => Promise<boolean>;
   /** Lê as chamadas de uma execução, para o desfazer. */
   detalhar: (id: string) => Promise<void>;
   /** Desfaz o que a execução fez dentro do Moductus; devolve o erro do serviço, ou `null`. */
@@ -378,6 +380,22 @@ export function useAgente(canal: EstadoConexao, agenteId: string): DadosAgente &
     [agenteId],
   );
 
+  const restaurar = useCallback(async () => {
+    setErro(null);
+    try {
+      setAgente(await servico.pedir("agentes.restaurarPadrao", { id: agenteId }));
+    } catch (e) {
+      setErro(mensagemDeErro(e));
+      return false;
+    }
+    // As ferramentas voltaram às de fábrica: o recorte do catálogo que a página mostra muda junto.
+    servico
+      .pedir("agentes.capacidades", { id: agenteId })
+      .then(setCapacidades)
+      .catch(() => undefined);
+    return true;
+  }, [agenteId]);
+
   const desfazer = useCallback(
     async (execucaoId: string) => {
       const chamadas = desfaziveis(detalhes[execucaoId]);
@@ -425,6 +443,7 @@ export function useAgente(canal: EstadoConexao, agenteId: string): DadosAgente &
     pausar: () => pedir(() => servico.pedir("agentes.pausar", { agenteId, ate: null })),
     retomar: () => pedir(() => servico.pedir("agentes.retomar", { agenteId })),
     ligar: () => pedir(() => servico.pedir("agentes.ligar", { id: agenteId, ligado: true })),
+    restaurar,
     detalhar,
     desfazer,
     anteriores,

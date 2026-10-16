@@ -523,6 +523,107 @@ describe("página do agente", () => {
     expect(idas).toEqual([{ area: "agentes", secao: "tula" }]);
   });
 
+  it("restaurar padrão pede confirmação no lugar: Manter desiste, Esc fecha, Restaurar volta ao de fábrica", async () => {
+    servicoDaTula();
+    const base = falso.responder;
+    const restaurada = {
+      ...agente("tula", { atividade: "trabalhando" }),
+      nome: "Tula",
+      instrucoes: "De fábrica.",
+    };
+    falso.responder = (metodo, dados) => {
+      if (metodo === "agentes.restaurarPadrao") return Promise.resolve(restaurada);
+      return base(metodo, dados);
+    };
+    await montar("tula/pagina");
+    const restaurar = botao("Restaurar padrão");
+    expect(restaurar.getAttribute("aria-expanded")).toBe("false");
+
+    // Abre logo abaixo do cabeçalho, sem modal, com o foco em "Manter como está".
+    await act(async () => restaurar.click());
+    const confirmacao = por('[aria-label="Restaurar a Tula ao padrão de fábrica"]')!;
+    expect(confirmacao.closest('[role="dialog"]')).toBeNull();
+    expect(restaurar.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(botao("Manter como está"));
+    expect(confirmacao.textContent).toContain("Não dá para desfazer.");
+    expect(confirmacao.textContent).toContain("Modelo e reservaModelo escolhido · sua assinatura");
+    expect(confirmacao.textContent).toContain("Ligada ou em pausacontinua ligada");
+    expect(auditar(recipiente)).toEqual([]);
+
+    await act(async () => botao("Manter como está").click());
+    expect(por(".pagina-agente-confirmacao")).toBeNull();
+    expect(document.activeElement).toBe(restaurar);
+
+    await act(async () => restaurar.click());
+    await act(async () => {
+      botao("Manter como está").dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(por(".pagina-agente-confirmacao")).toBeNull();
+    expect(pedidosDe("agentes.restaurarPadrao")).toEqual([]);
+
+    await act(async () => restaurar.click());
+    const capacidadesAntes = pedidosDe("agentes.capacidades").length;
+    await act(async () => botao("Restaurar a Tula").click());
+    expect(pedidosDe("agentes.restaurarPadrao")).toEqual([{ id: "tula" }]);
+    // As ferramentas voltaram: a página relê o que ela pode fazer.
+    expect(pedidosDe("agentes.capacidades")).toHaveLength(capacidadesAntes + 1);
+    expect(por(".pagina-agente-confirmacao")).toBeNull();
+    expect(document.activeElement).toBe(botao("Restaurar padrão"));
+    await act(async () => botao("Instruções").click());
+    expect(por(".pagina-agente-instrucoes")!.textContent).toBe("De fábrica.");
+  });
+
+  // O selo fala da atividade ("erro", "parado"); o que fica é o estado guardado, no gênero dele.
+  it.each([
+    ["tula", "ativo", "erro", "Ligada ou em pausacontinua ligada"],
+    ["tula", "pausado", "ocioso", "Ligada ou em pausacontinua em pausa"],
+    ["tula", "dormindo", "ocioso", "Ligada ou em pausacontinua dormindo"],
+    ["tula", "desligado", "ocioso", "Ligada ou em pausacontinua desligada"],
+    ["nuno", "ativo", "erro", "Ligado ou em pausacontinua ligado"],
+    ["nuno", "pausado", "ocioso", "Ligado ou em pausacontinua em pausa"],
+    ["nuno", "dormindo", "ocioso", "Ligado ou em pausacontinua dormindo"],
+    ["nuno", "desligado", "ocioso", "Ligado ou em pausacontinua desligado"],
+  ] as const)("a confirmação diz que %s %s continua como está", async (id, estado, atividade, linha) => {
+    servicoDaTula();
+    const base = falso.responder;
+    falso.responder = (metodo, dados) => {
+      if (metodo === "agentes.obter") return Promise.resolve(agente(id, { estado, atividade }));
+      return base(metodo, dados);
+    };
+    await montar(`${id}/pagina`);
+    await act(async () => botao("Restaurar padrão").click());
+    const linhas = [...recipiente.querySelectorAll(".pagina-agente-confirmacao-linha")].map(
+      (l) => l.textContent,
+    );
+    expect(linhas).toContain(linha);
+  });
+
+  it("restaurar recusado deixa a confirmação aberta com o erro; agente criado por você não tem o botão", async () => {
+    servicoDaTula();
+    const base = falso.responder;
+    falso.responder = (metodo, dados) => {
+      if (metodo === "agentes.restaurarPadrao") {
+        return Promise.reject(new RecusaDoServico("só os agentes de fábrica voltam ao padrão."));
+      }
+      return base(metodo, dados);
+    };
+    await montar("tula/pagina");
+    await act(async () => botao("Restaurar padrão").click());
+    await act(async () => botao("Restaurar a Tula").click());
+    expect(por(".pagina-agente-confirmacao")).not.toBeNull();
+    expect(por('[role="alert"]')!.textContent).toBe("Só os agentes de fábrica voltam ao padrão.");
+    act(() => raiz?.unmount());
+    recipiente.remove();
+
+    falso.responder = (metodo, dados) => {
+      if (metodo === "agentes.obter") return Promise.resolve({ ...agente("tula"), deFabrica: false });
+      return base(metodo, dados);
+    };
+    await montar("tula/pagina");
+    expect(por("h1")!.textContent).toBe("Tula");
+    expect(botao("Restaurar padrão")).toBeUndefined();
+  });
+
   it("as abas andam pelas setas e o histórico diz o custo com a fonte", async () => {
     servicoDaTula();
     await montar("tula/pagina");

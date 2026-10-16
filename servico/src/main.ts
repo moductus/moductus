@@ -10,7 +10,7 @@ import { classificadorPeloRuntime, Roteador } from "./agentes/roteador.ts";
 import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
 import { VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
-import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
+import { abrirServidorWs, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ligarBandeja } from "./bandeja/bandeja.ts";
@@ -338,6 +338,13 @@ servidor = await abrirServidorWs(token, {
     bandeja.atualizar();
     return agente;
   },
+  // A página do agente (F3-04): volta ao de fábrica; o modelo e o estado ficam.
+  "agentes.restaurarPadrao": (pedido) => {
+    const agente = agentes.restaurarPadrao(pedido);
+    servidor?.emitir("agentes.mudou", agente);
+    bandeja.atualizar();
+    return agente;
+  },
   "execucoes.listar": (pedido) => execucoes.listar(pedido),
   "execucoes.obter": (pedido) => execucoes.obter(pedido),
   "execucoes.desfazer": (pedido) => execucoes.desfazer(pedido),
@@ -359,8 +366,6 @@ servidor = await abrirServidorWs(token, {
   "provedores.definir": (mudanca) => servicoProvedores.definir(mudanca),
   "provedores.remover": (pedido) => servicoProvedores.remover(pedido),
   "provedores.testar": (pedido) => servicoProvedores.testar(pedido),
-  // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
-  ...semAtendente(["agentes.restaurarPadrao"]),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
 canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });
