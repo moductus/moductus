@@ -143,7 +143,8 @@ describe("migração agenda e foco", () => {
       sincronizado_em: INSTANTE,
     });
     calendario(db, "trabalho", { ler: 0 });
-    expect(() => calendario(db, "outro-espelho", { espelho: 1 })).toThrow(/UNIQUE/);
+    expect(() => calendario(db, "outro-espelho", { espelho: 1, pode_escrever: 1 })).toThrow(/UNIQUE/);
+    expect(() => calendario(db, "espelho-so-leitura", { espelho: 1, pode_escrever: 0 })).toThrow(/CHECK/);
     expect(() => calendario(db, "mesmo-id", { id_externo: "trabalho@google" })).toThrow(/UNIQUE/);
     expect(() => calendario(db, "sem-id", { id_externo: null })).toThrow(/CHECK/);
     expect(() => calendario(db, "fonte", { fonte: "icloud" })).toThrow(/CHECK/);
@@ -156,7 +157,7 @@ describe("migração agenda e foco", () => {
 
     // O espelho na lixeira libera a fonte para o novo.
     db.prepare("UPDATE calendarios SET apagado_em = ? WHERE id = 'moductus'").run(INSTANTE);
-    calendario(db, "moductus-novo", { espelho: 1, id_externo: "moductus@google" });
+    calendario(db, "moductus-novo", { espelho: 1, pode_escrever: 1, id_externo: "moductus@google" });
   });
 
   test("evento: instante com hora, dia no dia inteiro com o fim depois, alertas em lista, um por id de lá", () => {

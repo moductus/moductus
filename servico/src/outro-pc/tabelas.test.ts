@@ -203,6 +203,42 @@ describe("configuração × dado", () => {
     );
   });
 
+  test("evento de calendário local na lixeira e etapa de foco em andamento não viajam", () => {
+    const db = bancoNovo();
+    db.prepare(
+      "INSERT INTO calendarios (id, nome, fonte, pode_escrever, apagado_em) VALUES ('velho', 'Velho', 'local', 1, ?)",
+    ).run(AGORA);
+    const fim = "2026-10-09T13:00:00.000Z";
+    const evento = db.prepare(
+      "INSERT INTO eventos (id, calendario_id, titulo, inicio, fim) VALUES (?, ?, ?, ?, ?)",
+    );
+    evento.run("ev-vivo", "local", "dentista", AGORA, fim);
+    evento.run("ev-do-velho", "velho", "aula", AGORA, fim);
+    const foco = db.prepare(
+      "INSERT INTO sessoes_foco (id, tipo, inicio, fim, duracao_planejada_min, duracao_real_min) VALUES (?, 'foco', ?, ?, 25, ?)",
+    );
+    foco.run("f-terminada", AGORA, fim, 25);
+    foco.run("f-rodando", fim, null, null);
+
+    expect(linhasQueViajam(db, "eventos").map((e) => e.id)).toEqual(["ev-vivo"]);
+    expect(linhasQueViajam(db, "sessoes_foco").map((s) => s.id)).toEqual(["f-terminada"]);
+  });
+
+  test("toda tabela marcada sai pela chave primária dela, e config fica com o ServicoConfig", () => {
+    const db = bancoNovo();
+    db.prepare("INSERT INTO config (chave, valor) VALUES ('tema', '\"escuro\"'), ('fuso', '\"UTC\"')").run();
+    db.prepare(
+      "INSERT INTO onboarding (passo, estado) VALUES ('tutorial', 'pendente'), ('configuracao', 'feito')",
+    ).run();
+
+    for (const tabela of Object.keys(EXPORTACAO)) {
+      expect(() => linhasQueViajam(db, tabela, new Date(AGORA)), tabela).not.toThrow();
+    }
+    expect(linhasQueViajam(db, "config")).toEqual([]);
+    expect(linhasQueViajam(db, "onboarding").map((o) => o.passo)).toEqual(["configuracao", "tutorial"]);
+    expect(linhasQueViajam(db, "agentes").map((a) => a.id)).toEqual(["alba", "faina", "nuno", "tula"]);
+  });
+
   test("tabela sem marcação não sai em só configurações", () => {
     const db = bancoNovo();
     db.exec(criarTabela("esquecida", ["texto TEXT"], { lixeira: false }));

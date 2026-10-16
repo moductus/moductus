@@ -51,6 +51,8 @@ const calendarios = criarTabela(
     restricoes: [
       "CHECK ((fonte = 'local') = (id_externo IS NULL))",
       "CHECK (fonte <> 'local' OR (espelho = 0 AND token_sincronizacao IS NULL AND sincronizado_em IS NULL))",
+      // O espelho existe para a Alba escrever nele.
+      "CHECK (espelho = 0 OR pode_escrever = 1)",
     ],
   },
 );

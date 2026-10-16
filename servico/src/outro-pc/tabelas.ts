@@ -76,11 +76,14 @@ const SITUACAO_DESTE_PC: Readonly<Record<string, readonly string[]>> = {
 
 /**
  * Linhas que não viajam: regra que já expirou não autoriza mais nada, aqui nem lá; evento de
- * calendário de fora é cache deste PC, e a fonte da verdade é o Google, que o PC novo lê de novo.
+ * calendário de fora é cache deste PC, e a fonte da verdade é o Google, que o PC novo lê de novo;
+ * evento de calendário local na lixeira iria sem o calendário, que não viaja; a etapa de foco em
+ * andamento é o relógio deste PC, e só a terminada é histórico.
  */
 const SO_AS_QUE_VALEM: Readonly<Record<string, string>> = {
   regras_permissao: "(expira_em IS NULL OR expira_em > :agora)",
-  eventos: "calendario_id IN (SELECT id FROM calendarios WHERE fonte = 'local')",
+  eventos: `calendario_id IN (SELECT id FROM calendarios WHERE fonte = 'local' AND ${COLUNA_LIXEIRA} IS NULL)`,
+  sessoes_foco: "fim IS NOT NULL",
 };
 
 /**
@@ -107,12 +110,15 @@ export function lerConfiguracoes(db: DatabaseSync, agora: Date = new Date()): Ma
 /**
  * As linhas de uma tabela como saem deste PC, em qualquer modalidade: sem o que está na lixeira,
  * sem as colunas que nunca vão nem as da situação deste PC, e sem as linhas que não viajam (regra
- * vencida, evento do Google). Tabela deste PC ou sem marcação não sai.
+ * vencida, evento do Google). Tabela deste PC ou sem marcação não sai, nem `config`, que vai pelo
+ * ServicoConfig. A ordem é a da chave primária, que nem toda tabela tem em `id`.
  */
 export function linhasQueViajam(db: DatabaseSync, tabela: string, agora: Date = new Date()): Linha[] {
   const marcacao = EXPORTACAO[tabela];
   if (marcacao !== "configuracao" && marcacao !== "dado") return [];
+  if (tabela === PELO_SERVICO_CONFIG) return [];
   const colunas = colunasDe(db, tabela);
+  const chave = chavePrimariaDe(db, tabela);
   const ficam = [...COLUNAS_QUE_NUNCA_VAO, ...(SITUACAO_DESTE_PC[tabela] ?? [])];
   const levadas = colunas.filter((c) => !ficam.includes(c));
   const condicoes = [
@@ -120,7 +126,8 @@ export function linhasQueViajam(db: DatabaseSync, tabela: string, agora: Date = 
     ...(SO_AS_QUE_VALEM[tabela] ? [SO_AS_QUE_VALEM[tabela]] : []),
   ];
   const onde = condicoes.length ? ` WHERE ${condicoes.join(" AND ")}` : "";
-  const sql = `SELECT ${levadas.map((c) => `"${c}"`).join(", ")} FROM "${tabela}"${onde} ORDER BY id`;
+  const ordem = chave.length ? chave.map((c) => `"${c}"`).join(", ") : "rowid";
+  const sql = `SELECT ${levadas.map((c) => `"${c}"`).join(", ")} FROM "${tabela}"${onde} ORDER BY ${ordem}`;
   const parametros: Record<string, string> = sql.includes(":agora") ? { agora: agora.toISOString() } : {};
   return db.prepare(sql).all(parametros) as Linha[];
 }
@@ -140,5 +147,14 @@ export function tabelasDoBanco(db: DatabaseSync): string[] {
 function colunasDe(db: DatabaseSync, tabela: string): string[] {
   return (
     db.prepare("SELECT name FROM pragma_table_info(?) ORDER BY cid").all(tabela) as { name: string }[]
+  ).map((c) => c.name);
+}
+
+/** As colunas da chave primária, na ordem da chave; vazia na tabela sem chave declarada. */
+function chavePrimariaDe(db: DatabaseSync, tabela: string): string[] {
+  return (
+    db.prepare("SELECT name FROM pragma_table_info(?) WHERE pk > 0 ORDER BY pk").all(tabela) as {
+      name: string;
+    }[]
   ).map((c) => c.name);
 }
