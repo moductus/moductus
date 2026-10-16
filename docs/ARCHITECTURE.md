@@ -124,7 +124,7 @@ As quatro são declaradas no `tauri.conf.json`, todas sem borda do sistema e tra
 | Janela | Rótulo e tamanho | Detalhe |
 |---|---|---|
 | Dock | `dock`, 64 px de largura (80 na forma flutuante) | Sempre no topo, fora da barra de tarefas, não ativa ao clicar; fechar o dock encerra o app |
-| Painel | `painel`, 372 px | Sempre no topo, encostado no dock, mostrado com `SW_SHOWNOACTIVATE`; ganha foco só quando um campo pede o teclado |
+| Painel | `painel`, 412 px (cartão de 400 mais 12 de afastamento do dock) | Sempre no topo, encostado no dock, mostrado com `SW_SHOWNOACTIVATE`; ganha foco só quando um campo pede o teclado |
 | Sistema | `sistema`, 1200×780 (mínimo 800×520) | Janela normal com barra de título própria; fechar só esconde; lembra posição |
 | Captura | `captura`, 640×72 | Centralizada, ganha foco; some ao perder o foco ou com `Esc` |
 

@@ -26,8 +26,15 @@ use windows::Win32::{
 
 use crate::{appbar, dock};
 
-/// Largura do painel lateral em pixels lógicos (DESIGN §3: 368–372 px).
-pub const LARGURA_PAINEL: f64 = 372.0;
+/// Largura do cartão do painel lateral em pixels lógicos (DESIGN §3: 400 px, como nos quadros).
+pub const LARGURA_PAINEL: f64 = 400.0;
+/// Afastamento do cartão para o dock (`--margem-painel`): fica dentro da janela, do lado do dock.
+pub const MARGEM_PAINEL: f64 = 12.0;
+
+/// Largura física da janela do painel: o cartão mais o afastamento, na escala do monitor.
+pub fn largura_janela_painel(escala: f64) -> i32 {
+    ((LARGURA_PAINEL + MARGEM_PAINEL) * escala).round() as i32
+}
 
 static PAINEL: Mutex<Option<(String, Instant)>> = Mutex::new(None);
 static ARQUIVO_SISTEMA: OnceLock<PathBuf> = OnceLock::new();
@@ -110,7 +117,7 @@ fn abrir_painel(app: AppHandle, area: String, alternar: bool) {
     unsafe {
         let _ = GetWindowRect(hwnd(&janela_dock), &mut rd);
     }
-    let largura = (LARGURA_PAINEL * appbar::escala(dock::hwnd_de(&janela_dock))).round() as i32;
+    let largura = largura_janela_painel(appbar::escala(dock::hwnd_de(&janela_dock)));
     let rc = retangulo_painel(rd, dock::configuracao().lado, largura);
     let _ = painel.emit("painel:area", &area);
     unsafe {
@@ -319,11 +326,19 @@ mod testes {
     #[test]
     fn painel_encosta_no_dock_pelo_lado_de_dentro() {
         let dock = RECT { left: 0, top: 48, right: 64, bottom: 1440 };
-        let e = retangulo_painel(dock, appbar::Lado::Esquerda, 372);
-        assert_eq!((e.left, e.right, e.top, e.bottom), (64, 436, 48, 1440));
+        let e = retangulo_painel(dock, appbar::Lado::Esquerda, 412);
+        assert_eq!((e.left, e.right, e.top, e.bottom), (64, 476, 48, 1440));
         let dock_d = RECT { left: 2496, top: 48, right: 2560, bottom: 1440 };
-        let d = retangulo_painel(dock_d, appbar::Lado::Direita, 372);
-        assert_eq!((d.left, d.right), (2124, 2496));
+        let d = retangulo_painel(dock_d, appbar::Lado::Direita, 412);
+        assert_eq!((d.left, d.right), (2084, 2496));
+    }
+
+    #[test]
+    fn janela_do_painel_tem_o_cartao_de_400_mais_o_afastamento() {
+        assert_eq!(largura_janela_painel(1.0), 412);
+        assert_eq!(largura_janela_painel(1.25), 515);
+        assert_eq!(largura_janela_painel(1.5), 618);
+        assert_eq!(largura_janela_painel(2.0), 824);
     }
 
     #[test]

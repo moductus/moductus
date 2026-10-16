@@ -40,7 +40,7 @@
 
   /* Medidas fixas da estrutura (as mesmas da casca em src-tauri) */
   --largura-dock: 64px;
-  --largura-painel: 372px;
+  --largura-painel: 400px;
   --largura-lateral-sistema: 232px;
   --tamanho-botao-dock: 44px;
   --tamanho-badge: 16px;
@@ -58,7 +58,8 @@
   --tamanho-ponto-estado: 6px;
   /* Ponto do status nas linhas de sessão e de PR (Agentes.dc.html) */
   --tamanho-ponto-status: 8px;
-  /* O painel desenha o cartão afastado do dock, como no Main.dc.html */
+  /* O painel desenha o cartão afastado do dock, como no Main.dc.html; a janela tem o cartão
+     mais esta margem (MARGEM_PAINEL em src-tauri/src/janelas.rs) */
   --margem-painel: 12px;
 
   /* Traços: elevação por borda de 1 px, ícones de 1,6 px, foco de 2 px */

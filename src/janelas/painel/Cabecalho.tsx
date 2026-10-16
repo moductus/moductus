@@ -43,7 +43,7 @@ export function CabecalhoPainel({ titulo, icone, subtitulo, sistema, atalho }: P
           onClick={() => void invoke("painel_fechar")}
         />
       </div>
-      {/* Embaixo do título, na largura toda: o painel tem 360 px e a linha não pode quebrar. */}
+      {/* Embaixo do título, na largura toda: o cartão tem 400 px e a linha não pode quebrar. */}
       {subtitulo && <p className="painel-subtitulo">{subtitulo}</p>}
     </header>
   );

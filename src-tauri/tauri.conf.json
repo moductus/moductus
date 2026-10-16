@@ -29,7 +29,7 @@
         "label": "painel",
         "create": false,
         "title": "Moductus painel",
-        "width": 372,
+        "width": 412,
         "height": 600,
         "decorations": false,
         "resizable": false,
