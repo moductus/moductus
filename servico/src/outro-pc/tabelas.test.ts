@@ -20,6 +20,8 @@ const CONFIGURACOES = [
   "agentes",
   "conexoes",
   "config",
+  "etiquetas",
+  "listas",
   "notificacoes_preferencias",
   "provedores",
   "regras_permissao",
@@ -50,7 +52,7 @@ describe("configuração × dado", () => {
     expect(configuracoes).toEqual(CONFIGURACOES);
   });
 
-  test("só configurações leva agentes, provedores, regras, conexões e preferências, sem credencial nem execuções ou sessões", () => {
+  test("só configurações leva agentes, provedores, regras, conexões, preferências, listas e etiquetas, sem credencial nem execuções, sessões ou tarefas", () => {
     const db = bancoNovo();
     db.prepare(
       "INSERT INTO provedores (id, tipo, nome, modelo, credencial) VALUES ('p1', 'anthropic', 'Claude', 'opus', 'moductus:anthropic')",
@@ -81,6 +83,15 @@ describe("configuração × dado", () => {
     db.prepare(
       "INSERT INTO notificacoes (id, tipo, titulo, canal) VALUES ('n1', 'aviso', 'oi', 'dock')",
     ).run();
+    db.prepare("INSERT INTO listas (id, nome, apagado_em) VALUES ('l-apagada', 'Velha', ?)").run(AGORA);
+    db.prepare("INSERT INTO etiquetas (id, nome) VALUES ('et1', 'casa')").run();
+    db.prepare(
+      "INSERT INTO tarefas (id, lista_id, titulo) VALUES ('t1', 'entrada', 'ligar pro banco')",
+    ).run();
+    db.prepare("INSERT INTO tarefa_etiquetas (id, tarefa_id, etiqueta_id) VALUES ('te1', 't1', 'et1')").run();
+    db.prepare(
+      "INSERT INTO lembretes (id, texto, quando, tarefa_id) VALUES ('lb1', 'ligar pro banco', ?, 't1')",
+    ).run(AGORA);
 
     const tabelas = lerConfiguracoes(db);
     // `config` vai pelo ServicoConfig, como já ia.
@@ -92,6 +103,8 @@ describe("configuração × dado", () => {
     expect(tabelas.get("regras_permissao")?.map((r) => r.id)).toEqual(["r1"]);
     expect(tabelas.get("conexoes")).toEqual([expect.objectContaining({ id: "c1", conta: "gustavo" })]);
     expect(tabelas.get("notificacoes_preferencias")?.map((p) => p.id)).toEqual(["np1"]);
+    expect(tabelas.get("listas")?.map((l) => l.id)).toEqual(["entrada", "pessoal", "trabalho"]);
+    expect(tabelas.get("etiquetas")?.map((e) => e.id)).toEqual(["et1"]);
 
     for (const [tabela, linhas] of tabelas) {
       for (const linha of linhas) {

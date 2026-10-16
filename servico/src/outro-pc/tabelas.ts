@@ -36,6 +36,12 @@ export const EXPORTACAO: Readonly<Record<string, Exportacao>> = {
   uso_ia_mensagens: "deste_pc",
   // agendador-disparos: até onde o agendador daqui contou; o PC novo começa a contar do zero.
   agendador_disparos: "deste_pc",
+  // 013-tarefas: listas e etiquetas são como o usuário organiza; o que ele tem a fazer é dado.
+  listas: "configuracao",
+  etiquetas: "configuracao",
+  tarefas: "dado",
+  tarefa_etiquetas: "dado",
+  lembretes: "dado",
 };
 
 /**

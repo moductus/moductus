@@ -39,7 +39,7 @@ export class ArquivoRecusado extends Error {}
 /**
  * Levar para outro PC, modalidade "só configurações": gera o .moductus com manifesto, config
  * e um JSON por tabela de configuração (agentes, provedores, regras, conexões, preferências de
- * aviso), e importa a config passando pelo ServicoConfig, para a casca aplicar o que é nativo e
+ * aviso, listas e etiquetas), e importa a config passando pelo ServicoConfig, para a casca aplicar o que é nativo e
  * nada ser gravado se ela recusar. Credenciais e a pasta portable nunca entram. A importação
  * das tabelas ainda não existe: o arquivo já as leva, e o PC novo por ora lê só a config.
  */
