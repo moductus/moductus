@@ -10,7 +10,7 @@ import { classificadorPeloRuntime, Roteador } from "./agentes/roteador.ts";
 import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
 import { VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
-import { abrirServidorWs, type ServidorWs } from "./api/servidor.ts";
+import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ligarBandeja } from "./bandeja/bandeja.ts";
@@ -373,6 +373,65 @@ servidor = await abrirServidorWs(token, {
   "provedores.definir": (mudanca) => servicoProvedores.definir(mudanca),
   "provedores.remover": (pedido) => servicoProvedores.remover(pedido),
   "provedores.testar": (pedido) => servicoProvedores.testar(pedido),
+  // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
+  // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
+  ...semAtendente([
+    "listas.listar",
+    "listas.criar",
+    "listas.definir",
+    "listas.ordenar",
+    "listas.apagar",
+    "tarefas.listar",
+    "tarefas.obter",
+    "tarefas.criar",
+    "tarefas.definir",
+    "tarefas.concluir",
+    "tarefas.reabrir",
+    "tarefas.cancelar",
+    "tarefas.adiar",
+    "tarefas.mover",
+    "tarefas.ordenar",
+    "tarefas.apagar",
+    "tarefas.etiquetas",
+    "lembretes.listar",
+    "lembretes.hoje",
+    "lembretes.criar",
+    "lembretes.definir",
+    "lembretes.adiar",
+    "lembretes.concluir",
+    "lembretes.cancelar",
+    "agenda.calendarios",
+    "agenda.definirCalendario",
+    "agenda.consultar",
+    "agenda.obterEvento",
+    "agenda.criarEvento",
+    "agenda.definirEvento",
+    "agenda.apagarEvento",
+    "foco.obter",
+    "foco.iniciar",
+    "foco.alternar",
+    "foco.pausar",
+    "foco.retomar",
+    "foco.estender",
+    "foco.terminar",
+    "foco.pularPausa",
+    "foco.historico",
+    "notas.listar",
+    "notas.obter",
+    "notas.criar",
+    "notas.salvar",
+    "notas.definir",
+    "notas.apagar",
+    "notas.buscar",
+    "rotinas.listar",
+    "rotinas.definir",
+    "rotinas.hoje",
+    "rotinas.agir",
+    "captura.entender",
+    "captura.lancar",
+    "captura.desfazer",
+    "areas.contagens",
+  ]),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
 canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });

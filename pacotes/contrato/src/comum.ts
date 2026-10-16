@@ -26,3 +26,25 @@ export type PedidoPagina = z.infer<typeof PedidoPagina>;
 export function pagina<T extends z.ZodType>(item: T) {
   return z.object({ itens: z.array(item), proximo: Id.nullable() });
 }
+
+/** Quem criou ou mudou a linha por último (DATA.md §1, carimbo de origem). */
+export const Origem = z.enum(["usuario", "agente", "importacao", "conexao"]);
+export type Origem = z.infer<typeof Origem>;
+
+/**
+ * O carimbo de origem como as áreas do dia mostram ("criada pela Alba"): `agenteId` vem quando
+ * `origem` é `agente`. É auditoria, não vínculo: o agente pode ter saído.
+ */
+export const CamposOrigem = {
+  origem: Origem,
+  agenteId: Id.nullable(),
+  execucaoId: Id.nullable(),
+};
+
+/** Regra de repetição do iCalendar (RRULE), guardada como texto; quem entende é o serviço. */
+export const Recorrencia = z.string().trim().min(1).max(500);
+export type Recorrencia = z.infer<typeof Recorrencia>;
+
+/** O que foi para a lixeira num pedido: o item e o que foi junto com ele. */
+export const Apagados = z.object({ ids: z.array(Id) });
+export type Apagados = z.infer<typeof Apagados>;

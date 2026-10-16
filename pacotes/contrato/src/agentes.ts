@@ -76,9 +76,29 @@ export const SituacaoAgente = z.object({
 });
 export type SituacaoAgente = z.infer<typeof SituacaoAgente>;
 
+/**
+ * O que a definição de fábrica cobre (`servico/src/agentes/de-fabrica.ts`) e "restaurar padrão"
+ * leva de volta. Modelo, reserva e teto são escolha sua e ficam fora.
+ */
+export const CampoDeFabrica = ConfigAgente.keyof().extract([
+  "nome",
+  "funcao",
+  "instrucoes",
+  "personagem",
+  "ferramentas",
+  "gatilhos",
+  "escoposMemoria",
+]);
+export type CampoDeFabrica = z.infer<typeof CampoDeFabrica>;
+
 export const Agente = ConfigAgente.extend({
   id: Id,
   deFabrica: z.boolean(),
+  /**
+   * Os campos em que o de fábrica difere da definição de fábrica, para o selo "personalizada" e a
+   * lista do que muda ao restaurar. Vazia no que está como veio e no criado por você.
+   */
+  camposPersonalizados: z.array(CampoDeFabrica),
   situacao: SituacaoAgente,
 });
 export type Agente = z.infer<typeof Agente>;

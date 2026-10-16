@@ -19,7 +19,12 @@ import {
 import { colunasDeOrigem, DO_USUARIO } from "../banco/tabela.ts";
 import type { Catalogo } from "../ferramentas/catalogo.ts";
 import type { ConfigProvedor } from "../provedores/provedor.ts";
-import { colunasDeFabrica, definicaoDeFabrica, type DefinicaoDeFabrica } from "./de-fabrica.ts";
+import {
+  camposPersonalizados,
+  colunasDeFabrica,
+  definicaoDeFabrica,
+  type DefinicaoDeFabrica,
+} from "./de-fabrica.ts";
 import type { EstadosAgentes } from "./estado.ts";
 
 /** Um agente como está no banco: a configuração e o estado guardado, sem o que o runtime vê agora. */
@@ -369,6 +374,10 @@ export class ServicoAgentes {
       pausadoAte: _pausadoAte,
       ...config
     } = agente;
-    return { ...config, situacao: this.situacao(agente) };
+    return {
+      ...config,
+      camposPersonalizados: camposPersonalizados(agente.id, agente.deFabrica, agente),
+      situacao: this.situacao(agente),
+    };
   }
 }
