@@ -64,8 +64,15 @@ const tarefas = criarTabela(
   },
 );
 
-/** Etiquetas livres (`trabalho`, `casa`, `pr-123`); o nome não se repete entre as vivas. */
-const etiquetas = criarTabela("etiquetas", ["nome TEXT NOT NULL"], { lixeira: true });
+/**
+ * Etiquetas livres (`trabalho`, `casa`, `pr-123`); o nome não se repete entre as vivas, sem
+ * diferença de caixa nem de espaço nas pontas. `nome_chave` é o nome normalizado, que o serviço
+ * grava (banco/nome-chave.ts): o `COLLATE NOCASE` do SQLite só iguala A-Z e deixaria passar
+ * `Ônibus` ao lado de `ônibus`.
+ */
+const etiquetas = criarTabela("etiquetas", ["nome TEXT NOT NULL", "nome_chave TEXT NOT NULL"], {
+  lixeira: true,
+});
 
 /**
  * Muitos para muitos, sem lixeira. Tarefas e etiquetas têm lixeira, então a ligação não tem chave
@@ -110,11 +117,14 @@ const lembretes = criarTabela(
 /**
  * Subtarefa de um nível (DATA.md §2): a mãe não pode ser subtarefa, e tarefa com subtarefas não
  * vira subtarefa. No banco, para nenhum caminho de escrita (importação, outro PC) passar por cima.
+ * O de INSERT também olha as filhas: o `INSERT OR REPLACE` reescreve uma mãe que já tem filhas, e a
+ * importação com as chaves adiadas pode gravar a neta antes da filha.
  */
 const umNivel = `
   CREATE TRIGGER tarefas_subtarefa_de_um_nivel BEFORE INSERT ON tarefas
     WHEN NEW.tarefa_pai_id IS NOT NULL
-      AND (SELECT tarefa_pai_id FROM tarefas WHERE id = NEW.tarefa_pai_id) IS NOT NULL
+      AND ((SELECT tarefa_pai_id FROM tarefas WHERE id = NEW.tarefa_pai_id) IS NOT NULL
+        OR EXISTS (SELECT 1 FROM tarefas WHERE tarefa_pai_id = NEW.id))
   BEGIN
     SELECT RAISE(ABORT, 'subtarefa só tem um nível');
   END;
@@ -141,14 +151,14 @@ const ligacaoSaiJunto = `
 
 /**
  * Índice em toda coluna-filha de chave estrangeira e de ligação, e nos caminhos de consulta do dia:
- * as abertas por dia (hoje e atrasadas), o nome da etiqueta viva (o Windows não diferencia
- * maiúsculas) e o próximo lembrete a disparar.
+ * as abertas por dia (hoje e atrasadas), a chave do nome da etiqueta viva (única) e o próximo
+ * lembrete a disparar.
  */
 const indices = `
   CREATE INDEX tarefas_lista_id ON tarefas (lista_id, ordem);
   CREATE INDEX tarefas_tarefa_pai_id ON tarefas (tarefa_pai_id, ordem) WHERE tarefa_pai_id IS NOT NULL;
   CREATE INDEX tarefas_abertas_vence_em ON tarefas (vence_em) WHERE estado = 'aberta' AND apagado_em IS NULL;
-  CREATE UNIQUE INDEX etiquetas_nome ON etiquetas (nome COLLATE NOCASE) WHERE apagado_em IS NULL;
+  CREATE UNIQUE INDEX etiquetas_nome_chave ON etiquetas (nome_chave) WHERE apagado_em IS NULL;
   CREATE INDEX tarefa_etiquetas_etiqueta_id ON tarefa_etiquetas (etiqueta_id);
   CREATE INDEX lembretes_tarefa_id ON lembretes (tarefa_id) WHERE tarefa_id IS NOT NULL;
   CREATE INDEX lembretes_proximo ON lembretes (coalesce(adiado_ate, quando))

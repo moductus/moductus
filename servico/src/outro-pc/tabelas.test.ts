@@ -84,7 +84,7 @@ describe("configuração × dado", () => {
       "INSERT INTO notificacoes (id, tipo, titulo, canal) VALUES ('n1', 'aviso', 'oi', 'dock')",
     ).run();
     db.prepare("INSERT INTO listas (id, nome, apagado_em) VALUES ('l-apagada', 'Velha', ?)").run(AGORA);
-    db.prepare("INSERT INTO etiquetas (id, nome) VALUES ('et1', 'casa')").run();
+    db.prepare("INSERT INTO etiquetas (id, nome, nome_chave) VALUES ('et1', 'casa', 'casa')").run();
     db.prepare(
       "INSERT INTO tarefas (id, lista_id, titulo) VALUES ('t1', 'entrada', 'ligar pro banco')",
     ).run();

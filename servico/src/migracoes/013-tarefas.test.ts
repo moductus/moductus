@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import { abrirBanco } from "../banco/conexao.ts";
 import { limparLixeira } from "../banco/lixeira.ts";
 import { migrar, versaoAtual } from "../banco/migracoes.ts";
+import { nomeChave } from "../banco/nome-chave.ts";
 import { MIGRACOES } from "./index.ts";
 
 // Pela posição do nome, para o teste não mudar se a migração for renumerada.
@@ -49,6 +50,16 @@ const tarefa = (db: DatabaseSync, id: string, campos: Record<string, string | nu
   db.prepare(
     `INSERT INTO tarefas (id, ${colunas.join(", ")}) VALUES (?, ${colunas.map(() => "?").join(", ")})`,
   ).run(id, ...Object.values(linha));
+};
+
+/** Como o serviço grava: o nome e a chave dele. */
+const etiqueta = (db: DatabaseSync, id: string, nome: string, apagadoEm: string | null = null) => {
+  db.prepare("INSERT INTO etiquetas (id, nome, nome_chave, apagado_em) VALUES (?, ?, ?, ?)").run(
+    id,
+    nome,
+    nomeChave(nome),
+    apagadoEm,
+  );
 };
 
 describe("migração tarefas", () => {
@@ -112,6 +123,9 @@ describe("migração tarefas", () => {
     expect(() => tarefa(db, "estado", { estado: "adiada" })).toThrow(/CHECK/);
     expect(() => tarefa(db, "feita-sem-data", { estado: "feita" })).toThrow(/CHECK/);
     expect(() => tarefa(db, "aberta-com-data", { concluida_em: AGORA.toISOString() })).toThrow(/CHECK/);
+    for (const concluida_em of ["2026-10-16T12:00:00Z", "2026-10-16 12:00:00.000", "16/10/2026"]) {
+      expect(() => tarefa(db, `feita-${concluida_em}`, { estado: "feita", concluida_em })).toThrow(/CHECK/);
+    }
     expect(() => tarefa(db, "agente-sem-id", { origem: "agente" })).toThrow(/CHECK/);
   });
 
@@ -136,6 +150,33 @@ describe("migração tarefas", () => {
     });
   });
 
+  test("reescrever com INSERT OR REPLACE a mãe de uma subtarefa como subtarefa não passa", () => {
+    const db = bancoNovo();
+    tarefa(db, "mae");
+    tarefa(db, "filha", { tarefa_pai_id: "mae" });
+    tarefa(db, "solta");
+    expect(() =>
+      db
+        .prepare(
+          "INSERT OR REPLACE INTO tarefas (id, lista_id, titulo, tarefa_pai_id) VALUES ('mae', 'entrada', 'm', 'solta')",
+        )
+        .run(),
+    ).toThrow(/um nível/);
+    expect(db.prepare("SELECT tarefa_pai_id FROM tarefas WHERE id = 'mae'").get()).toEqual({
+      tarefa_pai_id: null,
+    });
+  });
+
+  test("com as chaves adiadas, gravar a neta antes da filha não monta dois níveis", () => {
+    const db = bancoNovo();
+    db.exec("BEGIN");
+    db.exec("PRAGMA defer_foreign_keys = ON");
+    tarefa(db, "neta2", { tarefa_pai_id: "filha2" });
+    expect(() => tarefa(db, "filha2", { tarefa_pai_id: "mae2" })).toThrow(/um nível/);
+    db.exec("ROLLBACK");
+    expect(ids(db, "tarefas")).toEqual([]);
+  });
+
   test("lembrete: instante no formato das datas, adiado só com a hora nova, disparado com a hora", () => {
     const db = bancoNovo();
     const lembrete = db.prepare(
@@ -151,6 +192,12 @@ describe("migração tarefas", () => {
     expect(() => lembrete.run("sem-z", "2026-10-16T18:00:00", "agendado", null, null, "windows")).toThrow(
       /CHECK/,
     );
+    for (const fora of ["2026-10-16T18:00:00Z", "2026-10-16 18:00:00.000", "amanhã"]) {
+      expect(() => lembrete.run(`disparado-${fora}`, quando, "disparado", fora, null, "windows")).toThrow(
+        /CHECK/,
+      );
+      expect(() => lembrete.run(`adiado-${fora}`, quando, "adiado", null, fora, "windows")).toThrow(/CHECK/);
+    }
     expect(() => lembrete.run("adiado-sem-hora", quando, "adiado", null, null, "windows")).toThrow(/CHECK/);
     expect(() =>
       lembrete.run("agendado-adiado", quando, "agendado", null, "2026-10-16T18:10:00.000Z", "windows"),
@@ -162,13 +209,20 @@ describe("migração tarefas", () => {
     expect(() => lembrete.run("canal", quando, "agendado", null, null, "email")).toThrow(/CHECK/);
   });
 
-  test("etiqueta viva não repete o nome, nem com outra caixa; a da lixeira libera o nome", () => {
+  test("etiqueta viva não repete a chave do nome, nem com outra caixa, acento ou espaço; a da lixeira libera", () => {
     const db = bancoNovo();
-    const etiqueta = db.prepare("INSERT INTO etiquetas (id, nome, apagado_em) VALUES (?, ?, ?)");
-    etiqueta.run("e1", "casa", null);
-    expect(() => etiqueta.run("e2", "Casa", null)).toThrow(/UNIQUE/);
+    etiqueta(db, "e1", "casa");
+    expect(() => etiqueta(db, "e2", "Casa")).toThrow(/UNIQUE/);
+    expect(() => etiqueta(db, "e2", " casa ")).toThrow(/UNIQUE/);
+    etiqueta(db, "onibus", "ônibus");
+    expect(() => etiqueta(db, "e2", "Ônibus")).toThrow(/UNIQUE/);
+    etiqueta(db, "ação", "AÇÃO");
+    expect(() => etiqueta(db, "e2", "ação")).toThrow(/UNIQUE/);
+    expect(() => db.prepare("INSERT INTO etiquetas (id, nome) VALUES ('sem-chave', 'x')").run()).toThrow(
+      /NOT NULL/,
+    );
     db.prepare("UPDATE etiquetas SET apagado_em = ? WHERE id = 'e1'").run(AGORA.toISOString());
-    etiqueta.run("e3", "casa", null);
+    etiqueta(db, "e3", "Casa");
 
     tarefa(db, "t1");
     const ligar = db.prepare("INSERT INTO tarefa_etiquetas (id, tarefa_id, etiqueta_id) VALUES (?, ?, ?)");
@@ -176,33 +230,42 @@ describe("migração tarefas", () => {
     expect(() => ligar.run("l2", "t1", "e3")).toThrow(/UNIQUE/);
   });
 
-  test("a limpeza leva a tarefa vencida com a subtarefa, o lembrete e as ligações, e a lista viva segura", () => {
+  test("a limpeza leva a vencida com subtarefa, lembrete e ligações; a vencida com filha viva fica, com as ligações", () => {
     const db = bancoNovo();
-    db.prepare("INSERT INTO listas (id, nome, apagado_em) VALUES ('velha', 'Velha', ?)").run(diasAtras(40));
-    db.prepare("INSERT INTO listas (id, nome, apagado_em) VALUES ('presa', 'Presa', ?)").run(diasAtras(40));
-    tarefa(db, "vencida", { lista_id: "velha", apagado_em: diasAtras(31) });
-    tarefa(db, "sub-vencida", { lista_id: "velha", tarefa_pai_id: "vencida", apagado_em: diasAtras(31) });
-    tarefa(db, "viva", { lista_id: "presa" });
-    db.prepare(
-      "INSERT INTO lembretes (id, texto, quando, tarefa_id, apagado_em) VALUES ('lb-vencido', 'x', ?, 'vencida', ?)",
-    ).run(AGORA.toISOString(), diasAtras(31));
-    db.prepare("INSERT INTO lembretes (id, texto, quando, tarefa_id) VALUES ('lb-vivo', 'x', ?, 'viva')").run(
-      AGORA.toISOString(),
+    const lembrete = db.prepare(
+      "INSERT INTO lembretes (id, texto, quando, tarefa_id, apagado_em) VALUES (?, 'x', ?, ?, ?)",
     );
-    const etiqueta = db.prepare("INSERT INTO etiquetas (id, nome, apagado_em) VALUES (?, ?, ?)");
-    etiqueta.run("et-viva", "casa", null);
-    etiqueta.run("et-vencida", "velha", diasAtras(31));
     const ligar = db.prepare("INSERT INTO tarefa_etiquetas (id, tarefa_id, etiqueta_id) VALUES (?, ?, ?)");
+    const vencida = diasAtras(31);
+
+    // Sai tudo: lista, tarefa, subtarefa e lembrete vencidos, e a etiqueta vencida com as ligações.
+    db.prepare("INSERT INTO listas (id, nome, apagado_em) VALUES ('velha', 'Velha', ?)").run(diasAtras(40));
+    tarefa(db, "vencida", { lista_id: "velha", apagado_em: vencida });
+    tarefa(db, "sub-vencida", { lista_id: "velha", tarefa_pai_id: "vencida", apagado_em: vencida });
+    lembrete.run("lb-vencido", AGORA.toISOString(), "vencida", vencida);
+    etiqueta(db, "et-viva", "casa");
+    etiqueta(db, "et-vencida", "velha", vencida);
     ligar.run("l-da-vencida", "vencida", "et-viva");
+
+    // Fica o que tem filha viva: a lista por uma tarefa, a mãe por uma subtarefa, a tarefa por um
+    // lembrete. A ligação da que ficou fica junto.
+    db.prepare("INSERT INTO listas (id, nome, apagado_em) VALUES ('presa', 'Presa', ?)").run(diasAtras(40));
+    tarefa(db, "viva", { lista_id: "presa" });
     ligar.run("l-da-etiqueta-vencida", "viva", "et-vencida");
+    lembrete.run("lb-vivo", AGORA.toISOString(), "viva", null);
     ligar.run("l-viva", "viva", "et-viva");
+    tarefa(db, "mae-presa", { apagado_em: vencida });
+    tarefa(db, "sub-viva", { tarefa_pai_id: "mae-presa" });
+    tarefa(db, "presa-por-lembrete", { apagado_em: vencida });
+    lembrete.run("lb-da-presa", AGORA.toISOString(), "presa-por-lembrete", null);
+    ligar.run("l-da-presa", "presa-por-lembrete", "et-viva");
 
     limparLixeira(db, AGORA);
     expect(ids(db, "listas")).toEqual(["entrada", "pessoal", "presa", "trabalho"]);
-    expect(ids(db, "tarefas")).toEqual(["viva"]);
-    expect(ids(db, "lembretes")).toEqual(["lb-vivo"]);
+    expect(ids(db, "tarefas")).toEqual(["mae-presa", "presa-por-lembrete", "sub-viva", "viva"]);
+    expect(ids(db, "lembretes")).toEqual(["lb-da-presa", "lb-vivo"]);
     expect(ids(db, "etiquetas")).toEqual(["et-viva"]);
-    expect(ids(db, "tarefa_etiquetas")).toEqual(["l-viva"]);
+    expect(ids(db, "tarefa_etiquetas")).toEqual(["l-da-presa", "l-viva"]);
     expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
   });
 });
