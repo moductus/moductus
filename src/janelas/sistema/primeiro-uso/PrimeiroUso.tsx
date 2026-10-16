@@ -31,13 +31,16 @@ import { Personagem } from "../../../componentes/personagem/Personagem.tsx";
 import type { Agente, EstadoPersonagem } from "../../../componentes/personagem/agentes.ts";
 import { Selo } from "../../../componentes/Selo.tsx";
 import { Seletor, type OpcaoSeletor } from "../../../componentes/Seletor.tsx";
+import { abrirEndereco, useAbrir } from "../../../nativo/abrir.ts";
 import { servico } from "../../../servico/conexao.ts";
 import {
   CLIS,
+  COMO_INSTALAR,
   criadosDepois,
   formatarLatencia,
   MODELO_INICIAL,
   novoDaApi,
+  precisaInstalar,
   situacaoDoCli,
   substituicao,
   type EscolhaModelo,
@@ -329,12 +332,14 @@ interface PropsOpcao {
   previa?: ReactNode;
   /** Selo ao lado do título (o estado de cada modelo). */
   selo?: ReactNode;
+  /** Botão à direita, fora do rótulo ("Como instalar"). */
+  acao?: ReactNode;
 }
 
 /** Cartão de opção com rádio de verdade: Tab entra no grupo, as setas trocam, Enter segue. */
-function Opcao({ nome, marcada, aoMarcar, titulo, texto, desativada, previa, selo }: PropsOpcao) {
+function Opcao({ nome, marcada, aoMarcar, titulo, texto, desativada, previa, selo, acao }: PropsOpcao) {
   const id = useId();
-  return (
+  const opcao = (
     <label className="uso-opcao" data-marcada={marcada}>
       {previa}
       <span className="uso-opcao-linha">
@@ -353,6 +358,13 @@ function Opcao({ nome, marcada, aoMarcar, titulo, texto, desativada, previa, sel
         {texto}
       </span>
     </label>
+  );
+  if (!acao) return opcao;
+  return (
+    <div className="uso-opcao-moldura">
+      {opcao}
+      <span className="uso-opcao-acao">{acao}</span>
+    </div>
   );
 }
 
@@ -502,6 +514,7 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
   const [erroDeteccao, setErroDeteccao] = useState<string | null>(null);
   // Cada "Procurar de novo" é uma rodada: depois de instalar ou entrar no CLI, sem reabrir nada.
   const [rodada, setRodada] = useState(0);
+  const instalar = useAbrir();
   const { escolha, formulario, resultado } = estado;
   const testando = resultado.fase === "testando";
 
@@ -595,6 +608,7 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
       <fieldset className="uso-opcoes uso-opcoes--lista" aria-busy={detectados === null}>
         <legend className="so-leitor">Modelo</legend>
         {CLIS.map((c) => {
+          const achado = detectados?.find((d) => d.tipo === c.tipo);
           const situacao =
             detectados === null
               ? {
@@ -603,10 +617,7 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
                   texto: "Procurando no PATH…",
                   escolhivel: false,
                 }
-              : situacaoDoCli(
-                  c.nome,
-                  detectados.find((d) => d.tipo === c.tipo),
-                );
+              : situacaoDoCli(c.nome, achado);
           return (
             <Opcao
               key={c.tipo}
@@ -617,6 +628,18 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
               titulo={c.nome}
               selo={<Selo tom={situacao.tom}>{situacao.estado}</Selo>}
               texto={situacao.texto}
+              acao={
+                detectados !== null &&
+                precisaInstalar(achado) && (
+                  <Botao
+                    tamanho="pequeno"
+                    aria-label={`Como instalar o ${c.nome}`}
+                    onClick={() => instalar.abrir(() => abrirEndereco(COMO_INSTALAR[c.tipo]))}
+                  >
+                    Como instalar
+                  </Botao>
+                )
+              }
             />
           );
         })}
@@ -632,6 +655,11 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
       {erroDeteccao && (
         <p className="uso-erro" role="alert">
           {erroDeteccao}
+        </p>
+      )}
+      {instalar.erro && (
+        <p className="uso-erro" role="alert">
+          {instalar.erro}
         </p>
       )}
       {detectados !== null && (

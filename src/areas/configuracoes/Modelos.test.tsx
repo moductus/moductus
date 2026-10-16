@@ -28,6 +28,9 @@ vi.mock("../../servico/conexao.ts", () => ({
 vi.mock("../../nativo/eventos.ts", () => ({
   useServico: () => ({ estado: "pronto", porta: 1, token: "t" }),
 }));
+// A casca é falsa: nada abre no navegador.
+const casca = vi.hoisted(() => ({ invoke: vi.fn((..._: unknown[]) => Promise.resolve()) }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: casca.invoke }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -138,6 +141,8 @@ async function montar() {
 beforeEach(() => {
   falso.pedidos.length = 0;
   falso.ouvintes.clear();
+  casca.invoke.mockReset();
+  casca.invoke.mockImplementation(() => Promise.resolve());
 });
 afterEach(() => {
   act(() => raiz?.unmount());
@@ -272,6 +277,24 @@ describe("Modelos", () => {
     await act(async () => botao("Conectar Claude Code e testar").click());
     expect(pedidosDe("provedores.criar")).toEqual([{ tipo: "claude-cli", nome: "Claude Code" }]);
     expect(pedidosDe("provedores.testar")).toEqual([{ id: "novo" }]);
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("CLI que não está no PC leva à página de instalação; o achado não oferece instalar", async () => {
+    servico([], [agente("alba", "Alba", null, null)]);
+    await montar();
+    expect(botao("Como instalar o Claude Code")).toBeUndefined();
+    const codex = botao("Como instalar o Codex");
+    expect(codex.textContent).toBe("Como instalar");
+    await act(async () => codex.click());
+    expect(casca.invoke).toHaveBeenCalledWith("abrir_endereco", {
+      endereco: "https://github.com/openai/codex",
+    });
+    casca.invoke.mockImplementationOnce(() => Promise.reject("o Windows não abriu"));
+    await act(async () => botao("Como instalar o OpenCode").click());
+    expect(por('[aria-label="CLIs no PC"] [role="alert"]')!.textContent).toBe(
+      "Não consegui abrir: o Windows não abriu.",
+    );
     expect(auditar(recipiente)).toEqual([]);
   });
 });

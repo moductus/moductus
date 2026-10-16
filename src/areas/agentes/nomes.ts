@@ -6,5 +6,9 @@ const ARTIGO: Readonly<Record<Agente, "a" | "o">> = { alba: "a", tula: "a", fain
 /** "a Tula", "o Nuno". */
 export const comArtigo = (agente: Agente) => `${ARTIGO[agente]} ${DADOS_AGENTES[agente].nome}`;
 
+/** A palavra no gênero do agente: `noGenero("tula", "ligada", "ligado")` é "ligada". */
+export const noGenero = (agente: Agente, feminina: string, masculina: string) =>
+  ARTIGO[agente] === "a" ? feminina : masculina;
+
 /** "da Tula", "do Nuno". */
 export const deAgente = (agente: Agente) => `d${comArtigo(agente)}`;

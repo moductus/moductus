@@ -19,6 +19,7 @@ import {
 import { colunasDeOrigem, DO_USUARIO } from "../banco/tabela.ts";
 import type { Catalogo } from "../ferramentas/catalogo.ts";
 import type { ConfigProvedor } from "../provedores/provedor.ts";
+import { colunasDeFabrica, definicaoDeFabrica, type DefinicaoDeFabrica } from "./de-fabrica.ts";
 import type { EstadosAgentes } from "./estado.ts";
 
 /** Um agente como está no banco: a configuração e o estado guardado, sem o que o runtime vê agora. */
@@ -146,6 +147,36 @@ export class RepositorioAgentes {
   }
 
   /**
+   * Volta nome, função, instruções, personagem, ferramentas, gatilhos e escopos ao de fábrica, com
+   * o usuário como origem. Modelo, reserva, teto e estado ficam. Devolve se havia o que voltar.
+   */
+  restaurarPadrao(id: string, definicao: DefinicaoDeFabrica, agora: string): boolean {
+    const c = colunasDeFabrica(definicao);
+    const origem = colunasDeOrigem(DO_USUARIO);
+    const r = this.db
+      .prepare(
+        `UPDATE agentes SET nome = ?, funcao = ?, instrucoes = ?, personagem = ?, ferramentas = ?,
+                gatilhos = ?, escopos_memoria = ?, atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
+          WHERE id = ? AND de_fabrica = 1 AND apagado_em IS NULL`,
+      )
+      .run(
+        c.nome,
+        c.funcao,
+        c.instrucoes,
+        c.personagem,
+        c.ferramentas,
+        c.gatilhos,
+        c.escopos_memoria,
+        agora,
+        origem.origem,
+        origem.agente_id,
+        origem.execucao_id,
+        id,
+      );
+    return Number(r.changes) > 0;
+  }
+
+  /**
    * Muda o estado guardado do agente, só se ele está num dos estados `de`: o sono que uma execução
    * pede não passa por cima da pausa nem do desligado. `pelo` diz quem mudou (o carimbo de origem):
    * o usuário pausando, ou o próprio agente dormindo e acordando. Devolve se mudou.
@@ -211,6 +242,8 @@ export const MENSAGEM_RESERVA_SEM_PRINCIPAL = "Escolha o principal antes da rese
  * centavos de uma moeda que ainda não existe. Gravar um valor seria prometer um limite que não vale.
  */
 export const MENSAGEM_TETO_SEM_MOEDA = "O teto por dia ainda não vale: falta decidir a moeda dele.";
+/** Agente criado por você não tem padrão para onde voltar (AGENTS.md §1). */
+export const MENSAGEM_SO_DE_FABRICA = "Só os agentes de fábrica voltam ao padrão.";
 
 /** Os agentes como a interface vê: configuração, estado e o que estão fazendo agora. */
 export class ServicoAgentes {
@@ -300,6 +333,20 @@ export class ServicoAgentes {
       novo.provedorId !== atual.provedorId || novo.provedorReservaId !== atual.provedorReservaId;
     this.repo.definirModelo(atual.id, novo, this.agora().toISOString());
     if (trocouModelo) this.estados.modeloMudou(atual.id);
+    return this.obter({ id: atual.id });
+  }
+
+  /**
+   * Volta um agente de fábrica ao padrão (de-fabrica.ts): nome, função, instruções, visual,
+   * ferramentas, vigias e escopos. Modelo, reserva, estado e histórico ficam como estão. Vale na
+   * próxima execução, como `definir`: a que está rodando termina com a configuração de antes.
+   */
+  restaurarPadrao(pedido: PedidoAgente): Agente {
+    const atual = this.repo.agente(pedido.id);
+    if (!atual) throw new Error("agente não encontrado");
+    const definicao = atual.deFabrica ? definicaoDeFabrica(atual.id) : null;
+    if (!definicao) throw new Error(MENSAGEM_SO_DE_FABRICA);
+    this.repo.restaurarPadrao(atual.id, definicao, this.agora().toISOString());
     return this.obter({ id: atual.id });
   }
 

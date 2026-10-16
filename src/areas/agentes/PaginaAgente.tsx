@@ -1,8 +1,9 @@
-import type { Capacidade, Execucao } from "@moductus/contrato";
+import type { Capacidade, EstadoAgente, Execucao } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { Cartao } from "../../componentes/Cartao.tsx";
+import { FalaAgente } from "../../componentes/FalaAgente.tsx";
 import { DADOS_AGENTES, type Agente } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
 import { horaCurta } from "../../componentes/personagem/quando.ts";
@@ -24,7 +25,7 @@ import {
 } from "../../servico/agente.ts";
 import { EstadoVazio } from "../Pagina.tsx";
 import { useAgora } from "../tempo.ts";
-import { comArtigo, deAgente } from "./nomes.ts";
+import { comArtigo, deAgente, noGenero } from "./nomes.ts";
 
 const ABAS = [
   { id: "geral", nome: "Visão geral" },
@@ -44,8 +45,9 @@ interface PropsPaginaAgente {
 
 /**
  * A página de um agente (AreaAgente.dc.html): quem é e o que está fazendo agora, pausar ou
- * retomar, e em abas a visão geral (vigias, modelo, permissões, o dia), o histórico com desfazer,
- * as instruções, as ferramentas e a memória.
+ * retomar, restaurar o padrão (só os de fábrica, com confirmação no lugar), e em abas a visão
+ * geral (vigias, modelo, permissões, o dia), o histórico com desfazer, as instruções, as
+ * ferramentas e a memória.
  */
 export function PaginaAgente({ canal, agente, aoConversar, aoTrocarModelo }: PropsPaginaAgente) {
   const dados = useAgente(canal, agente);
@@ -53,6 +55,14 @@ export function PaginaAgente({ canal, agente, aoConversar, aoTrocarModelo }: Pro
   const agora = useAgora();
   const [aba, setAba] = useState<Aba>("geral");
   const idAbas = useId();
+  const [confirmando, setConfirmando] = useState(false);
+  const idConfirmacao = useId();
+  const botaoRestaurar = useRef<HTMLButtonElement>(null);
+  // Fechar a confirmação (Manter como está, Esc ou depois de restaurar) devolve o foco ao botão.
+  const fecharConfirmacao = () => {
+    setConfirmando(false);
+    botaoRestaurar.current?.focus();
+  };
   const { agente: doServico, conectado } = dados;
   const situacao = doServico?.situacao ?? null;
   const leitura = lerSituacao(situacao);
@@ -81,11 +91,32 @@ export function PaginaAgente({ canal, agente, aoConversar, aoTrocarModelo }: Pro
         <div className="pagina-agente-acoes">
           <BotaoTentarAgora dados={dados} />
           <BotaoPausa agente={agente} dados={dados} />
+          {doServico?.deFabrica && (
+            <Botao
+              ref={botaoRestaurar}
+              className="pagina-agente-restaurar"
+              aria-expanded={confirmando}
+              aria-controls={confirmando ? idConfirmacao : undefined}
+              disabled={!conectado}
+              onClick={() => (confirmando ? fecharConfirmacao() : setConfirmando(true))}
+            >
+              Restaurar padrão
+            </Botao>
+          )}
           <Botao variante="primario" onClick={aoConversar}>
             Conversar
           </Botao>
         </div>
       </header>
+      {confirmando && doServico?.deFabrica && (
+        <ConfirmarRestaurar
+          id={idConfirmacao}
+          agente={agente}
+          dados={dados}
+          estado={doServico.situacao.estado}
+          aoFechar={fecharConfirmacao}
+        />
+      )}
       {dados.erro && (
         <p className="pagina-agente-erro" role="alert">
           {dados.erro}
@@ -141,6 +172,124 @@ function BotaoTentarAgora({ dados }: { dados: ReturnType<typeof useAgente> }) {
     <Botao disabled={!dados.conectado} onClick={() => void dados.acordar()}>
       Tentar agora
     </Botao>
+  );
+}
+
+interface PropsConfirmarRestaurar {
+  id: string;
+  agente: Agente;
+  dados: ReturnType<typeof useAgente>;
+  /** Ligado, em pausa, dormindo ou desligado: restaurar não muda. */
+  estado: EstadoAgente;
+  aoFechar: () => void;
+}
+
+/**
+ * Confirmação no lugar (DESIGN.md §5, AreaAgente.dc.html): cartão elevado logo abaixo do botão,
+ * nunca modal, com o que volta ao de fábrica e o que fica. O foco começa em "Manter como está".
+ */
+function ConfirmarRestaurar({ id, agente, dados, estado, aoFechar }: PropsConfirmarRestaurar) {
+  const [enviando, setEnviando] = useState(false);
+  const manter = useRef<HTMLButtonElement>(null);
+  useEffect(() => manter.current?.focus(), []);
+  const restaurar = async () => {
+    setEnviando(true);
+    const deuCerto = await dados.restaurar();
+    setEnviando(false);
+    // Recusado, fica aberta: o erro aparece logo abaixo, como o dos outros botões da página.
+    if (deuCerto) aoFechar();
+  };
+  const aoTeclar = (e: KeyboardEvent) => {
+    if (e.key !== "Escape" || enviando) return;
+    e.preventDefault();
+    aoFechar();
+  };
+  const volta = [
+    { campo: "Nome e visual", muda: `${DADOS_AGENTES[agente].nome}, com o personagem de fábrica` },
+    { campo: "Instruções", muda: "o que você escreveu sai" },
+    { campo: "Ferramentas e vigias", muda: "voltam os de fábrica" },
+  ];
+  const fica = [
+    { campo: "Modelo e reserva", muda: textoDoModelo(dados) },
+    { campo: `${noGenero(agente, "Ligada", "Ligado")} ou em pausa`, muda: estadoQueFica(agente, estado) },
+    { campo: "Histórico e memória", muda: "nada é apagado" },
+  ];
+  return (
+    <Cartao
+      como="section"
+      variante="elevado"
+      id={id}
+      className="pagina-agente-confirmacao"
+      aria-label={`Restaurar ${comArtigo(agente)} ao padrão de fábrica`}
+      onKeyDown={aoTeclar}
+    >
+      {/* As duas listas vão na ação da fala, alinhadas com o texto, como no quadro. */}
+      <FalaAgente
+        agente={agente}
+        estado="esperando"
+        tamanho="faixa"
+        acao={
+          <div className="pagina-agente-confirmacao-colunas">
+            <ListaRestaurar titulo="Volta ao de fábrica" linhas={volta} />
+            <ListaRestaurar titulo="Fica como está" linhas={fica} />
+          </div>
+        }
+      >
+        Volto ao nome, às instruções, às ferramentas e aos vigias de fábrica. Modelo, reserva e o que já fiz
+        ficam como estão.
+      </FalaAgente>
+      <div className="pagina-agente-confirmacao-rodape">
+        <span className="pagina-agente-rotulo pagina-agente-confirmacao-aviso">Não dá para desfazer.</span>
+        <Botao ref={manter} disabled={enviando} aria-keyshortcuts="Escape" onClick={aoFechar}>
+          Manter como está
+        </Botao>
+        <Botao variante="primario" disabled={enviando || !dados.conectado} onClick={() => void restaurar()}>
+          {`Restaurar ${comArtigo(agente)}`}
+        </Botao>
+      </div>
+    </Cartao>
+  );
+}
+
+/**
+ * O estado que fica, dito pelo estado guardado e no gênero dele ("continua ligada", "continua
+ * desligado"), e não pelo selo, que fala da atividade ("trabalhando", "erro").
+ */
+function estadoQueFica(agente: Agente, estado: EstadoAgente): string {
+  switch (estado) {
+    case "ativo":
+      return `continua ${noGenero(agente, "ligada", "ligado")}`;
+    case "pausado":
+      return "continua em pausa";
+    case "dormindo":
+      return "continua dormindo";
+    case "desligado":
+      return `continua ${noGenero(agente, "desligada", "desligado")}`;
+  }
+}
+
+function ListaRestaurar({
+  titulo,
+  linhas,
+}: {
+  titulo: string;
+  linhas: readonly { campo: string; muda: string }[];
+}) {
+  const idTitulo = useId();
+  return (
+    <div className="pagina-agente-confirmacao-lista">
+      <span id={idTitulo} className="pagina-agente-rotulo">
+        {titulo}
+      </span>
+      <ul className="pagina-agente-linhas" aria-labelledby={idTitulo}>
+        {linhas.map((l) => (
+          <li key={l.campo} className="pagina-agente-confirmacao-linha">
+            <span className="pagina-agente-confirmacao-campo">{l.campo}</span>
+            <span className="pagina-agente-confirmacao-muda">{l.muda}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

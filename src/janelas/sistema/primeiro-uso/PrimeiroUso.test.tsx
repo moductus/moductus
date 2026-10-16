@@ -6,6 +6,7 @@ import {
   type Config,
   type EstadoPrimeiroUso,
 } from "@moductus/contrato";
+import { invoke } from "@tauri-apps/api/core";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -532,6 +533,30 @@ describe("primeiro uso: modelo", () => {
     falso.detectados = [{ ...CLAUDE, versao: "2.1.100", versaoMinima: "2.1.257" }];
     await clicar(botao("Procurar de novo"));
     expect(modelos()[0]).toMatchObject({ selo: "desatualizado", desativado: true });
+  });
+
+  it("Como instalar abre a página do CLI que falta, pela casca, fora do rótulo da opção", async () => {
+    falso.detectados = [CLAUDE, { ...CLAUDE, tipo: "gemini-cli", impedimento: "sem_adaptador" }];
+    await noModelo();
+    const invocar = vi.mocked(invoke);
+    invocar.mockClear();
+    const instalar = todos("button").filter((b) => b.textContent === "Como instalar");
+    expect(instalar.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Como instalar o Codex",
+      "Como instalar o OpenCode",
+    ]);
+    // O botão não entra no nome do rádio nem marca a opção.
+    expect(instalar.every((b) => b.closest("label") === null)).toBe(true);
+    await clicar(instalar[1]);
+    expect(invocar).toHaveBeenCalledWith("abrir_endereco", { endereco: "https://opencode.ai/docs/" });
+    expect(modelos().find((m) => m.nome === "OpenCode")?.marcado).toBe(false);
+
+    invocar.mockImplementationOnce(() => Promise.reject("o Windows não abriu"));
+    await clicar(instalar[0]);
+    expect(todos('.uso-erro[role="alert"]').map((e) => e.textContent)).toEqual([
+      "Não consegui abrir: o Windows não abriu.",
+    ]);
+    expect(auditar(recipiente)).toEqual([]);
   });
 
   it("Testar conecta o CLI escolhido e mostra a latência real; aí o passo segue com Continuar", async () => {
