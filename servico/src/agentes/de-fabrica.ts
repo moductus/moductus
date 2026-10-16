@@ -8,8 +8,9 @@ import type { AgenteDeFabrica, ConfigAgente } from "@moductus/contrato";
  *
  * A migração 003 semeou os quatro com estes mesmos valores, escritos no SQL dela (migração
  * publicada não muda). Daqui em diante, quem mudar um de fábrica muda aqui e numa migração nova
- * que lê daqui (`sqlDeFabrica`): `de-fabrica.test.ts` confere que um banco novo, com todas as
- * migrações, tem o time exatamente como está aqui.
+ * que lê daqui (`sqlDeFabrica`, que só troca o campo que ainda está como veio de fábrica):
+ * `de-fabrica.test.ts` confere que um banco novo, com todas as migrações, tem o time exatamente
+ * como está aqui.
  */
 export type DefinicaoDeFabrica = Pick<
   ConfigAgente,
@@ -82,15 +83,47 @@ export function colunasDeFabrica(d: DefinicaoDeFabrica): Record<CampoDeFabrica, 
   };
 }
 
+const COLUNA: Readonly<Record<keyof DefinicaoDeFabrica, CampoDeFabrica>> = {
+  nome: "nome",
+  funcao: "funcao",
+  instrucoes: "instrucoes",
+  personagem: "personagem",
+  ferramentas: "ferramentas",
+  gatilhos: "gatilhos",
+  escoposMemoria: "escopos_memoria",
+};
+
 const literal = (texto: string) => `'${texto.replaceAll("'", "''")}'`;
 
+/** O valor de um campo como fica na coluna: texto como está, listas e personagem em JSON. */
+const emColuna = (valor: DefinicaoDeFabrica[keyof DefinicaoDeFabrica]) =>
+  typeof valor === "string" ? valor : JSON.stringify(valor);
+
 /**
- * O `UPDATE` com que uma migração leva campos de um agente de fábrica ao que está aqui. Migração
- * é texto SQL numa transação: os valores entram como literais, com a aspa dobrada.
+ * O SQL com que uma migração leva campos de um agente de fábrica ao que está aqui, sem passar
+ * por cima da personalização. `antes` diz, campo a campo, o valor de fábrica que a migração
+ * troca, e o campo só muda onde ainda é esse (`AND <coluna> = <valor antigo>`): o que o usuário
+ * mudou fica como ele deixou, e só "restaurar padrão" leva ao de fábrica de agora. Um `UPDATE`
+ * por campo, para quem personalizou o nome ainda receber as ferramentas novas. Listas e
+ * personagem comparam por `json()`, que não liga para espaço. Migração é texto SQL numa
+ * transação: os valores entram como literais, com a aspa dobrada.
  */
-export function sqlDeFabrica(id: AgenteDeFabrica, campos: readonly CampoDeFabrica[]): string {
+export function sqlDeFabrica(id: AgenteDeFabrica, antes: Partial<DefinicaoDeFabrica>): string {
+  const campos = (Object.keys(antes) as (keyof DefinicaoDeFabrica)[]).filter(
+    (c) => Object.hasOwn(COLUNA, c) && antes[c] !== undefined,
+  );
   if (campos.length === 0) throw new Error("diga quais campos do agente de fábrica mudam");
-  const colunas = colunasDeFabrica(DE_FABRICA[id]);
-  const valores = campos.map((c) => `${c} = ${literal(colunas[c])}`).join(", ");
-  return `UPDATE agentes SET ${valores} WHERE id = ${literal(id)} AND de_fabrica = 1;`;
+  return campos
+    .map((campo) => {
+      const coluna = COLUNA[campo];
+      const novo = emColuna(DE_FABRICA[id][campo]);
+      const antigo = emColuna(antes[campo]!);
+      if (antigo === novo) throw new Error(`${campo} já é esse no de fábrica de agora`);
+      const igual =
+        typeof antes[campo] === "string"
+          ? `${coluna} = ${literal(antigo)}`
+          : `json(${coluna}) = json(${literal(antigo)})`;
+      return `UPDATE agentes SET ${coluna} = ${literal(novo)} WHERE id = ${literal(id)} AND de_fabrica = 1 AND ${igual};`;
+    })
+    .join("\n");
 }

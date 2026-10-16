@@ -547,7 +547,7 @@ describe("página do agente", () => {
     expect(document.activeElement).toBe(botao("Manter como está"));
     expect(confirmacao.textContent).toContain("Não dá para desfazer.");
     expect(confirmacao.textContent).toContain("Modelo e reservaModelo escolhido · sua assinatura");
-    expect(confirmacao.textContent).toContain("Ligado ou em pausacontinua trabalhando");
+    expect(confirmacao.textContent).toContain("Ligada ou em pausacontinua ligada");
     expect(auditar(recipiente)).toEqual([]);
 
     await act(async () => botao("Manter como está").click());
@@ -571,6 +571,31 @@ describe("página do agente", () => {
     expect(document.activeElement).toBe(botao("Restaurar padrão"));
     await act(async () => botao("Instruções").click());
     expect(por(".pagina-agente-instrucoes")!.textContent).toBe("De fábrica.");
+  });
+
+  // O selo fala da atividade ("erro", "parado"); o que fica é o estado guardado, no gênero dele.
+  it.each([
+    ["tula", "ativo", "erro", "Ligada ou em pausacontinua ligada"],
+    ["tula", "pausado", "ocioso", "Ligada ou em pausacontinua em pausa"],
+    ["tula", "dormindo", "ocioso", "Ligada ou em pausacontinua dormindo"],
+    ["tula", "desligado", "ocioso", "Ligada ou em pausacontinua desligada"],
+    ["nuno", "ativo", "erro", "Ligado ou em pausacontinua ligado"],
+    ["nuno", "pausado", "ocioso", "Ligado ou em pausacontinua em pausa"],
+    ["nuno", "dormindo", "ocioso", "Ligado ou em pausacontinua dormindo"],
+    ["nuno", "desligado", "ocioso", "Ligado ou em pausacontinua desligado"],
+  ] as const)("a confirmação diz que %s %s continua como está", async (id, estado, atividade, linha) => {
+    servicoDaTula();
+    const base = falso.responder;
+    falso.responder = (metodo, dados) => {
+      if (metodo === "agentes.obter") return Promise.resolve(agente(id, { estado, atividade }));
+      return base(metodo, dados);
+    };
+    await montar(`${id}/pagina`);
+    await act(async () => botao("Restaurar padrão").click());
+    const linhas = [...recipiente.querySelectorAll(".pagina-agente-confirmacao-linha")].map(
+      (l) => l.textContent,
+    );
+    expect(linhas).toContain(linha);
   });
 
   it("restaurar recusado deixa a confirmação aberta com o erro; agente criado por você não tem o botão", async () => {

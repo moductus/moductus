@@ -65,22 +65,36 @@ describe("agentes de fábrica", () => {
     expect(definicaoDeFabrica("toString")).toBeNull();
   });
 
-  test("o SQL de uma migração leva só os campos pedidos ao de fábrica, com a aspa dobrada", () => {
+  // Uma migração muda o de fábrica de ontem para o de hoje; quem personalizou fica como deixou.
+  test("o SQL de uma migração só troca o campo que ainda está como veio de fábrica", () => {
     const { db, repo } = bancoNovo();
-    db.exec(`UPDATE agentes SET nome = 'Tulinha', instrucoes = 'D''Ávila', ferramentas = '[]',
-               provedor_id = 'p1' WHERE id = 'tula'`);
-    const sql = sqlDeFabrica("tula", ["instrucoes", "ferramentas"]);
-    db.exec(sql);
+    const ANTIGAS = "Era a D'Ávila.";
+    // A Tula no de fábrica antigo nas ferramentas (com espaço no JSON) e personalizada nas
+    // instruções; a Alba no de fábrica antigo nas instruções, com aspa.
+    db.exec(`UPDATE agentes SET nome = 'Tulinha', instrucoes = 'Do meu jeito.',
+               ferramentas = '[ "financas.*" ]', provedor_id = 'p1' WHERE id = 'tula'`);
+    db.exec(`UPDATE agentes SET instrucoes = 'Era a D''Ávila.' WHERE id = 'alba'`);
+
+    db.exec(sqlDeFabrica("tula", { instrucoes: ANTIGAS, ferramentas: ["financas.*"] }));
+    db.exec(sqlDeFabrica("alba", { instrucoes: ANTIGAS }));
+
     expect(repo.agente("tula")).toMatchObject({
       nome: "Tulinha",
-      instrucoes: DE_FABRICA.tula.instrucoes,
+      instrucoes: "Do meu jeito.",
       ferramentas: DE_FABRICA.tula.ferramentas,
       provedorId: "p1",
     });
+    expect(repo.agente("alba")?.instrucoes).toBe(DE_FABRICA.alba.instrucoes);
+  });
 
-    expect(sqlDeFabrica("alba", ["nome"])).toBe(
-      "UPDATE agentes SET nome = 'Alba' WHERE id = 'alba' AND de_fabrica = 1;",
+  test("o SQL tem um UPDATE por campo, com a condição do valor antigo", () => {
+    expect(sqlDeFabrica("alba", { nome: "Albinha" })).toBe(
+      "UPDATE agentes SET nome = 'Alba' WHERE id = 'alba' AND de_fabrica = 1 AND nome = 'Albinha';",
     );
-    expect(() => sqlDeFabrica("alba", [])).toThrow("diga quais campos");
+    expect(sqlDeFabrica("nuno", { funcao: "Olha o código", gatilhos: [{ tipo: "horario", hora: "08:00" }] }))
+      .toBe(`UPDATE agentes SET funcao = 'Fica de olho nas suas IAs e no seu código' WHERE id = 'nuno' AND de_fabrica = 1 AND funcao = 'Olha o código';
+UPDATE agentes SET gatilhos = '[]' WHERE id = 'nuno' AND de_fabrica = 1 AND json(gatilhos) = json('[{"tipo":"horario","hora":"08:00"}]');`);
+    expect(() => sqlDeFabrica("alba", {})).toThrow("diga quais campos");
+    expect(() => sqlDeFabrica("alba", { nome: "Alba" })).toThrow("nome já é esse");
   });
 });

@@ -23,7 +23,7 @@ Um agente é **configuração**, não código. Todos rodam no mesmo runtime, den
 
 ### De fábrica e criados por você
 
-- **De fábrica:** os quatro agentes da seção 2 vêm prontos. Dá para renomear, trocar o visual, ajustar instruções, ferramentas e modelo, ou desligar. Não dá para apagar: "restaurar padrão", na página do agente e com confirmação, volta nome, função, instruções, visual, ferramentas, gatilhos e escopos ao original (`agentes.restaurarPadrao`); modelo, reserva, estado e histórico ficam. O original mora em `servico/src/agentes/de-fabrica.ts`, que também é a fonte das migrações que mudarem um de fábrica.
+- **De fábrica:** os quatro agentes da seção 2 vêm prontos. Dá para renomear, trocar o visual, ajustar instruções, ferramentas e modelo, ou desligar. Não dá para apagar: "restaurar padrão", na página do agente e com confirmação, volta nome, função, instruções, visual, ferramentas, gatilhos e escopos ao original (`agentes.restaurarPadrao`); modelo, reserva, estado e histórico ficam. O original mora em `servico/src/agentes/de-fabrica.ts`, que também é a fonte das migrações que mudarem um de fábrica; essas só trocam o campo que ainda está como veio de fábrica, e o que você personalizou fica.
 - **Criados por você (fase 7):** um agente novo é preenchido a partir do zero ou duplicando um de fábrica. O Sistema guia pelos campos acima. O personagem é montado das mesmas peças (silhuetas, traços e tons), e as ferramentas vêm do mesmo catálogo. Ferramenta `externo` continua sempre com aprovação, então nenhum agente criado consegue agir fora do Moductus sem o seu sim.
 - **Compartilhar:** um agente se exporta e importa como arquivo `.json`, só com configuração, sem dados nem chaves.
 

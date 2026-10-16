@@ -1,4 +1,4 @@
-import type { Capacidade, Execucao } from "@moductus/contrato";
+import type { Capacidade, EstadoAgente, Execucao } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
@@ -25,7 +25,7 @@ import {
 } from "../../servico/agente.ts";
 import { EstadoVazio } from "../Pagina.tsx";
 import { useAgora } from "../tempo.ts";
-import { comArtigo, deAgente } from "./nomes.ts";
+import { comArtigo, deAgente, noGenero } from "./nomes.ts";
 
 const ABAS = [
   { id: "geral", nome: "Visão geral" },
@@ -112,7 +112,7 @@ export function PaginaAgente({ canal, agente, aoConversar, aoTrocarModelo }: Pro
           id={idConfirmacao}
           agente={agente}
           dados={dados}
-          estado={leitura.texto}
+          estado={doServico.situacao.estado}
           aoFechar={fecharConfirmacao}
         />
       )}
@@ -164,8 +164,8 @@ interface PropsConfirmarRestaurar {
   id: string;
   agente: Agente;
   dados: ReturnType<typeof useAgente>;
-  /** Como o estado dele é dito agora ("trabalhando", "pausado"): restaurar não muda. */
-  estado: string;
+  /** Ligado, em pausa, dormindo ou desligado: restaurar não muda. */
+  estado: EstadoAgente;
   aoFechar: () => void;
 }
 
@@ -196,7 +196,7 @@ function ConfirmarRestaurar({ id, agente, dados, estado, aoFechar }: PropsConfir
   ];
   const fica = [
     { campo: "Modelo e reserva", muda: textoDoModelo(dados) },
-    { campo: "Ligado ou em pausa", muda: `continua ${estado}` },
+    { campo: `${noGenero(agente, "Ligada", "Ligado")} ou em pausa`, muda: estadoQueFica(agente, estado) },
     { campo: "Histórico e memória", muda: "nada é apagado" },
   ];
   return (
@@ -234,6 +234,23 @@ function ConfirmarRestaurar({ id, agente, dados, estado, aoFechar }: PropsConfir
       </div>
     </Cartao>
   );
+}
+
+/**
+ * O estado que fica, dito pelo estado guardado e no gênero dele ("continua ligada", "continua
+ * desligado"), e não pelo selo, que fala da atividade ("trabalhando", "erro").
+ */
+function estadoQueFica(agente: Agente, estado: EstadoAgente): string {
+  switch (estado) {
+    case "ativo":
+      return `continua ${noGenero(agente, "ligada", "ligado")}`;
+    case "pausado":
+      return "continua em pausa";
+    case "dormindo":
+      return "continua dormindo";
+    case "desligado":
+      return `continua ${noGenero(agente, "desligada", "desligado")}`;
+  }
 }
 
 function ListaRestaurar({
