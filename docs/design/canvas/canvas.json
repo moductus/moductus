@@ -310,6 +310,27 @@
       "w": 1440,
       "x": 4560,
       "y": 20400
+    },
+    "PainelTarefas.dc.html": {
+      "h": 900,
+      "title": "Painel · Tarefas",
+      "w": 1440,
+      "x": 0,
+      "y": 22100
+    },
+    "PainelNotas.dc.html": {
+      "h": 900,
+      "title": "Painel · Notas",
+      "w": 1440,
+      "x": 1520,
+      "y": 22100
+    },
+    "LembreteHoje.dc.html": {
+      "h": 760,
+      "title": "Painel Hoje · lembrete chegando, tocando e atrasados",
+      "w": 1440,
+      "x": 3040,
+      "y": 22100
     }
   },
   "createdOnFiles": {
@@ -405,6 +426,13 @@
       "w": 380,
       "fill": "orange",
       "text": "Pendente, decisão do humano: a moeda do teto diário. O serviço guarda o teto em centavos e mede o custo em dólar; sem câmbio decidido, o teto não vale. Até lá, o campo fica sem símbolo e marcado \"moeda a decidir\"."
+    },
+    "titulo12": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "O dia no dock · Tarefas, Notas e lembretes",
+      "x": 0,
+      "y": 21800
     }
   },
   "order": [
@@ -451,7 +479,10 @@
     "ConfigConexoes.dc.html",
     "ConfigConexoesPrevia.dc.html",
     "ConfigConexoesErros.dc.html",
-    "ConfigConexoesVazio.dc.html"
+    "ConfigConexoesVazio.dc.html",
+    "PainelTarefas.dc.html",
+    "PainelNotas.dc.html",
+    "LembreteHoje.dc.html"
   ],
   "pages": [],
   "title": "Moductus — identidade visual"

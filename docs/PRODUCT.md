@@ -316,7 +316,7 @@ Criar, duplicar, exportar e importar agentes, com nome, função, visual, modelo
 | 36 | Número sem fonte confiável não aparece: janela de contexto vem da ferramenta ou de uma tabela de modelos versionada, limites de uso ficam fora, custo é vazio em assinatura | Um aviso de 80% sobre uma janela errada é pior que nenhum aviso. Decidido pelo orquestrador (ADR-0021) |
 | 37 | Trocar o modelo de um agente vale na próxima execução; a sessão do CLI não segue para outro provedor; no primeiro uso, trocar de modelo substitui o anterior | Evita dois modelos configurados sem querer e conversa que mistura provedores. Decidido pelo orquestrador (ADR-0025) |
 
-**Em aberto, do humano:** a moeda do teto diário de gasto (hoje o custo é medido em dólar e o teto fica desligado), um botão "Tentar agora" para acordar um agente que dorme por falha (pede `agentes.acordar` no contrato) e a largura do painel (o canvas desenhou 400 px; a casca usa 372 px).
+**Em aberto, do humano:** a moeda do teto diário de gasto (hoje o custo é medido em dólar e o teto fica desligado), um botão "Tentar agora" para acordar um agente que dorme por falha (pede `agentes.acordar` no contrato). A largura do painel está decidida: cartão de 400 px (janela de 412 com o afastamento do dock).
 
 As 21 decisões do v0 estão em [v0/PRODUCT.md](v0/PRODUCT.md#10-decisões-registradas), como registro histórico.
 
