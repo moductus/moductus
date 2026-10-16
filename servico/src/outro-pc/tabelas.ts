@@ -50,6 +50,9 @@ export const EXPORTACAO: Readonly<Record<string, Exportacao>> = {
   sessoes_foco: "dado",
   agenda_saida: "deste_pc",
   rotinas_registro: "deste_pc",
+  // 015-notas: o que o usuário escreveu é dado. O índice da busca (`notas_fts`) é tabela virtual,
+  // fora desta lista: os gatilhos o refazem com as notas que chegam.
+  notas: "dado",
 };
 
 /**
