@@ -7,7 +7,6 @@ import { combinacaoDoTeclado } from "../../componentes/CampoAtalho.tsx";
 import { auditar } from "../../teste/acessibilidade.ts";
 import { SecaoAtalhos } from "./Atalhos.tsx";
 import { SecaoGeral } from "./Geral.tsx";
-import { SecaoModelos } from "./Modelos.tsx";
 import { SecaoOutroPc } from "./OutroPc.tsx";
 import { SecaoTemaDock } from "./TemaDock.tsx";
 
@@ -339,13 +338,6 @@ describe("Levar para outro PC", () => {
     await clicar(botao("Escolher arquivo"));
     expect(alerta()).toContain("corrompido");
     expect(todos(".config-mudanca")).toEqual([]);
-  });
-});
-
-describe("Modelos", () => {
-  it("continua no estado vazio, apontando para a fase 2", async () => {
-    await montar(<SecaoModelos />);
-    expect(por(".estado-vazio .selo").textContent).toBe("Fase 2");
   });
 });
 

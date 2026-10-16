@@ -1,6 +1,6 @@
 [package]
 name = "moductus"
-version = "0.5.0-alpha"
+version = "0.6.0-alpha"
 description = "Moductus — o seu dia no PC, num dock só"
 authors = ["Gustavo Cremonez"]
 license = "MIT"
@@ -37,6 +37,8 @@ windows = { version = "0.62", features = [
   "Foundation_Collections",
   "Media_Control",
   "Storage_Streams",
+  "UI_Notifications",
+  "Data_Xml_Dom",
 ] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"

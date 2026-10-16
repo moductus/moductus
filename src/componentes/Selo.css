@@ -1,6 +1,11 @@
-/* Selo: contorno e texto na cor do status; o texto carrega o significado. */
+/* Selo (pill() do Agentes.dc.html): borda neutra, texto na cor do status; o texto carrega o
+   significado. Na forma de ponto, sem borda, o ponto colorido vem antes. */
 .selo {
+  --selo-cor: var(--texto-2);
+  --selo-ponto: var(--texto-3);
+
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: var(--esp-4);
   padding: var(--esp-1) var(--esp-7);
@@ -8,23 +13,43 @@
   border-radius: var(--raio-selo);
   font-size: var(--tipo-11);
   line-height: var(--altura-linha);
-  color: var(--texto-2);
+  color: var(--selo-cor);
   white-space: nowrap;
 }
 
+.selo[data-forma="ponto"] {
+  gap: var(--esp-6);
+  padding: 0;
+  border: 0;
+  font-size: var(--tipo-12);
+}
+
+.selo-ponto {
+  flex: none;
+  width: var(--tamanho-ponto-status);
+  height: var(--tamanho-ponto-status);
+  border-radius: 50%;
+  background: var(--selo-ponto);
+}
+
+.selo--apagado {
+  --selo-cor: var(--texto-3);
+  --selo-ponto: var(--texto-apagado);
+}
+
 .selo--sucesso {
-  border-color: var(--sucesso);
-  color: var(--sucesso);
+  --selo-cor: var(--sucesso);
+  --selo-ponto: var(--sucesso);
 }
 
 .selo--aviso {
-  border-color: var(--aviso);
-  color: var(--aviso);
+  --selo-cor: var(--aviso);
+  --selo-ponto: var(--aviso);
 }
 
 .selo--perigo {
-  border-color: var(--perigo);
-  color: var(--perigo);
+  --selo-cor: var(--perigo);
+  --selo-ponto: var(--perigo);
 }
 
 .contagem {

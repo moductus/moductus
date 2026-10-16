@@ -1,12 +1,50 @@
+import { mkdirSync } from "node:fs";
 import { hostname } from "node:os";
+import { join } from "node:path";
 import { VERSAO_PROTOCOLO, type EstadoConfig } from "@moductus/contrato";
-import { abrirServidorWs, type ServidorWs } from "./api/servidor.ts";
+import { RepositorioAgentes, ServicoAgentes } from "./agentes/agentes.ts";
+import { autorizarPorAprovacao } from "./agentes/autorizar.ts";
+import { RepositorioExecucoes, ServicoExecucoes } from "./agentes/execucoes.ts";
+import { aberturaMcpDoRuntime } from "./agentes/mcp.ts";
+import { classificadorPeloRuntime, Roteador } from "./agentes/roteador.ts";
+import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
+import { VigiaNuno } from "./agentes/vigias/nuno.ts";
+import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
+import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
+import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
+import { ligarBandeja } from "./bandeja/bandeja.ts";
+import { ambientePelaCasca } from "./casca/ambiente.ts";
+import { avisosPelaCasca, CLIQUE_NO_AVISO, lerClique } from "./casca/avisos.ts";
 import { CanalCasca } from "./casca/canal.ts";
+import { credenciaisPelaCasca } from "./casca/credenciais.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
+import { RepositorioConexoes, ServicoConexoes } from "./conexoes/conexoes.ts";
+import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts";
+import { executorGh } from "./conexoes/github/gh.ts";
+import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
+import { Catalogo } from "./ferramentas/catalogo.ts";
+import { ferramentasGithub } from "./ferramentas/github/github.ts";
+import { ferramentasSessoes } from "./ferramentas/sessoes/sessoes.ts";
+import { ferramentasUso } from "./ferramentas/uso/uso.ts";
+import { abrirServidorMcp } from "./mcp/servidor.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
+import { avisarAprovacoes } from "./notificacoes/aprovacoes.ts";
+import { avisarContexto, avisarDoVigia } from "./notificacoes/nuno.ts";
+import { RepositorioNotificacoes, ServicoNotificacoes } from "./notificacoes/notificacoes.ts";
 import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
+import { fabricaClaudeCli, rotaPreToolUse, type AberturaMcp } from "./provedores/claude-cli/claude-cli.ts";
+import { detectar } from "./provedores/deteccao.ts";
+import { fabricaOpenAiCompativel } from "./provedores/openai-compativel/openai-compativel.ts";
+import { RepositorioProvedores, ServicoProvedores } from "./provedores/provedores.ts";
+import { RegistroProvedores } from "./provedores/registro.ts";
+import { TRANSCRIPTS_DO_DISCO } from "./sessoes/contexto.ts";
+import { caminhoSettingsClaude, LigacaoClaudeCode } from "./sessoes/ligacao.ts";
+import { atenderHooks } from "./sessoes/permissao.ts";
+import { abrirReceptorHooks, portaDosHooks } from "./sessoes/receptor.ts";
+import { RepositorioSessoes, ServicoSessoes } from "./sessoes/sessoes.ts";
+import { tokenDosHooks } from "./sessoes/token.ts";
 import pacote from "../package.json" with { type: "json" };
 
 /**
@@ -38,6 +76,8 @@ const nativo: AplicadorNativo = {
 };
 
 let servidor: ServidorWs | null = null;
+// Os vigias do Nuno (F2-26) nascem com o runtime; os eventos de antes disso não pedem julgamento.
+let vigiaNuno: VigiaNuno | null = null;
 const config = new ServicoConfig(
   new RepositorioConfig(banco),
   nativo,
@@ -47,11 +87,220 @@ const config = new ServicoConfig(
 const primeiroUso = new ServicoPrimeiroUso(new RepositorioPrimeiroUso(banco), (estado) =>
   servidor?.emitir("primeiroUso.mudou", estado),
 );
-const outroPc = new ServicoOutroPc(config, {
+const outroPc = new ServicoOutroPc(config, banco, {
   versaoApp: pacote.version,
   versaoEsquema: MIGRACOES.length,
   pcOrigem: hostname(),
 });
+// Notificações (F2-20): preferência por agente e tipo, ponto no dock e aviso do Windows pela casca.
+const agentesDoTime = new RepositorioAgentes(banco);
+const notificacoes = new ServicoNotificacoes(
+  new RepositorioNotificacoes(banco),
+  {
+    agentes: () => agentesDoTime.agentes().map((a) => ({ id: a.id, nome: a.nome })),
+    silencio: () => config.obter().config.silencio,
+    windows: avisosPelaCasca(canal),
+  },
+  {
+    estado: (estado) => servidor?.emitir("notificacoes.mudou", estado),
+    nova: (notificacao) => servidor?.emitir("notificacoes.nova", notificacao),
+    naoVistas: (lista) => servidor?.emitir("notificacoes.naoVistas", lista),
+  },
+);
+const leituraSessoes = new RepositorioSessoes(banco);
+const avisarAprovacao = avisarAprovacoes(
+  notificacoes,
+  { obter: (id) => aprovacoes.obter(id), decidir: (pedido) => aprovacoes.decidir(pedido) },
+  {
+    nomeDoAgente: (id) => agentesDoTime.agente(id)?.nome ?? null,
+    projetoDaSessao: (id) => {
+      const projetoId = leituraSessoes.sessao(id)?.projetoId;
+      return projetoId ? (leituraSessoes.projeto(projetoId)?.nome ?? null) : null;
+    },
+  },
+);
+canal.aoAvisar(CLIQUE_NO_AVISO, (aviso) => {
+  const clique = lerClique(aviso);
+  if (!clique) return;
+  notificacoes
+    .aoClicar(clique.id, clique.botao)
+    .catch((erro: unknown) => console.error(`notificações: clique no aviso falhou: ${String(erro)}`));
+});
+const avisarContextoAoUsuario = avisarContexto(notificacoes);
+const sessoes = new ServicoSessoes(
+  new RepositorioSessoes(banco),
+  (mudanca) => {
+    servidor?.emitir("sessoes.mudou", mudanca);
+    vigiaNuno?.aoMudarSessao(mudanca);
+    // A missão do Nuno nos Primeiros passos (F2-32): a primeira sessão do Claude Code que chega.
+    if (mudanca.sessao.ferramenta === "claude-code") primeiroUso.sessaoDoClaudeCode();
+  },
+  {
+    transcripts: TRANSCRIPTS_DO_DISCO,
+    // O aviso de contexto vai às notificações (preferência do Nuno, ponto, Windows) e ao vigia.
+    aoAvisarContexto: (aviso) => {
+      avisarContextoAoUsuario(aviso);
+      vigiaNuno?.aoAvisarContexto(aviso);
+    },
+  },
+);
+const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {
+  aprovacao: (aprovacao) => {
+    servidor?.emitir("aprovacoes.mudou", aprovacao);
+    avisarAprovacao(aprovacao).catch((erro: unknown) =>
+      console.error(`notificações: aviso da aprovação falhou: ${String(erro)}`),
+    );
+  },
+  regras: (regras) => servidor?.emitir("regras.mudou", regras),
+});
+// Quem segurava a resposta dos hooks do terminal era o serviço que caiu: esses cartões expiram.
+aprovacoes.expirarDoTerminal();
+const repositorioConexoes = new RepositorioConexoes(banco);
+const github = new ServicoGithub(new RepositorioGithub(banco), repositorioConexoes, executorGh(), {
+  github: (situacao) => {
+    servidor?.emitir("github.mudou", situacao);
+    vigiaNuno?.aoLerGithub(situacao);
+  },
+  conexao: (conexao) => servidor?.emitir("conexoes.mudou", conexao),
+});
+const conexoes = new ServicoConexoes(
+  repositorioConexoes,
+  {
+    github,
+    ligacao: new LigacaoClaudeCode({
+      caminho: caminhoSettingsClaude(),
+      porta: portaDosHooks(),
+      memoria: join(pastaDeDados(), "ligacao-claude-code.json"),
+      copiasForaDoLink: join(pastaDeDados(), "copias", "claude-code"),
+    }),
+    ambiente: ambientePelaCasca(canal),
+    token: () => tokenDosHooks(credenciaisPelaCasca(canal)),
+  },
+  (conexao) => servidor?.emitir("conexoes.mudou", conexao),
+);
+
+/**
+ * Os adaptadores de modelo que esta versão tem. O CLI roda numa pasta própria, para não herdar
+ * CLAUDE.md nem `.claude/` de um projeto qualquer, e recebe as ferramentas do agente pelo MCP do
+ * Moductus. Sem o MCP, o agente ainda conversa, só sem ferramentas. As APIs compatíveis com OpenAI
+ * rodam o ciclo de ferramentas no serviço e leem a chave do Gerenciador de Credenciais a cada uso.
+ */
+function registrarProvedores(mcp: AberturaMcp | undefined): RegistroProvedores {
+  const pastaDoClaudeCli = join(pastaDeDados(), "claude-cli");
+  mkdirSync(pastaDoClaudeCli, { recursive: true });
+  const api = fabricaOpenAiCompativel({ credenciais: credenciaisPelaCasca(canal) });
+  return new RegistroProvedores()
+    .registrar("claude-cli", fabricaClaudeCli({ pasta: pastaDoClaudeCli, mcp }))
+    .registrar("openai-compativel", api)
+    .registrar("openai", api);
+}
+
+// Servidor MCP do Moductus (F2-11): cada execução em CLI abre o próprio acesso, e as chamadas rodam
+// pelo executor da execução no runtime (escopo, cartão e registro). O mesmo acesso atende o
+// PreToolUse do CLI (F2-12).
+const servidorMcp = await abrirServidorMcp(0, [rotaPreToolUse]).catch((erro: unknown) => {
+  console.error(`MCP do Moductus fora do ar: ${String(erro)}`);
+  return null;
+});
+if (servidorMcp) console.error(`MCP do Moductus na porta ${servidorMcp.porta}`);
+
+// Runtime dos agentes (F2-15).
+const provedores = registrarProvedores(
+  servidorMcp
+    ? aberturaMcpDoRuntime(servidorMcp, (execucaoId) => runtime.executorDaExecucao(execucaoId))
+    : undefined,
+);
+// As ferramentas de cada área (F2-26: as do Nuno); cada agente só vê as da lista dele.
+const catalogo = new Catalogo([
+  ...ferramentasSessoes(sessoes),
+  ...ferramentasUso(sessoes),
+  ...ferramentasGithub(github),
+]);
+const repositorioAgentes = new RepositorioAgentes(banco);
+const repositorioExecucoes = new RepositorioExecucoes(banco);
+// Quem rodava essas execuções era o serviço que parou: fecham como erro e os cartões delas expiram.
+const interrompidas = encerrarInterrompidas(repositorioExecucoes, aprovacoes);
+if (interrompidas.length > 0)
+  console.error(`execuções interrompidas na última subida: ${interrompidas.length}`);
+const runtime = new Runtime(
+  {
+    agentes: repositorioAgentes,
+    execucoes: repositorioExecucoes,
+    provedores,
+    catalogo,
+    autorizar: autorizarPorAprovacao(aprovacoes),
+  },
+  {
+    execucao: (execucao) => servidor?.emitir("execucoes.mudou", execucao),
+    agente: (agenteId) => {
+      const agente = agentes.procurar(agenteId);
+      if (agente) servidor?.emitir("agentes.mudou", agente);
+      // O Nuno retomou ou acordou: o vigia confere o que anotou enquanto ele não podia chamar o modelo.
+      if (agente) vigiaNuno?.aoMudarAgente(agente);
+      bandeja.atualizar();
+    },
+  },
+);
+const agentes = new ServicoAgentes(
+  repositorioAgentes,
+  catalogo,
+  (agente) => runtime.situacao(agente),
+  runtime.estados,
+);
+// Pausar pela bandeja (F2-18): o menu do ícone mostra o estado de cada agente e se refaz quando muda.
+const bandeja = ligarBandeja({ agentes, canal });
+// Provedores (F2-08): detecção dos CLIs, configuração e o teste de verdade, pelo registro do runtime.
+const servicoProvedores = new ServicoProvedores(
+  new RepositorioProvedores(banco),
+  {
+    credenciais: credenciaisPelaCasca(canal),
+    registro: provedores,
+    detectar: () => detectar({ atende: (tipo) => provedores.atende(tipo) }),
+  },
+  {
+    provedores: (lista) => servidor?.emitir("provedores.mudou", lista),
+    agentesMudaram: (ids) => {
+      for (const id of ids) {
+        const agente = agentes.procurar(id);
+        if (agente) servidor?.emitir("agentes.mudou", agente);
+      }
+      bandeja.atualizar();
+    },
+    // Só vêm os que dormem pelo provedor; quem dorme pelo teto continua dormindo.
+    provedorVoltou: (ids) => ids.forEach((id) => runtime.estados.acordar(id)),
+  },
+);
+vigiaNuno = new VigiaNuno({
+  executar: (pedido) => runtime.executar(pedido),
+  githubConhecido: github.obter().itens,
+  avisar: avisarDoVigia(notificacoes),
+  detalhar: (alvo) => github.detalhe(alvo),
+});
+const execucoes = new ServicoExecucoes(repositorioExecucoes, catalogo, {
+  mudou: (execucao) => servidor?.emitir("execucoes.mudou", execucao),
+});
+// Conversas (F2-19): o roteamento classifica pelo modelo da Alba o que as regras não pegam.
+const conversas = new ServicoConversas(
+  {
+    repo: new RepositorioConversas(banco),
+    agentes: repositorioAgentes,
+    runtime,
+    roteador: new Roteador(classificadorPeloRuntime(runtime, repositorioAgentes)),
+  },
+  {
+    conversa: (conversa) => servidor?.emitir("conversas.mudou", conversa),
+    mensagem: (mensagem) => servidor?.emitir("conversas.mensagem", mensagem),
+    parcial: (parcial) => servidor?.emitir("conversas.parcial", parcial),
+  },
+);
+// Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
+// Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
+runtime.estados.vigiar();
+bandeja.atualizar();
+conversas
+  .retomarPendentes()
+  .then((n) => n > 0 && console.error(`falas pendentes retomadas: ${n}`))
+  .catch((erro: unknown) => console.error(`falas pendentes não retomadas: ${String(erro)}`));
 
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
@@ -63,12 +312,86 @@ servidor = await abrirServidorWs(token, {
   "primeiroUso.obter": () => primeiroUso.obter(),
   "primeiroUso.concluir": (pedido) => primeiroUso.concluir(pedido),
   "primeiroUso.marcar": (pedido) => primeiroUso.marcar(pedido),
+  "sessoes.listar": () => sessoes.listar(),
+  "sessoes.eventos": (pedido) => sessoes.eventos(pedido),
+  "sessoes.uso": (pedido) => sessoes.uso(pedido),
+  "aprovacoes.pendentes": () => aprovacoes.pendentes(),
+  "aprovacoes.decidir": (pedido) => aprovacoes.decidir(pedido),
+  "regras.listar": () => aprovacoes.regras(),
+  "regras.remover": (pedido) => aprovacoes.removerRegra(pedido),
+  "conexoes.listar": () => conexoes.listar(),
+  "conexoes.previa": (pedido) => conexoes.previa(pedido),
+  "conexoes.ligar": (pedido) => conexoes.ligar(pedido),
+  "conexoes.desligar": (pedido) => conexoes.desligar(pedido),
+  "github.obter": () => github.obter(),
+  "github.atualizar": () => github.atualizar(),
+  "agentes.listar": () => agentes.listar(),
+  "agentes.obter": (pedido) => agentes.obter(pedido),
+  "agentes.capacidades": (pedido) => agentes.capacidades(pedido),
+  "agentes.ligar": (pedido) => agentes.ligar(pedido),
+  "agentes.pausar": (pedido) => agentes.pausar(pedido),
+  "agentes.retomar": (pedido) => agentes.retomar(pedido),
+  // Configurações › Modelos (F2-32): vale na próxima execução; as janelas ficam sabendo pelo aviso.
+  "agentes.definir": (mudanca) => {
+    const agente = agentes.definir(mudanca);
+    servidor?.emitir("agentes.mudou", agente);
+    bandeja.atualizar();
+    return agente;
+  },
+  "execucoes.listar": (pedido) => execucoes.listar(pedido),
+  "execucoes.obter": (pedido) => execucoes.obter(pedido),
+  "execucoes.desfazer": (pedido) => execucoes.desfazer(pedido),
+  "conversas.listar": () => conversas.listar(),
+  "conversas.abrir": (pedido) => conversas.abrir(pedido),
+  "conversas.mensagens": (pedido) => conversas.mensagens(pedido),
+  "conversas.enviar": (pedido) => conversas.enviar(pedido),
+  "conversas.arquivar": (pedido) => conversas.arquivar(pedido),
+  "conversas.apagar": (pedido) => conversas.apagar(pedido),
+  "notificacoes.obter": () => notificacoes.obter(),
+  "notificacoes.definir": (mudanca) => notificacoes.definir(mudanca),
+  "notificacoes.restaurar": (pedido) => notificacoes.restaurar(pedido),
+  "notificacoes.listar": (pedido) => notificacoes.listar(pedido),
+  "notificacoes.naoVistas": () => notificacoes.naoVistas(),
+  "notificacoes.marcarVistas": (pedido) => notificacoes.marcarVistas(pedido),
+  "provedores.listar": () => servicoProvedores.listar(),
+  "provedores.detectar": () => servicoProvedores.detectar(),
+  "provedores.criar": (novo) => servicoProvedores.criar(novo),
+  "provedores.definir": (mudanca) => servicoProvedores.definir(mudanca),
+  "provedores.remover": (pedido) => servicoProvedores.remover(pedido),
+  "provedores.testar": (pedido) => servicoProvedores.testar(pedido),
+  // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
+  ...semAtendente(["agentes.restaurarPadrao"]),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
 canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });
 config
   .aplicarAoSubir()
   .catch((erro: unknown) => console.error(`configuração não aplicada ao subir: ${String(erro)}`));
+
+// Hooks das sessões de IA (F2-21): sem o token ou com a porta ocupada, o resto do serviço segue.
+sessoes.vigiar();
+aprovacoes.vigiar();
+// GitHub pelo `gh` (F2-25): lê agora e a cada 15 min, se a conexão não estiver desligada.
+github.vigiar();
+// Agendador (F2-17): horário, intervalo e evento. As áreas avisam os eventos internos por
+// `agendador.emitir` (o tipo `EmitirEvento`). Na volta da suspensão (a casca avisa), depois do
+// prazo para a rede voltar, o que venceu dispara uma vez só e o GitHub é lido (AGENTS.md §6).
+const agendador = new Agendador({
+  agentes: repositorioAgentes,
+  disparos: new RepositorioDisparos(banco),
+  runtime,
+});
+agendador.vigiar();
+canal.aoAvisar("retomou", () => {
+  agendador
+    .retomar()
+    .then(() => github.atualizar("conexao"))
+    .catch((erro: unknown) => console.error(`github: leitura na retomada falhou: ${String(erro)}`));
+});
+tokenDosHooks(credenciaisPelaCasca(canal))
+  .then((tokenHooks) => abrirReceptorHooks(tokenHooks, atenderHooks(sessoes, aprovacoes), portaDosHooks()))
+  .then((receptor) => console.error(`hooks das sessões na porta ${receptor.porta}`))
+  .catch((erro: unknown) => console.error(`hooks das sessões fora do ar: ${String(erro)}`));
 
 // A casca fechou o stdin: ela saiu, então o serviço sai junto.
 process.stdin.on("end", () => {

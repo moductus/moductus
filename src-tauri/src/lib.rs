@@ -1,4 +1,6 @@
 mod acessibilidade;
+// O serviço chega aqui pelo canal do sidecar, como às credenciais.
+mod ambiente;
 mod appbar;
 mod atalhos;
 mod config_nativa;
@@ -8,10 +10,14 @@ mod credenciais;
 mod bandeja;
 mod dados;
 mod dock;
+// Avisa o serviço pelo canal do sidecar quando o PC volta da suspensão.
+mod energia;
 mod inicio;
 mod janelas;
 mod material;
 mod midia;
+// O serviço chega aqui pelo canal do sidecar; o clique no aviso volta pelo mesmo canal.
+mod notificacao;
 mod registro;
 mod servico;
 mod tela_cheia;
@@ -68,6 +74,7 @@ pub fn run() {
             let janela_dock = app.get_webview_window("dock").ok_or("janela dock ausente na configuração")?;
             dock::iniciar(&janela_dock, dock::Configuracao::default());
             acessibilidade::iniciar(app.handle().clone(), dock::hwnd_de(&janela_dock));
+            energia::iniciar(dock::hwnd_de(&janela_dock));
             janelas::criar(app.handle())?;
             for rotulo in JANELAS {
                 if app.get_webview_window(rotulo).is_none() {
@@ -76,6 +83,7 @@ pub fn run() {
             }
             janelas::iniciar(app.handle(), pasta.clone());
             tela_cheia::vigiar(app.handle().clone());
+            notificacao::iniciar(app.handle());
             atalhos::iniciar(app.handle(), atalhos::padrao());
             bandeja::iniciar(app.handle())?;
             midia::iniciar(app.handle().clone());

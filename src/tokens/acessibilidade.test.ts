@@ -72,6 +72,8 @@ function tokensDoTema(tema: string): Record<string, string> {
 
 const TEXTOS = ["--texto", "--texto-2", "--texto-3"];
 const STATUS = ["--sucesso", "--aviso", "--perigo"];
+/** Cor de identidade: o nome do agente na fala, em texto de 12 (DESIGN.md §5). */
+const IDENTIDADE = ["--agente-alba", "--agente-tula", "--agente-faina", "--agente-nuno"];
 const FUNDOS = [
   "--fundo-dock",
   "--fundo-janela",
@@ -101,6 +103,7 @@ function abaixoDoMinimo(tema: string): string[] {
   };
   medir(TEXTOS, FUNDOS, 4.5);
   medir(STATUS, ["--fundo-janela", "--fundo-lateral", "--fundo-cartao", "--fundo-elevado"], 4.5);
+  medir(IDENTIDADE, ["--fundo-janela", "--fundo-cartao", "--fundo-elevado"], 4.5);
   medir(["--cor-foco"], FUNDOS, 3);
   // Borda da caixa e do interruptor desligado (controle sem texto): 3:1.
   medir(["--texto-apagado"], ["--fundo-janela", "--fundo-cartao", "--fundo-elevado"], 3);

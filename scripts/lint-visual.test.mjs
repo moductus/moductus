@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { verificarConteudo, verificarPasta } from "./lint-visual.mjs";
+import { classesDeclaradas, colisoesDeClasse, verificarConteudo, verificarPasta } from "./lint-visual.mjs";
 
 const motivos = (texto, caminho) => verificarConteudo(texto, caminho).map((a) => a.motivo);
 
@@ -73,5 +73,45 @@ describe("lint-visual numa pasta", () => {
     expect(verificarPasta(raiz)).toEqual([
       { arquivo: "src/janelas/ruim.css", linha: 2, motivo: "medida 10px" },
     ]);
+  });
+});
+
+describe("classes repetidas entre áreas", () => {
+  let raiz;
+  afterEach(() => {
+    if (raiz) rmSync(raiz, { recursive: true, force: true });
+    raiz = undefined;
+  });
+
+  it("conta só a classe declarada sozinha, também em lista e dentro de @media", () => {
+    const css = [
+      "/* .comentada { } */",
+      ".a,\n.b {",
+      "}",
+      ".pai .filha, .c:hover, .d[data-x], .e:has(> .f) {",
+      "}",
+      "@media (forced-colors: active) {",
+      "  .g {",
+      "  }",
+      "}",
+    ].join("\n");
+    expect([...classesDeclaradas(css)]).toEqual(["a", "b", "g"]);
+  });
+
+  it("aponta a classe declarada em dois CSS e deixa src/tokens de fora", () => {
+    raiz = mkdtempSync(join(tmpdir(), "lint-visual-"));
+    for (const pasta of ["tokens", "areas", "janelas"])
+      mkdirSync(join(raiz, "src", pasta), { recursive: true });
+    writeFileSync(join(raiz, "src", "areas", "Sessoes.css"), ".uso-titulo {\n}\n.so-sessoes {\n}");
+    writeFileSync(join(raiz, "src", "janelas", "Uso.css"), ".uso-titulo {\n}\n.so-uso .so-sessoes {\n}");
+    writeFileSync(join(raiz, "src", "janelas", "Botao.css"), ".botao {\n}");
+    writeFileSync(join(raiz, "src", "tokens", "alto-contraste.css"), ".botao {\n}");
+    expect(colisoesDeClasse(raiz)).toEqual([
+      { classe: "uso-titulo", arquivos: ["src/areas/Sessoes.css", "src/janelas/Uso.css"] },
+    ]);
+  });
+
+  it("o src/ do repositório não tem nenhuma", () => {
+    expect(colisoesDeClasse(join(import.meta.dirname, ".."))).toEqual([]);
   });
 });

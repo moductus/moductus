@@ -88,6 +88,7 @@ describe("configuração", () => {
       dock: { lado: "direita", modo: "inteligente", forma: "flutuante" },
       atalhos: { sistema: "Ctrl+Shift+M", dock: "Ctrl+Alt+J", captura: "Ctrl+Alt+K" },
       autostart: true,
+      silencio: { horario: { ligado: true, inicio: "23:00", fim: "06:45" }, telaCheia: false, foco: true },
     };
     // Uma chave por vez, como a interface manda.
     for (const [chave, valor] of Object.entries(escolhida))

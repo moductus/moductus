@@ -1,0 +1,546 @@
+/* Sistema · Agentes: conversas (Conversas.dc.html) e página do agente (AreaAgente.dc.html). */
+
+/* A conversa ocupa a página inteira, sem a margem das outras áreas: lista e conversa vão até a
+   borda e só a lista de mensagens rola. */
+.sistema-conteudo:has(> .conversas) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.conversas {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---------- Lista de conversas ---------- */
+.conversas-lista {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--esp-2);
+  width: var(--largura-lista-conversas);
+  padding: var(--esp-18) var(--esp-10);
+  border-right: var(--espessura-borda) solid var(--borda);
+  overflow-y: auto;
+}
+
+.conversas-lista-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  padding: 0 var(--esp-8) var(--esp-10);
+}
+
+.conversas-titulo {
+  margin: 0;
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+}
+
+.conversas-itens {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conversas-item {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  width: 100%;
+  padding: var(--esp-8);
+  border: 0;
+  border-radius: var(--raio-controle);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-entrada) ease-out;
+}
+
+.conversas-item:hover {
+  background: var(--fundo-chip);
+}
+
+.conversas-item[aria-current="page"] {
+  background: var(--fundo-ativo);
+}
+
+.conversas-item-cabeca {
+  display: flex;
+  flex: none;
+}
+
+/* O time: as quatro cabeças num quadrado do tamanho de uma, sobre o chip. */
+.conversas-item-time {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: var(--icone-32);
+  height: var(--icone-32);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-chip);
+  overflow: hidden;
+}
+
+.conversas-item-textos {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-1);
+  min-width: 0;
+}
+
+.conversas-item-linha {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--esp-6);
+}
+
+.conversas-item-nome {
+  font-weight: var(--peso-forte);
+}
+
+.conversas-item-quando {
+  flex: none;
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.conversas-item-ultima {
+  overflow: hidden;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.conversas-nota {
+  margin: auto 0 0;
+  padding: var(--esp-10) var(--esp-8) 0;
+  border-top: var(--espessura-borda) solid var(--borda);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+/* ---------- Conversa aberta ---------- */
+.conversa {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.conversa-cabecalho {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--esp-12);
+  height: var(--altura-cabecalho-conversa);
+  padding: 0 var(--espaco-pagina);
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.conversa-quem {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.conversa-nome {
+  margin: 0;
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+}
+
+.conversa-sobre {
+  overflow: hidden;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.conversa-acoes,
+.conversa-confirmar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.conversa-confirmar > span {
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.conversa-mensagens {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-16);
+  min-height: 0;
+  padding: var(--espaco-cabecalho) var(--espaco-pagina);
+  overflow-y: auto;
+}
+
+.conversa-anteriores {
+  align-self: center;
+}
+
+.conversa-vazia {
+  align-self: center;
+  max-width: var(--largura-texto-vazio);
+  margin: auto 0;
+  color: var(--texto-3);
+  text-align: center;
+  text-wrap: pretty;
+}
+
+/* Fala do usuário: balão à direita, ponta embaixo do lado de quem falou. */
+.conversa-eu {
+  align-self: flex-end;
+  max-width: var(--largura-balao);
+  margin: 0;
+  padding: var(--esp-10) var(--esp-14);
+  border-radius: var(--raio-balao) var(--raio-balao) var(--raio-balao-ponta) var(--raio-balao);
+  background: var(--fundo-ativo);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.conversa-outro {
+  max-width: var(--largura-fala);
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.conversa-mensagens > .fala,
+.conversa-mensagens > [aria-busy] {
+  max-width: var(--largura-fala);
+}
+
+/* A resposta pode ter parágrafos ("A resposta parou no meio: …" vem depois de uma linha). */
+.conversa-mensagens .fala-texto {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.conversa-pensando {
+  color: var(--texto-3);
+}
+
+.conversa-erro {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.conversa-erro[role="alert"] {
+  color: var(--perigo);
+}
+
+/* ---------- Escrever ---------- */
+.escrever {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--esp-8);
+  padding: 0 var(--espaco-pagina) var(--espaco-cabecalho);
+}
+
+.escrever-caixa {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-10);
+  padding: var(--esp-12) var(--esp-14);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-campo);
+  transition: border-color var(--dur-entrada) ease-out;
+}
+
+.escrever-caixa:focus-within {
+  border-color: var(--cor-foco);
+}
+
+.escrever-campo {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  resize: none;
+}
+
+.escrever-campo::placeholder {
+  color: var(--texto-3);
+}
+
+/* O anel de foco já está na caixa inteira. */
+.escrever-campo:focus-visible {
+  outline: 0;
+}
+
+.escrever-acoes {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.escrever-mencao {
+  padding: var(--esp-1) var(--esp-5);
+  border: 0;
+  border-radius: var(--raio-atalho);
+  background: var(--fundo-chip);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-2);
+  cursor: pointer;
+}
+
+.escrever-mencao:hover {
+  color: var(--texto);
+}
+
+.escrever-enviar {
+  margin-left: auto;
+}
+
+/* ---------- Página do agente ---------- */
+.pagina-agente {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-18);
+}
+
+.pagina-agente-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-20);
+}
+
+.pagina-agente-quem {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-6);
+  min-width: 0;
+}
+
+.pagina-agente-rotulo {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.pagina-agente-nome {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+}
+
+.pagina-agente-titulo {
+  margin: 0;
+  font-size: var(--tipo-30);
+  font-weight: var(--peso-forte);
+  letter-spacing: var(--tracado-titulo);
+}
+
+.pagina-agente-funcao {
+  color: var(--texto-2);
+}
+
+.pagina-agente-acoes {
+  display: flex;
+  flex: none;
+  gap: var(--esp-8);
+}
+
+.pagina-agente-erro {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--perigo);
+}
+
+.pagina-agente-abas {
+  display: flex;
+  gap: var(--esp-2);
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.pagina-agente-abas-item {
+  margin-bottom: calc(-1 * var(--espessura-borda));
+  padding: var(--esp-10) var(--esp-14);
+  border: 0;
+  border-bottom: var(--espessura-aba) solid transparent;
+  background: transparent;
+  color: var(--texto-3);
+  cursor: pointer;
+}
+
+.pagina-agente-abas-item:hover {
+  color: var(--texto);
+}
+
+.pagina-agente-abas-item[aria-selected="true"] {
+  border-bottom-color: var(--destaque);
+  color: var(--texto);
+  font-weight: var(--peso-forte);
+}
+
+.pagina-agente-geral {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--esp-16);
+}
+
+.pagina-agente-coluna {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-16);
+}
+
+.pagina-agente-cartao {
+  gap: var(--esp-10);
+}
+
+.pagina-agente-cartao-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+}
+
+.pagina-agente-cartao-titulo {
+  margin: 0;
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-normal);
+  color: var(--texto-3);
+}
+
+.pagina-agente-vazio {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+  text-wrap: pretty;
+}
+
+.pagina-agente-linhas {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pagina-agente-vigia,
+.pagina-agente-execucao,
+.pagina-agente-ferramenta {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  padding: var(--esp-6) 0;
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.pagina-agente-vigia-textos {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pagina-agente-modelo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-10);
+}
+
+.pagina-agente-modelo .selo {
+  font-size: var(--tipo-13);
+  color: var(--texto);
+  white-space: normal;
+}
+
+.pagina-agente-permissao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+}
+
+.pagina-agente-permissao-titulo {
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-forte);
+}
+
+.pagina-agente-permissao[data-tom="sucesso"] .pagina-agente-permissao-titulo {
+  color: var(--sucesso);
+}
+
+.pagina-agente-permissao[data-tom="aviso"] .pagina-agente-permissao-titulo {
+  color: var(--aviso);
+}
+
+.pagina-agente-permissao-itens {
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+  overflow-wrap: anywhere;
+}
+
+.pagina-agente-hora {
+  flex: none;
+  width: var(--largura-hora);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.pagina-agente-execucao-texto {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.pagina-agente-execucao[data-estado="erro"] .pagina-agente-execucao-texto {
+  color: var(--perigo);
+}
+
+.pagina-agente-custo {
+  flex: none;
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.pagina-agente-ferramenta {
+  flex-wrap: wrap;
+}
+
+.pagina-agente-ferramenta-nome {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+}
+
+.pagina-agente-ferramenta-descricao {
+  flex-basis: 100%;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.pagina-agente-instrucoes {
+  margin: 0;
+  color: var(--texto-2);
+  white-space: pre-wrap;
+}
+
+.pagina-agente-mais {
+  align-self: center;
+}

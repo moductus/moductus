@@ -52,8 +52,8 @@ const MISSOES: Readonly<
     agente: "nuno",
     estado: "ocioso",
     nome: "Abra uma sessão do Claude Code",
+    // Feita pelo serviço quando chega o primeiro evento de uma sessão (hooks ligados em Conexões).
     dica: "O Nuno mostra o contexto, o gasto e os pedidos dela",
-    fase: "fase 2",
   },
 };
 

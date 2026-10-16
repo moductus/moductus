@@ -1,0 +1,43 @@
+/* Fala do agente (Conversas.dc.html): cabeça, nome na cor de identidade, texto e ação abaixo. */
+.fala {
+  display: flex;
+  gap: var(--esp-12);
+  min-width: 0;
+}
+
+.fala-corpo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-6);
+  min-width: 0;
+}
+
+.fala-nome {
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-forte);
+}
+
+.fala[data-agente="alba"] .fala-nome {
+  color: var(--agente-alba);
+}
+.fala[data-agente="tula"] .fala-nome {
+  color: var(--agente-tula);
+}
+.fala[data-agente="faina"] .fala-nome {
+  color: var(--agente-faina);
+}
+.fala[data-agente="nuno"] .fala-nome {
+  color: var(--agente-nuno);
+}
+
+.fala-texto {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.fala-acao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+}

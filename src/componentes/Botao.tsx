@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, Ref } from "react";
 import { Icone, type NomeIcone } from "./Icone.tsx";
 import "./Botao.css";
 
@@ -10,6 +10,8 @@ interface PropsBotao extends ButtonHTMLAttributes<HTMLButtonElement> {
   tamanho?: TamanhoBotao;
   /** Ícone à esquerda do texto. Sem texto, o botão precisa de `aria-label`. */
   icone?: NomeIcone;
+  /** Para quem precisa devolver o foco ao botão (confirmação que fecha). */
+  ref?: Ref<HTMLButtonElement>;
 }
 
 export function Botao({

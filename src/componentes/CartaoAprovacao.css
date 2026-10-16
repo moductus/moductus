@@ -1,0 +1,65 @@
+/* Cartão de aprovação (Agentes.dc.html, Conversas.dc.html): elevado, borda forte, ações à direita. */
+.aprovacao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-10);
+  padding: var(--esp-12);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-elevado);
+}
+
+.aprovacao-origem {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  min-width: 0;
+}
+
+.aprovacao-descricao {
+  margin: 0;
+  color: var(--texto-2);
+  text-wrap: pretty;
+}
+
+/* Comando ou lista de arquivos: mono, sobre o chip, como no canvas. */
+.aprovacao-detalhe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-3);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-2);
+}
+
+.aprovacao-detalhe code {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: var(--esp-2) var(--esp-6);
+  border-radius: var(--raio-atalho);
+  background: var(--fundo-chip);
+  color: var(--texto);
+  font-family: inherit;
+  font-size: var(--tipo-12);
+  overflow-wrap: anywhere;
+}
+
+.aprovacao-desfazer {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.aprovacao-erro {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--perigo);
+}
+
+.aprovacao-acoes,
+.aprovacao-desfecho {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--esp-8);
+}

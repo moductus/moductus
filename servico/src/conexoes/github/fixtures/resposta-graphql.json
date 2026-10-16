@@ -1,0 +1,91 @@
+{
+  "data": {
+    "viewer": { "login": "voce" },
+    "revisar": {
+      "nodes": [
+        {
+          "number": 412,
+          "title": "Importação de pedidos em lote",
+          "url": "https://github.com/loja/api-pedidos/pull/412",
+          "state": "OPEN",
+          "isDraft": false,
+          "updatedAt": "2026-10-08T10:00:00Z",
+          "author": { "login": "colega" },
+          "repository": { "nameWithOwner": "loja/api-pedidos" },
+          "reviewDecision": "REVIEW_REQUIRED",
+          "reviewRequests": {
+            "nodes": [{ "requestedReviewer": {} }, { "requestedReviewer": { "login": "Voce" } }]
+          },
+          "commits": { "nodes": [{ "commit": { "statusCheckRollup": { "state": "FAILURE" } } }] }
+        },
+        {
+          "number": 388,
+          "title": "Filtros na exportação de CSV",
+          "url": "https://github.com/loja/relatorios/pull/388",
+          "state": "OPEN",
+          "isDraft": false,
+          "updatedAt": "2026-10-09T09:00:00Z",
+          "author": null,
+          "repository": { "nameWithOwner": "loja/relatorios" },
+          "reviewDecision": null,
+          "reviewRequests": { "nodes": [{ "requestedReviewer": {} }] },
+          "commits": { "nodes": [{ "commit": { "statusCheckRollup": null } }] }
+        }
+      ]
+    },
+    "meus": {
+      "nodes": [
+        {
+          "number": 12,
+          "title": "Detecção de tela cheia",
+          "url": "https://github.com/voce/moductus/pull/12",
+          "state": "OPEN",
+          "isDraft": false,
+          "updatedAt": "2026-10-09T11:00:00Z",
+          "author": { "login": "voce" },
+          "repository": { "nameWithOwner": "voce/moductus" },
+          "reviewDecision": "APPROVED",
+          "commits": { "nodes": [{ "commit": { "statusCheckRollup": { "state": "SUCCESS" } } }] }
+        },
+        {
+          "number": 409,
+          "title": "Cache das consultas de estoque",
+          "url": "https://github.com/loja/api-pedidos/pull/409",
+          "state": "OPEN",
+          "isDraft": false,
+          "updatedAt": "2026-10-09T08:00:00Z",
+          "author": { "login": "voce" },
+          "repository": { "nameWithOwner": "loja/api-pedidos" },
+          "reviewDecision": "CHANGES_REQUESTED",
+          "commits": { "nodes": [{ "commit": { "statusCheckRollup": { "state": "PENDING" } } }] }
+        },
+        {
+          "number": 57,
+          "title": "Novo cabeçalho do site",
+          "url": "https://github.com/voce/site/pull/57",
+          "state": "OPEN",
+          "isDraft": true,
+          "updatedAt": "2026-10-07T23:00:00Z",
+          "author": { "login": "voce" },
+          "repository": { "nameWithOwner": "voce/site" },
+          "reviewDecision": null,
+          "commits": { "nodes": [{ "commit": { "statusCheckRollup": { "state": "ERROR" } } }] }
+        }
+      ]
+    },
+    "atribuidas": {
+      "nodes": [
+        {
+          "number": 31,
+          "title": "Dock some atrás da barra de tarefas no modo esconder",
+          "url": "https://github.com/voce/moductus/issues/31",
+          "state": "OPEN",
+          "updatedAt": "2026-10-06T14:30:00Z",
+          "author": { "login": "colega" },
+          "repository": { "nameWithOwner": "voce/moductus" }
+        },
+        {}
+      ]
+    }
+  }
+}

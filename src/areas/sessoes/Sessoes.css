@@ -1,0 +1,251 @@
+/* Sessões de IA (AreaSessoes.dc.html): uso e pedidos no alto, tabela das sessões, avisos do Nuno. */
+.sessoes-ferramentas {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.sessoes-alto {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--esp-18);
+  align-items: start;
+}
+
+.sessoes-alto[data-com-pedidos="true"] {
+  grid-template-columns: minmax(0, 1fr) var(--largura-coluna-pedidos);
+}
+
+/* ---------- uso da semana ---------- */
+.sessoes-uso {
+  gap: var(--esp-12);
+}
+
+.sessoes-uso-cabecalho,
+.sessoes-uso-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-12);
+}
+
+.sessoes-uso-cabecalho {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.sessoes-uso-titulo {
+  margin: 0;
+  font: inherit;
+  color: inherit;
+}
+
+.sessoes-uso-grafico {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--esp-10);
+  height: var(--altura-grafico-uso);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sessoes-uso-dia {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--esp-6);
+  height: 100%;
+  min-width: 0;
+}
+
+.sessoes-uso-numero,
+.sessoes-uso-rotulo {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
+/* A barra mede contra o maior dia da semana; o dia de hoje vai no destaque. */
+.sessoes-uso-barra {
+  width: 100%;
+  max-width: var(--largura-barra-uso);
+  height: calc(var(--altura-barra-uso) * var(--fracao-uso, 0));
+  min-height: var(--altura-barra-minima);
+  border-radius: var(--raio-barra-uso);
+  background: var(--texto-3);
+  opacity: var(--opacidade-barra-passada);
+}
+
+.sessoes-uso-dia[data-hoje="true"] .sessoes-uso-barra {
+  background: var(--destaque);
+  opacity: 1;
+}
+
+.sessoes-uso-rodape {
+  color: var(--texto-2);
+}
+
+.sessoes-uso-total {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+/* ---------- pedidos à direita ---------- */
+.sessoes-pedidos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-10);
+  min-width: 0;
+}
+
+.sessoes-pedido-projeto {
+  font-weight: var(--peso-forte);
+}
+
+.sessoes-pedido-ferramenta {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.sessoes-pedido-estado {
+  margin-left: auto;
+}
+
+/* ---------- tabela ---------- */
+.sessoes-tabela {
+  overflow: hidden;
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+}
+
+.sessoes-tabela table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.sessoes-tabela th,
+.sessoes-tabela td {
+  padding: 0;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.sessoes-tabela th:first-child,
+.sessoes-tabela td:first-child {
+  padding-left: var(--esp-16);
+}
+
+.sessoes-tabela th:last-child,
+.sessoes-tabela td:last-child {
+  padding-right: var(--esp-16);
+}
+
+.sessoes-tabela thead tr {
+  height: var(--altura-cabecalho-tabela);
+  background: var(--fundo-elevado);
+}
+
+.sessoes-tabela th {
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-normal);
+  color: var(--texto-3);
+}
+
+/* As colunas do quadro: 170, 110, 130, 150 e 120; a última ação fica com o resto. */
+.sessoes-tabela th:nth-child(1) {
+  width: calc(var(--largura-col-projeto) + var(--esp-16));
+}
+
+.sessoes-tabela th:nth-child(2) {
+  width: var(--largura-col-ferramenta);
+}
+
+.sessoes-tabela th:nth-child(3) {
+  width: var(--largura-col-estado);
+}
+
+.sessoes-tabela th:nth-child(4) {
+  width: var(--largura-col-contexto);
+}
+
+.sessoes-tabela th:nth-child(5) {
+  width: var(--largura-col-gasto);
+}
+
+.sessoes-tabela tbody tr {
+  height: var(--altura-linha-tabela);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.sessoes-tabela-projeto {
+  overflow: hidden;
+  font-weight: var(--peso-forte);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessoes-tabela-projeto[data-sem-projeto="true"] {
+  font-weight: var(--peso-normal);
+  color: var(--texto-3);
+}
+
+.sessoes-tabela-ferramenta {
+  color: var(--texto-2);
+}
+
+.sessoes-tabela-contexto {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.sessoes-tabela-contexto-trilho {
+  flex: none;
+  width: var(--largura-trilho-contexto);
+}
+
+.sessoes-tabela-numero {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.sessoes-tabela-contexto .sessoes-tabela-numero {
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.sessoes-tabela-contexto[data-alto="true"] .sessoes-tabela-numero {
+  color: var(--aviso);
+}
+
+.sessoes-tabela-numero[data-vazio="true"] {
+  color: var(--texto-3);
+}
+
+.sessoes-tabela-acao {
+  overflow: hidden;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- avisos do Nuno ---------- */
+.sessoes-avisos {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+}
+
+.sessoes-avisos-texto {
+  flex: 1;
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}

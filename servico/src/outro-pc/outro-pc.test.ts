@@ -39,10 +39,11 @@ function pc(nativo: AplicadorNativo = aceita(), portable = false) {
   const config = new ServicoConfig(new RepositorioConfig(db), nativo, (e) => eventos.push(e), portable);
   const outro = new ServicoOutroPc(
     config,
+    db,
     { versaoApp: "0.5.0-alpha", versaoEsquema: 1, pcOrigem: "casa" },
     () => CRIADO_EM,
   );
-  return { config, outro, eventos };
+  return { config, outro, eventos, db };
 }
 
 const MINHA: Config = {
@@ -50,6 +51,7 @@ const MINHA: Config = {
   dock: { lado: "direita", modo: "inteligente", forma: "flutuante" },
   atalhos: { sistema: "Ctrl+Alt+M", dock: "Ctrl+Alt+B", captura: "Ctrl+Shift+Space" },
   autostart: true,
+  silencio: { horario: { ligado: true, inicio: "22:00", fim: "07:30" }, telaCheia: true, foco: false },
 };
 
 const manifestoValido = (extra: Partial<Record<string, unknown>> = {}) => ({
@@ -92,19 +94,46 @@ describe("levar para outro PC: só configurações", () => {
     expect(trabalho.eventos.at(-1)?.config).toEqual(MINHA);
   });
 
-  test("o zip leva só manifesto e config, sem credencial nem a pasta portable", async () => {
+  test("o zip leva manifesto, config e um JSON por tabela de configuração, sem credencial nem a pasta portable", async () => {
     const casa = pc();
     await casa.config.definir(MINHA);
+    casa.db
+      .prepare(
+        "INSERT INTO provedores (id, tipo, nome, modelo, credencial) VALUES ('p1', 'anthropic', 'Claude', 'opus', 'moductus:anthropic')",
+      )
+      .run();
+    casa.db
+      .prepare(
+        "INSERT INTO conexoes (id, tipo, conta, credencial, estado, conectada_em) VALUES ('c1', 'github', 'gustavo', 'moductus:github', 'ligada', ?)",
+      )
+      .run(CRIADO_EM.toISOString());
     const caminho = join(pasta(), "casa.moductus");
     await casa.outro.exportar({ caminho });
     const conteudo = unzipSync(new Uint8Array(readFileSync(caminho)));
-    expect(Object.keys(conteudo).sort()).toEqual(["config.json", "manifesto.json"]);
+    const tabelas = ["agentes", "conexoes", "notificacoes_preferencias", "provedores", "regras_permissao"];
+    expect(Object.keys(conteudo).sort()).toEqual(
+      ["config.json", "manifesto.json", ...tabelas.map((t) => `${t}.json`)].sort(),
+    );
 
     const manifesto = Manifesto.parse(JSON.parse(strFromU8(conteudo["manifesto.json"]!)));
-    expect(manifesto).toEqual(manifestoValido());
+    expect(manifesto).toEqual(manifestoValido({ conteudo: ["config", ...tabelas] }));
     const config = JSON.parse(strFromU8(conteudo["config.json"]!)) as Record<string, unknown>;
     expect(config).toEqual(MINHA);
     expect(Object.keys(config)).not.toContain("portable");
+
+    const ler = (tabela: string) =>
+      JSON.parse(strFromU8(conteudo[`${tabela}.json`]!)) as Record<string, unknown>[];
+    expect(ler("agentes").map((a) => a.id)).toEqual(["alba", "faina", "nuno", "tula"]);
+    expect(ler("provedores")).toEqual([
+      expect.objectContaining({ id: "p1", nome: "Claude", modelo: "opus" }),
+    ]);
+    expect(ler("conexoes")).toEqual([
+      expect.objectContaining({ id: "c1", tipo: "github", conta: "gustavo" }),
+    ]);
+    expect(ler("regras_permissao")).toEqual([]);
+    for (const nome of Object.keys(conteudo)) {
+      expect(strFromU8(conteudo[nome]!), nome).not.toContain("moductus:");
+    }
   });
 
   test("juntar aplica só as chaves que o arquivo traz e mantém as outras", async () => {

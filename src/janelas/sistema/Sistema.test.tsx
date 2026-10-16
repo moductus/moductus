@@ -84,6 +84,7 @@ describe("áreas", () => {
   it("lê destinos do evento e da memória, e recusa o que não é área", () => {
     expect(lerDestino("dev")).toEqual({ area: "dev" });
     expect(lerDestino("configuracoes/modelos")).toEqual({ area: "configuracoes", secao: "modelos" });
+    expect(lerDestino("agentes/tula/pagina")).toEqual({ area: "agentes", secao: "tula/pagina" });
     expect([lerDestino("hoje"), lerDestino(""), lerDestino(3), lerDestino(null)]).toEqual([
       null,
       null,
@@ -118,6 +119,16 @@ describe("Sistema", () => {
       // Configurações já funciona: abre na Geral, com opções em vez de estado vazio.
       if (area.id === "configuracoes") {
         expect(por("main .config-secao").textContent!.length).toBeGreaterThan(30);
+        continue;
+      }
+      // Agentes já funciona: abre na conversa com o time.
+      if (area.id === "agentes") {
+        expect(por("main .conversa-nome").textContent).toBe("Time");
+        continue;
+      }
+      // Sessões de IA e Dev já leem o serviço: sem ele, dizem que esperam a resposta.
+      if (area.id === "sessoes" || area.id === "dev") {
+        expect(por('main [role="status"]').textContent).toBe("Esperando o serviço responder.");
         continue;
       }
       const vazio = por("main .estado-vazio");

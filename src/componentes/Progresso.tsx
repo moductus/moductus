@@ -1,6 +1,7 @@
 import "./Progresso.css";
 
-export type TomProgresso = "destaque" | "sucesso" | "aviso" | "perigo";
+/** `neutro`: a barra que só mede, sem chamar atenção (contexto de uma sessão abaixo dos 80%). */
+export type TomProgresso = "destaque" | "neutro" | "sucesso" | "aviso" | "perigo";
 
 interface PropsProgresso {
   valor: number;

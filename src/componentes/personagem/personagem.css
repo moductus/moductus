@@ -103,13 +103,14 @@
   border: var(--espessura-moldura) solid transparent;
   border-radius: 50%;
 }
-.personagem-moldura[data-estado="trabalhando"] {
+/* O tom vem do status (data-tom), não da expressão: teto tem cara preocupada e anel de aviso. */
+.personagem-moldura[data-tom="sucesso"] {
   border-color: var(--sucesso);
 }
-.personagem-moldura[data-estado="esperando"] {
+.personagem-moldura[data-tom="aviso"] {
   border-color: var(--aviso);
 }
-.personagem-moldura[data-estado="erro"] {
+.personagem-moldura[data-tom="perigo"] {
   border-style: dashed;
   border-color: var(--perigo);
 }

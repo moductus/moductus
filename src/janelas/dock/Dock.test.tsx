@@ -40,7 +40,7 @@ vi.mock("@tauri-apps/api/event", () => ({
 
 const { Dock, CONVITE_AGENTES } = await import("./Dock.tsx");
 const { Painel } = await import("../painel/Painel.tsx");
-const { formatarHora, ateProximoMinuto } = await import("./relogio.ts");
+const { formatarHora } = await import("../../componentes/personagem/quando.ts");
 const { proximoIndice } = await import("./navegacao.ts");
 const { auditar, marcos } = await import("../../teste/acessibilidade.ts");
 
@@ -234,11 +234,6 @@ describe("relógio e navegação (funções puras)", () => {
     expect(formatarHora(new Date(2026, 9, 8, 0, 0))).toBe("00:00");
   });
 
-  it("espera só até a virada do minuto", () => {
-    expect(ateProximoMinuto(new Date(2026, 9, 8, 9, 4, 58, 500))).toBe(1_500);
-    expect(ateProximoMinuto(new Date(2026, 9, 8, 9, 4, 0, 0))).toBe(60_000);
-  });
-
   it("anda em círculo e ignora teclas que não navegam", () => {
     expect(proximoIndice("ArrowDown", false, 4, 5)).toBe(0);
     expect(proximoIndice("ArrowUp", false, 0, 5)).toBe(4);
@@ -260,17 +255,12 @@ describe("Painel", () => {
     expect(chamadas.map((c) => c.comando)).toContain("painel_fechar");
   });
 
-  it("no time, convida a conectar um modelo e leva às Configurações", async () => {
+  it("no time, com o serviço subindo, diz que não sabe em vez de pedir um modelo", async () => {
     const el = await montar(<Painel />);
     await emitir("painel:area", "agentes");
-    expect(el.textContent).toContain("Conecte um modelo para acordar o time");
-    expect(el.querySelectorAll('.painel-time .personagem[data-estado="dormindo"]')).toHaveLength(4);
-    const botao = Array.from(el.querySelectorAll("button")).find(
-      (b) => b.textContent === "Abrir Configurações",
-    )!;
-    act(() => botao.click());
-    expect(chamadas).toContainEqual({ comando: "sistema_abrir", args: { area: "configuracoes/modelos" } });
-    expect(chamadas.map((c) => c.comando)).toContain("painel_fechar");
+    expect(el.textContent).toContain("Sem notícia do time agora");
+    expect(el.textContent).not.toContain("Conecte um modelo");
+    expect(el.querySelector(".time-lista")).toBeNull();
   });
 
   it("Esc fecha o painel", async () => {

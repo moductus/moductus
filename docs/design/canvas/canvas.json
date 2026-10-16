@@ -261,6 +261,55 @@
       "w": 1440,
       "x": 1520,
       "y": 17900
+    },
+    "ConfigModelos.dc.html": {
+      "h": 900,
+      "title": "Configurações · Modelos, provedores e agentes",
+      "w": 1440,
+      "x": 0,
+      "y": 19400
+    },
+    "ConfigModelosAgente.dc.html": {
+      "h": 900,
+      "title": "Configurações · Modelos, trocar o modelo de um agente",
+      "w": 1440,
+      "x": 1520,
+      "y": 19400
+    },
+    "ConfigModelosVazio.dc.html": {
+      "h": 900,
+      "title": "Configurações · Modelos, nenhum conectado",
+      "w": 1440,
+      "x": 3040,
+      "y": 19400
+    },
+    "ConfigConexoes.dc.html": {
+      "h": 900,
+      "title": "Configurações · Conexões ligadas",
+      "w": 1440,
+      "x": 0,
+      "y": 20400
+    },
+    "ConfigConexoesPrevia.dc.html": {
+      "h": 980,
+      "title": "Configurações · Conexões, prévia do settings.json",
+      "w": 1440,
+      "x": 1520,
+      "y": 20400
+    },
+    "ConfigConexoesErros.dc.html": {
+      "h": 720,
+      "title": "Configurações · Conexões com erro",
+      "w": 1440,
+      "x": 3040,
+      "y": 20400
+    },
+    "ConfigConexoesVazio.dc.html": {
+      "h": 720,
+      "title": "Configurações · Conexões, nenhuma ligada",
+      "w": 1440,
+      "x": 4560,
+      "y": 20400
     }
   },
   "createdOnFiles": {
@@ -342,6 +391,20 @@
       "text": "Áreas do Sistema",
       "x": 0,
       "y": 15600
+    },
+    "titulo11": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Configurações · Modelos e Conexões",
+      "x": 0,
+      "y": 19100
+    },
+    "pendente_moeda": {
+      "x": 4560,
+      "y": 19400,
+      "w": 380,
+      "fill": "orange",
+      "text": "Pendente, decisão do humano: a moeda do teto diário. O serviço guarda o teto em centavos e mede o custo em dólar; sem câmbio decidido, o teto não vale. Até lá, o campo fica sem símbolo e marcado \"moeda a decidir\"."
     }
   },
   "order": [
@@ -381,7 +444,14 @@
     "AreaDev.dc.html",
     "AreaAgente.dc.html",
     "AreaNotificacoes.dc.html",
-    "AreaMemoria.dc.html"
+    "AreaMemoria.dc.html",
+    "ConfigModelos.dc.html",
+    "ConfigModelosAgente.dc.html",
+    "ConfigModelosVazio.dc.html",
+    "ConfigConexoes.dc.html",
+    "ConfigConexoesPrevia.dc.html",
+    "ConfigConexoesErros.dc.html",
+    "ConfigConexoesVazio.dc.html"
   ],
   "pages": [],
   "title": "Moductus — identidade visual"

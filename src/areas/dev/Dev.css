@@ -1,0 +1,76 @@
+/* Dev (AreaDev.dc.html): a fala do Nuno no alto e as colunas do GitHub lado a lado. */
+.dev-leitura {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.dev-colunas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--esp-14);
+  align-items: start;
+}
+
+.dev-coluna {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+  min-width: 0;
+}
+
+.dev-coluna-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  padding: 0 var(--esp-2);
+}
+
+.dev-coluna-titulo {
+  margin: 0;
+  font-size: var(--tipo-13);
+  font-weight: var(--peso-forte);
+}
+
+.dev-coluna-vazia {
+  margin: 0;
+  padding: 0 var(--esp-2);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.dev-itens {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dev-item {
+  gap: var(--esp-6);
+  padding: var(--esp-12);
+}
+
+.dev-item-ref {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.dev-item-titulo {
+  font-weight: var(--peso-forte);
+  text-wrap: pretty;
+}
+
+.dev-item-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-6);
+}
+
+.dev-item-meta {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}

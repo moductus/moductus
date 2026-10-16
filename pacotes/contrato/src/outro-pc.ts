@@ -11,8 +11,18 @@ export const VERSAO_FORMATO = 1;
 
 export const EXTENSAO_ARQUIVO = ".moductus";
 
-/** O que pode ir num arquivo "só configurações" (cresce com as fases: agentes, regras...). */
-export const ConteudoArquivo = z.enum(["config"]);
+/**
+ * O que pode ir num arquivo "só configurações" (DATA.md §8): a config e uma tabela de
+ * configuração por arquivo JSON. Cresce com as fases.
+ */
+export const ConteudoArquivo = z.enum([
+  "config",
+  "agentes",
+  "provedores",
+  "regras_permissao",
+  "conexoes",
+  "notificacoes_preferencias",
+]);
 export type ConteudoArquivo = z.infer<typeof ConteudoArquivo>;
 
 export const Manifesto = z.object({

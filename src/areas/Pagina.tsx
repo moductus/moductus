@@ -15,18 +15,20 @@ export function dataCurta(data: Date): string {
 
 interface PropsPagina {
   titulo: string;
-  /** Ação contextual à direita do título; nenhuma área tem ainda na fase 1. */
+  /** Linha acima do título no lugar da data: quem cuida da área ("Nuno · GitHub"). */
+  rotulo?: string;
+  /** Ação ou situação contextual à direita do título ("atualizado há 2 min"). */
   acao?: ReactNode;
   children: ReactNode;
 }
 
-/** Cabeçalho de página do Sistema (data curta e título de 26) e o conteúdo da área. */
-export function Pagina({ titulo, acao, children }: PropsPagina) {
+/** Cabeçalho de página do Sistema (data curta, ou o rótulo da área, e título de 26) e o conteúdo. */
+export function Pagina({ titulo, rotulo, acao, children }: PropsPagina) {
   return (
     <div className="pagina">
       <header className="pagina-cabecalho">
         <div className="pagina-titulos">
-          <span className="pagina-data">{dataCurta(new Date())}</span>
+          <span className="pagina-data">{rotulo ?? dataCurta(new Date())}</span>
           <h1 className="pagina-titulo">{titulo}</h1>
         </div>
         {acao}
@@ -39,8 +41,10 @@ export function Pagina({ titulo, acao, children }: PropsPagina) {
 interface PropsEstadoVazio {
   titulo: string;
   texto: string;
-  /** Quando a área passa a funcionar ("Fase 2"). */
-  quando: string;
+  /** Quando a área passa a funcionar ("Fase 2"); área que já funciona não tem. */
+  quando?: string;
+  /** O que fazer para sair do vazio ("Abrir Conexões"), logo abaixo do texto (Estados.dc.html). */
+  acoes?: ReactNode;
   /** Um agente aparece de corpo inteiro; vários, só as cabeças lado a lado. */
   agentes?: readonly Agente[];
   /** Área sem agente dono mostra o próprio ícone. */
@@ -50,10 +54,18 @@ interface PropsEstadoVazio {
 }
 
 /**
- * Estado vazio da fase 1: quem cuida da área (ou o ícone dela), o que vem e em que fase. Nunca
+ * Estado vazio: quem cuida da área (ou o ícone dela), o que vem e em que fase, ou como ligar. Nunca
  * tela em branco: toda área mostra pelo menos isto.
  */
-export function EstadoVazio({ titulo, texto, quando, agentes = [], icone, nivel = 2 }: PropsEstadoVazio) {
+export function EstadoVazio({
+  titulo,
+  texto,
+  quando,
+  acoes,
+  agentes = [],
+  icone,
+  nivel = 2,
+}: PropsEstadoVazio) {
   const [unico] = agentes;
   const Titulo = nivel === 2 ? "h2" : "h3";
   return (
@@ -75,7 +87,8 @@ export function EstadoVazio({ titulo, texto, quando, agentes = [], icone, nivel 
       )}
       <Titulo className="estado-vazio-titulo">{titulo}</Titulo>
       <p className="estado-vazio-texto">{texto}</p>
-      <Selo>{quando}</Selo>
+      {quando && <Selo>{quando}</Selo>}
+      {acoes && <div className="estado-vazio-acoes">{acoes}</div>}
     </section>
   );
 }

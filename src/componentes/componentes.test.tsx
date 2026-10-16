@@ -9,7 +9,7 @@ import { ehNomeIcone, Icone, NOMES_ICONES, type NomeIcone } from "./Icone.tsx";
 import { Interruptor } from "./Interruptor.tsx";
 import { Progresso } from "./Progresso.tsx";
 import { Seletor } from "./Seletor.tsx";
-import { Contagem } from "./Selo.tsx";
+import { Contagem, Selo } from "./Selo.tsx";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -193,8 +193,8 @@ describe("Atalho", () => {
 });
 
 describe("Ícone", () => {
-  it("tem os 24 desenhos, o restaurar da janela, o escudo e o alerta, com 28 nomes (hoje e início são a casa)", () => {
-    expect(NOMES_ICONES).toHaveLength(28);
+  it("tem os 24 desenhos, o restaurar da janela, o escudo, o alerta e a seta de lista, com 29 nomes (hoje e início são a casa)", () => {
+    expect(NOMES_ICONES).toHaveLength(29);
     montar(
       <>
         <Icone nome="hoje" />
@@ -224,6 +224,30 @@ describe("Ícone", () => {
     expect(busca.getAttribute("class")).toContain("icone-busca");
     expect(mic.getAttribute("role")).toBe("img");
     expect(mic.getAttribute("aria-label")).toBe("Microfone mudo");
+  });
+});
+
+describe("Selo de status", () => {
+  it("pílula por padrão, ponto só na forma de ponto e escondido do leitor de tela; texto sempre", () => {
+    montar(
+      <>
+        <Selo tom="aviso">esperando você</Selo>
+        <Selo tom="perigo" forma="ponto">
+          CI falhou
+        </Selo>
+        <Selo tom="apagado" forma="ponto">
+          terminou
+        </Selo>
+      </>,
+    );
+    const [selo, ponto, apagado] = todos(".selo");
+    expect(selo!.dataset.forma).toBe("selo");
+    expect(selo!.className).toContain("selo--aviso");
+    expect(selo!.querySelector(".selo-ponto")).toBeNull();
+    expect(ponto!.dataset.forma).toBe("ponto");
+    expect(ponto!.querySelector(".selo-ponto")?.getAttribute("aria-hidden")).toBe("true");
+    expect(ponto!.textContent).toBe("CI falhou");
+    expect(apagado!.className).toContain("selo--apagado");
   });
 });
 

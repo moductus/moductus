@@ -24,6 +24,8 @@ Fontes dos desenhos do canvas [Moductus — identidade visual](https://claude.ai
 | `canvas/ExtratoColunas.dc.html`, `canvas/ExtratoRevisar.dc.html` | Importar extrato de banco sem perfil e revisar antes de lançar |
 | `canvas/PreviaFaina.dc.html` | Prévia da Faina antes de organizar uma pasta |
 | `canvas/OutroPC.dc.html`, `canvas/AreaNotificacoes.dc.html` | Configurações: levar para outro PC e notificações |
+| `canvas/ConfigModelos.dc.html`, `ConfigModelosAgente`, `ConfigModelosVazio` | Configurações › Modelos: provedores com testar, estado e tempo de resposta (um testando, um com erro), principal e reserva por agente, teto por dia com a moeda pendente, trocar o modelo de um agente e nenhum conectado |
+| `canvas/ConfigConexoes.dc.html`, `ConfigConexoesPrevia`, `ConfigConexoesErros`, `ConfigConexoesVazio` | Configurações › Conexões: Claude Code e GitHub ligados, prévia do `settings.json` antes e depois com consentimento, GitHub conectando, erros (JSON inválido, `gh` sem login), nenhuma ligada; OpenCode "em breve" |
 | `canvas/AreaTarefas.dc.html`, `AreaFinancas`, `AreaNotas`, `AreaSessoes`, `AreaDev`, `AreaMemoria`, `AreaAgente` | Áreas do Sistema e a página de um agente |
 | `canvas/canvas.json` | Disposição dos quadros no canvas |
 | `marca/` | Ícone do app (`.ico` e PNG), ícones da bandeja e a marca em SVG |

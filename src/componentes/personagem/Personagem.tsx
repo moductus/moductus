@@ -7,11 +7,13 @@ import {
 } from "../../tokens/personagens.ts";
 import {
   DADOS_AGENTES,
+  MOLDURA_DA_EXPRESSAO,
   ROTULO_ESTADO,
   eAgente,
   eEstadoPersonagem,
   type Agente,
   type EstadoPersonagem,
+  type TomMoldura,
 } from "./agentes.ts";
 import "./personagem.css";
 
@@ -31,8 +33,12 @@ export interface PersonagemProps {
   estado?: EstadoPersonagem;
   /** Substitui o rótulo acessível padrão ("Alba, dormindo"). */
   rotulo?: string;
-  /** Anel de estado em volta da cabeça, como nas listas (Time.dc.html). */
-  moldura?: boolean;
+  /**
+   * Anel de estado em volta da cabeça, como nas listas (Time.dc.html). `true` usa o anel da
+   * expressão; um tom troca o anel quando o status diz outra coisa (teto: cara de preocupado,
+   * anel de aviso).
+   */
+  moldura?: boolean | TomMoldura;
 }
 
 /** Diferenças de desenho entre os quatro: braços e o quanto o rosto desce no corpo. */
@@ -107,8 +113,19 @@ function alturaEmPx(tamanho: TamanhoPersonagem | number | undefined, modo: ModoP
   return Math.min(TAMANHO_PERSONAGEM_MAX, Math.max(TAMANHO_PERSONAGEM_MIN, Math.round(bruto)));
 }
 
+/** Borda direita do recorte da cabeça (`16 + 68` no viewBox). */
+const DIREITA_DA_CABECA = 84;
+
+/**
+ * O nó da bandana da Faina vai até x 86 e o recorte da cabeça corta em 84: cortado, o nó vira um
+ * zigue-zague no canto, que no dock se lê como o "z" de quem dorme. Na cabeça ele encolhe na
+ * largura a partir de onde sai da bandana (x 76) e cabe inteiro; no corpo inteiro fica como no
+ * canvas.
+ */
+const NO_NA_CABECA = `translate(76 0) scale(${(DIREITA_DA_CABECA - 1 - 76) / 10} 1) translate(-76 0)`;
+
 /** O traço próprio de cada um, que diz quem é mesmo a 16 px. */
-function Traco({ agente }: { agente: Agente }) {
+function Traco({ agente, modo }: { agente: Agente; modo: ModoPersonagem }) {
   switch (agente) {
     case "alba":
       return (
@@ -127,7 +144,11 @@ function Traco({ agente }: { agente: Agente }) {
       return (
         <g data-traco="bandana" className="personagem-cor-acessorio">
           <rect x="24" y="40" width="52" height="9" />
-          <path d="M76 43l10-6-2 9zM76 46l9 6-8 2z" />
+          <path
+            data-no=""
+            d="M76 43l10-6-2 9zM76 46l9 6-8 2z"
+            transform={modo === "cabeca" ? NO_NA_CABECA : undefined}
+          />
         </g>
       );
     case "nuno":
@@ -274,9 +295,9 @@ export function Personagem({
         <ellipse className="personagem-cor-sombra" cx={forma.bracoE} cy="78" rx="6" ry="10" />
         <ellipse className="personagem-cor-sombra" cx={forma.bracoD} cy="78" rx="6" ry="10" />
         {/* O coque da Tula fica atrás da cabeça; os outros traços vão por cima do corpo. */}
-        {agente === "tula" && <Traco agente={agente} />}
+        {agente === "tula" && <Traco agente={agente} modo={modo} />}
         <Corpo agente={agente} />
-        {agente !== "tula" && <Traco agente={agente} />}
+        {agente !== "tula" && <Traco agente={agente} modo={modo} />}
         <Rosto agente={agente} e={e} />
       </g>
       {e.zz && (
@@ -294,8 +315,9 @@ export function Personagem({
   );
 
   if (!moldura) return desenho;
+  const tom = moldura === true ? MOLDURA_DA_EXPRESSAO[estado] : moldura;
   return (
-    <span className="personagem-moldura" data-estado={estado}>
+    <span className="personagem-moldura" data-estado={estado} data-tom={tom}>
       {desenho}
     </span>
   );

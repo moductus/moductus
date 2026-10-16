@@ -106,15 +106,59 @@ export function verificarPasta(raiz) {
   return achados;
 }
 
+/**
+ * Classes que o CSS declara sozinhas (`.nome {`, também numa lista `.a, .nome {`). Seletor com
+ * contexto (`.pai .nome`, `.nome:has(…)`) é ajuste de propósito e não conta.
+ */
+export function classesDeclaradas(texto) {
+  const classes = new Set();
+  for (const m of semComentariosCss(texto).matchAll(/([^{}]+)\{/g)) {
+    if (m[1].trim().startsWith("@")) continue;
+    for (const seletor of m[1].split(",")) {
+      const classe = /^\s*\.([A-Za-z_][\w-]*)\s*$/.exec(seletor);
+      if (classe) classes.add(classe[1]);
+    }
+  }
+  return classes;
+}
+
+/**
+ * Classe declarada sozinha em mais de um CSS de `src/` (fora de `src/tokens`, que sobrescreve de
+ * propósito). As janelas carregam um bundle só: a regra que chega por último vence nas duas telas.
+ */
+export function colisoesDeClasse(raiz) {
+  const src = join(raiz, "src");
+  const tokens = join(src, "tokens") + sep;
+  const donos = new Map();
+  for (const caminho of arquivos(src)) {
+    if (caminho.startsWith(tokens) || !caminho.endsWith(".css")) continue;
+    const arquivo = relative(raiz, caminho).split(sep).join("/");
+    for (const classe of classesDeclaradas(readFileSync(caminho, "utf8"))) {
+      donos.set(classe, [...(donos.get(classe) ?? []), arquivo]);
+    }
+  }
+  return [...donos]
+    .filter(([, lista]) => lista.length > 1)
+    .map(([classe, lista]) => ({ classe, arquivos: lista.sort() }))
+    .sort((a, b) => a.classe.localeCompare(b.classe));
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const raiz = join(fileURLToPath(new URL(".", import.meta.url)), "..");
   const achados = verificarPasta(raiz);
   for (const a of achados) console.error(`${a.arquivo}:${a.linha} ${a.motivo} fora de src/tokens`);
+  const colisoes = colisoesDeClasse(raiz);
+  for (const c of colisoes) console.error(`.${c.classe} declarada em ${c.arquivos.join(" e ")}`);
   if (achados.length > 0) {
     console.error(
       `lint-visual: ${achados.length} valor(es) visual(is) literal(is); use os tokens de src/tokens.`,
     );
-    process.exit(1);
   }
-  console.log("lint-visual: nenhum valor visual literal fora de src/tokens");
+  if (colisoes.length > 0) {
+    console.error(
+      `lint-visual: ${colisoes.length} classe(s) declarada(s) em mais de um CSS; use o prefixo da área.`,
+    );
+  }
+  if (achados.length > 0 || colisoes.length > 0) process.exit(1);
+  console.log("lint-visual: nenhum valor visual literal fora de src/tokens nem classe repetida");
 }

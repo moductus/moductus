@@ -123,6 +123,24 @@
   border-radius: var(--raio-botao-dock);
 }
 
+/* Ponto de aviso no canto da cabeça, recortado do fundo do dock como no Dock.dc.html. */
+.dock-agente-ponto {
+  position: absolute;
+  right: var(--esp-6);
+  bottom: var(--esp-6);
+  width: var(--tamanho-ponto-status);
+  height: var(--tamanho-ponto-status);
+  border-radius: 50%;
+  background: var(--aviso);
+  border: var(--esp-2) solid var(--fundo-dock);
+  box-sizing: content-box;
+}
+
+/* Vermelho até o modelo voltar a responder (Estados.dc.html, "Erro de provedor"). */
+.dock-agente-ponto[data-tom="perigo"] {
+  background: var(--perigo);
+}
+
 .dock-espaco {
   flex: 1;
 }
