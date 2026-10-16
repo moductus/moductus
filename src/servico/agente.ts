@@ -271,6 +271,8 @@ export interface AcoesAgente {
   pausar: () => Promise<void>;
   retomar: () => Promise<void>;
   ligar: () => Promise<void>;
+  /** "Tentar agora": acorda quem dorme por falha do provedor; a recusa vem em `erro`. */
+  acordar: () => Promise<void>;
   /** Volta o agente de fábrica ao padrão; devolve se deu certo (o erro fica em `erro`). */
   restaurar: () => Promise<boolean>;
   /** Lê as chamadas de uma execução, para o desfazer. */
@@ -363,7 +365,7 @@ export function useAgente(canal: EstadoConexao, agenteId: string): DadosAgente &
     };
   }, [conectado, agenteId, detalhar]);
 
-  // Pausar, retomar e ligar devolvem o agente como ficou: a página não espera o `agentes.mudou`.
+  // Pausar, retomar, ligar e acordar devolvem o agente como ficou: a página não espera o `agentes.mudou`.
   const pedir = useCallback(
     async (fazer: () => Promise<Agente | readonly Agente[]>) => {
       setErro(null);
@@ -443,6 +445,7 @@ export function useAgente(canal: EstadoConexao, agenteId: string): DadosAgente &
     pausar: () => pedir(() => servico.pedir("agentes.pausar", { agenteId, ate: null })),
     retomar: () => pedir(() => servico.pedir("agentes.retomar", { agenteId })),
     ligar: () => pedir(() => servico.pedir("agentes.ligar", { id: agenteId, ligado: true })),
+    acordar: () => pedir(() => servico.pedir("agentes.acordar", { id: agenteId })),
     restaurar,
     detalhar,
     desfazer,

@@ -221,7 +221,10 @@ export type EstadoGuardado =
 export type SituacaoDe = (agente: AgenteGuardado) => SituacaoAgente;
 
 /** Quem muda o estado guardado (estado.ts), soltando ou recusando quem espera a vez. */
-export type MudarEstados = Pick<EstadosAgentes, "ligar" | "pausar" | "retomar" | "modeloMudou">;
+export type MudarEstados = Pick<
+  EstadosAgentes,
+  "ligar" | "pausar" | "retomar" | "tentarAgora" | "modeloMudou"
+>;
 
 /** O modelo de um agente: o provedor principal, a reserva e o teto de gasto por dia. */
 export type ModeloAgente = Pick<ConfigAgente, "provedorId" | "provedorReservaId" | "tetoDiarioCentavos">;
@@ -286,6 +289,15 @@ export class ServicoAgentes {
   /** Retoma um agente ou o time; a fila de cada um roda. Devolve quem retomou. */
   retomar(pedido: PedidoRetomar): Agente[] {
     return this.daLista(this.estados.retomar(pedido.agenteId));
+  }
+
+  /**
+   * "Tentar agora": acorda quem dorme por falha do provedor, e a fila dele roda já; falhando, ele
+   * volta a dormir com a espera de onde estava. Limite de uso e teto recusam com o motivo.
+   */
+  acordar(pedido: PedidoAgente): Agente {
+    this.estados.tentarAgora(pedido.id);
+    return this.obter(pedido);
   }
 
   /**

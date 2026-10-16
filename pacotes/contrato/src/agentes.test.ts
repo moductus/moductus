@@ -12,6 +12,7 @@ import {
   PedidoExecucoes,
   PedidoPausar,
 } from "./agentes.ts";
+import { METODOS } from "./metodos.ts";
 
 const nuno = {
   id: "nuno",
@@ -102,6 +103,13 @@ describe("agente", () => {
     expect(PedidoPausar.safeParse({ agenteId: "alba", ate: "2026-10-09T13:00:00.000Z" }).success).toBe(true);
     expect(PedidoPausar.safeParse({ agenteId: "alba" }).success).toBe(false);
     expect(PedidoPausar.safeParse({ ate: "amanhã" }).success).toBe(false);
+  });
+
+  test("tentar agora pede só o id do agente e devolve o agente como ficou", () => {
+    const { entrada, saida } = METODOS["agentes.acordar"];
+    expect(entrada.safeParse({ id: "tula" }).success).toBe(true);
+    expect(entrada.safeParse({ agenteId: "tula" }).success).toBe(false);
+    expect(saida.safeParse(nuno).success).toBe(true);
   });
 });
 

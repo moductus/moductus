@@ -82,6 +82,8 @@ export const METODOS = {
   "agentes.ligar": metodo(PedidoLigarAgente, Agente),
   "agentes.pausar": metodo(PedidoPausar, z.array(Agente)),
   "agentes.retomar": metodo(PedidoRetomar, z.array(Agente)),
+  /** "Tentar agora": só quem dorme por falha do provedor; limite de uso e teto recusam com o motivo. */
+  "agentes.acordar": metodo(PedidoAgente, Agente),
   "agentes.capacidades": metodo(PedidoAgente, z.array(Capacidade)),
 
   "execucoes.listar": metodo(PedidoExecucoes, PaginaExecucoes),

@@ -337,6 +337,7 @@ servidor = await abrirServidorWs(token, {
   "agentes.ligar": (pedido) => agentes.ligar(pedido),
   "agentes.pausar": (pedido) => agentes.pausar(pedido),
   "agentes.retomar": (pedido) => agentes.retomar(pedido),
+  "agentes.acordar": (pedido) => agentes.acordar(pedido),
   // Configurações › Modelos (F2-32): vale na próxima execução; as janelas ficam sabendo pelo aviso.
   "agentes.definir": (mudanca) => {
     const agente = agentes.definir(mudanca);

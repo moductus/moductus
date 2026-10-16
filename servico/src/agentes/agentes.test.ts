@@ -131,6 +131,26 @@ describe("agentes", () => {
     expect(servico.ligar({ id: "faina", ligado: true }).situacao.estado).toBe("ativo");
   });
 
+  test("acordar devolve o agente do contrato; só quem dorme por falha do provedor acorda", () => {
+    const { db, servico } = montar();
+    db.exec(`
+      UPDATE agentes SET estado = 'dormindo', motivo_sono = 'fora_do_ar', dorme_ate = '2026-10-09T12:04:00.000Z'
+       WHERE id = 'alba';
+      UPDATE agentes SET estado = 'dormindo', motivo_sono = 'limite', dorme_ate = '2026-10-09T18:00:00.000Z'
+       WHERE id = 'tula';
+    `);
+    const alba = servico.acordar({ id: "alba" });
+    expect(Agente.safeParse(alba).success).toBe(true);
+    expect(alba.situacao).toMatchObject({ estado: "ativo", motivoSono: null, dormeAte: null });
+    expect(db.prepare("SELECT origem FROM agentes WHERE id = 'alba'").get()).toEqual({ origem: "usuario" });
+
+    expect(() => servico.acordar({ id: "tula" })).toThrow("Tula espera o limite de uso renovar");
+    expect(servico.obter({ id: "tula" }).situacao).toMatchObject({
+      estado: "dormindo",
+      motivoSono: "limite",
+    });
+  });
+
   test("definir troca principal e reserva, com o usuário como origem, e devolve o agente do contrato", () => {
     const { db, servico } = montar();
     db.exec(

@@ -7,7 +7,7 @@ import { FalaAgente } from "../../componentes/FalaAgente.tsx";
 import { DADOS_AGENTES, type Agente } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
 import { horaCurta } from "../../componentes/personagem/quando.ts";
-import { lerSituacao, modeloDoAgente } from "../../componentes/personagem/situacao.ts";
+import { eFalhaDoProvedor, lerSituacao, modeloDoAgente } from "../../componentes/personagem/situacao.ts";
 import { Selo, type TomSelo } from "../../componentes/Selo.tsx";
 import {
   agoraDoAgente,
@@ -89,6 +89,8 @@ export function PaginaAgente({ canal, agente, aoConversar, aoTrocarModelo }: Pro
           </span>
         </div>
         <div className="pagina-agente-acoes">
+          <BotaoTentarAgora dados={dados} />
+          <BotaoPausa agente={agente} dados={dados} />
           {doServico?.deFabrica && (
             <Botao
               ref={botaoRestaurar}
@@ -101,7 +103,6 @@ export function PaginaAgente({ canal, agente, aoConversar, aoTrocarModelo }: Pro
               Restaurar padrão
             </Botao>
           )}
-          <BotaoPausa agente={agente} dados={dados} />
           <Botao variante="primario" onClick={aoConversar}>
             Conversar
           </Botao>
@@ -157,6 +158,20 @@ export function PaginaAgente({ canal, agente, aoConversar, aoTrocarModelo }: Pro
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * "Tentar agora" (Estados.dc.html), só para quem dorme por falha do provedor: o limite de uso e o
+ * teto esperam sozinhos, e o serviço recusaria.
+ */
+function BotaoTentarAgora({ dados }: { dados: ReturnType<typeof useAgente> }) {
+  const situacao = dados.agente?.situacao;
+  if (situacao?.estado !== "dormindo" || !eFalhaDoProvedor(situacao.motivoSono)) return null;
+  return (
+    <Botao disabled={!dados.conectado} onClick={() => void dados.acordar()}>
+      Tentar agora
+    </Botao>
   );
 }
 

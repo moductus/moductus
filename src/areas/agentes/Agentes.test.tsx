@@ -422,6 +422,9 @@ describe("página do agente", () => {
         case "agentes.pausar":
           tula = agente("tula", { estado: "pausado" });
           return Promise.resolve([tula]);
+        case "agentes.acordar":
+          tula = agente("tula");
+          return Promise.resolve(tula);
         default:
           return Promise.reject(new Error(`sem resposta para ${metodo}`));
       }
@@ -521,6 +524,26 @@ describe("página do agente", () => {
 
     await act(async () => botao("Conversar").click());
     expect(idas).toEqual([{ area: "agentes", secao: "tula" }]);
+  });
+
+  it("dormindo por falha do provedor, Tentar agora acorda na hora e o botão sai", async () => {
+    servicoDaTula({ estado: "dormindo", motivoSono: "fora_do_ar" });
+    await montar("tula/pagina");
+    // A ação urgente vem primeiro; restaurar o padrão fica depois de pausar.
+    const acoes = [...recipiente.querySelectorAll(".pagina-agente-acoes button")].map((b) => b.textContent);
+    expect(acoes.indexOf("Tentar agora")).toBe(0);
+    expect(acoes.indexOf("Restaurar padrão")).toBe(acoes.length - 2);
+    await act(async () => botao("Tentar agora").click());
+    expect(pedidosDe("agentes.acordar")).toEqual([{ id: "tula" }]);
+    expect(por(".pagina-agente-nome .selo")!.textContent).toBe("ocioso");
+    expect(recipiente.textContent).not.toContain("Tentar agora");
+  });
+
+  it("no limite de uso, Tentar agora não aparece: ele espera sozinho", async () => {
+    servicoDaTula({ estado: "dormindo", motivoSono: "limite" });
+    await montar("tula/pagina");
+    expect(por(".pagina-agente-nome .selo")!.textContent).toBe("dormindo");
+    expect(recipiente.textContent).not.toContain("Tentar agora");
   });
 
   it("restaurar padrão pede confirmação no lugar: Manter desiste, Esc fecha, Restaurar volta ao de fábrica", async () => {

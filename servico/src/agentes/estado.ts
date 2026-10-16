@@ -47,6 +47,19 @@ export class AgenteDesligado extends Error {
 export const MENSAGEM_PAUSA_PASSADA = "O fim da pausa já passou.";
 
 /**
+ * Por que "Tentar agora" não vale (H2): o limite de uso só libera quando o provedor renova, e o
+ * teto é uma decisão sua, que se muda em Modelos. Ditos ao usuário, na voz do AGENTS.md §2.
+ */
+export const MENSAGEM_ACORDAR_NO_LIMITE = (nome: string) =>
+  `${nome} espera o limite de uso renovar: tentar antes não adianta.`;
+export const MENSAGEM_ACORDAR_NO_TETO = (nome: string) =>
+  `${nome} chegou ao teto de hoje e volta amanhã. Para seguir antes, mude o teto em Modelos.`;
+export const MENSAGEM_ACORDAR_PAUSADO = (nome: string) => `${nome} está em pausa: retome para voltar.`;
+/** Dormindo sem motivo guardado não devia acontecer: recusa em vez de acordar no escuro. */
+export const MENSAGEM_ACORDAR_SEM_MOTIVO = (nome: string) =>
+  `${nome} dorme sem motivo guardado: espere o despertador ou pause e retome.`;
+
+/**
  * Converte o custo do dia (microdólares) para a moeda do teto (centavos); `null` quando não há
  * câmbio. O teto está em centavos e o custo em dólar: sem câmbio decidido, o teto não vale.
  */
@@ -208,6 +221,35 @@ export class EstadosAgentes {
     this.falhasSeguidas.delete(agenteId);
     this.principalForaAte.delete(agenteId);
     this.mudar(agenteId, ATIVO, ["dormindo"], "agente");
+  }
+
+  /**
+   * "Tentar agora" (H2): o usuário acorda o agente que dorme por falha do provedor (fora do ar,
+   * credencial, CLI ausente) e a fila roda já. Diferente de {@link acordar}, a contagem de falhas
+   * fica: se o provedor falhar de novo, a espera cresce de onde estava, em vez de voltar a 1
+   * minuto, e insistir não vira uma chamada por minuto. Limite de uso, teto e pausa recusam com o
+   * motivo; quem já está ativo (o despertador chegou antes) fica como está.
+   */
+  tentarAgora(agenteId: string): void {
+    const agente = this.deps.agentes.agente(agenteId);
+    if (!agente) throw new Error("agente não encontrado");
+    if (agente.estado === "desligado") throw new AgenteDesligado(agente.id, agente.nome);
+    if (agente.estado === "pausado") throw new Error(MENSAGEM_ACORDAR_PAUSADO(agente.nome));
+    if (agente.estado !== "dormindo") return;
+    switch (agente.motivoSono) {
+      case "limite":
+        throw new Error(MENSAGEM_ACORDAR_NO_LIMITE(agente.nome));
+      case "teto":
+        throw new Error(MENSAGEM_ACORDAR_NO_TETO(agente.nome));
+      // A falha do provedor pode já ter passado: o usuário instalou o CLI, entrou de novo, a rede voltou.
+      case "fora_do_ar":
+      case "credencial":
+      case "ausente":
+        this.mudar(agenteId, ATIVO, ["dormindo"], "usuario");
+        return;
+      default:
+        throw new Error(MENSAGEM_ACORDAR_SEM_MOTIVO(agente.nome));
+    }
   }
 
   /**
