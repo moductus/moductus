@@ -78,6 +78,22 @@ export function situacaoDoCli(nome: string, achado: ProvedorDetectado | undefine
   return { estado: "detectado", tom: "sucesso", texto: versao, escolhivel: true };
 }
 
+/** A página oficial de instalação de cada CLI, aberta no navegador pelo "Como instalar". */
+export const COMO_INSTALAR: Readonly<Record<TipoProvedorCli, string>> = {
+  "claude-cli": "https://code.claude.com/docs/en/setup",
+  "gemini-cli": "https://geminicli.com/docs/get-started/installation/",
+  "codex-cli": "https://github.com/openai/codex",
+  "opencode-cli": "https://opencode.ai/docs/",
+};
+
+/**
+ * "Como instalar" aparece quando falta instalar: o CLI não está no PATH, ou está pelo npm e o
+ * Moductus usa o do instalador nativo.
+ */
+export function precisaInstalar(achado: ProvedorDetectado | undefined): boolean {
+  return !achado || achado.impedimento === "instalado_pelo_npm";
+}
+
 const SEGUNDOS = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /** "2,1 s": o tempo da resposta inteira, como no quadro. */

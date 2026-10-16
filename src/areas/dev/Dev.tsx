@@ -1,7 +1,9 @@
 import type { Conexao, ItemGithub } from "@moductus/contrato";
 import { useId } from "react";
+import { Botao } from "../../componentes/Botao.tsx";
 import { Cartao } from "../../componentes/Cartao.tsx";
 import { Selo } from "../../componentes/Selo.tsx";
+import { abrirEndereco, useAbrir } from "../../nativo/abrir.ts";
 import { useServico } from "../../nativo/eventos.ts";
 import { useCanal } from "../../servico/conexao.ts";
 import { AbrirConexoes, FaixaNuno, LeituraPendente } from "../FaixaNuno.tsx";
@@ -31,6 +33,7 @@ export function Dev() {
   const canal = useCanal(useServico({ silencioso: true }));
   const agora = useAgora();
   const leitura = useDadosDev(canal);
+  const github = useAbrir();
 
   if (leitura.estado !== "pronta") {
     return (
@@ -56,17 +59,24 @@ export function Dev() {
     );
   }
 
-  const fala = erro ?? falaDoNuno(situacao.itens);
+  // A falha ao abrir o GitHub vem na fala do Nuno, no alto, até o próximo clique.
+  const falha = github.erro ?? erro;
+  const fala = falha ?? falaDoNuno(situacao.itens);
   return (
     <Pagina
       titulo={TITULO}
       rotulo={ROTULO}
       acao={<span className="dev-leitura">{situacaoDaLeitura(situacao, agora)}</span>}
     >
-      {fala && <FaixaNuno texto={fala} erro={erro !== null} />}
+      {fala && <FaixaNuno texto={fala} erro={falha !== null} />}
       <div className="dev-colunas">
         {colunas.map((c) => (
-          <Coluna key={c.id} coluna={c} agora={agora} />
+          <Coluna
+            key={c.id}
+            coluna={c}
+            agora={agora}
+            aoAbrir={(item) => github.abrir(() => abrirEndereco(item.url))}
+          />
         ))}
       </div>
     </Pagina>
@@ -104,7 +114,15 @@ function SemItens({ conexao }: { conexao: Conexao | null }) {
   );
 }
 
-function Coluna({ coluna, agora }: { coluna: ColunaDev; agora: Date }) {
+function Coluna({
+  coluna,
+  agora,
+  aoAbrir,
+}: {
+  coluna: ColunaDev;
+  agora: Date;
+  aoAbrir: (item: ItemGithub) => void;
+}) {
   const idTitulo = useId();
   return (
     <section className="dev-coluna" aria-labelledby={idTitulo}>
@@ -123,7 +141,7 @@ function Coluna({ coluna, agora }: { coluna: ColunaDev; agora: Date }) {
         <ul className="dev-itens">
           {coluna.itens.map((item) => (
             <li key={item.id}>
-              <CartaoItem item={item} coluna={coluna.id} agora={agora} />
+              <CartaoItem item={item} coluna={coluna.id} agora={agora} aoAbrir={() => aoAbrir(item)} />
             </li>
           ))}
         </ul>
@@ -132,7 +150,17 @@ function Coluna({ coluna, agora }: { coluna: ColunaDev; agora: Date }) {
   );
 }
 
-function CartaoItem({ item, coluna, agora }: { item: ItemGithub; coluna: IdColuna; agora: Date }) {
+function CartaoItem({
+  item,
+  coluna,
+  agora,
+  aoAbrir,
+}: {
+  item: ItemGithub;
+  coluna: IdColuna;
+  agora: Date;
+  aoAbrir: () => void;
+}) {
   const selo = seloDoItem(item, coluna);
   const meta = metaDoItem(item, coluna, agora);
   return (
@@ -144,6 +172,15 @@ function CartaoItem({ item, coluna, agora }: { item: ItemGithub; coluna: IdColun
       <span className="dev-item-linha">
         <Selo tom={selo.tom}>{selo.texto}</Selo>
         {meta && <span className="dev-item-meta">{meta}</span>}
+        <Botao
+          variante="fantasma"
+          tamanho="pequeno"
+          className="dev-item-abrir"
+          aria-label={`Abrir ${referencia(item)} no GitHub`}
+          onClick={aoAbrir}
+        >
+          Abrir no GitHub
+        </Botao>
       </span>
     </Cartao>
   );

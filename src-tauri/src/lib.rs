@@ -1,3 +1,5 @@
+// O serviço pede pelo canal do sidecar e a interface por comando; a casca valida o que abre.
+mod abrir;
 mod acessibilidade;
 // O serviço chega aqui pelo canal do sidecar, como às credenciais.
 mod ambiente;
@@ -33,6 +35,7 @@ pub fn run() {
     let pasta = dados::pasta();
     registro::iniciar(&pasta);
     appbar::iniciar(pasta.clone());
+    abrir::iniciar(pasta.clone());
 
     tauri::Builder::default()
         // A instância única vem antes de tudo: a segunda execução sai sem criar janelas.
@@ -67,6 +70,9 @@ pub fn run() {
             servico::servico_estado,
             material::tema_material,
             acessibilidade::acessibilidade_estado,
+            abrir::abrir_endereco,
+            abrir::abrir_arquivo,
+            abrir::abrir_settings_claude,
         ])
         .setup(move |app| {
             // Só o dock nasce antes do setup: a faixa fica reservada antes de painel,
