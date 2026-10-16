@@ -214,6 +214,53 @@ describe("migração notas", () => {
     db.prepare("UPDATE notas SET apagado_em = ? WHERE id = 'presa'").run(INSTANTE);
   });
 
+  test("o bloco rápido não muda de id, nem dele nem para o dele", () => {
+    const db = bancoNovo();
+    db.prepare("UPDATE notas SET conteudo = 'código do portão 4471' WHERE id = 'bloco_rapido'").run();
+    const comTexto = { ...BLOCO_RAPIDO, conteudo: "código do portão 4471" };
+
+    // Renomeado, ele iria à lixeira e a limpeza o levaria.
+    expect(() => db.prepare("UPDATE notas SET id = 'x' WHERE id = 'bloco_rapido'").run()).toThrow(
+      "o bloco rápido não muda de id",
+    );
+    expect(() => db.prepare("UPDATE OR REPLACE notas SET id = 'x' WHERE id = 'bloco_rapido'").run()).toThrow(
+      "o bloco rápido não muda de id",
+    );
+
+    // Outra nota no id dele o trocaria sem passar pelo gatilho de DELETE.
+    nota(db, "o", { titulo: "outra", conteudo: "texto da outra" });
+    expect(() => db.prepare("UPDATE OR REPLACE notas SET id = 'bloco_rapido' WHERE id = 'o'").run()).toThrow(
+      "o bloco rápido não muda de id",
+    );
+    expect(() => db.prepare("UPDATE notas SET id = 'bloco_rapido' WHERE id = 'o'").run()).toThrow(
+      "o bloco rápido não muda de id",
+    );
+
+    expect(bloco(db)).toEqual(comTexto);
+    expect(ids(db)).toEqual(["bloco_rapido", "o"]);
+    expect(buscar(db, "portao")).toEqual(["bloco_rapido"]);
+    expect(buscar(db, "outra")).toEqual(["o"]);
+
+    // Regravar o mesmo id não é mudança; outras notas seguem mudando de id.
+    db.prepare("UPDATE notas SET id = id, titulo = titulo WHERE id = 'bloco_rapido'").run();
+    db.prepare("UPDATE notas SET id = 'o2' WHERE id = 'o'").run();
+    expect(ids(db)).toEqual(["bloco_rapido", "o2"]);
+    limparLixeira(db, AGORA);
+    expect(bloco(db)).toEqual(comTexto);
+  });
+
+  test("o bloco rápido que chega de outro PC por INSERT OR REPLACE só troca o texto", () => {
+    const db = bancoNovo();
+    db.exec("BEGIN; PRAGMA defer_foreign_keys = ON;");
+    db.prepare(
+      "INSERT OR REPLACE INTO notas (id, titulo, conteudo, fixada) VALUES ('bloco_rapido', 'Bloco rápido', 'do outro pc', 1)",
+    ).run();
+    db.exec("COMMIT");
+    expect(bloco(db)).toEqual({ ...BLOCO_RAPIDO, conteudo: "do outro pc" });
+    expect(buscar(db, "outro pc")).toEqual(["bloco_rapido"]);
+    expect(noIndice(db)).toEqual([{ id: "bloco_rapido", n: 1 }]);
+  });
+
   test("a limpeza leva a nota vencida e tira do índice; o bloco rápido fica", () => {
     const db = bancoNovo();
     nota(db, "vencida", { conteudo: "velha", apagado_em: diasAtras(31) });

@@ -26,12 +26,22 @@ const notas = criarTabela(
   { lixeira: true, restricoes: [`CHECK (id <> '${BLOCO_RAPIDO}' OR apagado_em IS NULL)`] },
 );
 
-/** Apagar de vez também não leva o bloco rápido. */
+/**
+ * Apagar de vez também não leva o bloco rápido. E o id não muda, nem dele nem para o dele: a
+ * proteção é pelo id, então renomear o bloco o deixaria ir à lixeira e à limpeza, e o
+ * `UPDATE OR REPLACE` de outra nota para o id dele o trocaria sem passar pelo gatilho de DELETE.
+ * O `INSERT OR REPLACE` do bloco que chega de outro PC só troca o texto, como antes.
+ */
 const blocoFica = `
   CREATE TRIGGER notas_bloco_rapido_nao_se_apaga BEFORE DELETE ON notas
     WHEN OLD.id = '${BLOCO_RAPIDO}'
   BEGIN
     SELECT RAISE(ABORT, 'o bloco rápido não se apaga');
+  END;
+  CREATE TRIGGER notas_bloco_rapido_fica BEFORE UPDATE OF id ON notas
+    WHEN (OLD.id = '${BLOCO_RAPIDO}' OR NEW.id = '${BLOCO_RAPIDO}') AND NEW.id IS NOT OLD.id
+  BEGIN
+    SELECT RAISE(ABORT, 'o bloco rápido não muda de id');
   END;
 `;
 
