@@ -422,6 +422,9 @@ describe("página do agente", () => {
         case "agentes.pausar":
           tula = agente("tula", { estado: "pausado" });
           return Promise.resolve([tula]);
+        case "agentes.acordar":
+          tula = agente("tula");
+          return Promise.resolve(tula);
         default:
           return Promise.reject(new Error(`sem resposta para ${metodo}`));
       }
@@ -521,6 +524,22 @@ describe("página do agente", () => {
 
     await act(async () => botao("Conversar").click());
     expect(idas).toEqual([{ area: "agentes", secao: "tula" }]);
+  });
+
+  it("dormindo por falha do provedor, Tentar agora acorda na hora e o botão sai", async () => {
+    servicoDaTula({ estado: "dormindo", motivoSono: "fora_do_ar" });
+    await montar("tula/pagina");
+    await act(async () => botao("Tentar agora").click());
+    expect(pedidosDe("agentes.acordar")).toEqual([{ id: "tula" }]);
+    expect(por(".pagina-agente-nome .selo")!.textContent).toBe("ocioso");
+    expect(recipiente.textContent).not.toContain("Tentar agora");
+  });
+
+  it("no limite de uso, Tentar agora não aparece: ele espera sozinho", async () => {
+    servicoDaTula({ estado: "dormindo", motivoSono: "limite" });
+    await montar("tula/pagina");
+    expect(por(".pagina-agente-nome .selo")!.textContent).toBe("dormindo");
+    expect(recipiente.textContent).not.toContain("Tentar agora");
   });
 
   it("as abas andam pelas setas e o histórico diz o custo com a fonte", async () => {

@@ -9,6 +9,7 @@ import type {
   SituacaoAgente,
   SituacaoGithub,
 } from "@moductus/contrato";
+import { RecusaDoServico } from "@moductus/contrato/cliente";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -96,6 +97,7 @@ const servidor: {
   github: SituacaoGithub;
   conexoes: Conexao[];
   provedores: Provedor[];
+  acordar: () => Promise<unknown>;
 } = {
   agentes: [],
   pendentes: [],
@@ -103,6 +105,7 @@ const servidor: {
   github: { itens: [], atualizadoEm: null },
   conexoes: [],
   provedores: [PROVEDOR],
+  acordar: async () => [],
 };
 const ouvintes = new Map<string, Set<(dados: unknown) => void>>();
 const pedir = vi.fn(async (metodo: string, _dados?: unknown): Promise<unknown> => {
@@ -125,6 +128,8 @@ const pedir = vi.fn(async (metodo: string, _dados?: unknown): Promise<unknown> =
       return servidor.github;
     case "agentes.retomar":
       return [];
+    case "agentes.acordar":
+      return servidor.acordar();
     case "config.obter":
       return { config: { atalhos: { sistema: "Ctrl+Shift+M" } }, portable: false, falhasAtalhos: {} };
     case "aprovacoes.decidir":
@@ -228,6 +233,7 @@ beforeEach(() => {
   servidor.github = { itens: [], atualizadoEm: null };
   servidor.conexoes = [conexao("hooks-claude-code"), conexao("github")];
   servidor.provedores = [PROVEDOR];
+  servidor.acordar = async () => [];
   pedir.mockClear();
   chamadasCasca.length = 0;
 });
@@ -571,7 +577,7 @@ describe("painel Agentes: estados que pedem decisão (Estados.dc.html)", () => {
     expect(estados()).toHaveLength(0);
   });
 
-  it("erro de provedor: selo de erro, nada alterado e Trocar modelo", async () => {
+  it("erro de provedor: selo de erro, nada alterado, Tentar agora acorda e Trocar modelo leva aos Modelos", async () => {
     servidor.agentes = [agente("tula", { estado: "dormindo", motivoSono: "fora_do_ar" })];
     await montar();
     await abrir("agentes");
@@ -581,8 +587,33 @@ describe("painel Agentes: estados que pedem decisão (Estados.dc.html)", () => {
     expect(cartao!.textContent).toContain(
       "O Claude Code não respondeu. Nada foi alterado; tento de novo em breve.",
     );
-    expect([...cartao!.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Trocar modelo"]);
+    expect([...cartao!.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
+      "Trocar modelo",
+      "Tentar agora",
+    ]);
     expect(linhaDo("tula").querySelector(".selo")?.textContent).toBe("erro");
+    await act(async () => botaoCom(cartao!, "Tentar agora").click());
+    expect(pedir).toHaveBeenCalledWith("agentes.acordar", { id: "tula" });
+    await act(async () => botaoCom(cartao!, "Trocar modelo").click());
+    expect(chamadasCasca).toContainEqual({
+      comando: "sistema_abrir",
+      args: { area: "configuracoes/modelos" },
+    });
+  });
+
+  it("Tentar agora acorda cada um do grupo, e a recusa do serviço aparece no cartão", async () => {
+    servidor.agentes = [
+      agente("alba", { estado: "dormindo", motivoSono: "fora_do_ar" }),
+      agente("tula", { estado: "dormindo", motivoSono: "fora_do_ar" }),
+    ];
+    servidor.acordar = () => Promise.reject(new RecusaDoServico("Tula espera o limite de uso renovar."));
+    await montar();
+    await abrir("agentes");
+    const [cartao] = estados();
+    await act(async () => botaoCom(cartao!, "Tentar agora").click());
+    const acordados = pedir.mock.calls.filter(([m]) => m === "agentes.acordar").map(([, d]) => d);
+    expect(acordados).toEqual([{ id: "alba" }, { id: "tula" }]);
+    expect(cartao!.querySelector('[role="alert"]')?.textContent).toBe("Tula espera o limite de uso renovar.");
   });
 
   it("CLI sem login: o cartão diz como entrar, com o comando como código, e a linha fala de login", async () => {

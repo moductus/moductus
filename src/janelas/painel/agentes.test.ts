@@ -266,6 +266,11 @@ describe("cartões de estado (Estados.dc.html)", () => {
       AGORA,
     )[0]!;
     expect(fora.texto).toBe("O Claude Code não respondeu. Nada foi alterado; tento de novo às 10:05.");
+    // H2: a falha do provedor deixa tentar já; trocar o modelo fica como segunda saída.
+    expect(fora).toMatchObject({
+      primaria: { texto: "Tentar agora", acao: { tipo: "acordar", agenteIds: ["tula"] } },
+      secundaria: { texto: "Trocar modelo", acao: { tipo: "modelos" } },
+    });
     expect(fora.estado).toEqual({ texto: "erro", tom: "perigo" });
     const chave = cartoesDeEstado(
       timeDoServico([agente("tula", { estado: "dormindo", motivoSono: "credencial" }, "api")]),

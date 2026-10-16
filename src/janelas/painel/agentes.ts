@@ -159,7 +159,10 @@ export type TipoEstado = "pausa" | "limite" | "falha" | "teto";
 
 /** O que os botões do cartão fazem; quem decide é o serviço ou a tela de Modelos. */
 export type AcaoEstado =
-  { tipo: "retomar"; agenteIds?: string[] } | { tipo: "modelos" } | { tipo: "dispensar" };
+  | { tipo: "retomar"; agenteIds?: string[] }
+  | { tipo: "acordar"; agenteIds: string[] }
+  | { tipo: "modelos" }
+  | { tipo: "dispensar" };
 
 export interface CartaoEstado {
   /** Muda quando o estado muda: dispensar um cartão vale só para aquele sono. */
@@ -264,7 +267,9 @@ export function cartoesDeEstado(
             estado: { texto: "erro", tom: "perigo" },
             titulo: "Não consegui falar com o modelo",
             ...falaDaFalha(motivo, provedor, s.dormeAte, agora, varios),
-            primaria: { texto: "Trocar modelo", acao: { tipo: "modelos" } },
+            // A falha pode já ter passado (H2): tentar agora não espera a hora; cada um do grupo.
+            primaria: { texto: "Tentar agora", acao: { tipo: "acordar", agenteIds: [...agentes] } },
+            secundaria: { texto: "Trocar modelo", acao: { tipo: "modelos" } },
           };
         }
         case "teto":

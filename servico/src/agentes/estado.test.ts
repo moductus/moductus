@@ -14,6 +14,9 @@ import {
   ESPERA_MAXIMA_MS,
   esperaCrescente,
   inicioDoDiaSeguinte,
+  MENSAGEM_ACORDAR_NO_LIMITE,
+  MENSAGEM_ACORDAR_NO_TETO,
+  MENSAGEM_ACORDAR_PAUSADO,
   MENSAGEM_DESLIGADO,
   PROVA_DO_PRINCIPAL_MS,
   type ConverterCusto,
@@ -260,6 +263,98 @@ describe("dormir pelo provedor e acordar", () => {
     tempo.avancar(60_000);
     expect(guardado("faina")).toMatchObject({ estado: "ativo", pausado_ate: null });
     expect(tempo.pendentes).toBe(0);
+  });
+});
+
+describe("tentar agora", () => {
+  test("acorda quem dorme pela falha do provedor e a fila roda na hora; falhando, a espera cresce sem zerar", async () => {
+    const { runtime, falsos, tempo, guardado } = montar();
+    falsos["p-alba"]!.roteirizar(
+      roteiros.falha("fora_do_ar"),
+      roteiros.falha("fora_do_ar"),
+      roteiros.falha("credencial"),
+      roteiros.resposta("voltei"),
+      roteiros.falha("ausente"),
+    );
+    await runtime.executar(pedir("alba", "1"));
+    const segundo = acompanhar(runtime.executar(pedir("alba", "2")));
+    tempo.avancar(ESPERA_INICIAL_MS);
+    await vi.waitFor(() => expect(segundo.resultado).not.toBeNull());
+    const agora = INICIO + ESPERA_INICIAL_MS;
+    expect(guardado("alba")).toMatchObject({ dorme_ate: as(agora + 2 * ESPERA_INICIAL_MS) });
+
+    // Sem o relógio andar: o pedido que esperava vai ao modelo já.
+    const terceiro = acompanhar(runtime.executar(pedir("alba", "3")));
+    await assentar();
+    expect(terceiro.resultado).toBeNull();
+    runtime.estados.tentarAgora("alba");
+    await vi.waitFor(() => expect(terceiro.resultado).not.toBeNull());
+    expect(falsos["p-alba"]!.pedidos).toHaveLength(3);
+    // Terceira falha seguida: 4 minutos, não 1. O despertador antigo (2 minutos) não acorda antes.
+    expect(guardado("alba")).toMatchObject({
+      estado: "dormindo",
+      motivo_sono: "credencial",
+      dorme_ate: as(agora + 4 * ESPERA_INICIAL_MS),
+    });
+    tempo.avancar(2 * ESPERA_INICIAL_MS);
+    expect(guardado("alba")).toMatchObject({ estado: "dormindo" });
+
+    // Agora o provedor responde: a espera zera, e a próxima falha volta a 1 minuto.
+    const quarto = acompanhar(runtime.executar(pedir("alba", "4")));
+    runtime.estados.tentarAgora("alba");
+    await vi.waitFor(() => expect(quarto.resultado?.texto).toBe("voltei"));
+    await runtime.executar(pedir("alba", "5"));
+    const depois = agora + 2 * ESPERA_INICIAL_MS;
+    expect(guardado("alba")).toMatchObject({
+      dorme_ate: as(depois + ESPERA_INICIAL_MS),
+      motivo_sono: "ausente",
+    });
+  });
+
+  test("sem fila, o agente fica ativo pelo usuário e o próximo pedido vai ao modelo na hora", async () => {
+    const { runtime, falsos, guardado } = montar();
+    falsos["p-alba"]!.roteirizar(roteiros.falha("ausente"), roteiros.resposta("instalado"));
+    await runtime.executar(pedir("alba", "1"));
+    runtime.estados.tentarAgora("alba");
+    expect(guardado("alba")).toMatchObject({
+      estado: "ativo",
+      dorme_ate: null,
+      motivo_sono: null,
+      origem: "usuario",
+    });
+    expect((await runtime.executar(pedir("alba", "2"))).texto).toBe("instalado");
+  });
+
+  test("limite de uso, teto e pausa recusam com o motivo e não mexem no sono; ativo fica como está", async () => {
+    const { db, runtime, falsos, guardado } = montar();
+    const volta = as(INICIO + 3_600_000);
+    falsos["p-alba"]!.roteirizar(roteiros.falha("limite", volta), roteiros.resposta("depois"));
+    await runtime.executar(pedir("alba", "1"));
+    const esperando = acompanhar(runtime.executar(pedir("alba", "2")));
+    await assentar();
+
+    expect(() => runtime.estados.tentarAgora("alba")).toThrow(MENSAGEM_ACORDAR_NO_LIMITE("Alba"));
+    await assentar();
+    expect(esperando.resultado).toBeNull();
+    expect(guardado("alba")).toMatchObject({ estado: "dormindo", motivo_sono: "limite", dorme_ate: volta });
+
+    const amanha = inicioDoDiaSeguinte(new Date(INICIO)).toISOString();
+    db.exec(
+      `UPDATE agentes SET estado = 'dormindo', motivo_sono = 'teto', dorme_ate = '${amanha}' WHERE id = 'nuno'`,
+    );
+    expect(() => runtime.estados.tentarAgora("nuno")).toThrow(MENSAGEM_ACORDAR_NO_TETO("Nuno"));
+    expect(guardado("nuno")).toMatchObject({ estado: "dormindo", motivo_sono: "teto", dorme_ate: amanha });
+
+    runtime.estados.pausar("faina", null);
+    expect(() => runtime.estados.tentarAgora("faina")).toThrow(MENSAGEM_ACORDAR_PAUSADO("Faina"));
+    expect(guardado("faina")).toMatchObject({ estado: "pausado" });
+
+    runtime.estados.tentarAgora("tula");
+    expect(guardado("tula")).toMatchObject({ estado: "ativo" });
+
+    runtime.estados.ligar("tula", false);
+    expect(() => runtime.estados.tentarAgora("tula")).toThrow(AgenteDesligado);
+    expect(() => runtime.estados.tentarAgora("ninguem")).toThrow("agente não encontrado");
   });
 });
 
