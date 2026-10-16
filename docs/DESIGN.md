@@ -122,12 +122,13 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 | Primeiro uso: boas-vindas, tema e dock, modelo, conhecer o time, conexões | ✓ (tweak de tema) | ✓ | ✓ |
 | Tutorial "Primeiros passos" no Início, com cartão de aprovação de treino | ✓ (tweak de tema) | ✓ | ✓ |
 | Briefing da manhã e fechamento do dia | ✓ (tweak de tema) | ✓ | ✓ |
-| Painéis do dock: Foco, Finanças, Dev, Arquivos | ✓ (tweak de tema) | ✓ | ✓ |
+| Painéis do dock: Foco, Finanças, Dev, Arquivos, Tarefas e Notas | ✓ (tweak de tema) | ✓ | ✓ |
+| Lembrete no painel Hoje: chegando, tocando com Adiar e Feito, atrasados agrupados depois da suspensão | ✓ (tweak de tema) | ✓ | ✓ |
 | Estados do agente: sem modelo, erro, teto de gasto, vazio, conexão caída, pausado | ✓ (tweak de tema) | ✓ | ✓ |
 | Conversa com o time | ✓ (tweak de tema) | ✓ | ✓ |
 | Importar extrato: mapear colunas e revisar antes de lançar | ✓ (tweak de tema) | ✓ | ✓ |
 | Prévia da Faina antes de organizar | ✓ (tweak de tema) | ✓ | ✓ |
-| Sistema: Tarefas, Finanças, Notas, Sessões de IA, Dev, Memória, página do agente | ✓ (tweak de tema) | ✓ | ✓ |
+| Sistema: Tarefas, Finanças, Notas, Sessões de IA, Dev, Memória, página do agente, com restaurar padrão | ✓ (tweak de tema) | ✓ | ✓ |
 | Configurações: notificações e levar para outro PC | ✓ (tweak de tema) | ✓ | ✓ |
 | Configurações › Modelos: provedores, principal e reserva por agente, teto por dia, trocar o modelo, nenhum conectado | ✓ (tweak de tema) | ✓ | ✓ |
 | Configurações › Conexões: Claude Code e GitHub, prévia do `settings.json` com consentimento, conectando, erros, nenhuma ligada | ✓ (tweak de tema) | ✓ | ✓ |
@@ -145,6 +146,8 @@ Padrões que saíram dessas telas e valem para o resto:
 - **Estado de uma conexão ou provedor:** ponto + texto ao lado do nome (`funcionando`, `testando`, `erro`, `desligada`, `em breve`); testando ganha uma barra indeterminada embaixo e o botão vira "Cancelar"; o erro vem numa linha abaixo, com impacto, motivo e saída.
 - **Prévia de arquivo antes de mexer:** o agente diz numa fala o que muda e o tamanho; ao lado, o trecho antes e depois em mono, linhas novas marcadas com `+` no tom de sucesso; uma linha diz onde fica a cópia e como desfazer; o botão primário é verbo com objeto ("Ligar 8 hooks no Claude Code").
 - **Estado do agente, em texto:** o status, a hora de volta e a frase de cada situação saem de um formatador só (`situacao.ts` e `quando.ts` em `src/componentes/personagem/`), então dock, painel, página do agente e conversa dizem o mesmo: "seg 9:00" curto no dock e "segunda às 9:00" no cartão (a hora é sempre HH:MM, inclusive a cheia: diferença deliberada do quadro Estados); "tentando de novo" quando a hora já chegou, em vez de prometer uma hora que passou. Um quadro novo de estado reaproveita esses textos (ADR-0026).
+- **Lembrete:** quando toca, sobe para o topo do Hoje num bloco elevado com sino, hora e origem, com [Adiar 10 min] e [Feito]. O que venceu com o PC suspenso chega junto num cartão só, com a fala da Alba, Feito por item e as ações em grupo; nunca toca um por um.
+- **Confirmação no lugar:** ação que não se desfaz abre um cartão elevado logo abaixo do botão, nunca modal. Diz o que muda e o que fica e termina em "Não dá para desfazer."; o secundário é "Manter como está" e o primário é verbo com objeto.
 - **Valor pendente de decisão:** marcador tracejado no tom de aviso ("moeda a decidir") no lugar do símbolo, até a decisão ser registrada.
 
 **A desenhar:** Foco e Ferramentas no Sistema, instruções e ferramentas na página do agente, criar agente (fase 7), demais seções de Configurações (Geral, Atalhos, Privacidade) e o instalador.

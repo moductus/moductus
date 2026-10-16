@@ -55,12 +55,26 @@ input::placeholder,textarea::placeholder{color:inherit;opacity:0.7}
 <span style="flex: none; width: 100px; height: 120px; display: flex"><dc-import name="Personagem" agente="tula" estado="focado" modo="corpo" tamanho="{{ 120 }}" hint-size="100px,120px"></dc-import></span>
 <div style="flex: 1; display: flex; flex-direction: column; gap: 6px">
 <span style="{{s.rot}}">Agentes · de fábrica</span>
-<div style="display: flex; align-items: center; gap: 10px"><h1 style="{{s.h1}}; font-size: 30px">Tula</h1><span style="{{trab}}">trabalhando</span></div>
+<div style="display: flex; align-items: center; gap: 10px"><h1 style="{{s.h1}}; font-size: 30px">Tula</h1><span style="{{trab}}">trabalhando</span><span style="{{pers}}">personalizada</span></div>
 <span style="color: {{t.texto2}}">Finanças: gastos, dívidas e planos. Objetiva, acolhedora, precisa nos números, sem julgamento.</span>
 <span style="{{s.rot}}">Agora: lendo o extrato de setembro (OFX, 84 lançamentos)</span>
 </div>
-<div style="display: flex; gap: 8px"><button style="{{s.btn}}">Pausar a Tula</button><button style="{{s.btnPri}}">Conversar</button></div>
+<div style="display: flex; gap: 8px"><button aria-expanded="true" style="{{restaurar}}">Restaurar padrão</button><button style="{{s.btn}}">Pausar a Tula</button><button style="{{s.btnPri}}">Conversar</button></div>
 </div>
+<section aria-label="Restaurar a Tula ao padrão de fábrica" style="{{s.elevada}}; display: flex; flex-direction: column; gap: 12px; padding: 16px 18px">
+<div style="display: flex; gap: 10px; align-items: flex-start"><span style="flex: none; width: 26px; height: 26px; display: flex"><dc-import name="Personagem" agente="tula" estado="atento" modo="cabeca" tamanho="{{ 26 }}" hint-size="26px,26px"></dc-import></span><div style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; font-weight: 600; color: {{ag.tula}}">Tula</span><span style="color: {{t.texto}}; text-wrap: pretty">Volto às instruções e aos vigias de fábrica. Modelo, reserva e o que já fiz ficam como estão.</span></div></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding-left: 36px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="{{s.rot}}; padding-bottom: 2px">Volta ao de fábrica</span>
+<sc-for list="{{volta}}" as="v" hint-placeholder-count="3"><div style="display: flex; gap: 10px"><span style="{{v.campoEstilo}}">{{v.campo}}</span><span style="{{v.mudaEstilo}}">{{v.muda}}</span></div></sc-for>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="{{s.rot}}; padding-bottom: 2px">Fica como está</span>
+<sc-for list="{{fica}}" as="v" hint-placeholder-count="3"><div style="display: flex; gap: 10px"><span style="{{v.campoEstilo}}">{{v.campo}}</span><span style="{{v.mudaEstilo}}">{{v.muda}}</span></div></sc-for>
+</div>
+</div>
+<div style="display: flex; align-items: center; gap: 8px"><span style="flex: 1; {{s.rot}}">Não dá para desfazer.</span><button style="{{s.btn}}">Manter como está</button><button style="{{s.btnPri}}">Restaurar a Tula</button></div>
+</section>
 <div style="display: flex; gap: 2px; border-bottom: 1px solid {{t.borda}}"><sc-for list="{{abas}}" as="a" hint-placeholder-count="5"><a href="#" style="{{a.estilo}}">{{a.nome}}</a></sc-for></div>
 <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start">
 <section style="{{s.cartao}}; display: flex; flex-direction: column; gap: 10px; "><div style="display: flex; justify-content: space-between; align-items: center; {{s.rot}}"><span>Vigias · trabalham sem gastar modelo</span><span></span></div><sc-for list="{{vigias}}" as="v" hint-placeholder-count="4"><div style="display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid {{t.borda}}"><div style="flex: 1; display: flex; flex-direction: column"><span>{{v.nome}}</span><span style="{{s.rot}}">{{v.quando}}</span></div><span style="{{v.chave}}"><span style="{{v.bola}}"></span></span></div></sc-for></section>
@@ -187,7 +201,18 @@ class Component extends DCLogic {
       { hora: '8:12', texto: 'Mandou a linha do briefing da manhã', desfaz: false },
       { hora: '8:00', texto: 'Criou lembrete da fatura para sexta', desfaz: true }
     ];
-    return R({ abas: abas, vigias: vigias, perms: perms, hist: hist, trab: pill(t.sucesso), ok: ponto(t.sucesso) });
+    var linha = function (v) { return Object.assign({}, v, { campoEstilo: 'width: 140px; flex: none; font-weight: 600; ' + (v.igual ? 'color: ' + t.texto3 + ';' : ''), mudaEstilo: 'color: ' + (v.igual ? t.texto3 : t.texto2) + ';' }); };
+    var volta = [
+      { campo: 'Instruções', muda: '2 trechos que você escreveu saem' },
+      { campo: 'Vigias', muda: '"Assinaturas sem uso" volta a ficar ligado' },
+      { campo: 'O resto', muda: 'nome, visual e ferramentas já são os de fábrica', igual: true }
+    ].map(linha);
+    var fica = [
+      { campo: 'Modelo e reserva', muda: 'Claude Code · sua assinatura' },
+      { campo: 'Ligada ou em pausa', muda: 'continua trabalhando' },
+      { campo: 'Histórico e memória', muda: 'nada é apagado' }
+    ].map(linha);
+    return R({ abas: abas, vigias: vigias, perms: perms, hist: hist, volta: volta, fica: fica, trab: pill(t.sucesso), pers: pill(t.texto3), ok: ponto(t.sucesso), restaurar: s.btn + ' background: ' + t.ativo + ';' });
   }
 }
 </script>

@@ -4,7 +4,7 @@ Fontes dos desenhos do canvas [Moductus — identidade visual](https://claude.ai
 
 | Arquivo | O que mostra |
 |---|---|
-| `canvas/Main.dc.html` | Tema Grafite: dock colado na borda e painel Hoje |
+| `canvas/Main.dc.html` | Tema Grafite: dock colado na borda e painel Hoje, com um lembrete tocando no topo |
 | `canvas/Papel.dc.html` | Tema Papel: dock flutuante e painel Hoje |
 | `canvas/Vidro.dc.html` | Tema Vidro: dock e painel translúcidos |
 | `canvas/Sistema.dc.html` | Janela Sistema · Início, com seletor dos três temas |
@@ -14,11 +14,13 @@ Fontes dos desenhos do canvas [Moductus — identidade visual](https://claude.ai
 | `canvas/Marca.dc.html` | Quatro opções de marca em fundo escuro e claro, de 104 a 16 px |
 | `canvas/Dock.dc.html` | Componente do dock, com tema e item ativo, usado pelos painéis |
 | `canvas/Time.dc.html` | Os quatro agentes (Alba, Tula, Faina, Nuno) como personagens, com as expressões de cada estado e o esboço de criar um agente |
-| `canvas/Personagem.dc.html` | Componente do personagem: agente, expressão, corpo inteiro ou só a cabeça, tamanho |
+| `canvas/Personagem.dc.html` | Componente do personagem: agente, expressão, corpo inteiro ou só a cabeça, tamanho; na cabeça, o recorte da Faina começa 3 unidades à direita para o nó da bandana caber inteiro |
 | `canvas/Uso1Boas.dc.html` a `canvas/Uso5Conexoes.dc.html` | Primeiro uso: boas-vindas, tema e dock, modelo, conhecer o time, conexões |
 | `canvas/Tutorial.dc.html` | "Primeiros passos" no Início, com o cartão de aprovação de treino |
 | `canvas/Briefing.dc.html`, `canvas/Fechamento.dc.html` | Briefing da manhã e fechamento do dia |
 | `canvas/PainelFoco.dc.html`, `PainelFinancas`, `PainelDev`, `PainelArquivos` | Painéis do dock de cada agente |
+| `canvas/PainelTarefas.dc.html`, `canvas/PainelNotas.dc.html` | Painéis Tarefas (adicionar por frase, atrasadas, hoje, marcar com desfazer) e Notas (nota fixa editável, busca e recentes), em 400 px |
+| `canvas/LembreteHoje.dc.html` | O lembrete no painel Hoje: chegando, tocando (Adiar 10 min e Feito, também no aviso do Windows) e atrasados agrupados na volta da suspensão |
 | `canvas/Estados.dc.html` | Estados do agente: sem modelo, erro, teto de gasto, vazio, conexão caída, pausado |
 | `canvas/Conversas.dc.html` | Conversa com o time, com aprovação no meio da conversa |
 | `canvas/ExtratoColunas.dc.html`, `canvas/ExtratoRevisar.dc.html` | Importar extrato de banco sem perfil e revisar antes de lançar |
@@ -26,7 +28,7 @@ Fontes dos desenhos do canvas [Moductus — identidade visual](https://claude.ai
 | `canvas/OutroPC.dc.html`, `canvas/AreaNotificacoes.dc.html` | Configurações: levar para outro PC e notificações |
 | `canvas/ConfigModelos.dc.html`, `ConfigModelosAgente`, `ConfigModelosVazio` | Configurações › Modelos: provedores com testar, estado e tempo de resposta (um testando, um com erro), principal e reserva por agente, teto por dia com a moeda pendente, trocar o modelo de um agente e nenhum conectado |
 | `canvas/ConfigConexoes.dc.html`, `ConfigConexoesPrevia`, `ConfigConexoesErros`, `ConfigConexoesVazio` | Configurações › Conexões: Claude Code e GitHub ligados, prévia do `settings.json` antes e depois com consentimento, GitHub conectando, erros (JSON inválido, `gh` sem login), nenhuma ligada; OpenCode "em breve" |
-| `canvas/AreaTarefas.dc.html`, `AreaFinancas`, `AreaNotas`, `AreaSessoes`, `AreaDev`, `AreaMemoria`, `AreaAgente` | Áreas do Sistema e a página de um agente |
+| `canvas/AreaTarefas.dc.html`, `AreaFinancas`, `AreaNotas`, `AreaSessoes`, `AreaDev`, `AreaMemoria`, `AreaAgente` | Áreas do Sistema e a página de um agente, com "Restaurar padrão" e a confirmação aberta |
 | `canvas/canvas.json` | Disposição dos quadros no canvas |
 | `marca/` | Ícone do app (`.ico` e PNG), ícones da bandeja e a marca em SVG |
 
