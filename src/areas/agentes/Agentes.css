@@ -361,6 +361,56 @@
   gap: var(--esp-8);
 }
 
+/* Restaurar padrão (AreaAgente.dc.html): o botão fica marcado enquanto a confirmação está aberta. */
+.pagina-agente-restaurar[aria-expanded="true"] {
+  background: var(--fundo-ativo);
+}
+
+/* Confirmação no lugar (DESIGN.md §5): cartão elevado logo abaixo do cabeçalho, nunca modal. */
+.pagina-agente-confirmacao {
+  gap: var(--esp-12);
+  padding: var(--esp-16) var(--esp-18);
+}
+
+.pagina-agente-confirmacao-colunas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--esp-24);
+}
+
+.pagina-agente-confirmacao-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  min-width: 0;
+}
+
+.pagina-agente-confirmacao-linha {
+  display: flex;
+  gap: var(--esp-10);
+}
+
+.pagina-agente-confirmacao-campo {
+  flex: none;
+  width: var(--largura-rotulo-mudanca);
+  font-weight: var(--peso-forte);
+}
+
+.pagina-agente-confirmacao-muda {
+  min-width: 0;
+  color: var(--texto-2);
+}
+
+.pagina-agente-confirmacao-rodape {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.pagina-agente-confirmacao-aviso {
+  flex: 1;
+}
+
 .pagina-agente-erro {
   margin: 0;
   font-size: var(--tipo-12);

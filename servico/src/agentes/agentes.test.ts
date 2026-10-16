@@ -12,11 +12,13 @@ import {
   MENSAGEM_PROVEDOR_SAIU,
   MENSAGEM_RESERVA_IGUAL,
   MENSAGEM_RESERVA_SEM_PRINCIPAL,
+  MENSAGEM_SO_DE_FABRICA,
   MENSAGEM_SO_MODELO,
   MENSAGEM_TETO_SEM_MOEDA,
   RepositorioAgentes,
   ServicoAgentes,
 } from "./agentes.ts";
+import { DE_FABRICA } from "./de-fabrica.ts";
 import { EstadosAgentes } from "./estado.ts";
 import { RepositorioExecucoes } from "./execucoes.ts";
 
@@ -187,6 +189,46 @@ describe("agentes", () => {
       estado: "dormindo",
       dormeAte: "2026-10-10T03:00:00.000Z",
     });
+  });
+
+  test("restaurar padrão volta o personalizado ao de fábrica e mantém modelo, reserva, teto e estado", () => {
+    const { db, servico } = montar();
+    db.exec(`INSERT INTO provedores (id, tipo, nome) VALUES ('p1', 'claude-cli', 'Claude'), ('p2', 'openai', 'OpenAI');
+             UPDATE agentes SET nome = 'Tulinha', funcao = 'Contas', instrucoes = 'Fale em versos.',
+               personagem = '{"silhueta":"ovo","traco":"raios","tom":"ambar"}', ferramentas = '["agenda.*"]',
+               gatilhos = '[{"tipo":"horario","hora":"08:30"}]', escopos_memoria = '["geral"]',
+               provedor_id = 'p1', provedor_reserva_id = 'p2', estado = 'pausado',
+               pausado_ate = '2026-10-09T13:00:00.000Z', origem = 'agente', agente_id = 'tula'
+             WHERE id = 'tula';`);
+    expect(servico.obter({ id: "tula" }).nome).toBe("Tulinha");
+
+    const tula = servico.restaurarPadrao({ id: "tula" });
+    expect(Agente.safeParse(tula).success).toBe(true);
+    expect(tula).toMatchObject({ ...DE_FABRICA.tula, provedorId: "p1", provedorReservaId: "p2" });
+    expect(tula.situacao).toMatchObject({ estado: "pausado", pausadoAte: "2026-10-09T13:00:00.000Z" });
+    expect(
+      db
+        .prepare(
+          "SELECT origem, agente_id, atualizado_em, teto_diario_centavos FROM agentes WHERE id = 'tula'",
+        )
+        .get(),
+    ).toEqual({
+      origem: "usuario",
+      agente_id: null,
+      atualizado_em: "2026-10-09T12:00:00.000Z",
+      teto_diario_centavos: null,
+    });
+    // Só a Tula voltou: os outros seguem como estavam.
+    expect(servico.obter({ id: "alba" })).toMatchObject(DE_FABRICA.alba);
+  });
+
+  test("restaurar padrão só vale para agente de fábrica que existe", () => {
+    const { db, servico } = montar();
+    db.exec(`INSERT INTO agentes (id, nome, funcao, personagem)
+             VALUES ('meu', 'Meu', 'Ajuda', '{"silhueta":"ovo","traco":"raios","tom":"ambar"}')`);
+    expect(() => servico.restaurarPadrao({ id: "meu" })).toThrow(MENSAGEM_SO_DE_FABRICA);
+    expect(servico.obter({ id: "meu" }).nome).toBe("Meu");
+    expect(() => servico.restaurarPadrao({ id: "zeca" })).toThrow("agente não encontrado");
   });
 
   test("o provedor vem com a configuração para o registro; o da lixeira não", () => {
