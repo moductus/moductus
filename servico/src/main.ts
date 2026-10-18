@@ -15,6 +15,12 @@ import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoe
 import { RepositorioAgenda, ServicoAgenda } from "./areas/agenda/agenda.ts";
 import { RepositorioTarefasDoDia } from "./areas/agenda/tarefas-do-dia.ts";
 import {
+  devPrecisando,
+  RepositorioContagens,
+  ServicoContagens,
+  sessoesEsperando,
+} from "./areas/contagens.ts";
+import {
   motivoDaCasca,
   PrimeiraAtividade,
   RepositorioAtividade,
@@ -100,12 +106,16 @@ const repositorioConfig = new RepositorioConfig(banco);
 // pelo aviso abaixo. A reação (acordar quem saiu do teto) nasce com o runtime, mais adiante.
 let reagirACotacao: () => void = () => {};
 const cotacaoMudou = vigiarCotacao(repositorioConfig.ler().cambio, () => reagirACotacao());
+// As contagens das áreas (F3-20) nascem depois das áreas que contam; até lá, recontar não faz nada.
+let recontarAreas: () => void = () => {};
 const config = new ServicoConfig(
   repositorioConfig,
   nativo,
   (estado: EstadoConfig) => {
     servidor?.emitir("config.mudou", estado);
     cotacaoMudou(estado.config.cambio);
+    // O fuso pode ter mudado: o "hoje" das tarefas muda junto.
+    recontarAreas();
   },
   portable(),
 );
@@ -177,6 +187,7 @@ projetosDaCasca.mandar();
 const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {
   aprovacao: (aprovacao) => {
     servidor?.emitir("aprovacoes.mudou", aprovacao);
+    recontarAreas();
     avisarAprovacao(aprovacao).catch((erro: unknown) =>
       console.error(`notificações: aviso da aprovação falhou: ${String(erro)}`),
     );
@@ -189,6 +200,7 @@ const repositorioConexoes = new RepositorioConexoes(banco);
 const github = new ServicoGithub(new RepositorioGithub(banco), repositorioConexoes, executorGh(), {
   github: (situacao) => {
     servidor?.emitir("github.mudou", situacao);
+    recontarAreas();
     vigiaNuno?.aoLerGithub(situacao);
   },
   conexao: (conexao) => servidor?.emitir("conexoes.mudou", conexao),
@@ -377,11 +389,33 @@ const tarefas = new ServicoTarefas(
   new RepositorioTarefas(banco),
   { lerFuso: () => repositorioConfig.ler().dia.fuso, notas },
   {
-    tarefas: (mudanca) => servidor?.emitir("tarefas.mudou", mudanca),
+    tarefas: (mudanca) => {
+      servidor?.emitir("tarefas.mudou", mudanca);
+      recontarAreas();
+    },
     listas: (listas) => servidor?.emitir("listas.mudou", listas),
-    lembretes: (mudanca) => servidor?.emitir("lembretes.mudou", mudanca),
+    lembretes: (mudanca) => {
+      servidor?.emitir("lembretes.mudou", mudanca);
+      recontarAreas();
+    },
   },
 );
+// Contagens das áreas (F3-20): a barra lateral do Sistema e os badges do dock leem daqui. As
+// sessões esperando são os pedidos do terminal, como o Nuno no dock.
+const leituraAprovacoes = new RepositorioAprovacoes(banco);
+const repositorioContagens = new RepositorioContagens(banco);
+const contagens = new ServicoContagens(
+  {
+    tarefasPendentes: () => tarefas.pendentesDeHoje(),
+    lembretesAtrasados: () => repositorioContagens.lembretesAtrasados(),
+    sessoesEsperando: () => sessoesEsperando(leituraAprovacoes.pendentes()),
+    devPrecisando: () => devPrecisando(github.obter().itens),
+  },
+  (novas) => servidor?.emitir("areas.contagens", novas),
+);
+recontarAreas = () => contagens.recontar();
+contagens.recontar();
+contagens.vigiar();
 // Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
 // Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
 runtime.estados.vigiar();
@@ -501,8 +535,8 @@ servidor = await abrirServidorWs(token, {
     "captura.entender",
     "captura.lancar",
     "captura.desfazer",
-    "areas.contagens",
   ]),
+  "areas.contagens": () => contagens.obter(),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
 canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });
@@ -545,6 +579,8 @@ sinalDeAtividade("subida");
 canal.aoAvisar("atividade", (aviso) => sinalDeAtividade(motivoDaCasca(aviso)));
 canal.aoAvisar("retomou", () => {
   sinalDeAtividade("retomada");
+  // O PC dormiu: o dia pode ter virado antes da próxima volta do relógio das contagens.
+  recontarAreas();
   agendador
     .retomar()
     .then(() => github.atualizar("conexao"))

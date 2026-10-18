@@ -1,4 +1,5 @@
 import type { NomeIcone } from "../componentes/Icone.tsx";
+import type { CampoContagem } from "../servico/contagens.ts";
 
 /**
  * Áreas que o dock abre no painel lateral (Dock.dc.html), na ordem do dock, e o estado vazio
@@ -12,8 +13,8 @@ export type AreaPainel = AreaDock | "agentes";
 export interface DadosArea {
   nome: string;
   icone: NomeIcone;
-  /** Do que é a contagem do badge, para o leitor de tela; sem ela a área não tem badge. */
-  contagem?: string;
+  /** O número de `areas.contagens` que o badge mostra; sem ele a área não tem badge. */
+  contagem?: CampoContagem;
   vazio: { titulo: string; texto: string };
 }
 
@@ -29,7 +30,7 @@ export const DADOS_AREAS: Readonly<Record<AreaPainel, DadosArea>> = {
   tarefas: {
     nome: "Tarefas",
     icone: "tarefas",
-    contagem: "tarefas pendentes",
+    contagem: "tarefasPendentes",
     vazio: { titulo: "0 tarefas pendentes", texto: "Anote pela captura rápida o que precisa fazer." },
   },
   foco: {
@@ -45,7 +46,7 @@ export const DADOS_AREAS: Readonly<Record<AreaPainel, DadosArea>> = {
   dev: {
     nome: "Dev",
     icone: "dev",
-    contagem: "avisos de dev",
+    contagem: "devPrecisando",
     vazio: { titulo: "Nenhum repositório", texto: "Conecte o GitHub para ver PRs, CI e issues aqui." },
   },
   notas: {

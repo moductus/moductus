@@ -39,7 +39,8 @@
     color: HighlightText;
   }
 
-  .navegacao-item[aria-current="page"] .navegacao-atalho {
+  .navegacao-item[aria-current="page"] .navegacao-atalho,
+  .navegacao-item[aria-current="page"] .navegacao-contagem {
     color: inherit;
   }
 

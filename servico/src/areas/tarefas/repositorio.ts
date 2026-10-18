@@ -284,6 +284,14 @@ export class RepositorioTarefas {
     ).all(...parametros) as unknown as LinhaTarefa[];
   }
 
+  /** Quantas abertas vivas vencem até o dia dado, ele incluído (pelo índice das abertas por dia). */
+  contarAbertasAte(dia: string): number {
+    const r = this.sql(
+      "SELECT count(*) AS n FROM tarefas WHERE estado = 'aberta' AND apagado_em IS NULL AND vence_em <= ?",
+    ).get(dia) as { n: number };
+    return r.n;
+  }
+
   /** As subtarefas vivas das mães dadas, em todos os estados ("subtarefas 1 de 3"). */
   subtarefas(maes: readonly string[]): LinhaTarefa[] {
     if (maes.length === 0) return [];
