@@ -15,7 +15,7 @@ import {
   type ResultadoExportar,
 } from "@moductus/contrato";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import type { ServicoConfig } from "../config/config.ts";
+import { completarComPadrao, type ServicoConfig } from "../config/config.ts";
 import { lerConfiguracoes } from "./tabelas.ts";
 
 /** De onde o arquivo sai: vai no manifesto. */
@@ -190,7 +190,10 @@ function lerConfigDoArquivo(arquivos: Record<string, Uint8Array>): {
   const chaves: Record<string, unknown> = {};
   for (const [chave, valor] of Object.entries(json)) {
     if (!(chave in Config.shape)) continue;
-    const campo = Config.shape[chave as keyof Config].safeParse(valor);
+    // Arquivo de uma versão anterior não traz os campos novos de uma chave: entram com o padrão.
+    const campo = Config.shape[chave as keyof Config].safeParse(
+      completarComPadrao(chave as keyof Config, valor),
+    );
     if (!campo.success) {
       throw new ArquivoRecusado(
         `A configuração "${chave}" do arquivo é inválida (${campo.error.issues[0]?.message ?? "formato inesperado"}). Nada foi importado.`,

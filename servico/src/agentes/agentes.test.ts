@@ -242,6 +242,27 @@ describe("agentes", () => {
     expect(servico.obter({ id: "alba" })).toMatchObject(DE_FABRICA.alba);
   });
 
+  test("o agente diz quais campos saíram do de fábrica; modelo e estado não contam", () => {
+    const { db, servico } = montar();
+    for (const a of servico.listar()) expect(a.camposPersonalizados, a.id).toEqual([]);
+
+    // O personagem com as chaves em outra ordem é o mesmo; o nome e as ferramentas mudaram.
+    db.exec(`INSERT INTO provedores (id, tipo, nome) VALUES ('p1', 'claude-cli', 'Claude');
+             UPDATE agentes SET nome = 'Tulinha', ferramentas = '["financas.*"]',
+               personagem = '{"tom":"musgo","traco":"coque","silhueta":"pera"}',
+               provedor_id = 'p1', estado = 'pausado'
+             WHERE id = 'tula';
+             INSERT INTO agentes (id, nome, funcao, personagem)
+             VALUES ('meu', 'Meu', 'Ajuda', '{"silhueta":"ovo","traco":"raios","tom":"ambar"}');`);
+    const tula = servico.obter({ id: "tula" });
+    expect(Agente.safeParse(tula).success).toBe(true);
+    expect(tula.camposPersonalizados).toEqual(["nome", "ferramentas"]);
+    // Criado por você não tem de fábrica para comparar.
+    expect(servico.obter({ id: "meu" }).camposPersonalizados).toEqual([]);
+
+    expect(servico.restaurarPadrao({ id: "tula" }).camposPersonalizados).toEqual([]);
+  });
+
   test("restaurar padrão só vale para agente de fábrica que existe", () => {
     const { db, servico } = montar();
     db.exec(`INSERT INTO agentes (id, nome, funcao, personagem)

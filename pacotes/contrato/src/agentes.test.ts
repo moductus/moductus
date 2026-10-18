@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   AGENTES_DE_FABRICA,
   Agente,
+  CampoDeFabrica,
   ChamadaFerramenta,
   Execucao,
   ExecucaoDetalhada,
@@ -30,6 +31,7 @@ const nuno = {
   escoposMemoria: ["dev", "geral"],
   tetoDiarioCentavos: null,
   deFabrica: true,
+  camposPersonalizados: ["instrucoes", "gatilhos"],
   situacao: {
     estado: "dormindo",
     atividade: "ocioso",
@@ -90,6 +92,23 @@ describe("agente", () => {
     expect(situacao({ fila: -1 })).toBe(false);
   });
 
+  test("personalizado diz só os campos que a definição de fábrica cobre", () => {
+    expect(CampoDeFabrica.options).toEqual([
+      "nome",
+      "funcao",
+      "instrucoes",
+      "personagem",
+      "ferramentas",
+      "gatilhos",
+      "escoposMemoria",
+    ]);
+    expect(Agente.safeParse({ ...nuno, camposPersonalizados: [] }).success).toBe(true);
+    // Modelo e teto são escolha do usuário: não contam como personalização.
+    expect(Agente.safeParse({ ...nuno, camposPersonalizados: ["provedorId"] }).success).toBe(false);
+    const { camposPersonalizados: _campos, ...semCampos } = nuno;
+    expect(Agente.safeParse(semCampos).success).toBe(false);
+  });
+
   test("mudança precisa do id e aceita só parte dos campos", () => {
     expect(MudancaAgente.parse({ id: "tula", provedorId: null })).toEqual({ id: "tula", provedorId: null });
     expect(MudancaAgente.safeParse({ provedorId: null }).success).toBe(false);
@@ -103,6 +122,7 @@ describe("agente", () => {
     expect(PedidoPausar.safeParse({ agenteId: "alba", ate: "2026-10-09T13:00:00.000Z" }).success).toBe(true);
     expect(PedidoPausar.safeParse({ agenteId: "alba" }).success).toBe(false);
     expect(PedidoPausar.safeParse({ ate: "amanhã" }).success).toBe(false);
+    expect(PedidoPausar.safeParse({ ate: "2026-10-09T13:00:00Z" }).success).toBe(false);
   });
 
   test("tentar agora pede só o id do agente e devolve o agente como ficou", () => {

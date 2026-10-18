@@ -46,6 +46,7 @@ const agente = (mudar: Partial<Agente> = {}, situacao: Partial<SituacaoAgente> =
   escoposMemoria: [],
   tetoDiarioCentavos: null,
   deFabrica: true,
+  camposPersonalizados: [],
   situacao: { ...SITUACAO, ...situacao },
   ...mudar,
 });

@@ -15,9 +15,30 @@ import {
   PedidoPausar,
   PedidoRetomar,
 } from "./agentes.ts";
+import {
+  Agenda,
+  Calendario,
+  EventoAgenda,
+  MudancaAgenda,
+  MudancaCalendario,
+  MudancaEvento,
+  NovoEvento,
+  PedidoAgenda,
+  PedidoAplicarSugestao,
+  PedidoEvento,
+  SugestaoAplicada,
+} from "./agenda.ts";
 import { Aprovacao, PedidoDecidir, PedidoRegra, RegraPermissao } from "./aprovacoes.ts";
+import { ContagensAreas } from "./areas.ts";
 import { metodo } from "./canal.ts";
-import { PedidoPagina } from "./comum.ts";
+import {
+  LancamentoCaptura,
+  PedidoDesfazerCaptura,
+  PedidoEntender,
+  PedidoLancar,
+  PreviaCaptura,
+} from "./captura.ts";
+import { Apagados, PedidoPagina } from "./comum.ts";
 import { EstadoConfig, MudancaConfig } from "./config.ts";
 import {
   Conversa,
@@ -31,6 +52,36 @@ import {
   PedidoMensagens,
   ResultadoEnviar,
 } from "./conversas.ts";
+import {
+  EstadoFoco,
+  HistoricoFoco,
+  PedidoEstenderFoco,
+  PedidoHistoricoFoco,
+  PedidoIniciarFoco,
+} from "./foco.ts";
+import {
+  Lembrete,
+  LembretesDeHoje,
+  MudancaLembrete,
+  MudancaLembretes,
+  NovoLembrete,
+  PedidoAdiarLembretes,
+  PedidoLembretes,
+  PedidoListarLembretes,
+} from "./lembretes.ts";
+import {
+  MudancaNota,
+  MudancaNotas,
+  Nota,
+  NovaNota,
+  PedidoBuscarNotas,
+  PedidoNota,
+  PedidoNotas,
+  PedidoSalvarNota,
+  ResultadoBuscaNota,
+  ResultadoSalvarNota,
+  ResumoNota,
+} from "./notas.ts";
 import {
   EstadoNotificacoes,
   MudancaPreferencia,
@@ -50,6 +101,7 @@ import {
   ProvedorDetectado,
   ResultadoTesteProvedor,
 } from "./provedores.ts";
+import { ApresentacaoRotina, MudancaRotina, PedidoAgirRotina, Rotina, RotinasDeHoje } from "./rotinas.ts";
 import {
   Conexao,
   EventoSessao,
@@ -62,6 +114,23 @@ import {
   SituacaoGithub,
   UsoIa,
 } from "./sessoes.ts";
+import {
+  ConclusaoTarefa,
+  Etiqueta,
+  Lista,
+  MudancaLista,
+  MudancaTarefa,
+  MudancaTarefas,
+  NovaLista,
+  NovaTarefa,
+  PedidoAdiarTarefas,
+  PedidoLista,
+  PedidoMoverTarefa,
+  PedidoOrdenar,
+  PedidoTarefa,
+  PedidoTarefas,
+  Tarefa,
+} from "./tarefas.ts";
 
 /** Todos os métodos que o serviço atende, com entrada e saída. */
 export const METODOS = {
@@ -127,6 +196,82 @@ export const METODOS = {
   "notificacoes.listar": metodo(PedidoPagina, PaginaNotificacoes),
   "notificacoes.naoVistas": metodo(z.undefined(), z.array(Notificacao)),
   "notificacoes.marcarVistas": metodo(PedidoMarcarVistas, z.array(Notificacao)),
+
+  // O dia (fase 3): a regra de cada um mora na área do serviço (`servico/src/areas`).
+  "listas.listar": metodo(z.undefined(), z.array(Lista)),
+  "listas.criar": metodo(NovaLista, Lista),
+  "listas.definir": metodo(MudancaLista, Lista),
+  "listas.ordenar": metodo(PedidoOrdenar, z.array(Lista)),
+  /** Manda à lixeira; as tarefas vão junto. As três padrão não saem. */
+  "listas.apagar": metodo(PedidoLista, z.array(Lista)),
+
+  "tarefas.listar": metodo(PedidoTarefas, z.array(Tarefa)),
+  "tarefas.obter": metodo(PedidoTarefa, Tarefa),
+  "tarefas.criar": metodo(NovaTarefa, Tarefa),
+  "tarefas.definir": metodo(MudancaTarefa, Tarefa),
+  "tarefas.concluir": metodo(PedidoTarefa, ConclusaoTarefa),
+  "tarefas.reabrir": metodo(PedidoTarefa, Tarefa),
+  /** "Descartar" do fechamento: fica como cancelada, fora das abertas. */
+  "tarefas.cancelar": metodo(PedidoTarefa, Tarefa),
+  "tarefas.adiar": metodo(PedidoAdiarTarefas, z.array(Tarefa)),
+  "tarefas.mover": metodo(PedidoMoverTarefa, Tarefa),
+  "tarefas.ordenar": metodo(PedidoOrdenar, z.array(Tarefa)),
+  /** Manda à lixeira com as subtarefas e o lembrete ligado; volta o que foi. */
+  "tarefas.apagar": metodo(PedidoTarefa, Apagados),
+  "tarefas.etiquetas": metodo(z.undefined(), z.array(Etiqueta)),
+
+  "lembretes.listar": metodo(PedidoListarLembretes, z.array(Lembrete)),
+  "lembretes.hoje": metodo(z.undefined(), LembretesDeHoje),
+  "lembretes.criar": metodo(NovoLembrete, Lembrete),
+  "lembretes.definir": metodo(MudancaLembrete, Lembrete),
+  "lembretes.adiar": metodo(PedidoAdiarLembretes, z.array(Lembrete)),
+  /** "Feito": o recorrente volta com o próximo horário; o de uma vez sai. */
+  "lembretes.concluir": metodo(PedidoLembretes, MudancaLembretes),
+  "lembretes.cancelar": metodo(PedidoLembretes, Apagados),
+
+  "agenda.calendarios": metodo(z.undefined(), z.array(Calendario)),
+  "agenda.definirCalendario": metodo(MudancaCalendario, Calendario),
+  /** Os dias pedidos: as ocorrências de todos os calendários lidos e os blocos livres. */
+  "agenda.consultar": metodo(PedidoAgenda, Agenda),
+  "agenda.obterEvento": metodo(PedidoEvento, EventoAgenda),
+  /** Só no local e no "Moductus"; nos outros, quem escreve é a Alba, com cartão. */
+  "agenda.criarEvento": metodo(NovoEvento, EventoAgenda),
+  "agenda.definirEvento": metodo(MudancaEvento, EventoAgenda),
+  "agenda.apagarEvento": metodo(PedidoEvento, Apagados),
+  /** Aplicar o encaixe da Alba: só com o clique, `interno`, com desfazer de 24 h. */
+  "agenda.aplicarSugestao": metodo(PedidoAplicarSugestao, SugestaoAplicada),
+
+  "foco.obter": metodo(z.undefined(), EstadoFoco),
+  "foco.iniciar": metodo(PedidoIniciarFoco, EstadoFoco),
+  /** O atalho do foco (Ctrl+Alt+P): inicia se está parado, pausa se está rodando, retoma se pausado. */
+  "foco.alternar": metodo(z.undefined(), EstadoFoco),
+  "foco.pausar": metodo(z.undefined(), EstadoFoco),
+  "foco.retomar": metodo(z.undefined(), EstadoFoco),
+  "foco.estender": metodo(PedidoEstenderFoco, EstadoFoco),
+  /** "Terminar ciclo": fecha a etapa agora (antes da hora, fica interrompida) e segue para a próxima. */
+  "foco.terminar": metodo(z.undefined(), EstadoFoco),
+  "foco.pularPausa": metodo(z.undefined(), EstadoFoco),
+  "foco.historico": metodo(PedidoHistoricoFoco, HistoricoFoco),
+
+  "notas.listar": metodo(PedidoNotas, z.array(ResumoNota)),
+  "notas.obter": metodo(PedidoNota, Nota),
+  "notas.criar": metodo(NovaNota, Nota),
+  "notas.salvar": metodo(PedidoSalvarNota, ResultadoSalvarNota),
+  "notas.definir": metodo(MudancaNota, Nota),
+  /** Manda à lixeira; o bloco rápido não vai. */
+  "notas.apagar": metodo(PedidoNota, Apagados),
+  "notas.buscar": metodo(PedidoBuscarNotas, z.array(ResultadoBuscaNota)),
+
+  "rotinas.listar": metodo(z.undefined(), z.array(Rotina)),
+  "rotinas.definir": metodo(MudancaRotina, Rotina),
+  "rotinas.hoje": metodo(z.undefined(), RotinasDeHoje),
+  "rotinas.agir": metodo(PedidoAgirRotina, ApresentacaoRotina),
+
+  "captura.entender": metodo(PedidoEntender, PreviaCaptura),
+  "captura.lancar": metodo(PedidoLancar, LancamentoCaptura),
+  "captura.desfazer": metodo(PedidoDesfazerCaptura, LancamentoCaptura),
+
+  "areas.contagens": metodo(z.undefined(), ContagensAreas),
 } as const;
 
 export type Metodos = typeof METODOS;
@@ -155,6 +300,20 @@ export const EVENTOS = {
   "notificacoes.nova": Notificacao,
   /** O que ainda não foi visto e pede o ponto no dock, a cada mudança. */
   "notificacoes.naoVistas": z.array(Notificacao),
+
+  "listas.mudou": z.array(Lista),
+  "tarefas.mudou": MudancaTarefas,
+  "lembretes.mudou": MudancaLembretes,
+  /** O lembrete do painel Hoje, a cada mudança: também quando o próximo entra nos 30 min antes. */
+  "lembretes.hoje": LembretesDeHoje,
+  "agenda.mudou": MudancaAgenda,
+  "agenda.calendarios": z.array(Calendario),
+  "foco.mudou": EstadoFoco,
+  "notas.mudou": MudancaNotas,
+  "rotinas.mudou": z.array(Rotina),
+  /** Um briefing ou fechamento que acabou de aparecer: abre o painel Hoje. */
+  "rotinas.apareceu": ApresentacaoRotina,
+  "areas.contagens": ContagensAreas,
 } as const;
 
 export type NomeEvento = keyof typeof EVENTOS;

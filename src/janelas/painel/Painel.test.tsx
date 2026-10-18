@@ -68,6 +68,7 @@ function agente(
     escoposMemoria: [],
     tetoDiarioCentavos: null,
     deFabrica: true,
+    camposPersonalizados: [],
     situacao: { ...ATIVO, ...situacao },
   };
 }

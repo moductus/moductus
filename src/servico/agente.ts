@@ -213,10 +213,14 @@ export interface Vigia {
   estado: EstadoLigacao | null;
 }
 
-/** As conexões que são vigias de alguém (AGENTS.md §6): hoje, as do Nuno. */
+/**
+ * As conexões que são vigias de alguém (AGENTS.md §6): as do Nuno e a agenda do Google da Alba,
+ * lida a cada 10 min (ADR-0035), que o serviço só lista a partir da F3-22.
+ */
 const VIGIAS_DE_CONEXAO: Readonly<Record<TipoConexao, { agente: string; nome: string; quando: string }>> = {
   "hooks-claude-code": { agente: "nuno", nome: "Sessões do Claude Code", quando: "na hora, pelos hooks" },
   github: { agente: "nuno", nome: "GitHub", quando: "a cada 15 min" },
+  "google-agenda": { agente: "alba", nome: "Google Agenda", quando: "a cada 10 min" },
 };
 
 const NOME_GATILHO: Record<Gatilho["tipo"], string> = {

@@ -210,3 +210,16 @@ describe("conexão com o GitHub", () => {
     expect(servico.listar()[0]?.estado).toBe("desligada");
   });
 });
+
+describe("conexão com a agenda do Google", () => {
+  test("o tipo já existe, mas até a F3-22 o serviço responde que não está disponível", async () => {
+    const { servico, avisos, ler } = montar();
+    const google = { tipo: "google-agenda" } as const;
+    const motivo = "a conexão google-agenda ainda não está disponível nesta versão do serviço";
+    expect(() => servico.previa(google)).toThrow(motivo);
+    await expect(servico.ligar(google)).rejects.toThrow(motivo);
+    await expect(servico.desligar(google)).rejects.toThrow(motivo);
+    expect(avisos).toEqual([]);
+    expect(ler()).toBe(ORIGINAL);
+  });
+});

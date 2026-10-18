@@ -86,9 +86,14 @@ describe("configuração", () => {
     const escolhida: Config = {
       tema: "papel",
       dock: { lado: "direita", modo: "inteligente", forma: "flutuante" },
-      atalhos: { sistema: "Ctrl+Shift+M", dock: "Ctrl+Alt+J", captura: "Ctrl+Alt+K" },
+      atalhos: { sistema: "Ctrl+Shift+M", dock: "Ctrl+Alt+J", captura: "Ctrl+Alt+K", foco: "Ctrl+Alt+F" },
       autostart: true,
       silencio: { horario: { ligado: true, inicio: "23:00", fim: "06:45" }, telaCheia: false, foco: true },
+      dia: {
+        fuso: "Europe/Lisbon",
+        expediente: { inicio: "08:30", fim: "17:00" },
+        foco: { focoMin: 50, pausaMin: 10, pausaLongaMin: 30, ciclosAtePausaLonga: 3 },
+      },
     };
     // Uma chave por vez, como a interface manda.
     for (const [chave, valor] of Object.entries(escolhida))
@@ -96,6 +101,30 @@ describe("configuração", () => {
     primeiro.db.close();
     const depois = montar(aceita(), primeiro.pasta);
     expect(depois.servico.obter().config).toEqual(escolhida);
+  });
+
+  test("config da 0.6.0, sem o atalho do foco e sem o dia, sobe com o padrão e fica com o resto", () => {
+    const { db, servico } = montar(aceita());
+    const antigos = { sistema: "Ctrl+Shift+M", dock: "Ctrl+Alt+J", captura: "Ctrl+Alt+K" };
+    db.prepare("INSERT INTO config (chave, valor) VALUES (?, ?)").run("atalhos", JSON.stringify(antigos));
+    const { config } = servico.obter();
+    expect(config.atalhos).toEqual({ ...antigos, foco: "Ctrl+Alt+P" });
+    expect(config.dia).toEqual(CONFIG_PADRAO.dia);
+    expect(config.dia.expediente).toEqual({ inicio: "09:00", fim: "18:00" });
+    expect(config.dia.foco).toEqual({ focoMin: 25, pausaMin: 5, pausaLongaMin: 15, ciclosAtePausaLonga: 4 });
+  });
+
+  test("dia gravado pela metade completa com o padrão campo a campo", () => {
+    const { db, servico } = montar(aceita());
+    db.prepare("INSERT INTO config (chave, valor) VALUES (?, ?)").run(
+      "dia",
+      JSON.stringify({ fuso: "Europe/Lisbon", foco: { focoMin: 50 } }),
+    );
+    expect(servico.obter().config.dia).toEqual({
+      fuso: "Europe/Lisbon",
+      expediente: CONFIG_PADRAO.dia.expediente,
+      foco: { ...CONFIG_PADRAO.dia.foco, focoMin: 50 },
+    });
   });
 
   test("portable: autostart não liga, o resto continua editável", async () => {

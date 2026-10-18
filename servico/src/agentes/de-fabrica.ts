@@ -1,4 +1,9 @@
-import type { AgenteDeFabrica, ConfigAgente } from "@moductus/contrato";
+import { isDeepStrictEqual } from "node:util";
+import {
+  CampoDeFabrica as CampoDaDefinicao,
+  type AgenteDeFabrica,
+  type ConfigAgente,
+} from "@moductus/contrato";
 
 /**
  * Os quatro agentes de fábrica num lugar só (AGENTS.md §1 e §2, DESIGN.md §6): o que volta ao
@@ -12,10 +17,7 @@ import type { AgenteDeFabrica, ConfigAgente } from "@moductus/contrato";
  * `de-fabrica.test.ts` confere que um banco novo, com todas as migrações, tem o time exatamente
  * como está aqui.
  */
-export type DefinicaoDeFabrica = Pick<
-  ConfigAgente,
-  "nome" | "funcao" | "instrucoes" | "personagem" | "ferramentas" | "gatilhos" | "escoposMemoria"
->;
+export type DefinicaoDeFabrica = Pick<ConfigAgente, CampoDaDefinicao>;
 
 /** Os gatilhos ficam vazios até cada área ligar os vigias do seu agente. */
 export const DE_FABRICA: Readonly<Record<AgenteDeFabrica, DefinicaoDeFabrica>> = {
@@ -64,6 +66,21 @@ export const DE_FABRICA: Readonly<Record<AgenteDeFabrica, DefinicaoDeFabrica>> =
 /** A definição de fábrica de um id; `null` se o id não é de um dos quatro. */
 export function definicaoDeFabrica(id: string): DefinicaoDeFabrica | null {
   return Object.hasOwn(DE_FABRICA, id) ? DE_FABRICA[id as AgenteDeFabrica] : null;
+}
+
+/**
+ * Os campos em que um agente de fábrica saiu da definição de fábrica, na ordem do contrato: o
+ * selo "personalizada" e a lista do que muda ao restaurar. Listas comparam na ordem, como a
+ * migração que lê daqui. O criado por você não tem padrão, e a lista fica vazia.
+ */
+export function camposPersonalizados(
+  id: string,
+  deFabrica: boolean,
+  atual: DefinicaoDeFabrica,
+): CampoDaDefinicao[] {
+  const definicao = deFabrica ? definicaoDeFabrica(id) : null;
+  if (!definicao) return [];
+  return CampoDaDefinicao.options.filter((campo) => !isDeepStrictEqual(atual[campo], definicao[campo]));
 }
 
 /** As colunas de `agentes` que a definição de fábrica cobre. */

@@ -56,6 +56,7 @@ const agente = (id: string, nome: string, principal: string | null, reserva: str
   escoposMemoria: [],
   tetoDiarioCentavos: null,
   deFabrica: true,
+  camposPersonalizados: [],
   situacao: principal ? SITUACAO : { ...SITUACAO, estado: "dormindo", motivoSono: "sem_modelo" },
 });
 

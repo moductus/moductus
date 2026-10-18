@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Id, Instante, PedidoPagina, pagina } from "./comum.ts";
+import { Id, Instante, InstanteEntrada, PedidoPagina, pagina } from "./comum.ts";
 import { Cobranca, MotivoFalhaProvedor } from "./provedores.ts";
 
 /**
@@ -76,9 +76,29 @@ export const SituacaoAgente = z.object({
 });
 export type SituacaoAgente = z.infer<typeof SituacaoAgente>;
 
+/**
+ * O que a definição de fábrica cobre (`servico/src/agentes/de-fabrica.ts`) e "restaurar padrão"
+ * leva de volta. Modelo, reserva e teto são escolha sua e ficam fora.
+ */
+export const CampoDeFabrica = ConfigAgente.keyof().extract([
+  "nome",
+  "funcao",
+  "instrucoes",
+  "personagem",
+  "ferramentas",
+  "gatilhos",
+  "escoposMemoria",
+]);
+export type CampoDeFabrica = z.infer<typeof CampoDeFabrica>;
+
 export const Agente = ConfigAgente.extend({
   id: Id,
   deFabrica: z.boolean(),
+  /**
+   * Os campos em que o de fábrica difere da definição de fábrica, para o selo "personalizada" e a
+   * lista do que muda ao restaurar. Vazia no que está como veio e no criado por você.
+   */
+  camposPersonalizados: z.array(CampoDeFabrica),
   situacao: SituacaoAgente,
 });
 export type Agente = z.infer<typeof Agente>;
@@ -95,7 +115,7 @@ export const PedidoLigarAgente = z.object({ id: Id, ligado: z.boolean() });
 export type PedidoLigarAgente = z.infer<typeof PedidoLigarAgente>;
 
 /** Pausar pela bandeja: um agente ou, sem `agenteId`, o time todo; `ate: null` é até retomar. */
-export const PedidoPausar = z.object({ agenteId: Id.optional(), ate: Instante.nullable() });
+export const PedidoPausar = z.object({ agenteId: Id.optional(), ate: InstanteEntrada.nullable() });
 export type PedidoPausar = z.infer<typeof PedidoPausar>;
 
 export const PedidoRetomar = z.object({ agenteId: Id.optional() });
