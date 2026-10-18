@@ -86,7 +86,7 @@ export interface LinhaEtapa {
 const COLUNAS =
   "id, tipo, tarefa_id, inicio, fim, termina_em, pausada_em, duracao_planejada_min, duracao_real_min, interrompida, ciclo";
 
-/** O fim planejado: o gravado, ou (na etapa de antes da migração 020) o início mais a duração. */
+/** O fim planejado: o gravado, ou (na etapa de antes da migração 021) o início mais a duração. */
 export const terminaEmDe = (l: LinhaEtapa): number =>
   l.termina_em !== null ? Date.parse(l.termina_em) : Date.parse(l.inicio) + l.duracao_planejada_min * MIN;
 
@@ -115,7 +115,7 @@ export interface CamposEtapa {
   interrompida: boolean;
 }
 
-/** `sessoes_foco` das migrações 014 e 020. */
+/** `sessoes_foco` das migrações 014 e 021. */
 export class RepositorioFoco {
   constructor(private readonly db: DatabaseSync) {}
 

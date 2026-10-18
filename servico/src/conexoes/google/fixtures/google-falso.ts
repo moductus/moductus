@@ -7,8 +7,24 @@ import type { ClienteOAuth, EnderecosGoogle } from "../cliente.ts";
  * Um Google de mentira em 127.0.0.1 para os testes (nenhum pedido sai da máquina): o endpoint de
  * token confere o PKCE, o `redirect_uri` e o cliente como o Google confere; o de revogação e o do
  * calendário principal respondem como os de verdade. O "navegador" lê a URL de autorização e faz
- * o redirecionamento que o Google faria depois do consentimento.
+ * o redirecionamento que o Google faria depois do consentimento. A Calendar API (F3-23) tem a
+ * lista de calendários e os eventos de cada um, com `timeMin`, páginas, `nextSyncToken` (o que
+ * mudou desde ele, com os apagados como `cancelled`), o 410 do token vencido e as respostas de cota.
  */
+
+/** Um calendário da lista da conta, como o `calendarList` devolve. */
+export interface CalendarioFalso {
+  id: string;
+  summary: string;
+  primary?: boolean;
+  backgroundColor?: string;
+}
+
+interface EventoGuardado {
+  corpo: Record<string, unknown>;
+  versao: number;
+  cancelado: boolean;
+}
 
 /** O que o navegador falso faz com a URL de autorização. */
 export type Navegacao =
@@ -43,6 +59,24 @@ export interface GoogleFalso {
   revogarTudoNoGoogle(): void;
   /** O redirecionamento feito pelo navegador falso, para esperar por ele. */
   redirecionamentos: Promise<Response | Error>[];
+  /** A lista de calendários da conta (`calendarList`). */
+  calendarios: CalendarioFalso[];
+  /** Grava um evento (novo ou mudado): a mudança entra na próxima leitura incremental. */
+  gravarEvento(calendarioId: string, evento: Record<string, unknown> & { id: string }): void;
+  /** Apaga um evento: a incremental o devolve como `cancelled`, a completa não o devolve mais. */
+  apagarEvento(calendarioId: string, id: string): void;
+  /** Os tokens de sincronização dados até aqui deixam de valer: o próximo pedido com eles é 410. */
+  vencerSincronizacao(): void;
+  /** Os próximos `restantes` pedidos à Calendar API respondem que passou da cota. */
+  cota: { restantes: number; status: 403 | 429 };
+  /** Todo pedido à Calendar API responde com este status (500 é o Google fora do ar). */
+  falharCalendario: number | null;
+  /** Eventos por página, para a leitura passar por mais de uma. */
+  porPagina: number;
+  /** Os pedidos à Calendar API, em ordem. */
+  pedidosCalendario: URL[];
+  /** Os tokens de acesso dados deixam de valer, como quando o Google os recusa antes de vencer. */
+  esquecerAcessos(): void;
   fechar(): Promise<void>;
 }
 
@@ -70,9 +104,85 @@ export async function abrirGoogleFalso(
   const clienteConfere = (campos: Record<string, string>) =>
     campos.client_id === cliente.id && (campos.client_secret ?? null) === cliente.segredo;
 
+  const eventos = new Map<string, Map<string, EventoGuardado>>();
+  let versao = 0;
+  let validoDesde = 0;
+
+  const erroGoogle = (res: ServerResponse, status: number, razao: string) =>
+    responder(res, status, { error: { code: status, errors: [{ reason: razao }] } });
+
+  /** Termina depois de `desde` (o `timeMin` do Google): o recorrente vale enquanto a regra valer. */
+  const terminaDepois = (corpo: Record<string, unknown>, desde: number) => {
+    if (Array.isArray(corpo.recurrence)) return true;
+    const fim = corpo.end as { date?: string; dateTime?: string } | undefined;
+    const quando = Date.parse(fim?.dateTime ?? fim?.date ?? "");
+    return !Number.isFinite(desde) || !Number.isFinite(quando) || quando > desde;
+  };
+
+  /** O que o Google devolve de um apagado: só o id e, da ocorrência, de qual recorrente ela é. */
+  const cancelado = (corpo: Record<string, unknown>) => ({
+    id: corpo.id,
+    status: "cancelled",
+    ...(corpo.recurringEventId
+      ? { recurringEventId: corpo.recurringEventId, originalStartTime: corpo.originalStartTime }
+      : {}),
+  });
+
+  const calendarioApi = (req: IncomingMessage, res: ServerResponse, url: URL) => {
+    falso.pedidosCalendario.push(url);
+    const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
+    if (!token || !acessos.has(token)) return erroGoogle(res, 401, "authError");
+    if (falso.falharCalendario !== null) return erroGoogle(res, falso.falharCalendario, "backendError");
+    if (falso.cota.restantes > 0) {
+      falso.cota.restantes--;
+      return erroGoogle(res, falso.cota.status, "rateLimitExceeded");
+    }
+    const rota = url.pathname.slice("/calendar/v3".length);
+    if (rota === "/users/me/calendarList") {
+      return responder(res, 200, { kind: "calendar#calendarList", items: falso.calendarios });
+    }
+    const m = /^\/calendars\/([^/]+)\/events$/.exec(rota);
+    const calendarioId = m ? decodeURIComponent(m[1]!) : "";
+    if (!m || !falso.calendarios.some((c) => c.id === calendarioId)) return erroGoogle(res, 404, "notFound");
+    const doCalendario = [...(eventos.get(calendarioId)?.values() ?? [])].sort(
+      (a, b) => a.versao - b.versao || String(a.corpo.id).localeCompare(String(b.corpo.id)),
+    );
+    const p = url.searchParams;
+    const [, deslocado, foto] = /^p:(\d+):(\d+)$/.exec(p.get("pageToken") ?? "") ?? [];
+    const instantanea = foto === undefined ? versao : Number(foto);
+    const sincronizacao = p.get("syncToken");
+    let itens: unknown[];
+    if (sincronizacao !== null) {
+      const desde = Number(/^sync:(\d+)$/.exec(sincronizacao)?.[1] ?? -1);
+      if (desde < validoDesde) return erroGoogle(res, 410, "fullSyncRequired");
+      itens = doCalendario
+        .filter((e) => e.versao > desde && e.versao <= instantanea)
+        .map((e) => (e.cancelado ? cancelado(e.corpo) : e.corpo));
+    } else {
+      const desde = Date.parse(p.get("timeMin") ?? "");
+      // Sem `showDeleted`, a completa ainda traz a ocorrência cancelada de um recorrente.
+      itens = doCalendario
+        .filter((e) => e.versao <= instantanea)
+        .filter((e) => (e.cancelado ? Boolean(e.corpo.recurringEventId) : terminaDepois(e.corpo, desde)))
+        .map((e) => (e.cancelado ? cancelado(e.corpo) : e.corpo));
+    }
+    const inicio = Number(deslocado ?? 0);
+    const pagina = itens.slice(inicio, inicio + falso.porPagina);
+    const resta = inicio + falso.porPagina < itens.length;
+    return responder(res, 200, {
+      kind: "calendar#events",
+      items: pagina,
+      ...(resta
+        ? { nextPageToken: `p:${inicio + falso.porPagina}:${instantanea}` }
+        : { nextSyncToken: `sync:${instantanea}` }),
+    });
+  };
+
   const http: Server = createServer((req, res) => {
     void (async () => {
-      const rota = new URL(req.url ?? "/", "http://127.0.0.1").pathname;
+      const endereco = new URL(req.url ?? "/", "http://127.0.0.1");
+      const rota = endereco.pathname;
+      if (rota.startsWith("/calendar/v3/")) return calendarioApi(req, res, endereco);
       if (rota === "/primary") {
         const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
         return token && acessos.has(token)
@@ -156,6 +266,7 @@ export async function abrirGoogleFalso(
       token: `${raiz}/token`,
       revogacao: `${raiz}/revoke`,
       calendarioPrincipal: `${raiz}/primary`,
+      calendario: `${raiz}/calendar/v3`,
     },
     navegacao: "autorizar",
     autorizacoes: [],
@@ -166,6 +277,28 @@ export async function abrirGoogleFalso(
     trocarRenovacao: false,
     redirecionamentos: [],
     revogarTudoNoGoogle: () => renovacoes.clear(),
+    calendarios: [{ id: conta, summary: conta, primary: true, backgroundColor: "#9fe1e7" }],
+    gravarEvento(calendarioId, evento) {
+      const doCalendario = eventos.get(calendarioId) ?? new Map<string, EventoGuardado>();
+      eventos.set(calendarioId, doCalendario);
+      doCalendario.set(evento.id, {
+        corpo: evento,
+        versao: ++versao,
+        cancelado: evento.status === "cancelled",
+      });
+    },
+    apagarEvento(calendarioId, id) {
+      const atual = eventos.get(calendarioId)?.get(id);
+      if (atual) eventos.get(calendarioId)!.set(id, { ...atual, versao: ++versao, cancelado: true });
+    },
+    vencerSincronizacao: () => {
+      validoDesde = ++versao;
+    },
+    cota: { restantes: 0, status: 429 },
+    falharCalendario: null,
+    porPagina: 250,
+    pedidosCalendario: [],
+    esquecerAcessos: () => acessos.clear(),
     abrir: {
       endereco(endereco) {
         const url = new URL(endereco);

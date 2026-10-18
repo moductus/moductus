@@ -13,8 +13,8 @@ import { FORMATO_DATA_GLOB } from "../banco/tabela.ts";
  *
  * A etapa que já existia ganha o `termina_em` do início mais a duração planejada e o ciclo 1.
  */
-export const m020: Migracao = {
-  versao: 20,
+export const m021: Migracao = {
+  versao: 21,
   nome: "foco-etapas",
   sql: `ALTER TABLE sessoes_foco ADD COLUMN termina_em TEXT
     CHECK (termina_em IS NULL OR (termina_em GLOB '${FORMATO_DATA_GLOB}' AND termina_em > inicio));

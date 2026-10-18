@@ -7,7 +7,7 @@ import { AGENTES, DADOS_AGENTES } from "../../componentes/personagem/agentes.ts"
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
 import { formatarHora } from "../../componentes/personagem/quando.ts";
 import { CONVITE_MODELO, lerSituacao } from "../../componentes/personagem/situacao.ts";
-import { Contagem } from "../../componentes/Selo.tsx";
+import { Contagem, textoDaContagem } from "../../componentes/Selo.tsx";
 import {
   useAwake,
   useConfiguracaoDock,
@@ -16,14 +16,12 @@ import {
   useServico,
   useTelaCheia,
 } from "../../nativo/eventos.ts";
-import { useDadosDev } from "../../areas/dev/dev.ts";
 import { useAgora } from "../../areas/tempo.ts";
 import { useCanal } from "../../servico/conexao.ts";
+import { ROTULOS_CONTAGEM, useContagens } from "../../servico/contagens.ts";
 import { marcarVistasDe, usePontosTime } from "../../servico/notificacoes.ts";
 import { useTime } from "../../servico/time.ts";
-import { AREAS_DOCK, DADOS_AREAS, type AreaDock } from "../areas.ts";
-import { sessoesEsperando } from "../painel/agentes.ts";
-import { usePendentesDoTerminal } from "../painel/dados.ts";
+import { AREAS_DOCK, DADOS_AREAS } from "../areas.ts";
 import { pontoDoAgente, rotuloDoAgente } from "./agentes.ts";
 import { proximoIndice } from "./navegacao.ts";
 import "./Dock.css";
@@ -58,16 +56,10 @@ export function Dock() {
   const canal = useCanal(servico);
   const { situacoes: time, modelos, gastos } = useTime(canal);
   const pontos = usePontosTime(canal);
+  // Os badges e as sessões esperando vêm contados do serviço, os mesmos da barra lateral do Sistema.
+  const contagens = useContagens(canal);
   // As sessões do terminal esperando você são do Nuno, que fica de olho nelas (Dock.dc.html).
-  const esperandoNoTerminal = sessoesEsperando(usePendentesDoTerminal(canal) ?? []);
-  const github = useDadosDev(canal);
-  // O badge do Dev conta o que precisa de você no GitHub; sem conexão, nada.
-  const contagens: Partial<Record<AreaDock, number>> = {
-    dev:
-      github.estado === "pronta"
-        ? github.dados.situacao.itens.filter((i) => i.estado === "aberto" && i.precisaDeMim).length
-        : 0,
-  };
+  const esperandoNoTerminal = contagens.sessoesEsperando;
   const config = useConfiguracaoDock();
   const aberta = useAreaAberta();
   // Um relógio só para o dock: a hora no rodapé e a hora das dicas viram juntas, no minuto.
@@ -131,6 +123,12 @@ export function Dock() {
 
       {AREAS_DOCK.map((id) => {
         const area = DADOS_AREAS[id];
+        const valor = area.contagem ? contagens[area.contagem] : 0;
+        // O nome do botão leva a contagem ("Tarefas, 4 tarefas pendentes"): o aria-label cobre o badge.
+        const rotulo =
+          area.contagem && valor > 0
+            ? `${area.nome}, ${textoDaContagem(valor, ROTULOS_CONTAGEM[area.contagem])}`
+            : area.nome;
         return (
           <button
             key={id}
@@ -138,14 +136,14 @@ export function Dock() {
             className="dock-botao"
             data-area={id}
             data-ativo={aberta === id || undefined}
-            aria-label={area.nome}
+            aria-label={rotulo}
             aria-expanded={aberta === id}
-            title={area.nome}
+            title={rotulo}
             onClick={() => void invoke("painel_abrir", { area: id })}
           >
             <Icone nome={area.icone} tamanho={20} />
-            {/* Área sem número ao vivo ainda conta zero, e zero não desenha o badge. */}
-            {area.contagem && <Contagem valor={contagens[id] ?? 0} rotulo={area.contagem} />}
+            {/* Zero não desenha o badge. */}
+            {area.contagem && <Contagem valor={valor} rotulo={ROTULOS_CONTAGEM[area.contagem]} />}
           </button>
         );
       })}
