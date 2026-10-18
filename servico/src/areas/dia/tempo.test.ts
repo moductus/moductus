@@ -11,6 +11,7 @@ import {
   inicioDoDia,
   instanteNoFuso,
   noFuso,
+  numeroDoDia,
   somarDias,
 } from "./tempo.ts";
 
@@ -51,6 +52,29 @@ describe("dia civil no fuso", () => {
     expect(diaNoFuso(em("2028-02-29T15:00:00.000Z"), SP)).toBe("2028-02-29");
     expect(diaNoFuso(em("2028-03-01T02:00:00.000Z"), SP)).toBe("2028-02-29");
     expect(diasEntre("2028-02-01", "2028-03-01")).toBe(29);
+  });
+
+  test("o calendário vai de 0001-01-01 a 9999-12-31, sem os anos 0 a 99 virarem 1900", () => {
+    expect(numeroDoDia("0050-06-15")).toBe(Date.parse("0050-06-15T00:00:00Z") / 86_400_000);
+    expect(somarDias("0099-12-31", 1)).toBe("0100-01-01");
+    expect(somarDias("0050-02-28", 1)).toBe("0050-03-01");
+    expect(diasEntre("0050-01-01", "0051-01-01")).toBe(365);
+    expect(diasEntre("0050-01-01", "0150-01-01")).toBe(36_524);
+    expect(diaDaSemana("0099-12-25")).toBe(5);
+    expect(ehDia("0001-01-01")).toBe(true);
+    expect(ehDia("0000-01-01")).toBe(false);
+    expect(ehDia("9999-12-31")).toBe(true);
+    expect(somarDias("9999-12-30", 1)).toBe("9999-12-31");
+    // Depois do último dia, erro em vez de "+010000-01-01".
+    expect(() => somarDias("9999-12-31", 1)).toThrow(RangeError);
+    expect(() => somarDias("0001-01-01", -1)).toThrow(RangeError);
+    const meioDia = instanteNoFuso("0050-06-15", "12:00", "UTC");
+    expect(meioDia.toISOString()).toBe("0050-06-15T12:00:00.000Z");
+    // No fuso de São Paulo, o ano 50 está na hora local média (−3:06:28), e a ida e volta fecha.
+    const local = instanteNoFuso("0050-06-15", "12:00", SP);
+    expect(diaNoFuso(local, SP)).toBe("0050-06-15");
+    expect(horaNoFuso(local, SP)).toBe("12:00");
+    expect(local.toISOString()).toBe("0050-06-15T15:06:28.000Z");
   });
 
   test("dia da semana, de 0 domingo a 6 sábado", () => {

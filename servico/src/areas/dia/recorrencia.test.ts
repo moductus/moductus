@@ -225,6 +225,108 @@ describe("expansão", () => {
     // De 7 em 7 dias a partir de uma terça, nunca é segunda.
     expect(proximoDia("FREQ=DAILY;INTERVAL=7;BYDAY=MO", "2026-10-20", "2026-10-20")).toBeNull();
   });
+
+  test("ordem no anual: a vigésima segunda-feira e toda segunda do ano", () => {
+    expect(dias("FREQ=YEARLY;BYDAY=20MO", "1997-05-19", "1997-01-01", "1999-12-31")).toEqual([
+      "1997-05-19",
+      "1998-05-18",
+      "1999-05-17",
+    ]);
+    expect(dias("FREQ=YEARLY;BYDAY=-1SU", "2026-12-27", "2026-01-01", "2028-12-31")).toEqual([
+      "2026-12-27",
+      "2027-12-26",
+      "2028-12-31",
+    ]);
+    expect(dias("FREQ=YEARLY;BYDAY=MO", "2026-12-21", "2026-12-01", "2027-01-11")).toEqual([
+      "2026-12-21",
+      "2026-12-28",
+      "2027-01-04",
+      "2027-01-11",
+    ]);
+    // BYMONTHDAY no anual vale em todo mês.
+    expect(dias("FREQ=YEARLY;BYMONTHDAY=1,-1", "2026-01-01", "2026-01-01", "2026-03-01")).toEqual([
+      "2026-01-01",
+      "2026-01-31",
+      "2026-02-01",
+      "2026-02-28",
+      "2026-03-01",
+    ]);
+  });
+
+  test("sem COUNT, começar no período pedido não tira a regra do passo", () => {
+    // Com COUNT a expansão conta desde o início; sem, ela pula até o intervalo. As duas batem.
+    for (const regra of [
+      "FREQ=DAILY;INTERVAL=3",
+      "FREQ=WEEKLY;INTERVAL=3;BYDAY=TU,SA",
+      "FREQ=WEEKLY;INTERVAL=2;BYDAY=SU,MO;WKST=SU",
+      "FREQ=MONTHLY;INTERVAL=5;BYDAY=-1FR",
+      "FREQ=MONTHLY;INTERVAL=7",
+      "FREQ=YEARLY;INTERVAL=5;BYMONTHDAY=13;BYDAY=FR",
+    ]) {
+      const semContagem = dias(regra, "2001-01-30", "2026-01-01", "2027-12-31");
+      expect(semContagem.length, regra).toBeGreaterThan(0);
+      expect(semContagem, regra).toEqual(
+        dias(`${regra};COUNT=100000`, "2001-01-30", "2026-01-01", "2027-12-31"),
+      );
+    }
+  });
+
+  test("regra anual com ordem que nunca acerta, ou com muitos itens, não trava o serviço", () => {
+    const prazo = (f: () => unknown) => {
+      const antes = performance.now();
+      f();
+      return performance.now() - antes;
+    };
+    const doMes = Array.from({ length: 28 }, (_, i) => i + 1).join(",");
+    // A 53ª segunda nunca cai de 1 a 28: mil anos sem acerto.
+    const nunca = `FREQ=YEARLY;BYDAY=53MO;BYMONTHDAY=${doMes}`;
+    const nuncaSete = `FREQ=YEARLY;BYDAY=53MO,53TU,53WE,53TH,53FR,53SA,53SU;BYMONTHDAY=${doMes}`;
+    for (const regra of [nunca, nuncaSete]) {
+      expect(
+        prazo(() => expect(proximoDia(regra, "2026-01-01", "2026-01-01")).toBeNull()),
+        regra,
+      ).toBeLessThan(200);
+      const inicio = new Date("2026-01-01T13:00:00.000Z");
+      expect(
+        prazo(() => expect(proximoInstante(regra, inicio, SP, inicio)).toBeNull()),
+        regra,
+      ).toBeLessThan(200);
+    }
+    // 83 ordens (-1MO a -52MO e de novo), no limite de 500 caracteres: toda segunda do ano.
+    const ordens = Array.from({ length: 83 }, (_, i) => `-${(i % 52) + 1}MO`).join(",");
+    const muitos = `FREQ=YEARLY;BYDAY=${ordens}`;
+    expect(muitos.length).toBeLessThanOrEqual(500);
+    const segundas = ["2026-10-05", "2026-10-12", "2026-10-19", "2026-10-26", "2026-11-02"];
+    // Com COUNT a expansão conta desde 1900, sem pular.
+    const comContagem = `FREQ=YEARLY;BYDAY=${Array.from({ length: 52 }, (_, i) => `-${i + 1}MO`).join(",")};COUNT=999999`;
+    for (const regra of [muitos, comContagem]) {
+      expect(lerRecorrencia(regra).entendida, regra).toBe(true);
+      expect(
+        prazo(() => expect(dias(regra, "1900-01-01", "2026-10-01", "2026-11-02")).toEqual(segundas)),
+      ).toBeLessThan(200);
+    }
+  });
+
+  test("o calendário vai do ano 1 ao 9999", () => {
+    expect(dias("FREQ=DAILY;COUNT=2", "0050-03-01", "0001-01-01", "2000-01-01")).toEqual([
+      "0050-03-01",
+      "0050-03-02",
+    ]);
+    expect(proximoDia("FREQ=YEARLY", "0096-02-29", "0096-02-29")).toBe("0104-02-29");
+    expect(dias("FREQ=MONTHLY;BYDAY=-1FR", "0099-12-25", "0099-12-01", "0100-01-31")).toEqual([
+      "0099-12-25",
+      "0100-01-29",
+    ]);
+    // Depois de 9999-12-31 não há próxima: a expansão para no fim do calendário.
+    expect(dias("FREQ=DAILY", "9999-12-30", "9999-12-01", "9999-12-31")).toEqual([
+      "9999-12-30",
+      "9999-12-31",
+    ]);
+    expect(proximoDia("FREQ=DAILY", "9999-12-30", "9999-12-31")).toBeNull();
+    expect(proximoDia("FREQ=YEARLY", "9999-06-01", "9999-06-01")).toBeNull();
+    const fimDoAno = new Date("9999-12-31T13:00:00.000Z");
+    expect(proximoInstante("FREQ=WEEKLY", fimDoAno, SP, fimDoAno)).toBeNull();
+  });
 });
 
 describe("com hora, no relógio do fuso", () => {

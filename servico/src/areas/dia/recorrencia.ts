@@ -1,4 +1,14 @@
-import { diaDaSemana, diaDoNumero, diasNoMes, ehDia, instanteNoFuso, noFuso, numeroDoDia } from "./tempo.ts";
+import {
+  ULTIMO_NUMERO,
+  diaDaSemana,
+  diaDoNumero,
+  diasNoMes,
+  ehDia,
+  instanteNoFuso,
+  noFuso,
+  numeroDaData,
+  numeroDoDia,
+} from "./tempo.ts";
 
 /**
  * Recorrência (ADR-0034): o subconjunto de RRULE do RFC 5545 que o Moductus expande sozinho,
@@ -185,21 +195,29 @@ export function escreverRecorrencia(regra: Regra): string {
 // A expansão: os dias (números desde 1970-01-01) em que a regra acontece, em ordem, a partir do
 // início. O `UNTIL` fica com quem chama, que sabe se o início tem hora.
 
+/** O dia da semana do número do dia (0 domingo): 1970-01-01 foi quinta. */
+const semanaDe = (dia: number): number => (((dia + 4) % 7) + 7) % 7;
+
+/** Ano e mês (1 a 12) do número do dia. */
+function anoEMes(dia: number): [number, number] {
+  const data = new Date(dia * 86_400_000);
+  return [data.getUTCFullYear(), data.getUTCMonth() + 1];
+}
+
 /** O período (dia, semana, mês ou ano) em que o dia cai, contado de 1970. */
 function periodoDe(regra: Regra, dia: number): number {
-  const data = new Date(dia * 86_400_000);
   switch (regra.frequencia) {
     case "DAILY":
       return dia;
-    case "WEEKLY": {
-      // 1970-01-01 foi quinta: desloca para a semana começar no WKST.
-      const inicio = SEMANA.indexOf(regra.inicioDaSemana);
-      return Math.floor((dia + 4 - inicio) / 7);
+    case "WEEKLY":
+      // Desloca para a semana começar no WKST.
+      return Math.floor((dia + 4 - SEMANA.indexOf(regra.inicioDaSemana)) / 7);
+    case "MONTHLY": {
+      const [ano, mes] = anoEMes(dia);
+      return ano * 12 + mes - 1;
     }
-    case "MONTHLY":
-      return data.getUTCFullYear() * 12 + data.getUTCMonth();
     case "YEARLY":
-      return data.getUTCFullYear();
+      return anoEMes(dia)[0];
   }
 }
 
@@ -211,77 +229,145 @@ function primeiroDoPeriodo(regra: Regra, periodo: number): number {
     case "WEEKLY":
       return periodo * 7 - 4 + SEMANA.indexOf(regra.inicioDaSemana);
     case "MONTHLY":
-      return Date.UTC(Math.floor(periodo / 12), periodo % 12, 1) / 86_400_000;
+      return numeroDaData(Math.floor(periodo / 12), (periodo % 12) + 1, 1);
     case "YEARLY":
-      return Date.UTC(periodo, 0, 1) / 86_400_000;
+      return numeroDaData(periodo, 1, 1);
   }
-}
-
-/** Os dias do período, do primeiro ao último. */
-function diasDoPeriodo(regra: Regra, periodo: number): number[] {
-  const primeiro = primeiroDoPeriodo(regra, periodo);
-  const total = primeiroDoPeriodo(regra, periodo + 1) - primeiro;
-  return Array.from({ length: total }, (_, i) => primeiro + i);
-}
-
-/** Os dias do período em que a regra acontece. */
-function candidatos(regra: Regra, periodo: number, inicio: number): number[] {
-  const dias = diasDoPeriodo(regra, periodo);
-  const dataInicio = new Date(inicio * 86_400_000);
-  if (regra.diasDaSemana.length === 0 && regra.diasDoMes.length === 0) {
-    // Sem BYDAY nem BYMONTHDAY, o padrão vem do início: o mesmo dia da semana, do mês ou do ano.
-    // Mês sem o dia (31 em abril, 29/02 fora do bissexto) fica sem ocorrência, como no RFC.
-    return dias.filter((d) => {
-      const data = new Date(d * 86_400_000);
-      switch (regra.frequencia) {
-        case "DAILY":
-          return true;
-        case "WEEKLY":
-          return data.getUTCDay() === dataInicio.getUTCDay();
-        case "MONTHLY":
-          return data.getUTCDate() === dataInicio.getUTCDate();
-        case "YEARLY":
-          return (
-            data.getUTCDate() === dataInicio.getUTCDate() && data.getUTCMonth() === dataInicio.getUTCMonth()
-          );
-      }
-    });
-  }
-  return dias.filter((d) => acertaDiaDoMes(regra, d) && acertaDiaDaSemana(regra, d, dias));
-}
-
-function acertaDiaDoMes(regra: Regra, dia: number): boolean {
-  if (regra.diasDoMes.length === 0) return true;
-  const data = new Date(dia * 86_400_000);
-  const doMes = data.getUTCDate();
-  const total = diasNoMes(data.getUTCFullYear(), data.getUTCMonth() + 1);
-  return regra.diasDoMes.some((n) => (n > 0 ? n === doMes : total + n + 1 === doMes));
-}
-
-/** O dia bate com algum BYDAY; a ordem (`2TU`, `-1FR`) conta dentro do período (mês ou ano). */
-function acertaDiaDaSemana(regra: Regra, dia: number, periodo: number[]): boolean {
-  if (regra.diasDaSemana.length === 0) return true;
-  const semana = new Date(dia * 86_400_000).getUTCDay();
-  return regra.diasDaSemana.some(({ dia: d, ordem }) => {
-    if (SEMANA.indexOf(d) !== semana) return false;
-    if (ordem === null) return true;
-    const mesmos = periodo.filter((p) => new Date(p * 86_400_000).getUTCDay() === semana);
-    return mesmos[ordem > 0 ? ordem - 1 : mesmos.length + ordem] === dia;
-  });
 }
 
 /**
- * Os dias da regra a partir do início, em ordem, sem passar de `limite`. O início vem primeiro
- * e conta no `COUNT`; o `UNTIL` fica com quem chama, que sabe se o início tem hora.
+ * A regra pronta para expandir: o `BYDAY` agrupado por dia da semana (toda segunda, ou só as
+ * ordens pedidas) e o `BYMONTHDAY` sem repetição. Item repetido não multiplica o trabalho.
  */
-function* dias(regra: Regra, inicio: number, limite: number): Generator<number> {
+interface Plano {
+  regra: Regra;
+  /** Por dia da semana (0 domingo): `true` é todo; um conjunto, só aquelas ordens. */
+  semana: Map<number, true | Set<number>>;
+  diasDoMes: number[];
+}
+
+function planejar(regra: Regra): Plano {
+  const semana = new Map<number, true | Set<number>>();
+  for (const { dia, ordem } of regra.diasDaSemana) {
+    const n = SEMANA.indexOf(dia);
+    const atual = semana.get(n);
+    if (ordem === null) semana.set(n, true);
+    else if (atual === undefined) semana.set(n, new Set([ordem]));
+    else if (atual !== true) atual.add(ordem);
+  }
+  return { regra, semana, diasDoMes: [...new Set(regra.diasDoMes)] };
+}
+
+/**
+ * Os dias de `primeiro` a `ultimo` (um período) em que a regra acontece, em ordem. Cada dia da
+ * semana é achado por conta (o primeiro dele no período e de 7 em 7), e a ordem é o índice nessa
+ * lista: nada de varrer o período dia a dia.
+ */
+function candidatos(plano: Plano, primeiro: number, ultimo: number, inicio: number): number[] {
+  const { regra } = plano;
+  if (plano.semana.size === 0 && plano.diasDoMes.length === 0) return padrao(regra, primeiro, ultimo, inicio);
+  // No diário o período é um dia só (e o RFC não dá ordem ao BYDAY): basta conferir o dia.
+  if (regra.frequencia === "DAILY") return acertaODia(plano, primeiro) ? [primeiro] : [];
+
+  let porSemana: Set<number> | null = null;
+  if (plano.semana.size > 0) {
+    porSemana = new Set();
+    for (const [semana, ordens] of plano.semana) {
+      const primeiraVez = primeiro + ((semana - semanaDe(primeiro) + 7) % 7);
+      const vezes = primeiraVez > ultimo ? 0 : Math.floor((ultimo - primeiraVez) / 7) + 1;
+      if (ordens === true) {
+        for (let i = 0; i < vezes; i++) porSemana.add(primeiraVez + 7 * i);
+        continue;
+      }
+      for (const ordem of ordens) {
+        const i = ordem > 0 ? ordem - 1 : vezes + ordem;
+        if (i >= 0 && i < vezes) porSemana.add(primeiraVez + 7 * i);
+      }
+    }
+  }
+  if (plano.diasDoMes.length === 0) return [...porSemana!].sort((a, b) => a - b);
+
+  const achados: number[] = [];
+  // Os meses que o período toca: um no diário e no mensal, doze no anual.
+  const [anoInicial, mesInicial] = anoEMes(primeiro);
+  for (let meses = anoInicial * 12 + mesInicial - 1; ; meses++) {
+    const ano = Math.floor(meses / 12);
+    const mes = (meses % 12) + 1;
+    const inicioDoMes = numeroDaData(ano, mes, 1);
+    if (inicioDoMes > ultimo) break;
+    const total = diasNoMes(ano, mes);
+    for (const n of plano.diasDoMes) {
+      const doMes = n > 0 ? n : total + n + 1;
+      if (doMes < 1 || doMes > total) continue;
+      const d = inicioDoMes + doMes - 1;
+      if (d >= primeiro && d <= ultimo && (porSemana === null || porSemana.has(d))) achados.push(d);
+    }
+  }
+  return [...new Set(achados)].sort((a, b) => a - b);
+}
+
+function acertaODia(plano: Plano, dia: number): boolean {
+  if (plano.semana.size > 0 && !plano.semana.has(semanaDe(dia))) return false;
+  if (plano.diasDoMes.length === 0) return true;
+  const data = new Date(dia * 86_400_000);
+  const doMes = data.getUTCDate();
+  const total = diasNoMes(data.getUTCFullYear(), data.getUTCMonth() + 1);
+  return plano.diasDoMes.some((n) => (n > 0 ? n : total + n + 1) === doMes);
+}
+
+/**
+ * Sem BYDAY nem BYMONTHDAY, o padrão vem do início: o mesmo dia da semana, do mês ou do ano. Mês
+ * sem o dia (31 em abril, 29/02 fora do bissexto) fica sem ocorrência, como no RFC.
+ */
+function padrao(regra: Regra, primeiro: number, ultimo: number, inicio: number): number[] {
+  if (regra.frequencia === "DAILY") return [primeiro];
+  if (regra.frequencia === "WEEKLY") return [primeiro + ((semanaDe(inicio) - semanaDe(primeiro) + 7) % 7)];
+  const dataInicio = new Date(inicio * 86_400_000);
+  const ano = anoEMes(primeiro)[0];
+  // No mensal, o mês do período; no anual, o mês do início.
+  const mes = regra.frequencia === "MONTHLY" ? anoEMes(primeiro)[1] : dataInicio.getUTCMonth() + 1;
+  const doMes = dataInicio.getUTCDate();
+  if (doMes > diasNoMes(ano, mes)) return [];
+  const d = numeroDaData(ano, mes, doMes);
+  return d <= ultimo ? [d] : [];
+}
+
+/**
+ * Teto de trabalho da expansão, além dos mil anos: cada período custa 1 mais os itens que a
+ * regra pede nele (as ordens do BYDAY e os BYMONTHDAY de cada mês). É a rede de segurança: regra
+ * que pede muito e acerta pouco para aqui em vez de travar o serviço, que é uma linha só.
+ */
+const TETO_DE_TRABALHO = 2_000_000;
+
+/**
+ * Os dias da regra a partir do início, em ordem, sem passar de `limite`. O início vem primeiro
+ * e conta no `COUNT`; o `UNTIL` fica com quem chama, que sabe se o início tem hora. Sem `COUNT`,
+ * nada antes de `desde` precisa ser contado, e a expansão já começa no período dele. O
+ * calendário acaba em 9999-12-31.
+ */
+function* dias(regra: Regra, inicio: number, limite: number, desde: number): Generator<number> {
   if (inicio > limite) return;
   yield inicio;
   let restantes = (regra.contagem ?? Number.POSITIVE_INFINITY) - 1;
-  const fim = Math.min(limite, inicio + HORIZONTE_DIAS);
-  for (let periodo = periodoDe(regra, inicio); restantes > 0; periodo += regra.intervalo) {
-    if (primeiroDoPeriodo(regra, periodo) > fim) return;
-    for (const d of candidatos(regra, periodo, inicio)) {
+  const fim = Math.min(limite, inicio + HORIZONTE_DIAS, ULTIMO_NUMERO);
+  const plano = planejar(regra);
+  let itensDaSemana = 0;
+  for (const ordens of plano.semana.values()) itensDaSemana += ordens === true ? 1 : ordens.size;
+  const custo =
+    regra.frequencia === "DAILY"
+      ? 1 + Math.sign(itensDaSemana) + Math.sign(plano.diasDoMes.length)
+      : 1 + itensDaSemana + plano.diasDoMes.length * (regra.frequencia === "YEARLY" ? 12 : 1);
+  let periodo = periodoDe(regra, inicio);
+  if (regra.contagem === null && desde > inicio) {
+    const alvo = periodoDe(regra, Math.min(desde, fim));
+    if (alvo > periodo) periodo += Math.floor((alvo - periodo) / regra.intervalo) * regra.intervalo;
+  }
+  for (let trabalho = 0; restantes > 0; periodo += regra.intervalo) {
+    const primeiro = primeiroDoPeriodo(regra, periodo);
+    if (primeiro > fim) return;
+    trabalho += custo;
+    if (trabalho > TETO_DE_TRABALHO) return;
+    for (const d of candidatos(plano, primeiro, primeiroDoPeriodo(regra, periodo + 1) - 1, inicio)) {
       if (d <= inicio) continue;
       if (d > fim || restantes <= 0) return;
       yield d;
@@ -324,7 +410,7 @@ export function diasNoIntervalo(
   const limite = Math.min(numeroDoDia(ate), Math.max(primeiro, limiteDoAte(leitura.regra.ate)));
   const desde = numeroDoDia(de);
   const ocorrencias: string[] = [];
-  for (const d of dias(leitura.regra, primeiro, limite)) {
+  for (const d of dias(leitura.regra, primeiro, limite, desde)) {
     if (d >= desde) ocorrencias.push(diaDoNumero(d));
   }
   return { ocorrencias, entendida: true };
@@ -340,7 +426,7 @@ export function proximoDia(recorrencia: string | null, inicio: string, depoisDe:
   const primeiro = numeroDoDia(inicio);
   const limite = Math.max(primeiro, limiteDoAte(leitura.regra.ate));
   const depois = numeroDoDia(depoisDe);
-  for (const d of dias(leitura.regra, primeiro, limite)) {
+  for (const d of dias(leitura.regra, primeiro, limite, depois)) {
     if (d > depois) return diaDoNumero(d);
   }
   return null;
@@ -362,7 +448,7 @@ function* instantes(
   const ate = regra.ate;
   // O UNTIL em UTC pode cair no dia seguinte do relógio do fuso; a conta exata vem em `passou`.
   const limiteDoUntil = ate === null ? Number.POSITIVE_INFINITY : numeroDoDia(ate.dia) + (ate.utc ? 1 : 0);
-  for (const d of dias(regra, primeiro, Math.min(ateDia, Math.max(primeiro, limiteDoUntil)))) {
+  for (const d of dias(regra, primeiro, Math.min(ateDia, Math.max(primeiro, limiteDoUntil)), desdeDia)) {
     // O início é o instante que veio e sempre conta, mesmo com um UNTIL antes dele.
     if (d === primeiro) {
       yield { instante: inicio, dia: local.dia };

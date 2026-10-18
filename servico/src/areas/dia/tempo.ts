@@ -34,7 +34,19 @@ function paredeComoUtc(ms: number, fuso: string): number {
     if (p.type !== "literal") partes[p.type] = Number(p.value);
   }
   const { year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0 } = partes;
-  return Date.UTC(year, month - 1, day, hour, minute, second);
+  return msUtc(year, month, day, hour, minute, second);
+}
+
+/**
+ * O `Date.UTC` do ano inteiro: o `Date.UTC` lê os anos 0 a 99 como 1900 a 1999, o
+ * `setUTCFullYear` não. O mês vai de 1 a 12 e transborda como no `Date.UTC` (13 é janeiro do ano
+ * seguinte).
+ */
+function msUtc(ano: number, mes: number, dia: number, hora = 0, minuto = 0, segundo = 0, ms = 0): number {
+  const data = new Date(0);
+  data.setUTCFullYear(ano, mes - 1, dia);
+  data.setUTCHours(hora, minuto, segundo, ms);
+  return data.getTime();
 }
 
 /** Quanto o fuso está à frente do UTC naquele instante, em ms (São Paulo hoje: −3 h). */
@@ -86,7 +98,7 @@ export function instanteNoFuso(dia: string, hora: string, fuso: string): Date {
   const h = HORA.exec(hora);
   if (h === null) throw new RangeError(`hora inválida: ${hora}`);
   const [ano, mes, d] = partesDoDia(dia);
-  const alvo = Date.UTC(ano, mes - 1, d, Number(h[1]), Number(h[2]), Number(h[3] ?? 0), Number(h[4] ?? 0));
+  const alvo = msUtc(ano, mes, d, Number(h[1]), Number(h[2]), Number(h[3] ?? 0), Number(h[4] ?? 0));
   // Uma virada de fuso por dia, no máximo: o deslocamento de antes e o de depois cobrem o caso.
   const antes = deslocamento(new Date(alvo - MS_DIA), fuso);
   const depois = deslocamento(new Date(alvo + MS_DIA), fuso);
@@ -104,6 +116,10 @@ export function inicioDoDia(dia: string, fuso: string): Date {
 
 // Aritmética do dia civil, sem fuso: o dia é um número de dias desde 1970-01-01.
 
+/**
+ * O calendário vai de 0001-01-01 a 9999-12-31: quatro dígitos no `AAAA-MM-DD`, e o ano 0000 fica
+ * fora porque o `Intl` o escreve como ano 1 (antes de Cristo, sem a era) e o dia sairia trocado.
+ */
 const DIA = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 function partesDoDia(dia: string): [number, number, number] {
@@ -111,11 +127,20 @@ function partesDoDia(dia: string): [number, number, number] {
   const ano = Number(m?.[1]);
   const mes = Number(m?.[2]);
   const d = Number(m?.[3]);
-  if (m === null || mes < 1 || mes > 12 || d < 1 || d > diasNoMes(ano, mes)) {
+  if (m === null || ano < 1 || mes < 1 || mes > 12 || d < 1 || d > diasNoMes(ano, mes)) {
     throw new RangeError(`dia inválido: ${dia}`);
   }
   return [ano, mes, d];
 }
+
+/** O número de dias desde 1970-01-01 do dia (ano, mês de 1 a 12, dia), transbordando o mês. */
+export function numeroDaData(ano: number, mes: number, dia: number): number {
+  return msUtc(ano, mes, dia) / MS_DIA;
+}
+
+/** O primeiro e o último dia do calendário, como número de dias desde 1970-01-01. */
+export const PRIMEIRO_NUMERO = numeroDaData(1, 1, 1);
+export const ULTIMO_NUMERO = numeroDaData(9999, 12, 31);
 
 /** Se o texto é um dia que existe no calendário (`2027-02-29` não é). */
 export function ehDia(texto: string): boolean {
@@ -139,11 +164,14 @@ export function diasNoMes(ano: number, mes: number): number {
 /** O dia como número de dias desde 1970-01-01. */
 export function numeroDoDia(dia: string): number {
   const [ano, mes, d] = partesDoDia(dia);
-  return Date.UTC(ano, mes - 1, d) / MS_DIA;
+  return numeroDaData(ano, mes, d);
 }
 
-/** O dia de um número de dias desde 1970-01-01. */
+/** O dia de um número de dias desde 1970-01-01; fora do calendário (ano 10000), erro. */
 export function diaDoNumero(numero: number): string {
+  if (!Number.isInteger(numero) || numero < PRIMEIRO_NUMERO || numero > ULTIMO_NUMERO) {
+    throw new RangeError(`dia fora do calendário: ${numero}`);
+  }
   return new Date(numero * MS_DIA).toISOString().slice(0, 10);
 }
 
