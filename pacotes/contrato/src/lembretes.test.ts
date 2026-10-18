@@ -4,6 +4,7 @@ import {
   EstadoLembrete,
   Lembrete,
   LembretesDeHoje,
+  MudancaLembretes,
   NovoLembrete,
   PedidoAdiarLembretes,
   PedidoLembretes,
@@ -29,6 +30,19 @@ const lembrete = {
 };
 
 describe("lembretes", () => {
+  test("a mudança pode trazer o quando de antes dos que mudaram de horário", () => {
+    expect(MudancaLembretes.safeParse({ lembretes: [lembrete], removidos: [] }).success).toBe(true);
+    const comAnteriores = {
+      lembretes: [lembrete],
+      removidos: [],
+      anteriores: [{ id: lembrete.id, quando: "2026-10-08T17:30:00.000Z" }],
+    };
+    expect(MudancaLembretes.parse(comAnteriores)).toEqual(comAnteriores);
+    expect(MudancaLembretes.safeParse({ ...comAnteriores, anteriores: [{ id: lembrete.id }] }).success).toBe(
+      false,
+    );
+  });
+
   test("estados e canais são os da migração 013", () => {
     expect(EstadoLembrete.options).toEqual(["agendado", "disparado", "adiado", "perdido"]);
     expect(CanalLembrete.options).toEqual(["dock", "windows", "calendario"]);

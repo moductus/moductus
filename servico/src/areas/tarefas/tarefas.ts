@@ -113,6 +113,8 @@ interface Registro {
   apagadas: Set<string>;
   lembretes: Set<string>;
   lembretesRemovidos: Set<string>;
+  /** O `quando` de antes dos lembretes que mudaram de horário: o aviso da ocorrência trocada sai. */
+  lembretesAnteriores: Map<string, string>;
   listas: boolean;
 }
 
@@ -592,6 +594,7 @@ export class ServicoTarefas {
       apagadas: new Set(),
       lembretes: new Set(),
       lembretesRemovidos: new Set(),
+      lembretesAnteriores: new Map(),
       listas: false,
     };
     // Sempre crescente, mesmo duas operações no mesmo milissegundo ou com o relógio voltando: a marca
@@ -621,7 +624,14 @@ export class ServicoTarefas {
     const lembretes = [...r.lembretes].filter((id) => !r.lembretesRemovidos.has(id));
     if (lembretes.length > 0 || r.lembretesRemovidos.size > 0) {
       const vivos = this.repo.lembretesDosIds(lembretes);
-      this.avisos.lembretes({ lembretes: vivos.map(paraLembrete), removidos: [...r.lembretesRemovidos] });
+      const anteriores = [...r.lembretesAnteriores]
+        .filter(([id]) => !r.lembretesRemovidos.has(id))
+        .map(([id, quando]) => ({ id, quando }));
+      this.avisos.lembretes({
+        lembretes: vivos.map(paraLembrete),
+        removidos: [...r.lembretesRemovidos],
+        ...(anteriores.length > 0 ? { anteriores } : {}),
+      });
     }
   }
 
@@ -701,8 +711,12 @@ export class ServicoTarefas {
       else r.lembretes.add(id);
       return;
     }
-    if (alvo.quando !== quando) this.repo.reagendarLembrete(alvo.id, tarefa.titulo, quando, agora, carimbo);
-    else if (alvo.texto !== tarefa.titulo) this.repo.textoDoLembrete(alvo.id, tarefa.titulo, agora, carimbo);
+    if (alvo.quando !== quando) {
+      // O primeiro horário da operação é o do aviso que pode estar na Central de Notificações.
+      if (!r.lembretesAnteriores.has(alvo.id)) r.lembretesAnteriores.set(alvo.id, alvo.quando);
+      this.repo.reagendarLembrete(alvo.id, tarefa.titulo, quando, agora, carimbo);
+    } else if (alvo.texto !== tarefa.titulo)
+      this.repo.textoDoLembrete(alvo.id, tarefa.titulo, agora, carimbo);
     else return;
     if (!fechada) r.lembretes.add(alvo.id);
   }

@@ -82,9 +82,15 @@ export type PedidoListarLembretes = z.infer<typeof PedidoListarLembretes>;
 
 /**
  * O que mudou: os que continuam (o recorrente concluído volta com o próximo `quando`) e os que
- * saíram (concluídos de uma vez ou cancelados, que vão para a lixeira).
+ * saíram (concluídos de uma vez ou cancelados, que vão para a lixeira). `anteriores` traz o `quando`
+ * de antes dos que mudaram de horário, para o aviso da ocorrência trocada sair da Central de
+ * Notificações; a janela pode ignorar.
  */
-export const MudancaLembretes = z.object({ lembretes: z.array(Lembrete), removidos: z.array(Id) });
+export const MudancaLembretes = z.object({
+  lembretes: z.array(Lembrete),
+  removidos: z.array(Id),
+  anteriores: z.array(z.object({ id: Id, quando: Instante })).optional(),
+});
 export type MudancaLembretes = z.infer<typeof MudancaLembretes>;
 
 /** Quanto tempo o PC ficou suspenso (ou o serviço parado) enquanto os atrasados venciam. */

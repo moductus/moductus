@@ -26,7 +26,9 @@ import {
   RepositorioAtividade,
   type MotivoAtividade,
 } from "./areas/dia/atividade.ts";
+import { RelogioDoDia } from "./areas/dia/relogio.ts";
 import { TempoDoDia } from "./areas/dia/tempo.ts";
+import { RepositorioLembretes, ServicoLembretes } from "./areas/lembretes/lembretes.ts";
 import { RepositorioNotas, ServicoNotas } from "./areas/notas/notas.ts";
 import { atendentesDasTarefas } from "./areas/tarefas/canal.ts";
 import { RepositorioTarefas } from "./areas/tarefas/repositorio.ts";
@@ -384,6 +386,21 @@ const conversas = new ServicoConversas(
 const notas = new ServicoNotas(new RepositorioNotas(banco), {
   mudou: (mudanca) => servidor?.emitir("notas.mudou", mudanca),
 });
+// Relógio do dia (F3-17, ADR-0032): lembretes disparam por um timer próprio, sem modelo e sem rede.
+const relogio = new RelogioDoDia();
+const lembretes = new ServicoLembretes(
+  new RepositorioLembretes(banco),
+  { lerFuso: () => repositorioConfig.ler().dia.fuso, notificacoes, relogio },
+  {
+    mudou: (mudanca) => {
+      servidor?.emitir("lembretes.mudou", mudanca);
+      // Disparou, adiou, concluiu ou virou perdido: os atrasados das contagens mudam.
+      recontarAreas();
+    },
+    hoje: (hoje) => servidor?.emitir("lembretes.hoje", hoje),
+  },
+);
+relogio.registrar(lembretes);
 // Tarefas (F3-15): "hoje" no fuso de config; a tarefa com hora mantém o lembrete ligado a ela.
 const tarefas = new ServicoTarefas(
   new RepositorioTarefas(banco),
@@ -394,8 +411,10 @@ const tarefas = new ServicoTarefas(
       recontarAreas();
     },
     listas: (listas) => servidor?.emitir("listas.mudou", listas),
+    // O lembrete da tarefa muda pelas Tarefas: o relógio se rearma e o aviso da ocorrência trocada sai.
     lembretes: (mudanca) => {
       servidor?.emitir("lembretes.mudou", mudanca);
+      lembretes.mudaramPorFora(mudanca);
       recontarAreas();
     },
   },
@@ -509,16 +528,16 @@ servidor = await abrirServidorWs(token, {
   "agenda.definirEvento": (mudanca) => agenda.definirEvento(mudanca),
   "agenda.apagarEvento": (pedido) => agenda.apagarEvento(pedido),
   "agenda.aplicarSugestao": (pedido) => agenda.aplicarSugestao(pedido),
+  "lembretes.listar": (pedido) => lembretes.listar(pedido),
+  "lembretes.hoje": () => lembretes.hoje(),
+  "lembretes.criar": (novo) => lembretes.criar(novo),
+  "lembretes.definir": (mudanca) => lembretes.definir(mudanca),
+  "lembretes.adiar": (pedido) => lembretes.adiar(pedido),
+  "lembretes.concluir": (pedido) => lembretes.concluir(pedido),
+  "lembretes.cancelar": (pedido) => lembretes.cancelar(pedido),
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
   ...semAtendente([
-    "lembretes.listar",
-    "lembretes.hoje",
-    "lembretes.criar",
-    "lembretes.definir",
-    "lembretes.adiar",
-    "lembretes.concluir",
-    "lembretes.cancelar",
     "foco.obter",
     "foco.iniciar",
     "foco.alternar",
@@ -567,6 +586,8 @@ const primeiraAtividade = new PrimeiraAtividade(
   (inicio) => console.error(`dia: ${inicio.dia} começou (${inicio.motivo})`),
 );
 primeiraAtividade.vigiar();
+// O que venceu com o serviço parado vira atrasado, num aviso só; depois o timer fica armado.
+relogio.ligar().catch((erro: unknown) => console.error(`relógio do dia não ligou: ${String(erro)}`));
 /** Um sinal de atividade; banco com problema não derruba quem avisou. */
 function sinalDeAtividade(motivo: MotivoAtividade): void {
   try {
@@ -579,6 +600,10 @@ sinalDeAtividade("subida");
 canal.aoAvisar("atividade", (aviso) => sinalDeAtividade(motivoDaCasca(aviso)));
 canal.aoAvisar("retomou", () => {
   sinalDeAtividade("retomada");
+  // Na volta da suspensão, os lembretes que venceram com o PC dormindo chegam juntos.
+  relogio
+    .retomar()
+    .catch((erro: unknown) => console.error(`relógio do dia: retomada falhou: ${String(erro)}`));
   // O PC dormiu: o dia pode ter virado antes da próxima volta do relógio das contagens.
   recontarAreas();
   agendador
