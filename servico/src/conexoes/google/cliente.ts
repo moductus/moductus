@@ -33,6 +33,8 @@ export interface EnderecosGoogle {
   revogacao: string;
   /** O calendário principal, cujo id é o e-mail da conta (`calendarList/primary`). */
   calendarioPrincipal: string;
+  /** A raiz da Calendar API v3: a lista de calendários e os eventos de cada um (F3-23). */
+  calendario: string;
 }
 
 export const ENDERECOS_GOOGLE: EnderecosGoogle = {
@@ -40,6 +42,7 @@ export const ENDERECOS_GOOGLE: EnderecosGoogle = {
   token: "https://oauth2.googleapis.com/token",
   revogacao: "https://oauth2.googleapis.com/revoke",
   calendarioPrincipal: "https://www.googleapis.com/calendar/v3/users/me/calendarList/primary",
+  calendario: "https://www.googleapis.com/calendar/v3",
 };
 
 /** Lê o cliente que o usuário trouxe; o que não tem a forma certa é recusado com o motivo. */

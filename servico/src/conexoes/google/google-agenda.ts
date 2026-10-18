@@ -49,6 +49,14 @@ export const AVISO_DESLIGADA = "O Google Agenda não está conectado. Conecte em
 export const AVISO_REVOGACAO =
   "Desconectado aqui, mas o Google não confirmou a revogação. Se quiser, tire o Moductus em myaccount.google.com/permissions.";
 export const AVISO_TROCAR_CLIENTE = "Desconecte o Google Agenda antes de trocar o cliente.";
+/**
+ * A fala de erro da Alba (AGENTS.md §2 "Voz dos agentes"), com o intervalo da leitura (F3-23): o
+ * título vai no aviso e as duas frases juntas na Conexão.
+ */
+export const TITULO_LEITURA_FALHOU = "Não consegui ler o Google Agenda.";
+export const CORPO_LEITURA_FALHOU =
+  "Os eventos de hoje podem estar incompletos; tento de novo em 10 minutos.";
+export const AVISO_LEITURA = `${TITULO_LEITURA_FALHOU} ${CORPO_LEITURA_FALHOU}`;
 export const avisoNavegador = (motivo: string) =>
   `Não consegui abrir o navegador (${motivo}). Conecte de novo.`;
 export const avisoFalhou = (motivo: string) =>
@@ -284,6 +292,7 @@ export class ServicoGoogleAgenda {
       credencial: null,
       conta: null,
       escopos: [],
+      lidaEm: null,
     });
   }
 
@@ -359,6 +368,42 @@ export class ServicoGoogleAgenda {
     }
     this.acesso = { token: tokens.tokenDeAcesso, venceEm: tokens.venceEm };
     return tokens.tokenDeAcesso;
+  }
+
+  /**
+   * O Google recusou este token de acesso (401) antes de vencer: o próximo pedido renova. Só esquece
+   * se ainda é o mesmo, para não jogar fora um que outro pedido acabou de renovar.
+   */
+  acessoRecusado(token: string): void {
+    if (this.acesso?.token === token) this.acesso = null;
+  }
+
+  /**
+   * O resultado de uma leitura do Calendar (F3-23). A que deu certo anota a data e tira o erro de
+   * leitura; a que falhou põe a conexão em erro com a fala da Alba. Erro de outra natureza (pedir
+   * para reconectar, conectar que não terminou) fica como está: ele diz o que fazer, e a leitura
+   * não sabe resolver. Desligada não muda. Devolve se a conexão acabou de entrar no erro de
+   * leitura, para a Alba avisar uma vez só.
+   */
+  marcarLeitura(resultado: { ok: boolean }): boolean {
+    const antes = this.conexao();
+    if (antes.estado === "desligada") return false;
+    if (antes.estado === "erro" && antes.ultimoErro !== AVISO_LEITURA) return false;
+    const linha = this.deps.conexoes.obter("google-agenda");
+    const agora = this.agora().toISOString();
+    this.gravar(
+      antes,
+      {
+        estado: resultado.ok ? "ligada" : "erro",
+        ultimoErro: resultado.ok ? null : AVISO_LEITURA,
+        conectadaEm: antes.conectadaEm,
+        credencial: linha?.credencial ?? null,
+        conta: antes.conta,
+        ...(resultado.ok ? { lidaEm: agora } : {}),
+      },
+      "conexao",
+    );
+    return !resultado.ok && antes.estado === "ligada";
   }
 
   /** A credencial não vale mais: a conexão fica em erro com "Reconectar", e as janelas sabem. */
@@ -445,6 +490,8 @@ export class ServicoGoogleAgenda {
       credencial: string | null;
       conta: string | null;
       escopos?: readonly string[];
+      /** A última leitura do Calendar que deu certo; ausente mantém a de antes. */
+      lidaEm?: string | null;
     },
     origem: "usuario" | "conexao" = "usuario",
   ): Conexao {

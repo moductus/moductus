@@ -17,6 +17,7 @@ import { RepositorioTarefasDoDia } from "./areas/agenda/tarefas-do-dia.ts";
 import { ServicoCaptura } from "./areas/captura/captura.ts";
 import { atendentesDaCaptura } from "./areas/captura/canal.ts";
 import { interpretePeloRuntime } from "./areas/captura/modelo.ts";
+import { ServicoContagens, sessoesEsperando } from "./areas/contagens.ts";
 import {
   motivoDaCasca,
   PrimeiraAtividade,
@@ -44,6 +45,7 @@ import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { ServicoGoogleAgenda } from "./conexoes/google/google-agenda.ts";
+import { LeituraGoogleAgenda, RepositorioLeituraGoogle } from "./conexoes/google/leitura.ts";
 import { ferramentasAgenda } from "./ferramentas/agenda/agenda.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
 import { ferramentasGithub } from "./ferramentas/github/github.ts";
@@ -105,12 +107,16 @@ const repositorioConfig = new RepositorioConfig(banco);
 // pelo aviso abaixo. A reação (acordar quem saiu do teto) nasce com o runtime, mais adiante.
 let reagirACotacao: () => void = () => {};
 const cotacaoMudou = vigiarCotacao(repositorioConfig.ler().cambio, () => reagirACotacao());
+// As contagens das áreas (F3-20) nascem depois das áreas que contam; até lá, recontar não faz nada.
+let recontarAreas: () => void = () => {};
 const config = new ServicoConfig(
   repositorioConfig,
   nativo,
   (estado: EstadoConfig) => {
     servidor?.emitir("config.mudou", estado);
     cotacaoMudou(estado.config.cambio);
+    // O fuso pode ter mudado: o "hoje" das tarefas muda junto.
+    recontarAreas();
   },
   portable(),
 );
@@ -182,6 +188,7 @@ projetosDaCasca.mandar();
 const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {
   aprovacao: (aprovacao) => {
     servidor?.emitir("aprovacoes.mudou", aprovacao);
+    recontarAreas();
     avisarAprovacao(aprovacao).catch((erro: unknown) =>
       console.error(`notificações: aviso da aprovação falhou: ${String(erro)}`),
     );
@@ -194,16 +201,23 @@ const repositorioConexoes = new RepositorioConexoes(banco);
 const github = new ServicoGithub(new RepositorioGithub(banco), repositorioConexoes, executorGh(), {
   github: (situacao) => {
     servidor?.emitir("github.mudou", situacao);
+    recontarAreas();
     vigiaNuno?.aoLerGithub(situacao);
   },
   conexao: (conexao) => servidor?.emitir("conexoes.mudou", conexao),
 });
+// A leitura dos calendários do Google (F3-23) nasce com a agenda, mais adiante: ela sabe da conexão
+// pelo aviso abaixo (conectou: lê; desconectou: esquece).
+let leituraGoogle: LeituraGoogleAgenda | null = null;
 // Google Agenda da Alba (F3-22): OAuth no navegador pela casca, refresh token no Gerenciador.
 const googleAgenda = new ServicoGoogleAgenda({
   conexoes: repositorioConexoes,
   credenciais: credenciaisPelaCasca(canal),
   abrir: abrirPelaCasca(canal),
-  avisar: (conexao) => servidor?.emitir("conexoes.mudou", conexao),
+  avisar: (conexao) => {
+    servidor?.emitir("conexoes.mudou", conexao);
+    leituraGoogle?.aoMudarConexao(conexao);
+  },
 });
 const conexoes = new ServicoConexoes(
   repositorioConexoes,
@@ -268,6 +282,40 @@ const agenda = new ServicoAgenda(
     calendarios: (calendarios) => servidor?.emitir("agenda.calendarios", calendarios),
   },
 );
+// Os calendários do Google no cache da agenda (F3-23, ADR-0035): a cada 10 min com variação, na
+// retomada, ao abrir a área e ao escolher ler um calendário. A falha vira a fala de erro da Alba.
+leituraGoogle = new LeituraGoogleAgenda({
+  google: googleAgenda,
+  repo: new RepositorioLeituraGoogle(banco),
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  avisos: {
+    eventos: ({ mudados, apagados }) => {
+      const eventos = mudados.flatMap((id) => {
+        try {
+          return [agenda.obterEvento({ id })];
+        } catch {
+          return [];
+        }
+      });
+      servidor?.emitir("agenda.mudou", { eventos, apagados });
+    },
+    calendarios: () => servidor?.emitir("agenda.calendarios", agenda.calendarios()),
+    erro: ({ titulo, corpo }) => {
+      notificacoes
+        .avisar({
+          agenteId: "alba",
+          tipo: "erro",
+          titulo,
+          corpo,
+          referencia: "conexao:google-agenda",
+          origem: "conexao",
+        })
+        .catch((erro: unknown) =>
+          console.error(`notificações: aviso da leitura do Google falhou: ${String(erro)}`),
+        );
+    },
+  },
+});
 // As ferramentas de cada área (F2-26: as do Nuno); cada agente só vê as da lista dele.
 const catalogo = new Catalogo([
   ...ferramentasSessoes(sessoes),
@@ -383,7 +431,11 @@ const lembretes = new ServicoLembretes(
   new RepositorioLembretes(banco),
   { lerFuso: () => repositorioConfig.ler().dia.fuso, notificacoes, relogio },
   {
-    mudou: (mudanca) => servidor?.emitir("lembretes.mudou", mudanca),
+    mudou: (mudanca) => {
+      servidor?.emitir("lembretes.mudou", mudanca);
+      // Disparou, adiou, concluiu ou virou perdido: os atrasados das contagens mudam.
+      recontarAreas();
+    },
     hoje: (hoje) => servidor?.emitir("lembretes.hoje", hoje),
   },
 );
@@ -393,12 +445,16 @@ const tarefas = new ServicoTarefas(
   new RepositorioTarefas(banco),
   { lerFuso: () => repositorioConfig.ler().dia.fuso, notas },
   {
-    tarefas: (mudanca) => servidor?.emitir("tarefas.mudou", mudanca),
+    tarefas: (mudanca) => {
+      servidor?.emitir("tarefas.mudou", mudanca);
+      recontarAreas();
+    },
     listas: (listas) => servidor?.emitir("listas.mudou", listas),
     // O lembrete da tarefa muda pelas Tarefas: o relógio se rearma e o aviso da ocorrência trocada sai.
     lembretes: (mudanca) => {
       servidor?.emitir("lembretes.mudou", mudanca);
       lembretes.mudaramPorFora(mudanca);
+      recontarAreas();
     },
   },
 );
@@ -413,6 +469,23 @@ const captura = new ServicoCaptura({
   interpretar: interpretePeloRuntime(runtime, repositorioAgentes),
   pediuLembrete: () => primeiroUso.lembretePedido(),
 });
+// Contagens das áreas (F3-20): a barra lateral do Sistema e os badges do dock leem daqui. As
+// sessões esperando são os pedidos do terminal, como o Nuno no dock.
+const leituraAprovacoes = new RepositorioAprovacoes(banco);
+const leituraLembretes = new RepositorioLembretes(banco);
+const leituraGithub = new RepositorioGithub(banco);
+const contagens = new ServicoContagens(
+  {
+    tarefasPendentes: () => tarefas.pendentesDeHoje(),
+    lembretesAtrasados: () => leituraLembretes.contarPerdidos(),
+    sessoesEsperando: () => sessoesEsperando(leituraAprovacoes.pendentes()),
+    devPrecisando: () => leituraGithub.contarPrecisandoDeMim(),
+  },
+  (novas) => servidor?.emitir("areas.contagens", novas),
+);
+recontarAreas = () => contagens.recontar();
+contagens.recontar();
+contagens.vigiar();
 // Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
 // Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
 runtime.estados.vigiar();
@@ -498,9 +571,21 @@ servidor = await abrirServidorWs(token, {
   "notas.apagar": (pedido) => notas.apagar(pedido),
   "notas.buscar": (pedido) => notas.buscar(pedido),
   ...atendentesDasTarefas(tarefas),
-  "agenda.calendarios": () => agenda.calendarios(),
-  "agenda.definirCalendario": (mudanca) => agenda.definirCalendario(mudanca),
-  "agenda.consultar": (pedido) => agenda.consultar(pedido),
+  // Abrir a área lê o Google de novo, se a última leitura não acabou de terminar (F3-23).
+  "agenda.calendarios": () => {
+    leituraGoogle?.aoAbrirArea();
+    return agenda.calendarios();
+  },
+  "agenda.definirCalendario": (mudanca) => {
+    const calendario = agenda.definirCalendario(mudanca);
+    // Passou a ler um calendário do Google: os eventos dele vêm já.
+    if (calendario.fonte === "google" && mudanca.ler === true) leituraGoogle?.aoEscolherCalendario();
+    return calendario;
+  },
+  "agenda.consultar": (pedido) => {
+    leituraGoogle?.aoAbrirArea();
+    return agenda.consultar(pedido);
+  },
   "agenda.obterEvento": (pedido) => agenda.obterEvento(pedido),
   "agenda.criarEvento": (novo) => agenda.criarEvento(novo),
   "agenda.definirEvento": (mudanca) => agenda.definirEvento(mudanca),
@@ -530,8 +615,8 @@ servidor = await abrirServidorWs(token, {
     "rotinas.definir",
     "rotinas.hoje",
     "rotinas.agir",
-    "areas.contagens",
   ]),
+  "areas.contagens": () => contagens.obter(),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
 canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });
@@ -544,6 +629,8 @@ sessoes.vigiar();
 aprovacoes.vigiar();
 // GitHub pelo `gh` (F2-25): lê agora e a cada 15 min, se a conexão não estiver desligada.
 github.vigiar();
+// Calendários do Google (F3-23): lê agora e a cada 10 min com variação, se a conexão não estiver desligada.
+leituraGoogle.vigiar();
 // Agendador (F2-17): horário, intervalo e evento. As áreas avisam os eventos internos por
 // `agendador.emitir` (o tipo `EmitirEvento`). Na volta da suspensão (a casca avisa), depois do
 // prazo para a rede voltar, o que venceu dispara uma vez só e o GitHub é lido (AGENTS.md §6).
@@ -580,10 +667,14 @@ canal.aoAvisar("retomou", () => {
   relogio
     .retomar()
     .catch((erro: unknown) => console.error(`relógio do dia: retomada falhou: ${String(erro)}`));
+  // O PC dormiu: o dia pode ter virado antes da próxima volta do relógio das contagens.
+  recontarAreas();
   agendador
     .retomar()
     .then(() => github.atualizar("conexao"))
-    .catch((erro: unknown) => console.error(`github: leitura na retomada falhou: ${String(erro)}`));
+    .catch((erro: unknown) => console.error(`github: leitura na retomada falhou: ${String(erro)}`))
+    // O Google também, depois do prazo para a rede voltar que o agendador já esperou.
+    .finally(() => void leituraGoogle?.atualizar());
 });
 tokenDosHooks(credenciaisPelaCasca(canal))
   .then((tokenHooks) => abrirReceptorHooks(tokenHooks, atenderHooks(sessoes, aprovacoes), portaDosHooks()))

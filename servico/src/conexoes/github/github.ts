@@ -116,6 +116,14 @@ export class RepositorioGithub {
     return linhas.map(paraItem);
   }
 
+  /** Quantos abertos precisam de você (`areas.contagens`), sem ler o cache inteiro. */
+  contarPrecisandoDeMim(): number {
+    const r = this.db
+      .prepare("SELECT count(*) AS n FROM github_itens WHERE estado = 'aberto' AND precisa_de_mim = 1")
+      .get() as { n: number };
+    return r.n;
+  }
+
   /**
    * Troca o cache pelo que a leitura trouxe: o item que continua guarda o id, o novo ganha um, e o
    * que saiu das buscas (fechado, review feito, desatribuído) sai do cache. Roda dentro da
