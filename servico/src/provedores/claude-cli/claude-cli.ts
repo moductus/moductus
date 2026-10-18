@@ -4,7 +4,7 @@ import {
   type SpawnOptionsWithoutStdio,
 } from "node:child_process";
 import { createInterface } from "node:readline";
-import { alvoDoCli, arquivoExiste } from "../executavel.ts";
+import { alvoDoCli, arquivoExiste, noPath, type AlvoCli } from "../executavel.ts";
 import type { ConfigProvedor, EventoAgente, PedidoDoAgente, Provedor } from "../provedor.ts";
 import type { FabricaProvedor } from "../registro.ts";
 import { LeitorStreamJson } from "./leitor.ts";
@@ -39,15 +39,17 @@ const SESSAO_PERDIDA = /no conversation found/i;
 
 class SessaoPerdida extends Error {}
 
+/** `alvo` é o programa que o adaptador iniciaria sem shell; os argumentos do CLI vêm depois de `alvo.antes`. */
 export type IniciarProcesso = (
   argumentos: string[],
   opcoes: SpawnOptionsWithoutStdio,
+  alvo: AlvoCli,
 ) => ChildProcessWithoutNullStreams;
 
 export interface OpcoesClaudeCli {
   /**
-   * O comando quando o provedor não tem o caminho que a detecção achou (`ConfigProvedor.caminho`),
-   * ou quando esse caminho já não existe; sem isso, o `claude` do PATH.
+   * O comando, procurado no PATH, quando o provedor não tem o caminho que a detecção achou
+   * (`ConfigProvedor.caminho`) ou esse caminho já não roda; sem isso, o `claude` do PATH.
    */
   comando?: string;
   /**
@@ -272,9 +274,7 @@ export class ProvedorClaudeCli implements Provedor {
     sinal: AbortSignal,
     acesso: { url: string; token: string } | null,
   ): AsyncIterable<EventoAgente> {
-    const comando = this.comando();
-    // Sem shell (ADR-0037): o `.cmd` do npm roda pelo programa que ele chama.
-    const alvo = alvoDoCli(comando, process.env);
+    const { comando, alvo } = this.resolver();
     if (!alvo) {
       yield {
         tipo: "erro",
@@ -287,12 +287,16 @@ export class ProvedorClaudeCli implements Provedor {
       return;
     }
     const iniciar: IniciarProcesso =
-      this.opcoes.iniciar ?? ((args, o) => spawn(alvo.executavel, [...alvo.antes, ...args], o));
-    const processo = iniciar(argumentosDoClaude(pedido, this.config, acesso?.url ?? null), {
-      cwd: this.opcoes.pasta,
-      env: ambienteDoCli(process.env, acesso?.token ?? null),
-      windowsHide: true,
-    });
+      this.opcoes.iniciar ?? ((args, o, a) => spawn(a.executavel, [...a.antes, ...args], o));
+    const processo = iniciar(
+      argumentosDoClaude(pedido, this.config, acesso?.url ?? null),
+      {
+        cwd: this.opcoes.pasta,
+        env: ambienteDoCli(process.env, acesso?.token ?? null),
+        windowsHide: true,
+      },
+      alvo,
+    );
     const saida = new Promise<{ codigo: number | null; erro: Error | null }>((resolve) => {
       processo.once("error", (erro) => resolve({ codigo: null, erro }));
       processo.once("close", (codigo) => resolve({ codigo, erro: null }));
@@ -363,14 +367,31 @@ export class ProvedorClaudeCli implements Provedor {
   }
 
   /**
-   * O que rodar: o caminho que a detecção guardou no provedor, se ainda é um arquivo; senão o
-   * comando das opções ou o `claude` do PATH. CLI desinstalado ou mudado de lugar cai no PATH, e a
-   * próxima detecção guarda o caminho novo.
+   * O que rodar, sem shell (ADR-0037): o caminho que a detecção guardou no provedor, se ainda é um
+   * arquivo que roda; senão o primeiro do comando das opções (ou `claude`) no PATH que roda, com o
+   * `.cmd` do npm trocado pelo programa que ele chama. Assim o CLI instalado depois da última
+   * detecção roda, e um shim que não dá para rodar não esconde o `claude.exe` adiante no PATH.
+   * `alvo` nulo é shim que só rodaria pelo `cmd.exe`, e `comando` diz qual. Nada achado: o comando
+   * puro, e o `ENOENT` do processo vira `ausente`.
    */
-  private comando(): string {
+  private resolver(): { comando: string; alvo: AlvoCli | null } {
+    let semAlvo: string | null = null;
     const guardado = this.config.caminho ?? null;
-    if (guardado !== null && arquivoExiste(guardado)) return guardado;
-    return this.opcoes.comando ?? "claude";
+    if (guardado !== null && arquivoExiste(guardado)) {
+      const alvo = alvoDoCli(guardado, process.env);
+      if (alvo) return { comando: guardado, alvo };
+      semAlvo = guardado;
+    }
+    const comando = this.opcoes.comando ?? "claude";
+    // Comando que já é caminho não se procura no PATH.
+    const candidatos = /[\\/]/.test(comando) ? [comando].filter(arquivoExiste) : noPath(comando, process.env);
+    for (const candidato of candidatos) {
+      const alvo = alvoDoCli(candidato, process.env);
+      if (alvo) return { comando: candidato, alvo };
+      semAlvo ??= candidato;
+    }
+    if (semAlvo !== null) return { comando: semAlvo, alvo: null };
+    return { comando, alvo: { executavel: comando, antes: [] } };
   }
 
   /** Volta do nome do CLI ao do catálogo; ferramenta de fora do Moductus fica com o nome dela. */

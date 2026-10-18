@@ -102,4 +102,37 @@ describe("alvo do CLI sem shell", () => {
       expect(alvoDoCli(shim, ambiente, disco({ [shim]: texto }, existentes))).toBeNull();
     }
   });
+
+  test("variável fora das do cmd-shim (o `@SET` de um shebang com ambiente) não é adivinhada", () => {
+    const shim = `${NPM}\\claude.cmd`;
+    const existentes = [SCRIPT, NODE_DO_PATH, NATIVO];
+    const comAmbiente = (texto: string, linha: string) =>
+      texto.replace("CALL :find_dp0\r\n", `CALL :find_dp0\r\n${linha}\r\n`);
+    for (const texto of [
+      comAmbiente(SHIM_NODE, "@SET NODE_OPTIONS=--require=C:\\outro.js"),
+      comAmbiente(SHIM_NATIVO, "@SET CLAUDE_CONFIG_DIR=C:\\outra-conta"),
+      comAmbiente(SHIM_NODE, 'SET "ANTHROPIC_API_KEY=x"'),
+    ]) {
+      expect(alvoDoCli(shim, ambiente, disco({ [shim]: texto }, existentes))).toBeNull();
+    }
+    // As três do próprio cmd-shim, em qualquer caixa, continuam valendo.
+    const emCaixaAlta = SHIM_NODE.replace("SET dp0=", "SET DP0=");
+    expect(alvoDoCli(shim, ambiente, disco({ [shim]: emCaixaAlta }, existentes))?.antes).toEqual([SCRIPT]);
+  });
+
+  test("a linha do programa vale só inteira, do começo: comentada ou com outro prefixo é nula", () => {
+    const shim = `${NPM}\\claude.cmd`;
+    const existentes = [SCRIPT, NODE_DO_PATH, NATIVO];
+    const linhaNode = SHIM_NODE.split("\r\n").find((l) => l.startsWith("endLocal"))!;
+    const linhaNativo = SHIM_NATIVO.split("\r\n").find((l) => l.startsWith('"%dp0%'))!;
+    for (const texto of [
+      SHIM_NODE.replace(linhaNode, `REM ${linhaNode}`),
+      SHIM_NODE.replace(linhaNode, linhaNode.replace(/^.*& "%_prog%"/, '"%_prog%"')),
+      SHIM_NODE.replace(linhaNode, linhaNode.replace("endLocal &", "outro.exe & endLocal &")),
+      SHIM_NATIVO.replace(linhaNativo, `REM ${linhaNativo}`),
+      SHIM_NATIVO.replace(linhaNativo, `outro.exe & ${linhaNativo}`),
+    ]) {
+      expect(alvoDoCli(shim, ambiente, disco({ [shim]: texto }, existentes))).toBeNull();
+    }
+  });
 });

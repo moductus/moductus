@@ -717,7 +717,7 @@ describe("primeiro uso: modelo", () => {
       nome: "Claude Code",
       selo: "instalado pelo npm",
       texto:
-        "CLI no PATH, versão 2.1.287 · o Moductus usa o Claude Code do instalador nativo. Instale por ele e procure de novo.",
+        "CLI no PATH, versão 2.1.287 · o npm instalou o Claude Code de um jeito que o Moductus não consegue rodar. Instale pelo instalador nativo e procure de novo.",
       marcado: false,
       desativado: true,
     });

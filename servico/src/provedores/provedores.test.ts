@@ -378,7 +378,7 @@ describe("testar provedor", () => {
       [
         [{ ...CLAUDE, caminho: "C:\\npm\\claude.cmd", impedimento: "instalado_pelo_npm" }],
         "ausente",
-        "Claude Code foi instalado pelo npm, e o Moductus usa o do instalador nativo. Instale por ele e teste de novo.",
+        "Claude Code foi instalado pelo npm de um jeito que o Moductus não consegue rodar. Instale pelo instalador nativo e teste de novo.",
       ],
     ];
     for (const [detectados, motivo, mensagem] of casos) {

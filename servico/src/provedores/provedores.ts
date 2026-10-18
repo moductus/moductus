@@ -549,7 +549,7 @@ function impedimentoDoAchado(linha: LinhaProvedor, achado: ProvedorDetectado): F
   if (achado.impedimento === "instalado_pelo_npm") {
     return falha(
       "ausente",
-      `${linha.nome} foi instalado pelo npm, e o Moductus usa o do instalador nativo. Instale por ele e teste de novo.`,
+      `${linha.nome} foi instalado pelo npm de um jeito que o Moductus não consegue rodar. Instale pelo instalador nativo e teste de novo.`,
     );
   }
   if (achado.impedimento === "sem_adaptador") {

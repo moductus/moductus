@@ -56,14 +56,28 @@ export function alvoDoCli(
 }
 
 /**
+ * A linha que chama o script pelo `_prog`, inteira e do começo, como o cmd-shim a grava (o
+ * `endLocal & goto ...` evita a pergunta "Terminate batch job?"): linha com REM não vale.
+ */
+const PELO_NODE =
+  /^endLocal & goto #_undefined_# 2>NUL \|\| title %COMSPEC% & "%_prog%"[ \t]+"%dp0%\\([^"%\r\n]+)"[ \t]+%\*[ \t]*$/im;
+
+/** A linha que chama o executável nativo, do começo ao fim. */
+const NATIVO = /^"%dp0%\\([^"%\r\n]+\.(?:exe|com))"[ \t]+%\*[ \t]*$/im;
+
+/** As variáveis que o cmd-shim define; qualquer outra (`@SET` do shebang) muda o que o shim roda. */
+const VARIAVEIS_DO_SHIM = new Set(["DP0", "_PROG", "PATHEXT"]);
+
+/**
  * Os dois formatos do `cmd-shim` que o npm grava, conferidos nos shims do npm em `%APPDATA%\npm`
  * em 16/10/2026:
  * - script com `#!/usr/bin/env node`: a última linha chama `"%_prog%"  "%dp0%\<script>" %*`, e o
  *   `_prog` é o `node.exe` ao lado do shim ou, sem ele, o `node` do PATH;
  * - executável nativo: a linha é `"%dp0%\<programa>.exe"   %*`.
  *
- * Qualquer outra forma (argumentos no shebang, outro interpretador, shim escrito à mão) é `null`:
- * adivinhar o que o shim faria é rodar outra coisa no lugar dele.
+ * Qualquer outra forma (argumentos no shebang, outro interpretador, variável de ambiente do
+ * shebang em `@SET`, shim escrito à mão, linha comentada) é `null`: adivinhar o que o shim faria é
+ * rodar outra coisa no lugar dele.
  */
 export function alvoDoShim(
   texto: string,
@@ -71,19 +85,27 @@ export function alvoDoShim(
   ambiente: NodeJS.ProcessEnv,
   arquivos: Arquivos,
 ): AlvoCli | null {
-  const peloNode = /"%_prog%"[ \t]+"%dp0%\\([^"%\r\n]+)"[ \t]+%\*[ \t]*$/im.exec(texto);
-  if (peloNode && /SET "_prog=node"/i.test(texto)) {
+  if (!soVariaveisDoShim(texto)) return null;
+  const peloNode = PELO_NODE.exec(texto);
+  if (peloNode && /^[ \t]*SET "_prog=node"[ \t]*$/im.test(texto)) {
     const script = win32.join(pasta, peloNode[1]!);
     if (!arquivos.eArquivo(script)) return null;
     const node = nodeDoShim(pasta, ambiente, arquivos);
     return node ? { executavel: node, antes: [script] } : null;
   }
-  const nativo = /^[ \t]*"%dp0%\\([^"%\r\n]+\.(?:exe|com))"[ \t]+%\*[ \t]*$/im.exec(texto);
+  const nativo = NATIVO.exec(texto);
   if (nativo) {
     const programa = win32.join(pasta, nativo[1]!);
     return arquivos.eArquivo(programa) ? { executavel: programa, antes: [] } : null;
   }
   return null;
+}
+
+function soVariaveisDoShim(texto: string): boolean {
+  for (const [, nome] of texto.matchAll(/^[ \t]*@?SET[ \t]+"?([^="\s]+)=/gim)) {
+    if (!VARIAVEIS_DO_SHIM.has(nome!.toUpperCase())) return false;
+  }
+  return true;
 }
 
 /**
@@ -111,6 +133,20 @@ export function acharNoPath(
   windows = process.platform === "win32",
   eArquivo: (caminho: string) => boolean = arquivoExiste,
 ): string | null {
+  for (const candidato of noPath(comando, ambiente, windows, eArquivo)) return candidato;
+  return null;
+}
+
+/**
+ * Todos os arquivos do comando no PATH, na ordem em que o Windows os tentaria. Quem roda sem shell
+ * passa adiante de um `.cmd` que só o `cmd.exe` rodaria, até um que rode.
+ */
+export function* noPath(
+  comando: string,
+  ambiente: NodeJS.ProcessEnv = process.env,
+  windows = process.platform === "win32",
+  eArquivo: (caminho: string) => boolean = arquivoExiste,
+): Generator<string> {
   const caminho = valorDe(ambiente, "PATH") ?? "";
   const pastas = caminho.split(windows ? ";" : ":").filter((p) => p.trim() !== "");
   const extensoes = windows
@@ -120,10 +156,9 @@ export function acharNoPath(
     const limpa = pasta.trim().replace(/^"(.*)"$/, "$1");
     for (const extensao of extensoes) {
       const candidato = join(limpa, comando + extensao.toLowerCase());
-      if (eArquivo(candidato)) return candidato;
+      if (eArquivo(candidato)) yield candidato;
     }
   }
-  return null;
 }
 
 export function arquivoExiste(caminho: string): boolean {

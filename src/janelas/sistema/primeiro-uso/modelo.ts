@@ -47,7 +47,7 @@ export function situacaoDoCli(nome: string, achado: ProvedorDetectado | undefine
     return {
       estado: "instalado pelo npm",
       tom: "aviso",
-      texto: `${versao} · o Moductus usa o ${nome} do instalador nativo. Instale por ele e procure de novo.`,
+      texto: `${versao} · o npm instalou o ${nome} de um jeito que o Moductus não consegue rodar. Instale pelo instalador nativo e procure de novo.`,
       escolhivel: false,
     };
   }
@@ -87,8 +87,8 @@ export const COMO_INSTALAR: Readonly<Record<TipoProvedorCli, string>> = {
 };
 
 /**
- * "Como instalar" aparece quando falta instalar: o CLI não está no PATH, ou está pelo npm e o
- * Moductus usa o do instalador nativo.
+ * "Como instalar" aparece quando falta instalar: o CLI não está no PATH, ou o npm o instalou de
+ * um jeito que o Moductus não consegue rodar.
  */
 export function precisaInstalar(achado: ProvedorDetectado | undefined): boolean {
   return !achado || achado.impedimento === "instalado_pelo_npm";
