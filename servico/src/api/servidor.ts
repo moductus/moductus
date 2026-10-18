@@ -73,7 +73,14 @@ export function abrirServidorWs(token: string, atendentes: Atendentes, porta = 0
   const wss = new WebSocketServer({ noServer: true });
 
   http.on("upgrade", (req, socket, cabeca) => {
-    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+    // `new URL` lança com request-target que não é URL (`GET http://[`): aqui derrubaria o serviço.
+    const base = "http://127.0.0.1";
+    if (!URL.canParse(req.url ?? "/", base)) {
+      socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n");
+      console.error("canal: pedido de conexão com endereço inválido recusado");
+      return;
+    }
+    const url = new URL(req.url ?? "/", base);
     if (!tokenConfere(url.searchParams.get(PARAMETRO_TOKEN), token)) {
       socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
       console.error("canal: conexão sem token válido recusada");

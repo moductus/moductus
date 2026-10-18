@@ -11,6 +11,8 @@ import { CREDENCIAL_HOOKS } from "../sessoes/token.ts";
 import { AVISO_DESATUALIZADA, AVISO_SAIU, RepositorioConexoes, ServicoConexoes } from "./conexoes.ts";
 import { GhAusente } from "./github/gh.ts";
 import { AVISO_SEM_GH, RepositorioGithub, ServicoGithub } from "./github/github.ts";
+import { credenciaisNaMemoria } from "./google/fixtures/google-falso.ts";
+import { AVISO_SEM_CLIENTE, ServicoGoogleAgenda } from "./google/google-agenda.ts";
 
 const pastas: string[] = [];
 const bancos: DatabaseSync[] = [];
@@ -58,6 +60,15 @@ function montar(conteudo: string | null = ORIGINAL, falhas: { ambiente?: string 
       conexao: (c) => avisos.push(c),
     },
   );
+  // O Google sem cliente nenhum: nenhum teste daqui abre navegador nem chama o Google.
+  const google = new ServicoGoogleAgenda({
+    conexoes: repositorio,
+    credenciais: credenciaisNaMemoria(),
+    abrir: { endereco: () => Promise.reject(new Error("nenhum navegador neste teste")) },
+    avisar: (c) => avisos.push(c),
+    clienteDoAutor: null,
+    agora: () => new Date("2026-10-09T12:00:00.000Z"),
+  });
   const servico = new ServicoConexoes(
     repositorio,
     {
@@ -65,6 +76,7 @@ function montar(conteudo: string | null = ORIGINAL, falhas: { ambiente?: string 
       ambiente,
       token: () => Promise.resolve(TOKEN),
       github,
+      google,
       agora: () => new Date("2026-10-09T12:00:00.000Z"),
     },
     (c) => avisos.push(c),
@@ -83,6 +95,7 @@ describe("conexão com o Claude Code", () => {
     expect(servico.listar()).toEqual([
       { tipo: "hooks-claude-code", estado: "desligada", conta: null, ultimoErro: null, conectadaEm: null },
       { tipo: "github", estado: "desligada", conta: null, ultimoErro: null, conectadaEm: null },
+      { tipo: "google-agenda", estado: "desligada", conta: null, ultimoErro: null, conectadaEm: null },
     ]);
 
     for (let volta = 0; volta < 2; volta++) {
@@ -212,14 +225,18 @@ describe("conexão com o GitHub", () => {
 });
 
 describe("conexão com a agenda do Google", () => {
-  test("o tipo já existe, mas até a F3-22 o serviço responde que não está disponível", async () => {
+  test("ligar e desligar vão ao serviço do Google, sem prévia de arquivo e sem tocar no Claude Code", async () => {
     const { servico, avisos, ler } = montar();
     const google = { tipo: "google-agenda" } as const;
-    const motivo = "a conexão google-agenda ainda não está disponível nesta versão do serviço";
-    expect(() => servico.previa(google)).toThrow(motivo);
-    await expect(servico.ligar(google)).rejects.toThrow(motivo);
-    await expect(servico.desligar(google)).rejects.toThrow(motivo);
-    expect(avisos).toEqual([]);
+    expect(servico.previa(google)).toEqual({ tipo: "google-agenda", arquivos: [] });
+    expect(await servico.ligar(google)).toMatchObject({ estado: "erro", ultimoErro: AVISO_SEM_CLIENTE });
+    expect(servico.listar()[2]).toMatchObject({ tipo: "google-agenda", estado: "erro" });
+    expect(await servico.desligar(google)).toMatchObject({ estado: "desligada", ultimoErro: null });
+    expect(avisos.map((a) => `${a.tipo}:${a.estado}`)).toEqual([
+      "google-agenda:erro",
+      "google-agenda:desligada",
+    ]);
     expect(ler()).toBe(ORIGINAL);
+    expect(servico.listar()[0]?.estado).toBe("desligada");
   });
 });

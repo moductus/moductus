@@ -146,7 +146,7 @@ export type SituacaoGithub = z.infer<typeof SituacaoGithub>;
 
 /**
  * Conexões (DATA.md §7 conexoes); as das outras áreas entram com elas. `google-agenda` é a da
- * Alba (ADR-0035): o serviço ainda responde que não está disponível até a F3-22.
+ * Alba (ADR-0031, ADR-0035), por OAuth no navegador desde a F3-22.
  */
 export const TipoConexao = z.enum(["github", "hooks-claude-code", "google-agenda"]);
 export type TipoConexao = z.infer<typeof TipoConexao>;

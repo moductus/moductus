@@ -25,6 +25,7 @@ import { RepositorioConexoes, ServicoConexoes } from "./conexoes/conexoes.ts";
 import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts";
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
+import { ServicoGoogleAgenda } from "./conexoes/google/google-agenda.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
 import { ferramentasGithub } from "./ferramentas/github/github.ts";
 import { ferramentasSessoes } from "./ferramentas/sessoes/sessoes.ts";
@@ -170,10 +171,18 @@ const github = new ServicoGithub(new RepositorioGithub(banco), repositorioConexo
   },
   conexao: (conexao) => servidor?.emitir("conexoes.mudou", conexao),
 });
+// Google Agenda da Alba (F3-22): OAuth no navegador pela casca, refresh token no Gerenciador.
+const googleAgenda = new ServicoGoogleAgenda({
+  conexoes: repositorioConexoes,
+  credenciais: credenciaisPelaCasca(canal),
+  abrir: abrirPelaCasca(canal),
+  avisar: (conexao) => servidor?.emitir("conexoes.mudou", conexao),
+});
 const conexoes = new ServicoConexoes(
   repositorioConexoes,
   {
     github,
+    google: googleAgenda,
     ligacao: new LigacaoClaudeCode({
       caminho: caminhoSettingsClaude(),
       porta: portaDosHooks(),

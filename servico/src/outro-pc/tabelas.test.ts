@@ -152,7 +152,7 @@ describe("configuração × dado", () => {
     const tabelas = lerConfiguracoes(db, new Date(AGORA));
     const [conexao] = tabelas.get("conexoes") ?? [];
     expect(conexao).toEqual(expect.objectContaining({ id: "c1", tipo: "github", conta: "gustavo" }));
-    for (const coluna of ["estado", "ultimo_erro", "conectada_em", "credencial"]) {
+    for (const coluna of ["estado", "ultimo_erro", "conectada_em", "credencial", "escopos"]) {
       expect(conexao).not.toHaveProperty(coluna);
     }
     // A de projeto viaja; a importação decide o que fazer com o projeto que não existe lá.
