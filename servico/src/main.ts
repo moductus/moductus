@@ -12,12 +12,15 @@ import { VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
+import { RepositorioAgenda, ServicoAgenda } from "./areas/agenda/agenda.ts";
+import { RepositorioTarefasDoDia } from "./areas/agenda/tarefas-do-dia.ts";
 import { RepositorioNotas, ServicoNotas } from "./areas/notas/notas.ts";
 import { atendentesDasTarefas } from "./areas/tarefas/canal.ts";
 import { RepositorioTarefas } from "./areas/tarefas/repositorio.ts";
 import { ServicoTarefas } from "./areas/tarefas/tarefas.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ligarBandeja } from "./bandeja/bandeja.ts";
+import { converterPelaConfig, ServicoCambio, vigiarCotacao } from "./cambio/cambio.ts";
 import { abrirPelaCasca, projetosNaCasca } from "./casca/abrir.ts";
 import { ambientePelaCasca } from "./casca/ambiente.ts";
 import { avisosPelaCasca, CLIQUE_NO_AVISO, lerClique } from "./casca/avisos.ts";
@@ -29,6 +32,7 @@ import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { ServicoGoogleAgenda } from "./conexoes/google/google-agenda.ts";
+import { ferramentasAgenda } from "./ferramentas/agenda/agenda.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
 import { ferramentasGithub } from "./ferramentas/github/github.ts";
 import { ferramentasSessoes } from "./ferramentas/sessoes/sessoes.ts";
@@ -85,10 +89,17 @@ let servidor: ServidorWs | null = null;
 // Os vigias do Nuno (F2-26) nascem com o runtime; os eventos de antes disso não pedem julgamento.
 let vigiaNuno: VigiaNuno | null = null;
 const repositorioConfig = new RepositorioConfig(banco);
+// A cotação nova vale já (F3-08), venha de config.definir ou de config.importar: os dois passam
+// pelo aviso abaixo. A reação (acordar quem saiu do teto) nasce com o runtime, mais adiante.
+let reagirACotacao: () => void = () => {};
+const cotacaoMudou = vigiarCotacao(repositorioConfig.ler().cambio, () => reagirACotacao());
 const config = new ServicoConfig(
   repositorioConfig,
   nativo,
-  (estado: EstadoConfig) => servidor?.emitir("config.mudou", estado),
+  (estado: EstadoConfig) => {
+    servidor?.emitir("config.mudou", estado);
+    cotacaoMudou(estado.config.cambio);
+  },
   portable(),
 );
 const primeiroUso = new ServicoPrimeiroUso(new RepositorioPrimeiroUso(banco), (estado) =>
@@ -230,14 +241,29 @@ const provedores = registrarProvedores(
     ? aberturaMcpDoRuntime(servidorMcp, (execucaoId) => runtime.executorDaExecucao(execucaoId))
     : undefined,
 );
+const repositorioExecucoes = new RepositorioExecucoes(banco);
+// Agenda (F3-16): o local e o cache do Google, o livre no expediente de `config` e o encaixe da
+// Alba, que só o clique aplica e o histórico desfaz.
+const agenda = new ServicoAgenda(
+  {
+    repo: new RepositorioAgenda(banco),
+    tarefas: new RepositorioTarefasDoDia(banco),
+    chamadas: repositorioExecucoes,
+    lerDia: () => repositorioConfig.ler().dia,
+  },
+  {
+    mudou: (mudanca) => servidor?.emitir("agenda.mudou", mudanca),
+    calendarios: (calendarios) => servidor?.emitir("agenda.calendarios", calendarios),
+  },
+);
 // As ferramentas de cada área (F2-26: as do Nuno); cada agente só vê as da lista dele.
 const catalogo = new Catalogo([
   ...ferramentasSessoes(sessoes),
   ...ferramentasUso(sessoes),
   ...ferramentasGithub(github),
+  ...ferramentasAgenda(agenda),
 ]);
 const repositorioAgentes = new RepositorioAgentes(banco);
-const repositorioExecucoes = new RepositorioExecucoes(banco);
 // Quem rodava essas execuções era o serviço que parou: fecham como erro e os cartões delas expiram.
 const interrompidas = encerrarInterrompidas(repositorioExecucoes, aprovacoes);
 if (interrompidas.length > 0)
@@ -251,7 +277,12 @@ const runtime = new Runtime(
     autorizar: autorizarPorAprovacao(aprovacoes),
   },
   {
-    execucao: (execucao) => servidor?.emitir("execucoes.mudou", execucao),
+    execucao: (execucao) => {
+      servidor?.emitir("execucoes.mudou", execucao);
+      // O que custou muda o gasto de hoje contra o teto, que vem com o agente.
+      if (execucao.fim !== null && execucao.custoEstimadoMicrodolares !== null)
+        emitirAgente(execucao.agenteId);
+    },
     agente: (agenteId) => {
       const agente = agentes.procurar(agenteId);
       if (agente) servidor?.emitir("agentes.mudou", agente);
@@ -260,6 +291,8 @@ const runtime = new Runtime(
       bandeja.atualizar();
     },
   },
+  // O teto diário vale na moeda escolhida, pela cotação da configuração (ADR-0040).
+  { emCentavos: converterPelaConfig(() => config.obter().config.cambio) },
 );
 const agentes = new ServicoAgentes(
   repositorioAgentes,
@@ -267,8 +300,23 @@ const agentes = new ServicoAgentes(
   (agente) => runtime.situacao(agente),
   runtime.estados,
 );
+/** Avisa as janelas de um agente que mudou (estado, modelo ou o gasto de hoje). */
+function emitirAgente(agenteId: string): void {
+  const agente = agentes.procurar(agenteId);
+  if (agente) servidor?.emitir("agentes.mudou", agente);
+}
 // Pausar pela bandeja (F2-18): o menu do ícone mostra o estado de cada agente e se refaz quando muda.
 const bandeja = ligarBandeja({ agentes, canal });
+// A cotação mudou: o gasto de hoje muda, e o teto vale de novo para cada agente (acorda ou adormece).
+reagirACotacao = () => {
+  for (const agente of repositorioAgentes.agentes()) {
+    runtime.estados.tetoMudou(agente.id);
+    emitirAgente(agente.id);
+  }
+  bandeja.atualizar();
+};
+// "Buscar cotação" (ADR-0040): só quando o usuário pede, e o valor só vale depois de confirmado.
+const cambio = new ServicoCambio();
 // Provedores (F2-08): detecção dos CLIs, configuração e o teste de verdade, pelo registro do runtime.
 const servicoProvedores = new ServicoProvedores(
   new RepositorioProvedores(banco),
@@ -340,6 +388,7 @@ servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
   "config.obter": () => config.obter(),
   "config.definir": (mudanca) => config.definir(mudanca),
+  "cambio.buscar": (pedido) => cambio.buscar(pedido.moeda),
   "config.exportar": (pedido) => outroPc.exportar(pedido),
   "config.previaImportar": (pedido) => outroPc.previa(pedido),
   "config.importar": (pedido) => outroPc.importar(pedido),
@@ -366,6 +415,8 @@ servidor = await abrirServidorWs(token, {
   "agentes.pausar": (pedido) => agentes.pausar(pedido),
   "agentes.retomar": (pedido) => agentes.retomar(pedido),
   "agentes.acordar": (pedido) => agentes.acordar(pedido),
+  // O cartão de teto (F3-08): solta mais até a meia-noite e a fila roda; o aviso sai pelo runtime.
+  "agentes.liberarTeto": (pedido) => agentes.liberarTeto(pedido),
   // Configurações › Modelos (F2-32): vale na próxima execução; as janelas ficam sabendo pelo aviso.
   "agentes.definir": (mudanca) => {
     const agente = agentes.definir(mudanca);
@@ -409,6 +460,14 @@ servidor = await abrirServidorWs(token, {
   "notas.apagar": (pedido) => notas.apagar(pedido),
   "notas.buscar": (pedido) => notas.buscar(pedido),
   ...atendentesDasTarefas(tarefas),
+  "agenda.calendarios": () => agenda.calendarios(),
+  "agenda.definirCalendario": (mudanca) => agenda.definirCalendario(mudanca),
+  "agenda.consultar": (pedido) => agenda.consultar(pedido),
+  "agenda.obterEvento": (pedido) => agenda.obterEvento(pedido),
+  "agenda.criarEvento": (novo) => agenda.criarEvento(novo),
+  "agenda.definirEvento": (mudanca) => agenda.definirEvento(mudanca),
+  "agenda.apagarEvento": (pedido) => agenda.apagarEvento(pedido),
+  "agenda.aplicarSugestao": (pedido) => agenda.aplicarSugestao(pedido),
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
   ...semAtendente([
@@ -419,14 +478,6 @@ servidor = await abrirServidorWs(token, {
     "lembretes.adiar",
     "lembretes.concluir",
     "lembretes.cancelar",
-    "agenda.calendarios",
-    "agenda.definirCalendario",
-    "agenda.consultar",
-    "agenda.obterEvento",
-    "agenda.criarEvento",
-    "agenda.definirEvento",
-    "agenda.apagarEvento",
-    "agenda.aplicarSugestao",
     "foco.obter",
     "foco.iniciar",
     "foco.alternar",

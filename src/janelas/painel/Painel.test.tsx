@@ -67,6 +67,15 @@ function agente(
     gatilhos: [],
     escoposMemoria: [],
     tetoDiarioCentavos: null,
+    tetoMoeda: "BRL",
+    gastoDeHoje: {
+      microdolares: 0,
+      centavos: null,
+      cotacaoDe: null,
+      limiteCentavos: null,
+      liberarCentavos: null,
+      pedeCotacao: false,
+    },
     deFabrica: true,
     camposPersonalizados: [],
     situacao: { ...ATIVO, ...situacao },
@@ -130,6 +139,8 @@ const pedir = vi.fn(async (metodo: string, _dados?: unknown): Promise<unknown> =
     case "agentes.retomar":
       return [];
     case "agentes.acordar":
+      return servidor.acordar();
+    case "agentes.liberarTeto":
       return servidor.acordar();
     case "config.obter":
       return { config: { atalhos: { sistema: "Ctrl+Shift+M" } }, portable: false, falhasAtalhos: {} };
@@ -640,6 +651,37 @@ describe("painel Agentes: estados que pedem decisão (Estados.dc.html)", () => {
       "O Claude `trabalho` está sem login. Entre no terminal com claude e tento de novo em breve.",
     );
     expect([...cartao!.querySelectorAll("p code")].map((c) => c.textContent)).toEqual(["claude"]);
+  });
+
+  it("teto com o gasto contado: o valor como estimativa, e Liberar pede ao serviço", async () => {
+    servidor.agentes = [
+      {
+        ...agente("nuno", { estado: "dormindo", motivoSono: "teto" }),
+        tetoDiarioCentavos: 1000,
+        tetoMoeda: "USD",
+        gastoDeHoje: {
+          microdolares: 10_000_000,
+          centavos: 1000,
+          cotacaoDe: null,
+          limiteCentavos: 1000,
+          liberarCentavos: 200,
+          pedeCotacao: false,
+        },
+      },
+    ];
+    await montar();
+    await abrir("agentes");
+    const [cartao] = estados();
+    expect(cartao!.querySelector("p")?.textContent).toBe(
+      "Usei cerca de US$ 10,00 de US$ 10,00 na API, estimativa. Paro até meia-noite, a menos que você libere mais.",
+    );
+    expect([...cartao!.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
+      "Parar até amanhã",
+      "Liberar US$ 2,00",
+    ]);
+    await act(async () => botaoCom(cartao!, "Liberar US$ 2,00").click());
+    expect(pedir).toHaveBeenCalledWith("agentes.liberarTeto", { id: "nuno" });
+    expect(auditar(recipiente)).toEqual([]);
   });
 
   it("teto: sem valor inventado, leva aos Modelos para mudar o teto", async () => {

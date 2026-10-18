@@ -385,18 +385,21 @@ function limiteDoAte(ate: Ate | null): number {
 export interface Expansao<T> {
   ocorrencias: T[];
   entendida: boolean;
+  /** Passou do `maximo` pedido: as ocorrências depois dele ficaram de fora. */
+  cortada?: true;
 }
 
 /**
  * Os dias de `de` a `ate` (inclusive) em que algo que começa em `inicio` (dia sem hora: tarefa,
  * evento de dia inteiro) acontece. Sem regra, só o início; com regra fora do subconjunto, também
- * só o início, e `entendida` falso.
+ * só o início, e `entendida` falso. Com `maximo`, a expansão para nele e marca `cortada`.
  */
 export function diasNoIntervalo(
   recorrencia: string | null,
   inicio: string,
   de: string,
   ate: string,
+  maximo = Number.POSITIVE_INFINITY,
 ): Expansao<string> {
   const leitura = recorrencia === null ? null : lerRecorrencia(recorrencia);
   const sozinho = (entendida: boolean): Expansao<string> => ({
@@ -411,7 +414,9 @@ export function diasNoIntervalo(
   const desde = numeroDoDia(de);
   const ocorrencias: string[] = [];
   for (const d of dias(leitura.regra, primeiro, limite, desde)) {
-    if (d >= desde) ocorrencias.push(diaDoNumero(d));
+    if (d < desde) continue;
+    if (ocorrencias.length >= maximo) return { ocorrencias, entendida: true, cortada: true };
+    ocorrencias.push(diaDoNumero(d));
   }
   return { ocorrencias, entendida: true };
 }
@@ -473,6 +478,7 @@ function passou(instante: Date, dia: string, hora: string, ate: Ate): boolean {
 /**
  * Os instantes cujo dia no fuso cai de `de` a `ate` (inclusive), para o que começa com hora
  * (evento, lembrete). Sem regra, só o início; fora do subconjunto, também, com `entendida` falso.
+ * Com `maximo`, a expansão para nele e marca `cortada`.
  */
 export function instantesNoIntervalo(
   recorrencia: string | null,
@@ -480,6 +486,7 @@ export function instantesNoIntervalo(
   fuso: string,
   de: string,
   ate: string,
+  maximo = Number.POSITIVE_INFINITY,
 ): Expansao<Date> {
   const leitura = recorrencia === null ? null : lerRecorrencia(recorrencia);
   const diaDoInicio = noFuso(inicio, fuso).dia;
@@ -491,7 +498,9 @@ export function instantesNoIntervalo(
   if (!leitura.entendida) return sozinho(false);
   const ocorrencias: Date[] = [];
   for (const o of instantes(leitura.regra, inicio, fuso, numeroDoDia(de), numeroDoDia(ate))) {
-    if (o.dia >= de && o.dia <= ate) ocorrencias.push(o.instante);
+    if (o.dia < de || o.dia > ate) continue;
+    if (ocorrencias.length >= maximo) return { ocorrencias, entendida: true, cortada: true };
+    ocorrencias.push(o.instante);
   }
   return { ocorrencias, entendida: true };
 }

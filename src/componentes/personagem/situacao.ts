@@ -227,12 +227,14 @@ function quandoVolta(dormeAte: string | null, agora: Date): string | null {
  * (fora do ar, chave recusada ou CLI sem login, CLI ausente) é o "Erro de provedor" do quadro:
  * cara preocupada, anel e ponto vermelhos até o modelo voltar; o `modelo` diz se a credencial é
  * login ou chave. O limite de uso é sono tranquilo, com a hora de volta na dica. Teto de gasto
- * pede uma decisão sua: cara preocupada, mas anel e ponto de aviso.
+ * pede uma decisão sua: cara preocupada, mas anel e ponto de aviso; `gastoNoTeto` é o gasto contra
+ * o limite já escrito como estimativa (servico/teto.ts), que a dica do dock mostra (Estados.dc.html).
  */
 export function lerSituacao(
   situacao: SituacaoAgente | null | undefined,
   agora: Date = new Date(),
   modelo: ModeloDoAgente | null = null,
+  gastoNoTeto: string | null = null,
 ): LeituraSituacao {
   if (!situacao) return SEM_SITUACAO;
   switch (situacao.estado) {
@@ -249,7 +251,7 @@ export function lerSituacao(
           moldura: "aviso",
           texto: "parado",
           tom: "aviso",
-          dica: "Chegou ao teto de hoje",
+          dica: gastoNoTeto ? `Chegou ao teto de hoje: ${gastoNoTeto}` : "Chegou ao teto de hoje",
           ponto: "aviso",
         };
       }

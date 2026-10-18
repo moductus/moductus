@@ -73,6 +73,7 @@ pub fn run() {
             abrir::abrir_endereco,
             abrir::abrir_arquivo,
             abrir::abrir_settings_claude,
+            abrir::abrir_terminal,
         ])
         .setup(move |app| {
             // Só o dock nasce antes do setup: a faixa fica reservada antes de painel,

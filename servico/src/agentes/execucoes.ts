@@ -207,6 +207,32 @@ export class RepositorioExecucoes {
   }
 
   /**
+   * A chamada que o clique do usuário fez, sem execução (o encaixe da Alba aplicado na agenda):
+   * carimbada por ele, desfaz-se por `execucoes.desfazer` como a de um agente.
+   */
+  registrarChamadaDoUsuario(c: Omit<NovaChamada, "execucaoId" | "agenteId" | "aprovacaoId">): void {
+    const origem = colunasDeOrigem(DO_USUARIO);
+    this.db
+      .prepare(
+        `INSERT INTO chamadas_ferramenta (id, da_execucao_id, ferramenta, efeito, entrada, resultado,
+           aprovacao_id, criado_em, atualizado_em, origem, agente_id, execucao_id)
+         VALUES (?, NULL, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        c.id,
+        c.ferramenta,
+        c.efeito,
+        emJson(c.entrada),
+        emJson(c.resultado),
+        c.agora,
+        c.agora,
+        origem.origem,
+        origem.agente_id,
+        origem.execucao_id,
+      );
+  }
+
+  /**
    * Fecha como erro as execuções que ficaram `rodando` porque o serviço parou no meio, e devolve
    * os cartões do Moductus que elas deixaram pendentes, para expirar.
    */

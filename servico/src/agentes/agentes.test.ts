@@ -14,7 +14,6 @@ import {
   MENSAGEM_RESERVA_SEM_PRINCIPAL,
   MENSAGEM_SO_DE_FABRICA,
   MENSAGEM_SO_MODELO,
-  MENSAGEM_TETO_SEM_MOEDA,
   RepositorioAgentes,
   ServicoAgentes,
 } from "./agentes.ts";
@@ -170,7 +169,7 @@ describe("agentes", () => {
     });
   });
 
-  test("definir recusa provedor que não existe, reserva igual ou sem principal, outro campo e teto com valor", () => {
+  test("definir recusa provedor que não existe, reserva igual ou sem principal e outro campo", () => {
     const { db, servico } = montar();
     db.exec(`INSERT INTO provedores (id, tipo, nome) VALUES ('p1', 'claude-cli', 'Claude'), ('p2', 'openai', 'OpenAI');
              UPDATE provedores SET apagado_em = '2026-10-01T00:00:00.000Z' WHERE id = 'p2';`);
@@ -182,9 +181,6 @@ describe("agentes", () => {
       MENSAGEM_RESERVA_SEM_PRINCIPAL,
     );
     expect(() => servico.definir({ id: "alba", nome: "Alva" })).toThrow(MENSAGEM_SO_MODELO);
-    // A moeda do teto não foi decidida: nenhum valor vira limite. Tirar o teto continua valendo.
-    expect(() => servico.definir({ id: "alba", tetoDiarioCentavos: 500 })).toThrow(MENSAGEM_TETO_SEM_MOEDA);
-    expect(servico.definir({ id: "alba", tetoDiarioCentavos: null }).tetoDiarioCentavos).toBeNull();
     expect(() => servico.definir({ id: "zeca", provedorId: "p1" })).toThrow("agente não encontrado");
     // Nada do que foi recusado ficou gravado.
     expect(servico.obter({ id: "alba" })).toMatchObject({
@@ -209,6 +205,51 @@ describe("agentes", () => {
       estado: "dormindo",
       dormeAte: "2026-10-10T03:00:00.000Z",
     });
+  });
+
+  test("definir grava o teto na moeda escolhida; em real sem cotação o teto não vale e a tela pede a cotação", () => {
+    const { db, servico } = montar();
+    const alba = servico.definir({ id: "alba", tetoDiarioCentavos: 500, tetoMoeda: "USD" });
+    expect(Agente.safeParse(alba).success).toBe(true);
+    expect(alba).toMatchObject({ tetoDiarioCentavos: 500, tetoMoeda: "USD" });
+    // Em dólar não há conversão: o gasto já vem na moeda do teto, sem data de cotação.
+    expect(alba.gastoDeHoje).toEqual({
+      microdolares: 0,
+      centavos: 0,
+      cotacaoDe: null,
+      limiteCentavos: 500,
+      liberarCentavos: 100,
+      pedeCotacao: false,
+    });
+    // O real é o padrão; sem cotação gravada, nada de número.
+    const tula = servico.definir({ id: "tula", tetoDiarioCentavos: 1000 });
+    expect(tula).toMatchObject({ tetoMoeda: "BRL", gastoDeHoje: { centavos: null, pedeCotacao: true } });
+    expect(
+      db.prepare("SELECT teto_moeda, teto_diario_centavos FROM agentes WHERE id = 'alba'").get(),
+    ).toEqual({
+      teto_moeda: "USD",
+      teto_diario_centavos: 500,
+    });
+    // Sem teto, nada a pedir.
+    expect(servico.definir({ id: "tula", tetoDiarioCentavos: null }).gastoDeHoje).toMatchObject({
+      limiteCentavos: null,
+      liberarCentavos: null,
+      pedeCotacao: false,
+    });
+  });
+
+  test("mudar o teto esquece o que foi liberado e acorda quem dormia pelo teto e já não está nele", () => {
+    const { db, servico } = montar();
+    db.exec(`UPDATE agentes SET teto_moeda = 'USD', teto_diario_centavos = 1000, teto_liberado_centavos = 200,
+               teto_liberado_ate = '2026-10-10T03:00:00.000Z', estado = 'dormindo', motivo_sono = 'teto',
+               dorme_ate = '2026-10-10T03:00:00.000Z' WHERE id = 'nuno'`);
+    expect(servico.obter({ id: "nuno" }).gastoDeHoje.limiteCentavos).toBe(1200);
+    const nuno = servico.definir({ id: "nuno", tetoDiarioCentavos: 1500 });
+    expect(nuno.situacao).toMatchObject({ estado: "ativo", motivoSono: null });
+    expect(nuno.gastoDeHoje.limiteCentavos).toBe(1500);
+    expect(
+      db.prepare("SELECT teto_liberado_centavos, teto_liberado_ate FROM agentes WHERE id = 'nuno'").get(),
+    ).toEqual({ teto_liberado_centavos: null, teto_liberado_ate: null });
   });
 
   test("restaurar padrão volta o personalizado ao de fábrica e mantém modelo, reserva, teto e estado", () => {
