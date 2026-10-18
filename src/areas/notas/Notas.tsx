@@ -29,6 +29,7 @@ import {
   quandoDaNota,
   TAMANHO_BUSCA,
   textoDoSalvo,
+  textoSemNota,
   tituloDaNota,
   useBuscaNotas,
   useNotas,
@@ -65,8 +66,15 @@ export function Notas({ secao, ir }: PropsNotas) {
   const agora = useAgora();
 
   const notas = lista.estado === "pronta" ? lista.dados : null;
-  const conhecida = (id: string) => id === criada || ehBlocoRapido(id) || !!notas?.some((n) => n.id === id);
-  const aberta = notas ? (secao && conhecida(secao) ? secao : notaPadrao(notas)) : (secao ?? null);
+  // A nota que foi para a Lixeira em outra janela com texto não salvo fica aberta: o aviso dela
+  // oferece guardar o texto numa nota nova.
+  const conhecida = (id: string) =>
+    id === criada || ehBlocoRapido(id) || textoSemNota(id) || !!notas?.some((n) => n.id === id);
+  // Sem nota pedida, fica a que já estava aberta: outra nota mexida em outra janela não a troca.
+  const [ultima, setUltima] = useState<string | null>(null);
+  const pedida = secao ?? ultima;
+  const aberta = notas ? (pedida && conhecida(pedida) ? pedida : notaPadrao(notas)) : pedida;
+  if (aberta !== ultima) setUltima(aberta);
   const abrir = (id: string) => ir({ area: "notas", secao: id });
 
   const novaNota = (texto?: { titulo: string; conteudo: string }) =>
@@ -389,15 +397,19 @@ type Renderizar = (texto: string) => string;
 
 /**
  * O `markdown-it` vem à parte, na primeira nota aberta: o dock e o painel não o carregam (spec da
- * fase 3, §7). Até ele chegar, o texto aparece cru.
+ * fase 3, §7). Até ele chegar, ou se não chegar, o texto aparece cru.
  */
 function useRenderizar(): Renderizar | null {
   const [renderizar, setRenderizar] = useState<Renderizar | null>(null);
   useEffect(() => {
     let vivo = true;
-    void import("./markdown.ts").then((m) => {
-      if (vivo) setRenderizar(() => m.renderizar);
-    });
+    import("./markdown.ts")
+      .then((m) => {
+        if (vivo) setRenderizar(() => m.renderizar);
+      })
+      .catch(() => {
+        // Sem o módulo, a nota continua legível como texto cru.
+      });
     return () => {
       vivo = false;
     };
@@ -415,9 +427,10 @@ function TextoNota({ estado, rascunho }: { estado: EstadoRascunho; rascunho: Ras
   const campo = useRef<HTMLTextAreaElement>(null);
   const renderizar = useRenderizar();
   const link = useAbrir();
+  // Enquanto você escreve, nada é renderizado: o markdown-it roda só quando o texto é lido.
   const html = useMemo(
-    () => (renderizar && estado.conteudo ? renderizar(estado.conteudo) : null),
-    [renderizar, estado.conteudo],
+    () => (!editando && renderizar && estado.conteudo ? renderizar(estado.conteudo) : null),
+    [editando, renderizar, estado.conteudo],
   );
   const idDica = useId();
 
@@ -455,17 +468,30 @@ function TextoNota({ estado, rascunho }: { estado: EstadoRascunho; rascunho: Ras
     );
   }
 
+  // O link não tem `href` (markdown.ts): clique, Enter e Espaço abrem pela casca, e o WebView2 não
+  // tem como abrir sozinho (clique do meio, menu de contexto).
+  const linkDe = (alvo: EventTarget) =>
+    alvo instanceof Element ? alvo.closest<HTMLElement>("[data-endereco]") : null;
+  const abrirLink = (el: HTMLElement) => {
+    const endereco = el.dataset.endereco ?? "";
+    link.abrir(() => abrirEndereco(endereco));
+  };
   const aoClicar = (e: MouseEvent<HTMLDivElement>) => {
-    const alvo = e.target instanceof Element ? e.target.closest("a") : null;
+    const alvo = linkDe(e.target);
     if (alvo) {
       e.preventDefault();
-      const endereco = alvo.getAttribute("href") ?? "";
-      link.abrir(() => abrirEndereco(endereco));
+      abrirLink(alvo);
       return;
     }
     setEditando(true);
   };
   const aoTeclar = (e: KeyboardEvent<HTMLDivElement>) => {
+    const alvo = linkDe(e.target);
+    if (alvo && (e.key === "Enter" || e.key === " ")) {
+      e.preventDefault();
+      abrirLink(alvo);
+      return;
+    }
     if (e.key !== "Enter" || e.target !== e.currentTarget) return;
     e.preventDefault();
     setEditando(true);

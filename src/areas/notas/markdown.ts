@@ -3,14 +3,16 @@ import markdownIt, { type StateCore, type Token } from "markdown-it";
 /**
  * A leitura da nota (ADR-0036): o Markdown cru vira HTML pelo `markdown-it` sem HTML de quem
  * escreveu (`html: false` escapa qualquer marcação), sem imagem (nada busca fora do PC só porque
- * a nota foi aberta) e com link só para `http(s)://`, que a casca abre no navegador (ADR-0038).
+ * a nota foi aberta) e com link só para `https://`, o único que a casca abre (ADR-0038); o resto
+ * fica texto. O link sai sem `href`, com o endereço em `data-endereco`: só a área o abre, pela
+ * casca, e o WebView2 não tem como navegar nem abrir por conta própria.
  * A caixa de seleção (`- [ ]` e `- [x]`) é desenhada aqui, sem plugin. Este módulo só é carregado
  * pela área Notas do Sistema, por import dinâmico: o painel e o dock não levam o `markdown-it`.
  */
 
 const md = markdownIt({ html: false, linkify: false, typographer: false, breaks: true });
 md.disable("image");
-md.validateLink = (endereco) => /^https?:\/\//i.test(endereco.trim());
+md.validateLink = (endereco) => /^https:\/\//i.test(endereco.trim());
 
 /** `[ ] ` ou `[x] ` no começo do item. */
 const MARCA_CAIXA = /^\[([ xX])\]\s+/;
@@ -43,11 +45,17 @@ function caixasDeSelecao(state: StateCore): void {
 
 md.core.ruler.after("inline", "caixas_de_selecao", caixasDeSelecao);
 
-// Link da nota não navega a janela: o clique é da área, que pede à casca.
-const abrirLink = md.renderer.rules.link_open;
-md.renderer.rules.link_open = (tokens: Token[], idx, opcoes, env, self) => {
-  tokens[idx]?.attrSet("rel", "noreferrer");
-  return abrirLink ? abrirLink(tokens, idx, opcoes, env, self) : self.renderToken(tokens, idx, opcoes);
+// Link da nota não navega a janela: sem `href`, focável e com papel de link; quem abre é a área.
+md.renderer.rules.link_open = (tokens: Token[], idx, opcoes, _env, self) => {
+  const token = tokens[idx];
+  if (token) {
+    const endereco = token.attrGet("href") ?? "";
+    token.attrs = (token.attrs ?? []).filter(([nome]) => nome !== "href");
+    token.attrSet("data-endereco", endereco);
+    token.attrSet("role", "link");
+    token.attrSet("tabindex", "0");
+  }
+  return self.renderToken(tokens, idx, opcoes);
 };
 
 /** O HTML da leitura de uma nota. */

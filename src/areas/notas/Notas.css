@@ -307,9 +307,15 @@
 }
 
 .nota-leitura a {
+  border-radius: var(--raio-caixa);
   color: var(--texto);
   text-decoration: underline;
   cursor: pointer;
+}
+
+.nota-leitura a:focus-visible {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco);
 }
 
 .nota-leitura code {

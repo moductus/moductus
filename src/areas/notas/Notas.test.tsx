@@ -375,9 +375,47 @@ describe("Notas: salva sozinha", () => {
   it("link do texto abre no navegador pela casca, sem entrar na edição", async () => {
     falso.notas.set(NOTA.id, { ...NOTA, conteudo: "[banco](https://banco.exemplo)" });
     await montar();
-    act(() => por<HTMLAnchorElement>(".nota-leitura a")!.click());
+    const link = por('.nota-leitura [role="link"]')!;
+    expect(link.hasAttribute("href")).toBe(false);
+    act(() => link.click());
     expect(casca.invoke).toHaveBeenCalledWith("abrir_endereco", { endereco: "https://banco.exemplo" });
     expect(por(".nota-campo")).toBeNull();
+    // Pelo teclado: Enter e Espaço no link abrem, sem entrar na edição.
+    casca.invoke.mockClear();
+    act(() => link.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    act(() => link.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true })));
+    expect(casca.invoke).toHaveBeenCalledTimes(2);
+    expect(por(".nota-campo")).toBeNull();
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("nota apagada em outra janela com texto não salvo fica aberta, e o texto vai para uma nota nova", async () => {
+    await montar();
+    digitar(editarTexto(), "o que eu não posso perder");
+    falso.notas.delete(NOTA.id);
+    act(() => falso.emitir("notas.mudou", { notas: [], apagadas: [NOTA.id] }));
+    // A lista lê de novo e já não tem a nota; a tela continua nela.
+    await andar(2000);
+    expect(por('[role="alert"]')?.textContent).toContain("Esta nota foi para a Lixeira em outra janela.");
+    expect(por<HTMLTextAreaElement>(".nota-campo")?.value).toBe("o que eu não posso perder");
+    expect(salvos()).toEqual([]);
+
+    await act(async () => botao("Salvar como nota nova")!.click());
+    expect(falso.pedidos).toContainEqual({
+      metodo: "notas.criar",
+      dados: { titulo: NOTA.titulo, conteudo: "o que eu não posso perder" },
+    });
+    const nova = [...falso.notas.values()].find((n) => n.id.startsWith("01NOVA"))!;
+    expect(nova.conteudo).toBe("o que eu não posso perder");
+    expect(ir).toHaveBeenCalledWith({ area: "notas", secao: nova.id });
+  });
+
+  it("nota apagada em outra janela sem nada pendente dá lugar à mais recente", async () => {
+    await montar();
+    falso.notas.delete(NOTA.id);
+    act(() => falso.emitir("notas.mudou", { notas: [], apagadas: [NOTA.id] }));
+    await andar();
+    expect(por<HTMLInputElement>(".nota-titulo-campo")?.value).toBe(RECEITA.titulo);
   });
 
   it("a nota mudou em outra janela enquanto você escrevia: as duas ficam e você escolhe", async () => {

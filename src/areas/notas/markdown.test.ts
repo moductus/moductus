@@ -15,13 +15,15 @@ describe("renderizar (ADR-0036)", () => {
     expect(html).toContain("&lt;script&gt;");
   });
 
-  it("link só para http(s), e imagem não busca nada fora", () => {
+  it("link só para https, sem href (só a área abre, pela casca), e imagem não busca nada fora", () => {
     const html = renderizar(
-      "[banco](https://banco.exemplo) [x](javascript:alert(1)) [arq](file:///C:/a.txt) ![foto](https://rastreio.exemplo/p.png)",
+      "[banco](https://banco.exemplo) [velho](http://inseguro.exemplo) [x](javascript:alert(1)) [arq](file:///C:/a.txt) ![foto](https://rastreio.exemplo/p.png)",
     );
-    expect(html).toContain('<a href="https://banco.exemplo" rel="noreferrer">banco</a>');
-    expect(html).not.toContain('javascript:alert(1)"');
-    expect(html).not.toMatch(/href="(javascript|file):/);
+    expect(html).toContain('<a data-endereco="https://banco.exemplo" role="link" tabindex="0">banco</a>');
+    expect(html).toContain("[velho](http://inseguro.exemplo)");
+    expect(html).not.toContain("href=");
+    expect(html).not.toContain('data-endereco="javascript');
+    expect(html).not.toContain('data-endereco="file');
     expect(html).not.toContain("<img");
   });
 

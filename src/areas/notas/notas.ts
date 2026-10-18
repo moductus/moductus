@@ -358,6 +358,15 @@ function receber(nota: Nota): void {
   esquecerSeQuieto(nota.id, entrada);
 }
 
+/**
+ * A nota foi para a Lixeira em outra janela e esta tem texto dela ainda não salvo: a área a mantém
+ * aberta até você guardar o texto numa nota nova (ou sair dela).
+ */
+export function textoSemNota(id: string): boolean {
+  const rascunho = entradas.get(id)?.rascunho;
+  return !!rascunho && rascunho.atual.situacao === "apagada" && rascunho.pendente;
+}
+
 /** Só para os testes: esquece os rascunhos entre um caso e outro. */
 export function esquecerRascunhos(): void {
   for (const { rascunho } of entradas.values()) rascunho?.encerrar();
