@@ -158,12 +158,17 @@ export function entenderFrase(frase: string, tempo: TempoDoDia, opcoes: OpcoesFr
   }
   if (marcaTipo?.tira) for (let i = marcaTipo.inicio; i < marcaTipo.fim; i++) tiradas[i] = true;
 
-  // "às 3" é a próxima entre 3h e 15h a partir de agora, quando o dia é hoje ou não foi dito.
-  if (horaAmbigua !== null && (campos.dia === null || campos.dia === hoje)) {
-    const agora = tempo.momento().hora;
+  // "às 3" é a próxima entre 3h e 15h a partir de agora, quando o dia é hoje ou não foi dito. Em
+  // dia futuro, como se fala: de 1 a 6 é tarde ou noite ("amanhã às 3" é 15h), de 7 a 11 é manhã.
+  if (horaAmbigua !== null) {
     const cedo = horaTexto(horaAmbigua, 0);
     const tarde = horaTexto(horaAmbigua + 12, 0);
-    campos.hora = cedo > agora ? cedo : tarde > agora ? tarde : cedo;
+    if (campos.dia === null || campos.dia === hoje) {
+      const agora = tempo.momento().hora;
+      campos.hora = cedo > agora ? cedo : tarde > agora ? tarde : cedo;
+    } else if (campos.dia > hoje) {
+      campos.hora = horaAmbigua <= 6 ? tarde : cedo;
+    }
   }
   // "hoje à meia-noite" é a virada de hoje para amanhã, não a que já passou.
   if (diaDeHoje && campos.hora === "00:00") campos.dia = diaSeguinte(hoje) ?? campos.dia;

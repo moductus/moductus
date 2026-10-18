@@ -285,6 +285,12 @@ const TABELA: [string, Esperado][] = [
   ],
   ["ligar pro João às 9", { titulo: "ligar pro João", dia: "2026-10-08", hora: "21:00" }],
   ["tomar remédio às 11", { titulo: "tomar remédio", dia: "2026-10-08", hora: "11:00" }],
+  // Em dia futuro dito: de 1 a 6 é tarde ou noite, de 7 a 11 é manhã.
+  ["dentista amanhã às 3", { titulo: "dentista", dia: "2026-10-09", hora: "15:00" }],
+  ["ligar pro cliente quinta às 6", { titulo: "ligar pro cliente", dia: "2026-10-15", hora: "18:00" }],
+  ["academia amanhã às 8", { titulo: "academia", dia: "2026-10-09", hora: "08:00" }],
+  ["entregar o laudo 20/10 às 11", { titulo: "entregar o laudo", dia: "2026-10-20", hora: "11:00" }],
+  ["reunião amanhã às 1", { tipo: "evento", titulo: "reunião", dia: "2026-10-09", hora: "13:00" }],
   // 5. Número com período abrindo a frase é hora, não gasto.
   ["8 da noite jantar", { titulo: "jantar", dia: "2026-10-08", hora: "20:00" }],
   ["10 da manhã academia", { titulo: "academia", dia: "2026-10-09", hora: "10:00" }],
