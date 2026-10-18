@@ -12,6 +12,8 @@ import { VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
+import { RelogioDoDia } from "./areas/dia/relogio.ts";
+import { RepositorioLembretes, ServicoLembretes } from "./areas/lembretes/lembretes.ts";
 import { RepositorioNotas, ServicoNotas } from "./areas/notas/notas.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ligarBandeja } from "./bandeja/bandeja.ts";
@@ -344,6 +346,18 @@ const conversas = new ServicoConversas(
 const notas = new ServicoNotas(new RepositorioNotas(banco), {
   mudou: (mudanca) => servidor?.emitir("notas.mudou", mudanca),
 });
+// Relógio do dia (F3-17, ADR-0032): lembretes disparam por um timer próprio, sem modelo e sem rede.
+// Quando as Tarefas (F3-15) chegarem, o aviso `lembretes` delas chama `lembretes.mudaramPorFora`.
+const relogio = new RelogioDoDia();
+const lembretes = new ServicoLembretes(
+  new RepositorioLembretes(banco),
+  { lerFuso: () => repositorioConfig.ler().dia.fuso, notificacoes, relogio },
+  {
+    mudou: (mudanca) => servidor?.emitir("lembretes.mudou", mudanca),
+    hoje: (hoje) => servidor?.emitir("lembretes.hoje", hoje),
+  },
+);
+relogio.registrar(lembretes);
 // Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
 // Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
 runtime.estados.vigiar();
@@ -428,6 +442,13 @@ servidor = await abrirServidorWs(token, {
   "notas.definir": (mudanca) => notas.definir(mudanca),
   "notas.apagar": (pedido) => notas.apagar(pedido),
   "notas.buscar": (pedido) => notas.buscar(pedido),
+  "lembretes.listar": (pedido) => lembretes.listar(pedido),
+  "lembretes.hoje": () => lembretes.hoje(),
+  "lembretes.criar": (novo) => lembretes.criar(novo),
+  "lembretes.definir": (mudanca) => lembretes.definir(mudanca),
+  "lembretes.adiar": (pedido) => lembretes.adiar(pedido),
+  "lembretes.concluir": (pedido) => lembretes.concluir(pedido),
+  "lembretes.cancelar": (pedido) => lembretes.cancelar(pedido),
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
   ...semAtendente([
@@ -448,13 +469,6 @@ servidor = await abrirServidorWs(token, {
     "tarefas.ordenar",
     "tarefas.apagar",
     "tarefas.etiquetas",
-    "lembretes.listar",
-    "lembretes.hoje",
-    "lembretes.criar",
-    "lembretes.definir",
-    "lembretes.adiar",
-    "lembretes.concluir",
-    "lembretes.cancelar",
     "agenda.calendarios",
     "agenda.definirCalendario",
     "agenda.consultar",
@@ -502,7 +516,13 @@ const agendador = new Agendador({
   runtime,
 });
 agendador.vigiar();
+// O que venceu com o serviço parado vira atrasado, num aviso só; depois o timer fica armado.
+relogio.ligar().catch((erro: unknown) => console.error(`relógio do dia não ligou: ${String(erro)}`));
 canal.aoAvisar("retomou", () => {
+  // Na volta da suspensão, os lembretes que venceram com o PC dormindo chegam juntos.
+  relogio
+    .retomar()
+    .catch((erro: unknown) => console.error(`relógio do dia: retomada falhou: ${String(erro)}`));
   agendador
     .retomar()
     .then(() => github.atualizar("conexao"))
