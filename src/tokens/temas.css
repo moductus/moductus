@@ -187,6 +187,8 @@
   --fracao-col-teto: 18cqi;
   --largura-lista-modelo-min: 132px;
   --largura-trilho-teste: 120px;
+  /* O valor do teto e a cotação do dólar: cabe "1.234,56" sem alargar a coluna */
+  --largura-campo-valor: 120px;
   --largura-min-caminho: 220px;
   --largura-min-dado-conexao: 160px;
   --altura-bloco-hooks: 216px;

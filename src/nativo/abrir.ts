@@ -1,3 +1,4 @@
+import type { TipoProvedorCli } from "@moductus/contrato";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useState } from "react";
 
@@ -20,6 +21,14 @@ export function abrirArquivo(caminho: string): Promise<void> {
 /** O `settings.json` do Claude Code: a casca sabe onde ele fica, mesmo sem a ligação de pé. */
 export function abrirSettingsClaude(): Promise<void> {
   return invoke("abrir_settings_claude");
+}
+
+/**
+ * O terminal já com o comando de login do CLI. Vai só a chave (`claude-cli`): o comando é da casca,
+ * de uma lista fixa, e qualquer outra chave é recusada lá.
+ */
+export function abrirTerminalDeLogin(cli: TipoProvedorCli): Promise<void> {
+  return invoke("abrir_terminal", { cli });
 }
 
 /** "Não consegui abrir: <motivo>", com o motivo da casca. */

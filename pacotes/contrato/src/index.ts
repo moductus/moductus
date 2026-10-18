@@ -2,6 +2,7 @@ export * from "./agenda.ts";
 export * from "./agentes.ts";
 export * from "./aprovacoes.ts";
 export * from "./areas.ts";
+export * from "./cambio.ts";
 export * from "./canal.ts";
 export * from "./captura.ts";
 export * from "./comum.ts";

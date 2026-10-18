@@ -98,6 +98,15 @@ function agente(
     gatilhos: [],
     escoposMemoria: [],
     tetoDiarioCentavos: null,
+    tetoMoeda: "BRL",
+    gastoDeHoje: {
+      microdolares: 0,
+      centavos: null,
+      cotacaoDe: null,
+      limiteCentavos: null,
+      liberarCentavos: null,
+      pedeCotacao: false,
+    },
     deFabrica: true,
     camposPersonalizados: [],
     situacao: { ...ATIVO, ...situacao },
@@ -328,6 +337,32 @@ describe("estados e sessões no dock (Estados.dc.html, Dock.dc.html)", () => {
       expressao: "erro",
       rotulo: "Tula, erro. Modelo fora do ar, tenta de novo em breve",
     });
+  });
+
+  it("no teto, a dica diz o gasto e o limite como estimativa, e acompanha agentes.mudou", async () => {
+    const noTeto = (centavos: number): Agente => ({
+      ...agente("nuno", { estado: "dormindo", motivoSono: "teto" }),
+      tetoDiarioCentavos: 1000,
+      gastoDeHoje: {
+        microdolares: 2_000_000,
+        centavos,
+        cotacaoDe: "2026-10-16",
+        limiteCentavos: 1000,
+        liberarCentavos: 200,
+        pedeCotacao: false,
+      },
+    });
+    canal.lista = async () => [noTeto(1000)];
+    await montar();
+    const nuno = () => recipiente.querySelector<HTMLButtonElement>('[data-agente="nuno"]')!;
+    expect(nuno().getAttribute("aria-label")).toBe(
+      "Nuno, parado. Chegou ao teto de hoje: ≈ R$ 10,00 de R$ 10,00, estimativa pela cotação de 16/10",
+    );
+    expect(nuno().title).toBe(nuno().getAttribute("aria-label"));
+    await act(async () => {
+      ouvintes.get("agentes.mudou")?.forEach((fn) => fn(noTeto(1050)));
+    });
+    expect(nuno().getAttribute("aria-label")).toContain("≈ R$ 10,50 de R$ 10,00");
   });
 
   it("ocioso tem olhos abertos e nenhum z; só quem dorme ou está em pausa tem", async () => {

@@ -1,6 +1,10 @@
 import type {
   Agente,
+  Cambio,
+  Cotacao,
+  CotacaoBuscada,
   Execucao,
+  MoedaComCotacao,
   MudancaAgente,
   NovoProvedor,
   Provedor,
@@ -40,14 +44,20 @@ export interface ModelosDaSecao {
   /** Cria o provedor e já testa: é assim que ele chega aos agentes que estão sem modelo. */
   conectar: (novo: NovoProvedor) => Promise<boolean>;
   trocarChave: (id: string, chave: string) => Promise<boolean>;
+  /** As cotações do teto gravadas na configuração; `null` até o serviço responder. */
+  cambio: Cambio | null;
+  /** "Buscar cotação": a fonte responde sem gravar; `null` quando falhou (o motivo vai em `erro`). */
+  buscarCotacao: (moeda: MoedaComCotacao) => Promise<CotacaoBuscada | null>;
+  /** Grava a cotação de uma moeda, digitada ou confirmada da busca; as outras ficam. */
+  gravarCotacao: (moeda: MoedaComCotacao, cotacao: Cotacao) => Promise<boolean>;
 }
 
 const trocar = <T extends { id: string }>(lista: T[] | null, item: T) =>
   lista?.some((x) => x.id === item.id) ? lista.map((x) => (x.id === item.id ? item : x)) : lista;
 
 /**
- * Provedores, agentes e as execuções de hoje pelo canal, acompanhando `provedores.mudou`,
- * `agentes.mudou` e `execucoes.mudou` de qualquer janela. O teste é o do serviço: uma chamada
+ * Provedores, agentes, as execuções de hoje e as cotações do teto pelo canal, acompanhando
+ * `provedores.mudou`, `agentes.mudou`, `execucoes.mudou` e `config.mudou` de qualquer janela. O teste é o do serviço: uma chamada
  * curta de verdade, só quando o usuário pede.
  */
 export function useModelos(): ModelosDaSecao {
@@ -60,10 +70,12 @@ export function useModelos(): ModelosDaSecao {
   const [procurando, setProcurando] = useState(false);
   const [testes, setTestes] = useState<Record<string, TesteProvedor>>({});
   const [erro, setErro] = useState<string | null>(null);
+  const [cambio, setCambio] = useState<Cambio | null>(null);
 
   useEffect(() => {
     const paradas = [
       servico.ouvir("provedores.mudou", setProvedores),
+      servico.ouvir("config.mudou", (estado) => setCambio(estado.config.cambio)),
       servico.ouvir("agentes.mudou", (a) => setAgentes((lista) => trocar(lista, a))),
       servico.ouvir("execucoes.mudou", (e) =>
         setExecucoes((todas) => {
@@ -82,6 +94,10 @@ export function useModelos(): ModelosDaSecao {
     servico
       .pedir("provedores.listar")
       .then((p) => vivo && setProvedores(p))
+      .catch(() => undefined);
+    servico
+      .pedir("config.obter")
+      .then((estado) => vivo && setCambio(estado.config.cambio))
       .catch(() => undefined);
     servico
       .pedir("agentes.listar")
@@ -183,6 +199,24 @@ export function useModelos(): ModelosDaSecao {
     [pedir, testar],
   );
 
+  const buscarCotacao = useCallback(
+    (moeda: MoedaComCotacao) => pedir(() => servico.pedir("cambio.buscar", { moeda })),
+    [pedir],
+  );
+
+  const gravarCotacao = useCallback(
+    async (moeda: MoedaComCotacao, cotacao: Cotacao) => {
+      // A configuração grava a chave inteira: as cotações das outras moedas vão junto, como estão.
+      const atual = cambio ?? { cotacoes: {} };
+      const estado = await pedir(() =>
+        servico.pedir("config.definir", { cambio: { cotacoes: { ...atual.cotacoes, [moeda]: cotacao } } }),
+      );
+      if (estado) setCambio(estado.config.cambio);
+      return estado !== null;
+    },
+    [cambio, pedir],
+  );
+
   return {
     provedores,
     agentes,
@@ -197,5 +231,8 @@ export function useModelos(): ModelosDaSecao {
     procurar,
     conectar,
     trocarChave,
+    cambio,
+    buscarCotacao,
+    gravarCotacao,
   };
 }
