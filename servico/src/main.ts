@@ -12,6 +12,13 @@ import { VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
+import {
+  motivoDaCasca,
+  PrimeiraAtividade,
+  RepositorioAtividade,
+  type MotivoAtividade,
+} from "./areas/dia/atividade.ts";
+import { TempoDoDia } from "./areas/dia/tempo.ts";
 import { RepositorioNotas, ServicoNotas } from "./areas/notas/notas.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ligarBandeja } from "./bandeja/bandeja.ts";
@@ -502,7 +509,27 @@ const agendador = new Agendador({
   runtime,
 });
 agendador.vigiar();
+// A primeira atividade do dia (F3-27, ADR-0033): o desbloqueio ou o logon (a casca avisa
+// `atividade`), a retomada e a subida, depois das 05:00 no fuso de config, ou o horário fixo do
+// briefing. Uma vez por dia; o briefing que sai daqui é a F3-29.
+const primeiraAtividade = new PrimeiraAtividade(
+  new RepositorioAtividade(banco),
+  new TempoDoDia(() => repositorioConfig.ler().dia.fuso),
+  (inicio) => console.error(`dia: ${inicio.dia} começou (${inicio.motivo})`),
+);
+primeiraAtividade.vigiar();
+/** Um sinal de atividade; banco com problema não derruba quem avisou. */
+function sinalDeAtividade(motivo: MotivoAtividade): void {
+  try {
+    primeiraAtividade.sinal(motivo);
+  } catch (erro) {
+    console.error(`dia: sinal de atividade (${motivo}) falhou: ${String(erro)}`);
+  }
+}
+sinalDeAtividade("subida");
+canal.aoAvisar("atividade", (aviso) => sinalDeAtividade(motivoDaCasca(aviso)));
 canal.aoAvisar("retomou", () => {
+  sinalDeAtividade("retomada");
   agendador
     .retomar()
     .then(() => github.atualizar("conexao"))
