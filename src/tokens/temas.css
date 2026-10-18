@@ -255,6 +255,15 @@
   --raio-balao-ponta: 4px;
   --espessura-aba: 2px;
   --largura-hora: 40px;
+  /* Tarefas (AreaTarefas.dc.html): sub-navegação de 210, campo da frase de 40, linha de 40, o traço
+     da prioridade e a coluna do quando */
+  --largura-subnav-tarefas: 210px;
+  --altura-campo-frase: 40px;
+  --altura-linha-tarefa: 40px;
+  --largura-prioridade: 3px;
+  --altura-prioridade: 18px;
+  --raio-prioridade: 2px;
+  --largura-quando-tarefa: 44px;
 }
 
 /* Menos animação no Windows: pela mídia do WebView ou pelo "Efeitos de animação" que a casca

@@ -1,0 +1,243 @@
+/* Sistema · Tarefas (AreaTarefas.dc.html): a sub-navegação vai até a borda, sem a margem das outras
+   áreas, e só a vista ao lado rola. */
+.sistema-conteudo:has(> .tarefas) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.tarefas {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.tarefas-rotulo {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+/* ---------- Sub-navegação ---------- */
+.tarefas-lateral {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--esp-2);
+  width: var(--largura-subnav-tarefas);
+  padding: var(--espaco-cabecalho) var(--esp-12);
+  border-right: var(--espessura-borda) solid var(--borda);
+  overflow-y: auto;
+}
+
+.tarefas-lateral-titulo {
+  margin: 0;
+  padding: 0 var(--esp-10) var(--esp-12);
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+}
+
+.tarefas-listas-cabeca {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--esp-14) var(--esp-4) var(--esp-4) var(--esp-10);
+}
+
+.tarefas-nova-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  padding: var(--esp-2) 0 var(--esp-4);
+}
+
+/* ---------- A vista ---------- */
+.tarefas-conteudo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--espaco-pagina) var(--esp-32);
+  overflow-y: auto;
+}
+
+.tarefas-erro {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--perigo);
+}
+
+/* ---------- O campo em linguagem natural ---------- */
+.tarefas-frase {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+}
+
+.tarefas-frase-caixa {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  height: var(--altura-campo-frase);
+  padding: 0 var(--esp-10);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-campo);
+  color: var(--texto-3);
+  transition: border-color var(--dur-entrada) ease-out;
+}
+
+/* O foco aparece na caixa inteira, como na busca: borda e contorno no anel do tema. */
+.tarefas-frase-caixa:focus-within {
+  border-color: var(--cor-foco);
+  outline: var(--espessura-borda) solid var(--cor-foco);
+}
+
+.tarefas-frase-entrada {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--texto);
+  font-size: var(--tipo-13);
+}
+
+.tarefas-frase-entrada::placeholder {
+  color: var(--texto-3);
+}
+
+.tarefas-frase-entrada:focus-visible {
+  outline: 0;
+}
+
+.tarefas-entendi {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-6);
+  padding-left: var(--esp-4);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.tarefas-entendi-aviso {
+  flex-basis: 100%;
+}
+
+.tarefas-frase-erro {
+  margin: 0;
+  padding-left: var(--esp-4);
+  font-size: var(--tipo-12);
+  color: var(--perigo);
+}
+
+.tarefas-frase-criado {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  margin: 0;
+  padding-left: var(--esp-4);
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+/* ---------- Grupos e linhas ---------- */
+.tarefas-grupos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+}
+
+.tarefas-grupo-cabeca {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  padding: var(--esp-12) 0 var(--esp-4);
+}
+
+.tarefas-grupo-nome {
+  margin: 0;
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-forte);
+  color: var(--texto-3);
+}
+
+.tarefas-grupo-nome[data-atrasado] {
+  color: var(--aviso);
+}
+
+.tarefas-linhas {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tarefa {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  min-height: var(--altura-linha-tarefa);
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.tarefa-prioridade {
+  flex: none;
+  width: var(--largura-prioridade);
+  height: var(--altura-prioridade);
+  border-radius: var(--raio-prioridade);
+}
+
+/* No contrato 3 é alta (o 1 do quadro) e 2 é média (o 2 do quadro); a baixa não pinta. */
+.tarefa-prioridade[data-prioridade="3"] {
+  background: var(--perigo);
+}
+
+.tarefa-prioridade[data-prioridade="2"] {
+  background: var(--aviso);
+}
+
+.tarefa-texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tarefa-titulo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tarefa[data-feita] .tarefa-titulo {
+  color: var(--texto-apagado);
+  text-decoration: line-through;
+}
+
+.tarefa-nota,
+.tarefa-lista {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.tarefa-lista {
+  flex: none;
+}
+
+.tarefa-quando {
+  flex: none;
+  width: var(--largura-quando-tarefa);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tarefa-quando--larga {
+  width: auto;
+}

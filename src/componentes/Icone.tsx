@@ -57,6 +57,8 @@ const DESENHOS = {
   fechar: <path d="M6 6l12 12M18 6L6 18" />,
   // Seta da lista suspensa (o "Onde" de AreaNotificacoes.dc.html).
   abrirLista: <path d="M6 9l6 6 6-6" />,
+  // O mais do campo de nova tarefa (AreaTarefas.dc.html).
+  mais: <path d="M12 5v14M5 12h14" />,
   // Escudo do aviso "Tudo fica neste PC" (Uso1Boas.dc.html).
   escudo: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
   // Triângulo de aviso: recusa da casca ou do serviço (atalho em uso, opção bloqueada).
