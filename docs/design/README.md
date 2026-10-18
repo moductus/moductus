@@ -15,8 +15,9 @@ Fontes dos desenhos do canvas [Moductus — identidade visual](https://claude.ai
 | `canvas/Dock.dc.html` | Componente do dock, com tema e item ativo, usado pelos painéis |
 | `canvas/Time.dc.html` | Os quatro agentes (Alba, Tula, Faina, Nuno) como personagens, com as expressões de cada estado e o esboço de criar um agente |
 | `canvas/Personagem.dc.html` | Componente do personagem: agente, expressão, corpo inteiro ou só a cabeça, tamanho; na cabeça, o recorte da Faina começa 3 unidades à direita para o nó da bandana caber inteiro |
-| `canvas/Uso1Boas.dc.html` a `canvas/Uso5Conexoes.dc.html` | Primeiro uso: boas-vindas, tema e dock, modelo, conhecer o time, conexões |
+| `canvas/Uso1Boas.dc.html` a `canvas/Uso5Conexoes.dc.html` | Primeiro uso: boas-vindas, tema e dock, modelo, conhecer o time, conexões; no passo 5, o Google Agenda conectado com os calendários marcados, e pastas e extrato marcados "chega com Arquivos" e "chega com Finanças" |
 | `canvas/Tutorial.dc.html` | "Primeiros passos" no Início, com o cartão de aprovação de treino |
+| `canvas/TutorialTour.dc.html` | O tour curto em quatro paradas (dock, um painel, o Sistema, a captura rápida) e os Primeiros passos desta versão, com as missões que ainda não valem em "Chegam depois" |
 | `canvas/Briefing.dc.html`, `canvas/Fechamento.dc.html` | Briefing da manhã e fechamento do dia |
 | `canvas/PainelFoco.dc.html`, `PainelFinancas`, `PainelDev`, `PainelArquivos` | Painéis do dock de cada agente |
 | `canvas/PainelTarefas.dc.html`, `canvas/PainelNotas.dc.html` | Painéis Tarefas (adicionar por frase, atrasadas, hoje, marcar com desfazer) e Notas (nota fixa editável, busca e recentes), em 400 px |
@@ -28,7 +29,12 @@ Fontes dos desenhos do canvas [Moductus — identidade visual](https://claude.ai
 | `canvas/OutroPC.dc.html`, `canvas/AreaNotificacoes.dc.html` | Configurações: levar para outro PC e notificações |
 | `canvas/ConfigModelos.dc.html`, `ConfigModelosAgente`, `ConfigModelosVazio` | Configurações › Modelos: provedores com testar, estado e tempo de resposta (um testando, um com erro), principal e reserva por agente, teto por dia com a moeda pendente, trocar o modelo de um agente e nenhum conectado |
 | `canvas/ConfigConexoes.dc.html`, `ConfigConexoesPrevia`, `ConfigConexoesErros`, `ConfigConexoesVazio` | Configurações › Conexões: Claude Code e GitHub ligados, prévia do `settings.json` antes e depois com consentimento, GitHub conectando, erros (JSON inválido, `gh` sem login), nenhuma ligada; OpenCode "em breve" |
+| `canvas/ConfigConexoesGoogle.dc.html`, `ConfigConexoesGoogleAutorizar`, `ConfigConexoesGoogleEstados` | Configurações › Conexões › Google Agenda: conectado, com o calendário "Moductus" criado e os calendários que a Alba lê; antes de conectar, o que ela pode fazer e o que sai do PC, com o aviso de app não verificado; abrindo o navegador, prazo, reconectar, sem rede, usar o próprio cliente e desconectar |
+| `canvas/ConfigDia.dc.html` | Configurações › O dia: dias de trabalho e fuso, briefing na primeira atividade ou em horário fixo, hora de parar, expediente e ciclos do foco |
 | `canvas/AreaTarefas.dc.html`, `AreaFinancas`, `AreaNotas`, `AreaSessoes`, `AreaDev`, `AreaMemoria`, `AreaAgente` | Áreas do Sistema e a página de um agente, com "Restaurar padrão" e a confirmação aberta |
+| `canvas/AreaFoco.dc.html`, `AreaFocoEstados`, `AreaFocoVazio` | Sistema · Foco: ciclo rodando com a tarefa ligada, etapas da rodada, hoje, semana e relatório por tarefa; em pausa, ciclo terminado, na pausa e rodada completa; nenhum ciclo ainda |
+| `canvas/DetalheTarefa.dc.html`, `DetalheEvento`, `DetalheEventoLeitura` | Detalhe de tarefa (todos os campos, origem, espelho no "Moductus", apagar) e de evento ao lado da agenda do dia; evento de outro calendário só leitura, com "Pedir à Alba para mudar" e o cartão de aprovação |
+| `canvas/InicioEditar.dc.html` | Início no modo de editar blocos: ordenar por arraste ou teclado, esconder e mostrar |
 | `canvas/canvas.json` | Disposição dos quadros no canvas |
 | `marca/` | Ícone do app (`.ico` e PNG), ícones da bandeja e a marca em SVG |
 
