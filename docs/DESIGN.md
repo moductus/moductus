@@ -132,6 +132,12 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 | Configurações: notificações e levar para outro PC | ✓ (tweak de tema) | ✓ | ✓ |
 | Configurações › Modelos: provedores, principal e reserva por agente, teto por dia, trocar o modelo, nenhum conectado | ✓ (tweak de tema) | ✓ | ✓ |
 | Configurações › Conexões: Claude Code e GitHub, prévia do `settings.json` com consentimento, conectando, erros, nenhuma ligada | ✓ (tweak de tema) | ✓ | ✓ |
+| Configurações › Conexões › Google Agenda: antes de conectar, abrindo o navegador, conectado com os calendários, erros, próprio cliente, desconectar; e o passo 5 do primeiro uso com o Google ligado | ✓ (tweak de tema) | ✓ | ✓ |
+| Configurações › O dia: dias, fuso, briefing, hora de parar, expediente e ciclos do foco | ✓ (tweak de tema) | ✓ | ✓ |
+| Sistema · Foco: rodando, em pausa, terminado, na pausa, rodada completa e vazio | ✓ (tweak de tema) | ✓ | ✓ |
+| Detalhe de tarefa e de evento, com o evento de outro calendário só leitura | ✓ (tweak de tema) | ✓ | ✓ |
+| Início no modo de editar blocos | ✓ (tweak de tema) | ✓ | ✓ |
+| Tour do tutorial em quatro paradas e as missões que ainda não valem | ✓ (tweak de tema) | ✓ | ✓ |
 
 O cartão de aprovação traz três ações: **Negar**, **Sempre neste projeto** e **Permitir**. A do meio vira uma regra do Moductus para aquele projeto: os próximos pedidos iguais (o mesmo comando, o mesmo caminho, o mesmo domínio) são decididos sem cartão. O Moductus não escreve nas permissões do Claude Code (ADR-0023). No aviso do Windows o rótulo é "Sempre aqui".
 
@@ -149,8 +155,13 @@ Padrões que saíram dessas telas e valem para o resto:
 - **Lembrete:** quando toca, sobe para o topo do Hoje num bloco elevado com sino, hora e origem, com [Adiar 10 min] e [Feito]. O que venceu com o PC suspenso chega junto num cartão só, com a fala da Alba, Feito por item e as ações em grupo; nunca toca um por um.
 - **Confirmação no lugar:** ação que não se desfaz abre um cartão elevado logo abaixo do botão, nunca modal. Diz o que muda e o que fica e termina em "Não dá para desfazer."; o secundário é "Manter como está" e o primário é verbo com objeto.
 - **Valor pendente de decisão:** marcador tracejado no tom de aviso ("moeda a decidir") no lugar do símbolo, até a decisão ser registrada.
+- **Detalhe ao lado:** tarefa ou evento abre num painel de 440 px à direita da lista ou da agenda, nunca em modal; o item aberto fica marcado na lista. Salva sozinho ("salvo agora"), e apagar fica no rodapé, no tom de perigo, dizendo para onde vai ("fica 30 dias na Lixeira", "sai também do Google").
+- **Só leitura com pedido:** o que vem de fora e não é do Moductus (evento de outro calendário) mostra os campos como texto, com cadeado e "só leitura"; a mudança é um pedido ao agente, que responde com o cartão de aprovação logo abaixo.
+- **Tour:** a parada fica num anel de 2 px no destaque e o resto da tela escurece e não recebe clique; a bolha fica ao lado do que aponta, com "n de 4", pontos de progresso, até duas frases e [Pular tour] [Voltar] [Próximo]. Esc pula, as setas andam, e o tour volta pelo menu Ajuda.
+- **Ainda não vale:** missão ou conexão que chega com outra área aparece apagada, com caixa tracejada e o selo "chega com Finanças", sem ação e fora da contagem.
+- **Editar blocos:** no modo de edição, cada bloco ganha alça, posição ("3 de 5"), mover para cima e para baixo e Esconder; o escondido vai para uma lista "Escondidos" com Mostrar, e cada mudança vale na hora.
 
-**A desenhar:** Foco e Ferramentas no Sistema, instruções e ferramentas na página do agente, criar agente (fase 7), demais seções de Configurações (Geral, Atalhos, Privacidade) e o instalador.
+**A desenhar:** Ferramentas no Sistema, instruções e ferramentas na página do agente, criar agente (fase 7), demais seções de Configurações (Geral, Atalhos, Privacidade) e o instalador.
 
 **Ícones da marca:** em [design/marca/](design/marca/): `moductus.ico` (16 a 256 px, Grafite), `app-*.png` (32 a 512), ícones da bandeja claro e escuro (16 e 32) e `marca.svg` em `currentColor`.
 

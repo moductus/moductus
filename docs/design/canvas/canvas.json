@@ -2,35 +2,6 @@
   "v": 3,
   "attachments": {},
   "boards": {
-    "Main.dc.html": {
-      "h": 900,
-      "title": "A · Grafite",
-      "w": 1440,
-      "x": 0,
-      "y": 0
-    },
-    "Papel.dc.html": {
-      "h": 900,
-      "title": "B · Papel",
-      "w": 1440,
-      "x": 1520,
-      "y": 0
-    },
-    "Vidro.dc.html": {
-      "h": 900,
-      "title": "C · Vidro",
-      "w": 1440,
-      "x": 3040,
-      "y": 0
-    },
-    "Sistema.dc.html": {
-      "h": 900,
-      "title": "Sistema · Início (troca de tema)",
-      "w": 1440,
-      "x": 0,
-      "y": 1320,
-      "is_interactive": true
-    },
     "Agentes.dc.html": {
       "h": 900,
       "title": "Painel · Agentes e sessões de IA",
@@ -38,12 +9,68 @@
       "x": 0,
       "y": 2720
     },
-    "Midia.dc.html": {
+    "AreaAgente.dc.html": {
       "h": 900,
-      "title": "Painel · Mídia, controles e apps abertos",
+      "title": "Sistema · página de um agente (Tula)",
+      "w": 1440,
+      "x": 3040,
+      "y": 16900
+    },
+    "AreaDev.dc.html": {
+      "h": 900,
+      "title": "Sistema · Dev",
       "w": 1440,
       "x": 1520,
-      "y": 2720
+      "y": 16900
+    },
+    "AreaFinancas.dc.html": {
+      "h": 900,
+      "title": "Sistema · Finanças, o dinheiro",
+      "w": 1440,
+      "x": 1520,
+      "y": 15900
+    },
+    "AreaMemoria.dc.html": {
+      "h": 900,
+      "title": "Sistema · Memória do time",
+      "w": 1440,
+      "x": 1520,
+      "y": 17900
+    },
+    "AreaNotas.dc.html": {
+      "h": 900,
+      "title": "Sistema · Notas",
+      "w": 1440,
+      "x": 3040,
+      "y": 15900
+    },
+    "AreaNotificacoes.dc.html": {
+      "h": 900,
+      "title": "Configurações · notificações",
+      "w": 1440,
+      "x": 0,
+      "y": 17900
+    },
+    "AreaSessoes.dc.html": {
+      "h": 900,
+      "title": "Sistema · Sessões de IA",
+      "w": 1440,
+      "x": 0,
+      "y": 16900
+    },
+    "AreaTarefas.dc.html": {
+      "h": 900,
+      "title": "Sistema · Tarefas, o dia",
+      "w": 1440,
+      "x": 0,
+      "y": 15900
+    },
+    "Briefing.dc.html": {
+      "h": 900,
+      "title": "Briefing da manhã",
+      "w": 1440,
+      "x": 0,
+      "y": 9500
     },
     "Captura.dc.html": {
       "h": 900,
@@ -52,12 +79,61 @@
       "x": 3040,
       "y": 2720
     },
-    "Marca.dc.html": {
+    "ConfigConexoes.dc.html": {
       "h": 900,
-      "title": "Marca · quatro opções",
+      "title": "Configurações · Conexões ligadas",
       "w": 1440,
       "x": 0,
-      "y": 4120
+      "y": 20400
+    },
+    "ConfigConexoesErros.dc.html": {
+      "h": 720,
+      "title": "Configurações · Conexões com erro",
+      "w": 1440,
+      "x": 3040,
+      "y": 20400
+    },
+    "ConfigConexoesPrevia.dc.html": {
+      "h": 980,
+      "title": "Configurações · Conexões, prévia do settings.json",
+      "w": 1440,
+      "x": 1520,
+      "y": 20400
+    },
+    "ConfigConexoesVazio.dc.html": {
+      "h": 720,
+      "title": "Configurações · Conexões, nenhuma ligada",
+      "w": 1440,
+      "x": 4560,
+      "y": 20400
+    },
+    "ConfigModelos.dc.html": {
+      "h": 900,
+      "title": "Configurações · Modelos, provedores e agentes",
+      "w": 1440,
+      "x": 0,
+      "y": 19400
+    },
+    "ConfigModelosAgente.dc.html": {
+      "h": 900,
+      "title": "Configurações · Modelos, trocar o modelo de um agente",
+      "w": 1440,
+      "x": 1520,
+      "y": 19400
+    },
+    "ConfigModelosVazio.dc.html": {
+      "h": 900,
+      "title": "Configurações · Modelos, nenhum conectado",
+      "w": 1440,
+      "x": 3040,
+      "y": 19400
+    },
+    "Conversas.dc.html": {
+      "h": 900,
+      "title": "Sistema · Agentes, conversa com o time",
+      "w": 1440,
+      "x": 0,
+      "y": 13400
     },
     "Dock.dc.html": {
       "h": 900,
@@ -66,12 +142,117 @@
       "x": 1520,
       "y": 4120
     },
-    "Time.dc.html": {
-      "h": 1000,
-      "title": "Agentes · Alba, Tula, Faina e Nuno",
+    "Estados.dc.html": {
+      "h": 680,
+      "title": "Estados · dormindo, erro, teto, vazio, conexão, pausa",
+      "w": 1440,
+      "x": 1520,
+      "y": 11900
+    },
+    "ExtratoColunas.dc.html": {
+      "h": 900,
+      "title": "Finanças · extrato sem perfil, mapear colunas",
+      "w": 1440,
+      "x": 1520,
+      "y": 13400
+    },
+    "ExtratoRevisar.dc.html": {
+      "h": 900,
+      "title": "Finanças · revisar o extrato antes de lançar",
+      "w": 1440,
+      "x": 3040,
+      "y": 13400
+    },
+    "Fechamento.dc.html": {
+      "h": 900,
+      "title": "Fechamento do dia",
+      "w": 1440,
+      "x": 1520,
+      "y": 9500
+    },
+    "LembreteHoje.dc.html": {
+      "h": 760,
+      "title": "Painel Hoje · lembrete chegando, tocando e atrasados",
+      "w": 1440,
+      "x": 3040,
+      "y": 22100
+    },
+    "Main.dc.html": {
+      "h": 900,
+      "title": "A · Grafite",
       "w": 1440,
       "x": 0,
-      "y": 5520
+      "y": 0
+    },
+    "Marca.dc.html": {
+      "h": 900,
+      "title": "Marca · quatro opções",
+      "w": 1440,
+      "x": 0,
+      "y": 4120
+    },
+    "Midia.dc.html": {
+      "h": 900,
+      "title": "Painel · Mídia, controles e apps abertos",
+      "w": 1440,
+      "x": 1520,
+      "y": 2720
+    },
+    "OutroPC.dc.html": {
+      "h": 900,
+      "title": "Configurações · levar para outro PC",
+      "w": 1440,
+      "x": 1520,
+      "y": 14400
+    },
+    "PainelArquivos.dc.html": {
+      "h": 900,
+      "title": "Painel · Arquivos",
+      "w": 1440,
+      "x": 0,
+      "y": 11900
+    },
+    "PainelDev.dc.html": {
+      "h": 900,
+      "title": "Painel · Dev",
+      "w": 1440,
+      "x": 3040,
+      "y": 10900
+    },
+    "PainelFinancas.dc.html": {
+      "h": 900,
+      "title": "Painel · Finanças",
+      "w": 1440,
+      "x": 1520,
+      "y": 10900
+    },
+    "PainelFoco.dc.html": {
+      "h": 900,
+      "title": "Painel · Foco",
+      "w": 1440,
+      "x": 0,
+      "y": 10900
+    },
+    "PainelNotas.dc.html": {
+      "h": 900,
+      "title": "Painel · Notas",
+      "w": 1440,
+      "x": 1520,
+      "y": 22100
+    },
+    "PainelTarefas.dc.html": {
+      "h": 900,
+      "title": "Painel · Tarefas",
+      "w": 1440,
+      "x": 0,
+      "y": 22100
+    },
+    "Papel.dc.html": {
+      "h": 900,
+      "title": "B · Papel",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
     },
     "Personagem.dc.html": {
       "h": 240,
@@ -79,6 +260,35 @@
       "w": 200,
       "x": 1688,
       "y": 4120
+    },
+    "PreviaFaina.dc.html": {
+      "h": 900,
+      "title": "Arquivos · prévia antes de organizar",
+      "w": 1440,
+      "x": 0,
+      "y": 14400
+    },
+    "Sistema.dc.html": {
+      "h": 900,
+      "is_interactive": true,
+      "title": "Sistema · Início (troca de tema)",
+      "w": 1440,
+      "x": 0,
+      "y": 1320
+    },
+    "Time.dc.html": {
+      "h": 1000,
+      "title": "Agentes · Alba, Tula, Faina e Nuno",
+      "w": 1440,
+      "x": 0,
+      "y": 5520
+    },
+    "Tutorial.dc.html": {
+      "h": 900,
+      "title": "Tutorial · Primeiros passos no Início",
+      "w": 1440,
+      "x": 3040,
+      "y": 8000
     },
     "Uso1Boas.dc.html": {
       "h": 900,
@@ -115,222 +325,96 @@
       "x": 1520,
       "y": 8000
     },
-    "Tutorial.dc.html": {
+    "Vidro.dc.html": {
       "h": 900,
-      "title": "Tutorial · Primeiros passos no Início",
+      "title": "C · Vidro",
       "w": 1440,
       "x": 3040,
-      "y": 8000
+      "y": 0
     },
-    "Briefing.dc.html": {
+    "AreaFoco.dc.html": {
       "h": 900,
-      "title": "Briefing da manhã",
+      "title": "Sistema · Foco, ciclo rodando",
       "w": 1440,
       "x": 0,
-      "y": 9500
+      "y": 23720
     },
-    "Fechamento.dc.html": {
-      "h": 900,
-      "title": "Fechamento do dia",
-      "w": 1440,
+    "AreaFocoEstados.dc.html": {
+      "h": 700,
+      "title": "Sistema · Foco, em pausa, terminado, na pausa e rodada completa",
+      "w": 1520,
       "x": 1520,
-      "y": 9500
+      "y": 23720
     },
-    "PainelFoco.dc.html": {
+    "AreaFocoVazio.dc.html": {
       "h": 900,
-      "title": "Painel · Foco",
+      "title": "Sistema · Foco, nenhum ciclo ainda",
+      "w": 1440,
+      "x": 3120,
+      "y": 23720
+    },
+    "DetalheTarefa.dc.html": {
+      "h": 900,
+      "title": "Sistema · Tarefas, detalhe da tarefa",
       "w": 1440,
       "x": 0,
-      "y": 10900
+      "y": 24740
     },
-    "PainelFinancas.dc.html": {
+    "DetalheEvento.dc.html": {
       "h": 900,
-      "title": "Painel · Finanças",
+      "title": "Sistema · Agenda, detalhe do evento",
       "w": 1440,
       "x": 1520,
-      "y": 10900
+      "y": 24740
     },
-    "PainelDev.dc.html": {
+    "DetalheEventoLeitura.dc.html": {
       "h": 900,
-      "title": "Painel · Dev",
+      "title": "Sistema · Agenda, evento de outro calendário (só leitura)",
       "w": 1440,
       "x": 3040,
-      "y": 10900
+      "y": 24740
     },
-    "PainelArquivos.dc.html": {
+    "InicioEditar.dc.html": {
       "h": 900,
-      "title": "Painel · Arquivos",
+      "title": "Sistema · Início, editar blocos",
       "w": 1440,
       "x": 0,
-      "y": 11900
+      "y": 25760
     },
-    "Estados.dc.html": {
-      "h": 680,
-      "title": "Estados · dormindo, erro, teto, vazio, conexão, pausa",
+    "ConfigDia.dc.html": {
+      "h": 900,
+      "title": "Configurações · O dia",
       "w": 1440,
       "x": 1520,
-      "y": 11900
+      "y": 25760
     },
-    "Conversas.dc.html": {
+    "ConfigConexoesGoogle.dc.html": {
       "h": 900,
-      "title": "Sistema · Agentes, conversa com o time",
+      "title": "Configurações · Conexões, Google Agenda conectado",
       "w": 1440,
       "x": 0,
-      "y": 13400
+      "y": 27080
     },
-    "ExtratoColunas.dc.html": {
+    "ConfigConexoesGoogleAutorizar.dc.html": {
       "h": 900,
-      "title": "Finanças · extrato sem perfil, mapear colunas",
+      "title": "Configurações · Conexões, Google Agenda antes de conectar",
       "w": 1440,
       "x": 1520,
-      "y": 13400
+      "y": 27080
     },
-    "ExtratoRevisar.dc.html": {
-      "h": 900,
-      "title": "Finanças · revisar o extrato antes de lançar",
+    "ConfigConexoesGoogleEstados.dc.html": {
+      "h": 1260,
+      "title": "Configurações · Conexões, Google Agenda: abrindo, erros, próprio cliente e desconectar",
       "w": 1440,
       "x": 3040,
-      "y": 13400
+      "y": 27080
     },
-    "PreviaFaina.dc.html": {
-      "h": 900,
-      "title": "Arquivos · prévia antes de organizar",
-      "w": 1440,
-      "x": 0,
-      "y": 14400
-    },
-    "OutroPC.dc.html": {
-      "h": 900,
-      "title": "Configurações · levar para outro PC",
-      "w": 1440,
-      "x": 1520,
-      "y": 14400
-    },
-    "AreaTarefas.dc.html": {
-      "h": 900,
-      "title": "Sistema · Tarefas, o dia",
-      "w": 1440,
-      "x": 0,
-      "y": 15900
-    },
-    "AreaFinancas.dc.html": {
-      "h": 900,
-      "title": "Sistema · Finanças, o dinheiro",
-      "w": 1440,
-      "x": 1520,
-      "y": 15900
-    },
-    "AreaNotas.dc.html": {
-      "h": 900,
-      "title": "Sistema · Notas",
-      "w": 1440,
-      "x": 3040,
-      "y": 15900
-    },
-    "AreaSessoes.dc.html": {
-      "h": 900,
-      "title": "Sistema · Sessões de IA",
-      "w": 1440,
-      "x": 0,
-      "y": 16900
-    },
-    "AreaDev.dc.html": {
-      "h": 900,
-      "title": "Sistema · Dev",
-      "w": 1440,
-      "x": 1520,
-      "y": 16900
-    },
-    "AreaAgente.dc.html": {
-      "h": 900,
-      "title": "Sistema · página de um agente (Tula)",
-      "w": 1440,
-      "x": 3040,
-      "y": 16900
-    },
-    "AreaNotificacoes.dc.html": {
-      "h": 900,
-      "title": "Configurações · notificações",
-      "w": 1440,
-      "x": 0,
-      "y": 17900
-    },
-    "AreaMemoria.dc.html": {
-      "h": 900,
-      "title": "Sistema · Memória do time",
-      "w": 1440,
-      "x": 1520,
-      "y": 17900
-    },
-    "ConfigModelos.dc.html": {
-      "h": 900,
-      "title": "Configurações · Modelos, provedores e agentes",
-      "w": 1440,
-      "x": 0,
-      "y": 19400
-    },
-    "ConfigModelosAgente.dc.html": {
-      "h": 900,
-      "title": "Configurações · Modelos, trocar o modelo de um agente",
-      "w": 1440,
-      "x": 1520,
-      "y": 19400
-    },
-    "ConfigModelosVazio.dc.html": {
-      "h": 900,
-      "title": "Configurações · Modelos, nenhum conectado",
-      "w": 1440,
-      "x": 3040,
-      "y": 19400
-    },
-    "ConfigConexoes.dc.html": {
-      "h": 900,
-      "title": "Configurações · Conexões ligadas",
-      "w": 1440,
-      "x": 0,
-      "y": 20400
-    },
-    "ConfigConexoesPrevia.dc.html": {
-      "h": 980,
-      "title": "Configurações · Conexões, prévia do settings.json",
-      "w": 1440,
-      "x": 1520,
-      "y": 20400
-    },
-    "ConfigConexoesErros.dc.html": {
-      "h": 720,
-      "title": "Configurações · Conexões com erro",
-      "w": 1440,
-      "x": 3040,
-      "y": 20400
-    },
-    "ConfigConexoesVazio.dc.html": {
-      "h": 720,
-      "title": "Configurações · Conexões, nenhuma ligada",
+    "TutorialTour.dc.html": {
+      "h": 1480,
+      "title": "Tutorial · tour em quatro paradas e as missões desta versão",
       "w": 1440,
       "x": 4560,
-      "y": 20400
-    },
-    "PainelTarefas.dc.html": {
-      "h": 900,
-      "title": "Painel · Tarefas",
-      "w": 1440,
-      "x": 0,
-      "y": 22100
-    },
-    "PainelNotas.dc.html": {
-      "h": 900,
-      "title": "Painel · Notas",
-      "w": 1440,
-      "x": 1520,
-      "y": 22100
-    },
-    "LembreteHoje.dc.html": {
-      "h": 760,
-      "title": "Painel Hoje · lembrete chegando, tocando e atrasados",
-      "w": 1440,
-      "x": 3040,
-      "y": 22100
+      "y": 27080
     }
   },
   "createdOnFiles": {
@@ -342,6 +426,13 @@
     "view": "canvas"
   },
   "notes": {
+    "pendente_moeda": {
+      "fill": "orange",
+      "text": "Pendente, decisão do humano: a moeda do teto diário. O serviço guarda o teto em centavos e mede o custo em dólar; sem câmbio decidido, o teto não vale. Até lá, o campo fica sem símbolo e marcado \"moeda a decidir\".",
+      "w": 380,
+      "x": 4560,
+      "y": 19400
+    },
     "titulo": {
       "kind": "title1",
       "maxW": 4480,
@@ -350,66 +441,11 @@
       "x": 0,
       "y": -300
     },
-    "titulo2": {
-      "kind": "title1",
-      "maxW": 4480,
-      "text": "Sistema — a janela completa",
-      "x": 0,
-      "y": 1020
-    },
-    "titulo3": {
-      "kind": "title1",
-      "maxW": 4480,
-      "text": "Painéis do dock e captura",
-      "x": 0,
-      "y": 2420
-    },
-    "titulo4": {
-      "kind": "title1",
-      "maxW": 4480,
-      "text": "Marca e componentes",
-      "x": 0,
-      "y": 3820
-    },
-    "titulo5": {
-      "kind": "title1",
-      "maxW": 4480,
-      "text": "O time de agentes",
-      "x": 0,
-      "y": 5220
-    },
-    "titulo6": {
-      "kind": "title1",
-      "maxW": 4480,
-      "text": "Primeiro uso e tutorial",
-      "x": 0,
-      "y": 6620
-    },
-    "titulo7": {
-      "kind": "title1",
-      "maxW": 4480,
-      "text": "Briefing e fechamento do dia",
-      "x": 0,
-      "y": 9200
-    },
-    "titulo8": {
-      "kind": "title1",
-      "maxW": 4480,
-      "text": "Painéis do dock e estados dos agentes",
-      "x": 0,
-      "y": 10600
-    },
-    "titulo9": {
-      "kind": "title1",
-      "maxW": 4480,
-      "text": "Conversas e fluxos com aprovação",
-      "x": 0,
-      "y": 13100
-    },
     "titulo10": {
       "kind": "title1",
       "maxW": 4480,
       "text": "Áreas do Sistema",
+      "w": 240,
       "x": 0,
       "y": 15600
     },
@@ -417,22 +453,97 @@
       "kind": "title1",
       "maxW": 4480,
       "text": "Configurações · Modelos e Conexões",
+      "w": 240,
       "x": 0,
       "y": 19100
-    },
-    "pendente_moeda": {
-      "x": 4560,
-      "y": 19400,
-      "w": 380,
-      "fill": "orange",
-      "text": "Pendente, decisão do humano: a moeda do teto diário. O serviço guarda o teto em centavos e mede o custo em dólar; sem câmbio decidido, o teto não vale. Até lá, o campo fica sem símbolo e marcado \"moeda a decidir\"."
     },
     "titulo12": {
       "kind": "title1",
       "maxW": 4480,
       "text": "O dia no dock · Tarefas, Notas e lembretes",
+      "w": 240,
       "x": 0,
       "y": 21800
+    },
+    "titulo2": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Sistema — a janela completa",
+      "w": 240,
+      "x": 0,
+      "y": 1020
+    },
+    "titulo3": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Painéis do dock e captura",
+      "w": 240,
+      "x": 0,
+      "y": 2420
+    },
+    "titulo4": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Marca e componentes",
+      "w": 240,
+      "x": 0,
+      "y": 3820
+    },
+    "titulo5": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "O time de agentes",
+      "w": 240,
+      "x": 0,
+      "y": 5220
+    },
+    "titulo6": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Primeiro uso e tutorial",
+      "w": 240,
+      "x": 0,
+      "y": 6620
+    },
+    "titulo7": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Briefing e fechamento do dia",
+      "w": 240,
+      "x": 0,
+      "y": 9200
+    },
+    "titulo8": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Painéis do dock e estados dos agentes",
+      "w": 240,
+      "x": 0,
+      "y": 10600
+    },
+    "titulo9": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Conversas e fluxos com aprovação",
+      "w": 240,
+      "x": 0,
+      "y": 13100
+    },
+    "titulo13": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "O dia no Sistema · Foco, detalhes, Início e O dia",
+      "w": 240,
+      "x": 0,
+      "y": 23420
+    },
+    "titulo14": {
+      "kind": "title1",
+      "maxW": 4480,
+      "text": "Google Agenda e o tour do tutorial",
+      "w": 240,
+      "x": 0,
+      "y": 26780
     }
   },
   "order": [
@@ -482,7 +593,19 @@
     "ConfigConexoesVazio.dc.html",
     "PainelTarefas.dc.html",
     "PainelNotas.dc.html",
-    "LembreteHoje.dc.html"
+    "LembreteHoje.dc.html",
+    "AreaFoco.dc.html",
+    "AreaFocoEstados.dc.html",
+    "AreaFocoVazio.dc.html",
+    "DetalheTarefa.dc.html",
+    "DetalheEvento.dc.html",
+    "DetalheEventoLeitura.dc.html",
+    "InicioEditar.dc.html",
+    "ConfigDia.dc.html",
+    "ConfigConexoesGoogle.dc.html",
+    "ConfigConexoesGoogleAutorizar.dc.html",
+    "ConfigConexoesGoogleEstados.dc.html",
+    "TutorialTour.dc.html"
   ],
   "pages": [],
   "title": "Moductus — identidade visual"
