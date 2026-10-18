@@ -1,0 +1,504 @@
+/* Sistema · Notas (AreaNotas.dc.html): lista, texto aberto e o que está ligado a ele. */
+
+/* As colunas vão até a borda, como nas conversas: só cada coluna rola. */
+.sistema-conteudo:has(> .notas) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.notas {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---------- Lista ---------- */
+.notas-lista {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--esp-4);
+  width: var(--largura-lista-notas);
+  padding: var(--esp-20) var(--esp-12);
+  border-right: var(--espessura-borda) solid var(--borda);
+  overflow-y: auto;
+}
+
+.notas-lista-cabecalho {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  padding: 0 var(--esp-8) var(--esp-6);
+}
+
+.notas-titulo {
+  margin: 0;
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+}
+
+.notas-lista > .campo {
+  margin-bottom: var(--esp-8);
+}
+
+.notas-erro {
+  margin: 0;
+  padding: 0 var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--perigo);
+}
+
+.notas-bloco {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  margin-bottom: var(--esp-8);
+  padding: var(--esp-10);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-elevado);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notas-bloco[aria-current="page"] {
+  border-color: var(--borda-forte);
+}
+
+.notas-bloco-rotulo {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.notas-bloco-trecho {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.notas-itens {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notas-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  width: 100%;
+  padding: var(--esp-8) var(--esp-10);
+  border: 0;
+  border-radius: var(--raio-controle);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-entrada) ease-out;
+}
+
+.notas-item:hover {
+  background: var(--fundo-chip);
+}
+
+.notas-item[aria-current="page"] {
+  background: var(--fundo-ativo);
+}
+
+.notas-item-titulo,
+.notas-item-linha {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.notas-item-titulo {
+  font-weight: var(--peso-forte);
+}
+
+.notas-item-linha {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.notas-lista-vazia {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-8);
+  margin: 0;
+  padding: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.notas-lista-vazia p {
+  margin: 0;
+}
+
+.notas-carregando {
+  padding: var(--esp-32) var(--espaco-nota-lateral);
+}
+
+/* ---------- Nota aberta ---------- */
+.nota-aberta {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.nota-vazia {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-8);
+  padding: var(--esp-32) var(--espaco-nota-lateral);
+  color: var(--texto-2);
+}
+
+.nota-vazia p {
+  margin: 0;
+}
+
+.nota {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-14);
+  min-width: 0;
+  padding: var(--esp-32) var(--espaco-nota-lateral);
+  overflow-y: auto;
+}
+
+.nota-topo {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--esp-12);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.nota-salvo {
+  flex: none;
+}
+
+.nota-titulo {
+  margin: 0;
+  font-size: var(--tipo-26);
+  font-weight: var(--peso-forte);
+  letter-spacing: var(--tracado-titulo);
+}
+
+.nota-titulo-campo {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--raio-caixa);
+  background: transparent;
+  color: var(--texto);
+  font-family: inherit;
+}
+
+.nota-titulo-campo::placeholder {
+  color: var(--texto-apagado);
+}
+
+.nota-titulo-campo:focus-visible {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco);
+}
+
+/* O Markdown cru: cresce com o texto, na mesma letra da leitura. */
+.nota-campo {
+  field-sizing: content;
+  width: 100%;
+  max-width: var(--largura-texto-nota);
+  min-height: var(--altura-min-texto-nota);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--texto);
+  font: inherit;
+  line-height: var(--altura-linha-escrita);
+  resize: none;
+}
+
+.nota-campo::placeholder {
+  color: var(--texto-apagado);
+}
+
+/* A leitura (ADR-0036): o HTML do markdown-it, com os tokens dos títulos e das listas do quadro. */
+.nota-leitura {
+  max-width: var(--largura-texto-nota);
+  border-radius: var(--raio-caixa);
+  color: var(--texto-2);
+  line-height: var(--altura-linha-escrita);
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+.nota-leitura:focus-visible {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco);
+}
+
+.nota-leitura-crua {
+  white-space: pre-wrap;
+}
+
+.nota-leitura > :first-child {
+  margin-top: 0;
+}
+
+.nota-leitura > :last-child {
+  margin-bottom: 0;
+}
+
+.nota-leitura p,
+.nota-leitura ul,
+.nota-leitura ol,
+.nota-leitura blockquote,
+.nota-leitura pre {
+  margin: 0 0 var(--esp-10);
+}
+
+.nota-leitura h1,
+.nota-leitura h2,
+.nota-leitura h3,
+.nota-leitura h4,
+.nota-leitura h5,
+.nota-leitura h6 {
+  margin: var(--esp-20) 0 var(--esp-8);
+  color: var(--texto);
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+}
+
+.nota-leitura h1 {
+  font-size: var(--tipo-20);
+}
+
+.nota-leitura h3,
+.nota-leitura h4,
+.nota-leitura h5,
+.nota-leitura h6 {
+  font-size: var(--tipo-13);
+}
+
+.nota-leitura ul,
+.nota-leitura ol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  padding-left: var(--esp-20);
+}
+
+.nota-leitura a {
+  color: var(--texto);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.nota-leitura code {
+  padding: var(--esp-1) var(--esp-5);
+  border-radius: var(--raio-atalho);
+  background: var(--fundo-chip);
+  color: var(--texto);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+}
+
+.nota-leitura pre {
+  padding: var(--esp-10) var(--esp-12);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-chip);
+  overflow-x: auto;
+}
+
+.nota-leitura pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.nota-leitura blockquote {
+  padding-left: var(--esp-12);
+  border-left: var(--espessura-aba) solid var(--borda-forte);
+}
+
+.nota-leitura hr {
+  margin: var(--esp-16) 0;
+  border: 0;
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+/* A caixa de seleção do Markdown (`- [ ]`), como a do quadro: quadrado apagado, ou marcado no
+   destaque com o visto; o item feito fica apagado e riscado (DESIGN.md §5 "Seleção"). */
+.nota-leitura .nota-item-caixa {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  list-style: none;
+  margin-left: calc(-1 * var(--esp-20));
+}
+
+.nota-leitura .nota-item-caixa[data-feita] {
+  color: var(--texto-apagado);
+  text-decoration: line-through;
+}
+
+.nota-caixa {
+  flex: none;
+  width: var(--tamanho-caixa);
+  height: var(--tamanho-caixa);
+  box-sizing: border-box;
+  border: var(--espessura-caixa) solid var(--texto-apagado);
+  border-radius: var(--raio-caixa);
+}
+
+.nota-item-caixa[data-feita] .nota-caixa {
+  border-color: var(--destaque);
+  background: var(--destaque);
+}
+
+.nota-item-caixa[data-feita] .nota-caixa::after {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--sobre-destaque);
+  content: "";
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / var(--tamanho-visto) no-repeat;
+}
+
+/* ---------- Ao lado ---------- */
+.nota-lado {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--esp-16);
+  width: var(--largura-lado-nota);
+  padding: var(--esp-32) var(--esp-18);
+  border-left: var(--espessura-borda) solid var(--borda);
+  overflow-y: auto;
+}
+
+.nota-lado-secao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+}
+
+.nota-lado-rotulo {
+  margin: 0;
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-normal);
+  color: var(--texto-3);
+}
+
+.nota-lado-texto {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-8);
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.nota-lado-texto p {
+  margin: 0;
+}
+
+.nota-lado-texto--apagado {
+  color: var(--texto-3);
+}
+
+.nota-ligado {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+}
+
+.nota-ligado-linha {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--esp-8);
+}
+
+.nota-ligado-cabeca {
+  display: flex;
+  flex: none;
+}
+
+.nota-ligado-tarefas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  margin: 0;
+  padding: 0 0 0 var(--esp-12);
+  border-left: var(--espessura-borda) solid var(--borda);
+  list-style: none;
+}
+
+.nota-ligado-tarefa {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.nota-ligado-tarefa[data-feita] .nota-ligado-tarefa-titulo {
+  color: var(--texto-apagado);
+  text-decoration: line-through;
+}
+
+.nota-ligado-tarefa-titulo {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nota-ligado-tarefa-meta {
+  flex: none;
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--agente-alba);
+}
+
+.nota-lado-rodape {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-6);
+  margin-top: auto;
+  padding-top: var(--esp-12);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.nota-apagar {
+  color: var(--perigo);
+}
+
+.nota-confirmacao {
+  gap: var(--esp-8);
+  padding: var(--esp-12);
+}
+
+.nota-confirmacao-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-8);
+}

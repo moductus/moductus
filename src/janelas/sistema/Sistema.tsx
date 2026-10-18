@@ -153,7 +153,7 @@ function ConteudoArea({ destino, ir, primeiroUso }: PropsConteudoArea) {
     case "dev":
       return <Dev />;
     case "notas":
-      return <Notas />;
+      return <Notas secao={destino.secao} ir={ir} />;
     case "arquivos":
       return <Arquivos />;
     case "memoria":
