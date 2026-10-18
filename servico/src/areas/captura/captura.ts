@@ -26,7 +26,8 @@ import type { Interpretacao, Interprete } from "./modelo.ts";
 /**
  * A captura rápida (PRODUCT.md §3; ADR-0034): a frase solta vira uma prévia ("entendeu como") e só
  * depois do Enter vira tarefa, lembrete, evento ou nota, criada pela área de cada um. Quem entende
- * é o entendedor de frases; o modelo da Alba só entra quando ele não reconhece nada além do título,
+ * é o entendedor de frases; o modelo da Alba só entra quando a janela pede (comModelo) e ele não
+ * reconhece nada além do título,
  * e sem modelo a frase vira tarefa sem data na Entrada. Gasto e memória são reconhecidos, mas só
  * chegam com a Tula e a Memória: a prévia diz isso e oferece tarefa ou nota.
  *
@@ -50,6 +51,10 @@ export class ErroDaCaptura extends Error {}
 
 export const AVISO_GASTO = "Gastos chegam com a Tula. Por enquanto, dá para lançar como tarefa ou nota.";
 export const AVISO_MEMORIA = "A Memória ainda não chegou. Por enquanto, dá para lançar como nota ou tarefa.";
+export const AVISO_LEMBRETE_VIRA_TAREFA =
+  "Vai como tarefa: um lembrete que repete não avisa em outro dia, e a tarefa avisa antes de cada vez.";
+export const MENSAGEM_LEMBRETE_MUDA_O_DIA =
+  "Um lembrete que repete não avisa em outro dia: lance como tarefa, que avisa antes de cada vez.";
 export const MENSAGEM_FRASE_VAZIA = "Escreva o que quer capturar.";
 export const MENSAGEM_LEMBRETE_SEM_HORA = "O lembrete precisa de dia e hora: preencha com Tab.";
 export const MENSAGEM_EVENTO_SEM_DIA = "O evento precisa de um dia: preencha com Tab.";
@@ -124,7 +129,10 @@ export class ServicoCaptura {
 
   /** A prévia: o tipo, os campos, o trecho que deu cada um e o "Na verdade é". Nada é criado. */
   async entender(pedido: PedidoEntender): Promise<PreviaCaptura> {
-    const { texto } = PedidoEntender.parse(pedido);
+    const { texto, comModelo } = PedidoEntender.parse(pedido);
+    // Qualquer frase nova, reconhecida ou não, encerra a pergunta da anterior: ela já não vale.
+    this.emCurso?.abort();
+    this.emCurso = null;
     const listas = this.deps.tarefas
       .listas()
       .filter((l) => !l.arquivada)
@@ -141,7 +149,7 @@ export class ServicoCaptura {
     let campos: CamposCaptura = frase.campos;
     let trechos: TrechoReconhecido[] = frase.trechos;
     let entendidoPor: PreviaCaptura["entendidoPor"] = "codigo";
-    if (!frase.reconheceu) {
+    if (!frase.reconheceu && comModelo === true) {
       const doModelo = await this.perguntarAoModelo(texto);
       const aplicada = doModelo === null ? null : this.aplicar(doModelo, campos);
       if (aplicada !== null) {
@@ -149,6 +157,19 @@ export class ServicoCaptura {
         trechos = [];
         entendidoPor = "modelo";
       }
+    }
+    // O lembrete que repete com o aviso em outro dia tocaria nos dias errados: vai como tarefa, que
+    // conta a antecedência a cada ocorrência.
+    if (tipo === "lembrete" && this.avisoMudaODia(campos)) {
+      return {
+        texto,
+        tipo: "tarefa",
+        campos,
+        trechos,
+        alternativas: alternativasDe("tarefa").filter((t) => t !== "lembrete"),
+        aviso: AVISO_LEMBRETE_VIRA_TAREFA,
+        entendidoPor,
+      };
     }
     return {
       texto,
@@ -165,6 +186,9 @@ export class ServicoCaptura {
   async lancar(pedido: PedidoLancar): Promise<LancamentoCaptura> {
     const { texto, tipo, campos } = PedidoLancar.parse(pedido);
     conferir(tipo, campos);
+    if (tipo === "lembrete" && this.avisoMudaODia(campos)) {
+      throw new ErroDaCaptura(MENSAGEM_LEMBRETE_MUDA_O_DIA);
+    }
     // Nenhum tipo lançável guarda o valor do gasto: a frase inteira vai junto, para ele não se perder.
     const frase = campos.valorCentavos === null ? null : texto;
     const itemId = await this.pelaArea(async () => {
@@ -231,6 +255,29 @@ export class ServicoCaptura {
   }
 
   // Lançar
+
+  /**
+   * Se o aviso de um lembrete que repete em dias marcados (`BYDAY`, `BYMONTHDAY`) cai em outro dia
+   * ("toda segunda 9h com lembrete 1 dia antes"): o lembrete repete o próprio horário, e a regra o
+   * levaria para segunda, não para o domingo.
+   */
+  private avisoMudaODia(campos: CamposCaptura): boolean {
+    const antes = campos.lembreteMinutosAntes ?? 0;
+    if (campos.recorrencia === null || antes === 0 || campos.dia === null || campos.hora === null)
+      return false;
+    if (!ehDia(campos.dia)) return false;
+    let emDiasMarcados: boolean;
+    try {
+      const leitura = lerRecorrencia(campos.recorrencia);
+      emDiasMarcados =
+        leitura.entendida && (leitura.regra.diasDaSemana.length > 0 || leitura.regra.diasDoMes.length > 0);
+    } catch {
+      return false;
+    }
+    if (!emDiasMarcados) return false;
+    const aviso = this.tempo.instante(campos.dia, campos.hora).getTime() - antes * 60_000;
+    return this.tempo.diaDe(new Date(aviso)) !== campos.dia;
+  }
 
   private novaTarefa(campos: CamposCaptura, frase: string | null): NovaTarefa {
     return {
@@ -306,20 +353,28 @@ export class ServicoCaptura {
 
   // O modelo
 
-  /** A resposta do modelo para a frase; a mesma frase no mesmo dia não pergunta de novo. */
+  /**
+   * A resposta do modelo para a frase; a mesma frase no mesmo dia não pergunta de novo. A Alba que
+   * não podia ser chamada (sem modelo, dormindo, pausada) não deixa resposta guardada.
+   */
   private async perguntarAoModelo(texto: string): Promise<Interpretacao | null> {
     const interpretar = this.deps.interpretar;
     if (!interpretar) return null;
     const hoje = this.tempo.hoje();
     const chave = `${hoje}\n${texto}`;
     if (this.respostas.has(chave)) return this.respostas.get(chave)!;
-    // A frase anterior ainda esperava: ela fica com o que o código entendeu.
-    this.emCurso?.abort();
     const controle = new AbortController();
     this.emCurso = controle;
     let resposta: Interpretacao | null;
     try {
-      resposta = await interpretar({ texto, hoje, agora: this.tempo.momento().hora, sinal: controle.signal });
+      const veio = await interpretar({
+        texto,
+        hoje,
+        agora: this.tempo.momento().hora,
+        sinal: controle.signal,
+      });
+      if (!veio.perguntou) return null;
+      resposta = veio.interpretacao;
     } catch (erro) {
       console.error(
         `captura: o modelo da Alba falhou: ${erro instanceof Error ? erro.message : String(erro)}`,

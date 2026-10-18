@@ -39,8 +39,17 @@ export interface Interpretacao {
   valorCentavos: number | null;
 }
 
-/** Interpreta a frase; `null` é "não sei" (sem modelo, falhou, passou do prazo, foi cancelado). */
-export type Interprete = (pedido: PedidoInterpretar) => Promise<Interpretacao | null>;
+/**
+ * O que veio do modelo. `perguntou: false` é que a Alba não podia ser chamada agora (sem modelo,
+ * dormindo, pausada, desligada): nada a guardar, ela pode voltar já. Com `perguntou: true`,
+ * `interpretacao` é `null` quando ele não soube, falhou, passou do prazo ou foi cancelado.
+ */
+export type RespostaDoModelo =
+  { perguntou: false } | { perguntou: true; interpretacao: Interpretacao | null };
+
+export const NAO_PERGUNTOU: RespostaDoModelo = { perguntou: false };
+
+export type Interprete = (pedido: PedidoInterpretar) => Promise<RespostaDoModelo>;
 
 const NOMES_DOS_DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 
@@ -119,7 +128,7 @@ export function interpretePeloRuntime(
   const prazoMs = opcoes.prazoMs ?? PRAZO_MODELO_MS;
   return async ({ texto, hoje, agora, sinal }) => {
     const quem = agentes.agente(agenteId);
-    if (!quem?.provedorId || quem.estado !== "ativo" || sinal.aborted) return null;
+    if (!quem?.provedorId || quem.estado !== "ativo" || sinal.aborted) return NAO_PERGUNTOU;
     const controle = new AbortController();
     let parou!: () => void;
     const parada = new Promise<null>((resolve) => (parou = () => resolve(null)));
@@ -143,8 +152,8 @@ export function interpretePeloRuntime(
       // O runtime cancela pelo sinal; a corrida garante o prazo mesmo se o adaptador demorar a parar.
       void execucao.catch(() => {});
       const resultado = await Promise.race([execucao, parada]);
-      if (!resultado || resultado.execucao.estado !== "ok") return null;
-      return lerInterpretacao(resultado.texto);
+      const ok = resultado !== null && resultado.execucao.estado === "ok";
+      return { perguntou: true, interpretacao: ok ? lerInterpretacao(resultado.texto) : null };
     } finally {
       clearTimeout(relogio);
       sinal.removeEventListener("abort", aoCancelar);

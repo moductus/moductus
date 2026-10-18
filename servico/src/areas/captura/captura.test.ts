@@ -22,12 +22,14 @@ import { RepositorioTarefas } from "../tarefas/repositorio.ts";
 import { ServicoTarefas } from "../tarefas/tarefas.ts";
 import {
   AVISO_GASTO,
+  AVISO_LEMBRETE_VIRA_TAREFA,
   AVISO_MEMORIA,
   ErroDaCaptura,
   MENSAGEM_DESFAZER_SUMIU,
   MENSAGEM_EVENTO_SEM_DIA,
   MENSAGEM_HORA_SEM_DIA,
   MENSAGEM_JA_DESFEITO,
+  MENSAGEM_LEMBRETE_MUDA_O_DIA,
   MENSAGEM_LEMBRETE_SEM_HORA,
   MENSAGEM_PRAZO_DESFAZER,
   MENSAGEM_REPETICAO,
@@ -35,7 +37,13 @@ import {
   ServicoCaptura,
 } from "./captura.ts";
 import { atendentesDaCaptura, MENSAGEM_ERRO_INTERNO } from "./canal.ts";
-import type { Interpretacao, Interprete, PedidoInterpretar } from "./modelo.ts";
+import {
+  NAO_PERGUNTOU,
+  type Interpretacao,
+  type Interprete,
+  type PedidoInterpretar,
+  type RespostaDoModelo,
+} from "./modelo.ts";
 
 const pastas: string[] = [];
 const bancos: DatabaseSync[] = [];
@@ -61,6 +69,10 @@ const resposta = (r: Partial<Interpretacao>): Interpretacao => ({
   valorCentavos: null,
   ...r,
 });
+
+/** O modelo perguntado, com o que ele disse. */
+const veio = (interpretacao: Interpretacao | null): Promise<RespostaDoModelo> =>
+  Promise.resolve({ perguntou: true, interpretacao });
 
 /**
  * Banco migrado de verdade e as quatro áreas de verdade (Tarefas, Lembretes, Agenda e Notas), com
@@ -218,20 +230,25 @@ describe("sem provedor", () => {
 });
 
 describe("com o modelo da Alba", () => {
-  test("só entra quando o código não reconhece nada além do título", async () => {
+  test("só entra quando a janela pede e o código não reconhece nada além do título", async () => {
     const pedidos: PedidoInterpretar[] = [];
     const interpretar: Interprete = (pedido) => {
       pedidos.push(pedido);
-      return Promise.resolve(resposta({ tipo: "lembrete", titulo: "regar as plantas", hora: "18:00" }));
+      return veio(resposta({ tipo: "lembrete", titulo: "regar as plantas", hora: "18:00" }));
     };
     const m = montar({ interpretar });
-    await m.captura.entender({ texto: "ligar pro banco amanhã 15h" });
+    const frase = "não esquecer das plantas no fim da tarde";
+    await m.captura.entender({ texto: "ligar pro banco amanhã 15h", comModelo: true });
+    // Sem a flag, a frase que o código não entende fica com ele: tarefa sem data, nenhuma execução.
+    expect(await m.captura.entender({ texto: frase })).toMatchObject({
+      tipo: "tarefa",
+      campos: vazios(frase),
+      entendidoPor: "codigo",
+    });
     expect(pedidos).toHaveLength(0);
 
-    const previa = await m.captura.entender({ texto: "não esquecer das plantas no fim da tarde" });
-    expect(pedidos.map((p) => [p.texto, p.hoje, p.agora])).toEqual([
-      ["não esquecer das plantas no fim da tarde", "2026-10-18", "09:00"],
-    ]);
+    const previa = await m.captura.entender({ texto: frase, comModelo: true });
+    expect(pedidos.map((p) => [p.texto, p.hoje, p.agora])).toEqual([[frase, "2026-10-18", "09:00"]]);
     // Hora sem dia é hoje (ainda não passou); o trecho não vem, porque o modelo não diz onde estava.
     expect(previa).toMatchObject({
       tipo: "lembrete",
@@ -240,23 +257,40 @@ describe("com o modelo da Alba", () => {
       entendidoPor: "modelo",
     });
     // A mesma frase no mesmo dia não pergunta de novo.
-    await m.captura.entender({ texto: "não esquecer das plantas no fim da tarde" });
+    await m.captura.entender({ texto: frase, comModelo: true });
     expect(pedidos).toHaveLength(1);
   });
 
   test("o modelo que só repete o título, falha ou não responde deixa a prévia do código", async () => {
-    const respostas: (() => Promise<Interpretacao | null>)[] = [
-      () => Promise.resolve(resposta({ titulo: "outra coisa" })),
+    const respostas: (() => Promise<RespostaDoModelo>)[] = [
+      () => veio(resposta({ titulo: "outra coisa" })),
       () => Promise.reject(new Error("caiu")),
-      () => Promise.resolve(null),
+      () => veio(null),
     ];
     const m = montar({ interpretar: () => respostas.shift()!() });
     const erro = vi.spyOn(console, "error").mockImplementation(() => {});
     for (const texto of ["comprar pão", "comprar leite", "comprar café"]) {
-      const previa = await m.captura.entender({ texto });
+      const previa = await m.captura.entender({ texto, comModelo: true });
       expect(previa).toMatchObject({ tipo: "tarefa", campos: vazios(texto), entendidoPor: "codigo" });
     }
     expect(erro).toHaveBeenCalledOnce();
+  });
+
+  test("a Alba que não podia ser chamada não deixa resposta guardada: acordada, pergunta", async () => {
+    const respostas: RespostaDoModelo[] = [NAO_PERGUNTOU, { perguntou: true, interpretacao: null }];
+    let chamadas = 0;
+    const m = montar({
+      interpretar: () => {
+        chamadas++;
+        return Promise.resolve(respostas.shift() ?? NAO_PERGUNTOU);
+      },
+    });
+    await m.captura.entender({ texto: "comprar pão", comModelo: true });
+    await m.captura.entender({ texto: "comprar pão", comModelo: true });
+    expect(chamadas).toBe(2);
+    // O "não sei" de quem perguntou fica guardado.
+    await m.captura.entender({ texto: "comprar pão", comModelo: true });
+    expect(chamadas).toBe(2);
   });
 
   test("evento sem dia e lembrete sem hora do modelo viram tarefa; antecedência só com hora", async () => {
@@ -264,37 +298,44 @@ describe("com o modelo da Alba", () => {
       resposta({ tipo: "evento", titulo: "churrasco", duracaoMin: 180 }),
       resposta({ tipo: "lembrete", dia: "2026-10-20", lembreteMinutosAntes: 30 }),
     ];
-    const m = montar({ interpretar: () => Promise.resolve(respostas.shift()!) });
-    expect(await m.captura.entender({ texto: "churras com a turma" })).toMatchObject({
+    const m = montar({ interpretar: () => veio(respostas.shift()!) });
+    expect(await m.captura.entender({ texto: "churras com a turma", comModelo: true })).toMatchObject({
       tipo: "tarefa",
       campos: { titulo: "churrasco", duracaoMin: 180, dia: null },
       entendidoPor: "modelo",
     });
-    expect(await m.captura.entender({ texto: "vacina do gato" })).toMatchObject({
+    expect(await m.captura.entender({ texto: "vacina do gato", comModelo: true })).toMatchObject({
       tipo: "tarefa",
       campos: { titulo: "vacina do gato", dia: "2026-10-20", hora: null, lembreteMinutosAntes: null },
     });
   });
 
-  test("a frase seguinte cancela a pergunta da anterior, que fica com o código", async () => {
+  test("qualquer frase nova cancela a pergunta da anterior, que fica com o código", async () => {
     const sinais: AbortSignal[] = [];
     const m = montar({
       interpretar: ({ sinal }) => {
         sinais.push(sinal);
-        if (sinais.length === 1) {
-          return new Promise((resolve) => sinal.addEventListener("abort", () => resolve(null)));
+        if (sinais.length !== 2) {
+          return new Promise((resolve) =>
+            sinal.addEventListener("abort", () => resolve({ perguntou: true, interpretacao: null })),
+          );
         }
-        return Promise.resolve(resposta({ tipo: "nota", titulo: "ideia" }));
+        return veio(resposta({ tipo: "nota", titulo: "ideia" }));
       },
     });
-    const primeira = m.captura.entender({ texto: "comprar pã" });
-    const segunda = await m.captura.entender({ texto: "comprar pão" });
+    const primeira = m.captura.entender({ texto: "comprar pã", comModelo: true });
+    const segunda = await m.captura.entender({ texto: "comprar pão", comModelo: true });
     expect(segunda).toMatchObject({ tipo: "nota", entendidoPor: "modelo" });
     expect(sinais[0]!.aborted).toBe(true);
     expect(await primeira).toMatchObject({ tipo: "tarefa", entendidoPor: "codigo" });
+
+    // A frase reconhecida, que não pergunta nada, também encerra a que esperava.
+    const terceira = m.captura.entender({ texto: "comprar pã", comModelo: true });
     // A cancelada não ficou guardada como "não sei": a frase volta a perguntar.
-    await m.captura.entender({ texto: "comprar pã" });
     expect(sinais).toHaveLength(3);
+    await m.captura.entender({ texto: "comprar pão amanhã" });
+    expect(sinais[2]!.aborted).toBe(true);
+    expect(await terceira).toMatchObject({ entendidoPor: "codigo" });
   });
 });
 
@@ -329,6 +370,53 @@ describe("lançar pela área", () => {
       tarefaId: null,
     });
     expect(m.missoes.lembrete).toBe(1);
+  });
+
+  test("lembrete que repete com o aviso em outro dia vai como tarefa, que avisa antes de cada vez", async () => {
+    const m = montar();
+    const semanal = "me lembra de ligar pra mãe toda segunda 9h com lembrete 1 dia antes";
+    const { previa, lancamento } = await capturar(m, semanal);
+    expect(previa).toMatchObject({
+      tipo: "tarefa",
+      aviso: AVISO_LEMBRETE_VIRA_TAREFA,
+      alternativas: ["evento", "nota"],
+      campos: {
+        dia: "2026-10-19",
+        hora: "09:00",
+        lembreteMinutosAntes: 1440,
+        recorrencia: "FREQ=WEEKLY;BYDAY=MO",
+      },
+    });
+    expect(m.tarefas.obter({ id: lancamento.itemId })).toMatchObject({
+      titulo: "ligar pra mãe",
+      recorrencia: "FREQ=WEEKLY;BYDAY=MO",
+      lembreteMinutosAntes: 1440,
+    });
+    expect(m.lembretes.listar({})).toHaveLength(1);
+    expect(m.lembretes.listar({})[0]).toMatchObject({ tarefaId: lancamento.itemId });
+
+    const mensal = "me lembra de pagar o aluguel todo dia 10 às 9h com lembrete 1 dia antes";
+    const doMes = await capturar(m, mensal);
+    expect(doMes.previa).toMatchObject({
+      tipo: "tarefa",
+      aviso: AVISO_LEMBRETE_VIRA_TAREFA,
+      campos: { recorrencia: "FREQ=MONTHLY;BYMONTHDAY=10", lembreteMinutosAntes: 1440 },
+    });
+    expect(m.tarefas.obter({ id: doMes.lancamento.itemId }).recorrencia).toBe("FREQ=MONTHLY;BYMONTHDAY=10");
+    // Pedido direto como lembrete, a captura recusa e diz o que fazer.
+    await expect(
+      m.captura.lancar({ texto: semanal, tipo: "lembrete", campos: previa.campos }),
+    ).rejects.toThrow(MENSAGEM_LEMBRETE_MUDA_O_DIA);
+
+    // Aviso no mesmo dia, ou todo dia: o lembrete repete certo e continua lembrete.
+    const mesmoDia = await m.captura.entender({
+      texto: "me lembra de tomar remédio toda segunda 9h com lembrete 30 min antes",
+    });
+    expect(mesmoDia).toMatchObject({ tipo: "lembrete", aviso: null });
+    const todoDia = await m.captura.entender({
+      texto: "me lembra de regar as plantas todo dia 9h com lembrete 1 dia antes",
+    });
+    expect(todoDia.tipo).toBe("lembrete");
   });
 
   test("evento com hora dura uma hora; sem hora, é de dia inteiro", async () => {

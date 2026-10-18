@@ -65,6 +65,10 @@ describe("captura", () => {
 
   test("frase vazia não é entendida; lançar volta o prazo de desfazer", () => {
     expect(PedidoEntender.safeParse({ texto: "   " }).success).toBe(false);
+    // O modelo só quando a janela pede; sem a flag, vale o pedido antigo.
+    expect(PedidoEntender.parse({ texto: "comprar pão" })).toEqual({ texto: "comprar pão" });
+    expect(PedidoEntender.parse({ texto: "comprar pão", comModelo: true }).comModelo).toBe(true);
+    expect(PedidoEntender.safeParse({ texto: "comprar pão", comModelo: "sim" }).success).toBe(false);
     const lancamento = {
       id: "01K7A0000000000000000000C1",
       tipo: "tarefa",

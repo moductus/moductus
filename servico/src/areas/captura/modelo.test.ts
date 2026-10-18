@@ -10,7 +10,10 @@ import { abrirBanco } from "../../banco/conexao.ts";
 import { Catalogo } from "../../ferramentas/catalogo.ts";
 import { ProvedorFalso, roteiros } from "../../provedores/falso.ts";
 import { RegistroProvedores } from "../../provedores/registro.ts";
-import { interpretePeloRuntime, lerInterpretacao, promptDoInterprete } from "./modelo.ts";
+import { interpretePeloRuntime, lerInterpretacao, NAO_PERGUNTOU, promptDoInterprete } from "./modelo.ts";
+
+/** Perguntou e não veio nada que sirva (prazo, cancelamento, falha). */
+const NAO_SOUBE = { perguntou: true, interpretacao: null };
 
 const pastas: string[] = [];
 const bancos: DatabaseSync[] = [];
@@ -96,8 +99,8 @@ describe("pelo modelo da Alba", () => {
     const { alba, execucoes, pedir } = montar();
     alba.roteirizar(roteiros.resposta('{"tipo":"nota","titulo":"ideia de presente"}'));
     expect(await pedir("ideia de presente pra mãe")).toMatchObject({
-      tipo: "nota",
-      titulo: "ideia de presente",
+      perguntou: true,
+      interpretacao: { tipo: "nota", titulo: "ideia de presente" },
     });
     const [pedido] = alba.pedidos;
     expect(pedido!.ferramentas).toEqual([]);
@@ -108,9 +111,9 @@ describe("pelo modelo da Alba", () => {
   test("sem modelo ou fora de ativo, não pergunta", async () => {
     const { db, alba, pedir } = montar();
     db.exec("UPDATE agentes SET estado = 'pausado' WHERE id = 'alba'");
-    expect(await pedir("qualquer coisa")).toBeNull();
+    expect(await pedir("qualquer coisa")).toEqual(NAO_PERGUNTOU);
     db.exec("UPDATE agentes SET estado = 'ativo', provedor_id = NULL WHERE id = 'alba'");
-    expect(await pedir("qualquer coisa")).toBeNull();
+    expect(await pedir("qualquer coisa")).toEqual(NAO_PERGUNTOU);
     expect(alba.pedidos).toHaveLength(0);
   });
 
@@ -118,7 +121,7 @@ describe("pelo modelo da Alba", () => {
     const { alba, execucoes, pedir } = montar(50);
     alba.roteirizar([{ tipo: "pausa", ms: 5_000 }, ...roteiros.resposta('{"tipo":"nota"}')]);
     const inicio = Date.now();
-    expect(await pedir("algo demorado")).toBeNull();
+    expect(await pedir("algo demorado")).toEqual(NAO_SOUBE);
     expect(Date.now() - inicio).toBeLessThan(1_000);
     await new Promise((r) => setTimeout(r, 20));
     expect(execucoes.pagina({ agenteId: "alba" }).itens.map((e) => [e.estado, e.erro])).toEqual([
@@ -132,10 +135,10 @@ describe("pelo modelo da Alba", () => {
     const controle = new AbortController();
     const pergunta = pedir("algo", controle.signal);
     controle.abort();
-    expect(await pergunta).toBeNull();
+    expect(await pergunta).toEqual(NAO_SOUBE);
     const cancelado = new AbortController();
     cancelado.abort();
-    expect(await pedir("outra", cancelado.signal)).toBeNull();
+    expect(await pedir("outra", cancelado.signal)).toEqual(NAO_PERGUNTOU);
     expect(alba.pedidos.length).toBeLessThanOrEqual(1);
   });
 });
