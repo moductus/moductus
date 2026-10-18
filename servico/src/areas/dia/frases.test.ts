@@ -70,7 +70,8 @@ const TABELA: [string, Esperado][] = [
   ["pagar IPTU dia 5", { titulo: "pagar IPTU", dia: "2026-11-05" }],
   ["pagar fatura do cartão até o dia 15", { titulo: "pagar fatura do cartão", dia: "2026-10-15" }],
   ["aniversário da Ana 25 de dezembro", { titulo: "aniversário da Ana", dia: "2026-12-25" }],
-  ["consulta 30/02", { tipo: "evento", titulo: "consulta 30/02" }],
+  // Evento sem dia e lembrete sem hora não se lançam: viram tarefa (volta 1, item 1).
+  ["consulta 30/02", { titulo: "consulta 30/02" }],
 
   // Horas.
   ["ver o jogo hoje às 21h", { titulo: "ver o jogo", dia: "2026-10-08", hora: "21:00" }],
@@ -190,7 +191,7 @@ const TABELA: [string, Esperado][] = [
     "lembrete: ligar pra mãe amanhã de manhã",
     { tipo: "lembrete", titulo: "ligar pra mãe", dia: "2026-10-09", hora: "09:00" },
   ],
-  ["lembrar de comprar ração amanhã", { tipo: "lembrete", titulo: "comprar ração", dia: "2026-10-09" }],
+  ["lembrar de comprar ração amanhã", { titulo: "comprar ração", dia: "2026-10-09" }],
   [
     "me avisa daqui a 2 horas de desligar o forno",
     { tipo: "lembrete", titulo: "desligar o forno", dia: "2026-10-08", hora: "12:00" },
@@ -258,6 +259,54 @@ const TABELA: [string, Esperado][] = [
   ["nota: ideias para o aniversário", { tipo: "nota", titulo: "ideias para o aniversário" }],
   ["anota que o código do portão é 4471", { tipo: "nota", titulo: "o código do portão é 4471" }],
   ["pedir nota fiscal amanhã", { titulo: "pedir nota fiscal", dia: "2026-10-09" }],
+
+  // Volta 1 da revisão.
+  // 1. Evento sem dia e lembrete sem hora viram tarefa.
+  ["reunião com o gerente", { titulo: "reunião com o gerente" }],
+  ["me lembra de pagar o condomínio", { titulo: "pagar o condomínio" }],
+  ["me lembra de pagar o condomínio sexta", { titulo: "pagar o condomínio", dia: "2026-10-09" }],
+  // 2. "as" sem crase é artigo; com hora marcada, vale.
+  ["entregar as 3 para o cliente", { titulo: "entregar as 3 para o cliente" }],
+  ["revisar as 3 com o chefe", { titulo: "revisar as 3 com o chefe" }],
+  ["ligar as 15h", { titulo: "ligar", dia: "2026-10-08", hora: "15:00" }],
+  // 3. Dia dito com repetição cai na primeira ocorrência a partir dele.
+  [
+    "academia toda segunda a partir de amanhã",
+    { titulo: "academia", dia: "2026-10-12", recorrencia: "FREQ=WEEKLY;BYDAY=MO" },
+  ],
+  [
+    "aula de natação toda terça a partir de 20/10",
+    { titulo: "aula de natação", dia: "2026-10-20", recorrencia: "FREQ=WEEKLY;BYDAY=TU" },
+  ],
+  // 4. "às N" sem período: a próxima entre N e N+12 a partir de agora (10:00).
+  [
+    "reunião às 3 sobre orçamento",
+    { tipo: "evento", titulo: "reunião sobre orçamento", dia: "2026-10-08", hora: "15:00" },
+  ],
+  ["ligar pro João às 9", { titulo: "ligar pro João", dia: "2026-10-08", hora: "21:00" }],
+  ["tomar remédio às 11", { titulo: "tomar remédio", dia: "2026-10-08", hora: "11:00" }],
+  // 5. Número com período abrindo a frase é hora, não gasto.
+  ["8 da noite jantar", { titulo: "jantar", dia: "2026-10-08", hora: "20:00" }],
+  ["10 da manhã academia", { titulo: "academia", dia: "2026-10-09", hora: "10:00" }],
+  ["3 de manhã correr", { titulo: "correr", dia: "2026-10-09", hora: "03:00" }],
+  // 6. "hoje à meia-noite" é a virada para amanhã.
+  ["fechar o caixa hoje à meia-noite", { titulo: "fechar o caixa", dia: "2026-10-09", hora: "00:00" }],
+  // 7. Data que não existe leva a hora junto para o título.
+  ["reunião 31/02 às 15h", { titulo: "reunião 31/02 às 15h" }],
+  ["pagar o boleto 30 de fevereiro 9h", { titulo: "pagar o boleto 30 de fevereiro 9h" }],
+  // 8. A preposição da hora sai com ela.
+  [
+    "reunião ao meio-dia com o diretor",
+    { tipo: "evento", titulo: "reunião com o diretor", dia: "2026-10-08", hora: "12:00" },
+  ],
+  [
+    "reunião para as 15h com o cliente",
+    { tipo: "evento", titulo: "reunião com o cliente", dia: "2026-10-08", hora: "15:00" },
+  ],
+  ["ligar pras 16h", { titulo: "ligar", dia: "2026-10-08", hora: "16:00" }],
+  // 9. "próxima" e "que vem" são futuro: com valor, é tarefa.
+  ["almoço 50 reais na próxima terça", { titulo: "almoço 50 reais", dia: "2026-10-13" }],
+  ["uber R$ 40 sexta que vem", { titulo: "uber R$ 40", dia: "2026-10-09" }],
 ];
 
 describe("a tabela de frases", () => {
@@ -318,6 +367,22 @@ describe("trechos e tipo", () => {
       trechoDoTipo: null,
       reconheceu: false,
     });
+  });
+
+  test('evento sem dia vira tarefa, mas diz de onde veio o tipo para o "Na verdade é"', () => {
+    const frase = "reunião com o gerente";
+    const r = entenderFrase(frase, tempo);
+    expect(r.tipo).toBe("tarefa");
+    expect(r.trechoDoTipo).toEqual({ inicio: 0, fim: 7 });
+    expect(r.reconheceu).toBe(true);
+    const lembrete = entenderFrase("me lembra de pagar o condomínio sexta", tempo);
+    expect(lembrete.tipo).toBe("tarefa");
+    expect(lembrete.trechoDoTipo).toEqual({ inicio: 0, fim: 12 });
+  });
+
+  test("às 3 sem dia depois das 15h é amanhã às 3", () => {
+    const r = entenderFrase("ligar às 3", tempoEm("2026-10-08T20:00:00.000Z"));
+    expect(r.campos).toMatchObject({ dia: "2026-10-09", hora: "03:00" });
   });
 
   test("um segundo dia fica no título em vez de trocar o primeiro", () => {

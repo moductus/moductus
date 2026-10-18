@@ -97,9 +97,13 @@ export function entenderFrase(frase: string, tempo: TempoDoDia, opcoes: OpcoesFr
   // segundo ("amanhã ... sexta") fica no título.
   const achados: Achado[] = [];
   const ocupados = new Set<CampoCaptura>();
+  let dataRecusada = false;
   for (let i = 0; i < p.length;) {
     const achado = reconhecer(p, i, listas);
-    if (achado !== null && achado.campos.every((c) => !ocupados.has(c))) {
+    if (achado?.recusada) {
+      dataRecusada = true;
+      i = achado.fim;
+    } else if (achado !== null && achado.campos.every((c) => !ocupados.has(c))) {
       achados.push(achado);
       for (const c of achado.campos) ocupados.add(c);
       i = achado.fim;
@@ -113,26 +117,36 @@ export function entenderFrase(frase: string, tempo: TempoDoDia, opcoes: OpcoesFr
   const marcaTipo = marcaDeTipo(p, usadas);
   const valor = achados.find((a) => a.valorCentavos !== undefined);
   const futuro = achados.some(
-    (a) => (a.dia?.tipo === "relativo" && a.dia.dias > 0) || a.dia?.tipo === "daqui",
+    (a) =>
+      (a.dia?.tipo === "relativo" && a.dia.dias > 0) ||
+      a.dia?.tipo === "daqui" ||
+      (a.dia?.tipo === "semana" && a.dia.adiante),
   );
   const ehGasto =
     marcaTipo === null && valor !== undefined && !futuro && !VERBOS_DE_TAREFA.has(p[0]?.forma ?? "");
-  const tipo: TipoCaptura = marcaTipo?.tipo ?? (ehGasto ? "gasto" : "tarefa");
+  let tipo: TipoCaptura = marcaTipo?.tipo ?? (ehGasto ? "gasto" : "tarefa");
+  // A data que não existe ("reunião 31/02 às 15h") leva a hora junto para o título: nada de hoje.
+  const semHora = dataRecusada && !achados.some((a) => a.dia !== undefined);
 
   // O valor só vale no gasto: na tarefa ("pagar R$ 150 da internet") ele fica no título.
   const hoje = tempo.hoje();
   const campos = camposVazios("");
   const trechos: TrechoReconhecido[] = [];
   const tiradas = new Array<boolean>(p.length).fill(false);
+  let horaAmbigua: number | null = null;
+  let diaDeHoje = false;
   for (const a of achados) {
     if (a.valorCentavos !== undefined && !ehGasto) continue;
+    if (semHora && a.campos.includes("hora")) continue;
     const dia = a.dia === undefined ? null : resolverDia(a.dia, hoje, tempo, ehGasto);
     if (a.dia !== undefined && dia === null) continue;
     if (dia !== null) {
       campos.dia = dia.dia;
       if (dia.hora !== null) campos.hora = dia.hora;
+      diaDeHoje = a.dia?.tipo === "relativo" && a.dia.dias === 0;
     }
     if (a.hora !== undefined) campos.hora = a.hora;
+    if (a.horaAmbigua !== undefined) horaAmbigua = a.horaAmbigua;
     if (a.duracaoMin !== undefined) campos.duracaoMin = a.duracaoMin;
     if (a.regra !== undefined) campos.recorrencia = escreverRecorrencia(a.regra);
     if (a.lembreteMinutosAntes !== undefined) campos.lembreteMinutosAntes = a.lembreteMinutosAntes;
@@ -144,11 +158,31 @@ export function entenderFrase(frase: string, tempo: TempoDoDia, opcoes: OpcoesFr
   }
   if (marcaTipo?.tira) for (let i = marcaTipo.inicio; i < marcaTipo.fim; i++) tiradas[i] = true;
 
-  const regra = achados.find((a) => a.regra !== undefined)?.regra;
-  if (campos.dia === null && (campos.hora !== null || regra !== undefined)) {
-    campos.dia = diaPadrao(tempo, hoje, campos.hora, regra ?? null, ehGasto);
+  // "às 3" é a próxima entre 3h e 15h a partir de agora, quando o dia é hoje ou não foi dito.
+  if (horaAmbigua !== null && (campos.dia === null || campos.dia === hoje)) {
+    const agora = tempo.momento().hora;
+    const cedo = horaTexto(horaAmbigua, 0);
+    const tarde = horaTexto(horaAmbigua + 12, 0);
+    campos.hora = cedo > agora ? cedo : tarde > agora ? tarde : cedo;
+  }
+  // "hoje à meia-noite" é a virada de hoje para amanhã, não a que já passou.
+  if (diaDeHoje && campos.hora === "00:00") campos.dia = diaSeguinte(hoje) ?? campos.dia;
+
+  const regra = achados.find((a) => a.regra !== undefined)?.regra ?? null;
+  if (regra !== null && campos.dia !== null && !acertaODia(regra, campos.dia)) {
+    // "toda segunda a partir de amanhã": a primeira segunda a partir do dia dito.
+    campos.dia = primeiraDepois(regra, campos.dia) ?? campos.dia;
+  }
+  if (campos.dia === null && (campos.hora !== null || regra !== null)) {
+    campos.dia = diaPadrao(tempo, hoje, campos.hora, regra, ehGasto);
     // Fora do calendário (ano 9999), a hora não fica sem o dia.
     if (campos.dia === null) campos.hora = null;
+  }
+
+  // Evento sem dia e lembrete sem hora não dá para lançar: viram tarefa, e o "Na verdade é" da
+  // captura oferece o tipo de volta.
+  if ((tipo === "evento" && campos.dia === null) || (tipo === "lembrete" && campos.hora === null)) {
+    tipo = "tarefa";
   }
 
   campos.titulo = titulo(texto, p, tiradas);
@@ -168,6 +202,8 @@ export function entenderFrase(frase: string, tempo: TempoDoDia, opcoes: OpcoesFr
 interface Palavra {
   /** Em minúsculas e sem acento: "Amanhã" é "amanha", "às" é "as". */
   forma: string;
+  /** Como foi escrita: a crase de "às" só existe aqui. */
+  original: string;
   inicio: number;
   fim: number;
 }
@@ -182,7 +218,7 @@ const PALAVRA = /[Rr]\$|[\p{L}\p{M}\p{N}]+(?:['’.,:/-][\p{L}\p{M}\p{N}]+)*|[^\
 function palavras(texto: string): Palavra[] {
   const saida: Palavra[] = [];
   for (const m of texto.matchAll(PALAVRA)) {
-    saida.push({ forma: normalizar(m[0]), inicio: m.index, fim: m.index + m[0].length });
+    saida.push({ forma: normalizar(m[0]), original: m[0], inicio: m.index, fim: m.index + m[0].length });
   }
   return saida;
 }
@@ -308,7 +344,8 @@ const PONTUACAO_SOLTA = new Set([",", ";", ":", "-", "–", "—"]);
 /** Um dia ainda não contado: só depois do tipo dá para saber se ele vai para frente ou para trás. */
 type DiaPedido =
   | { tipo: "relativo"; dias: number }
-  | { tipo: "semana"; semana: number }
+  /** `adiante`: "próxima terça", "terça que vem", que no gasto também não contam para trás. */
+  | { tipo: "semana"; semana: number; adiante: boolean }
   | { tipo: "data"; dia: number; mes: number | null; ano: number | null }
   | { tipo: "daqui"; minutos: number; dias: number };
 
@@ -324,6 +361,10 @@ interface Achado {
   lembreteMinutosAntes?: number;
   listaId?: string;
   valorCentavos?: number;
+  /** "às 3" sem período: a hora `h` ou `h + 12`, a que vier primeiro. */
+  horaAmbigua?: number;
+  /** Uma data que não existe ("31/02"). */
+  recusada?: boolean;
 }
 
 interface ListaPreparada {
@@ -417,6 +458,12 @@ interface Hora {
   periodo: Periodo | null;
 }
 
+/**
+ * Como o número sem "h" é aceito: `livre` aceita ("às 3", com crase); `conferir` aceita se o que
+ * vem depois pode vir depois de uma hora ("pelas 3"); `nao` só aceita com o período ("8 da noite").
+ */
+type NumeroNu = "livre" | "conferir" | "nao";
+
 const HORA_DOIS_PONTOS = /^(\d{1,2}):(\d{2})(?:h|hs|hrs)?$/;
 const HORA_COM_H = /^(\d{1,2})(?:h|hs|hr|hrs)(?:(\d{2})(?:min)?)?$/;
 
@@ -435,12 +482,8 @@ function continuaDepoisDaHora(p: readonly Palavra[], k: number): boolean {
   return f === undefined || !ehPalavra(f) || DEPOIS_DA_HORA_NUA.has(f) || diaDaSemanaPt(f) !== null;
 }
 
-/**
- * A hora que começa em `j`. `nuaPermitida` aceita o número sem "h" ("às 3"); `conferir` pede que
- * ele seja seguido do que pode vir depois de uma hora, menos quando um período já disse que é hora
- * ("à noite às 8").
- */
-function horaCore(p: readonly Palavra[], j: number, nuaPermitida: boolean, conferir = true): Hora | null {
+/** A hora que começa em `j`; o número sem "h" segue o `numeroNu`. */
+function horaCore(p: readonly Palavra[], j: number, numeroNu: NumeroNu): Hora | null {
   const f = forma(p, j);
   if (f === undefined) return null;
   let h: number;
@@ -457,7 +500,7 @@ function horaCore(p: readonly Palavra[], j: number, nuaPermitida: boolean, confe
   } else if (f === "meia-noite" || (f === "meia" && forma(p, j + 1) === "noite")) {
     h = 0;
     fim = f === "meia" ? j + 2 : j + 1;
-  } else if (nuaPermitida && /^\d{1,2}$/.test(f)) {
+  } else if (/^\d{1,2}$/.test(f) && (numeroNu !== "nao" || periodoEm(p, j + 1) !== null)) {
     h = Number(f);
     const unidade = forma(p, j + 1);
     if (unidade !== undefined && UNIDADE_HORA.has(unidade)) fim = j + 2;
@@ -468,16 +511,24 @@ function horaCore(p: readonly Palavra[], j: number, nuaPermitida: boolean, confe
     m = 30;
     fim += 2;
   }
-  let periodo: Periodo | null = null;
-  const depois = forma(p, fim);
-  const qual = PERIODOS.get(forma(p, fim + 1) ?? "");
-  if ((depois === "da" || depois === "de") && qual !== undefined) {
-    periodo = qual;
-    fim += 2;
-  }
-  if (nua && periodo === null && conferir && !continuaDepoisDaHora(p, fim)) return null;
+  const periodo = periodoEm(p, fim);
+  if (periodo !== null) fim += 2;
+  if (nua && periodo === null && numeroNu === "conferir" && !continuaDepoisDaHora(p, fim)) return null;
   if (h > 23 || m > 59) return null;
   return { h: periodo === null ? h : noPeriodo(h, periodo), m, fim, nua, periodo };
+}
+
+/** "da tarde", "de manhã" em `k`. */
+function periodoEm(p: readonly Palavra[], k: number): Periodo | null {
+  const depois = forma(p, k);
+  if (depois !== "da" && depois !== "de") return null;
+  return PERIODOS.get(forma(p, k + 1) ?? "") ?? null;
+}
+
+/** O "às" com crase, como foi escrito: sem ela, "as" é o artigo ("entregar as 3 para o cliente"). */
+function comCrase(p: readonly Palavra[], k: number): boolean {
+  const escrito = p[k]?.original.normalize("NFC").toLowerCase();
+  return escrito === "às" || escrito === "ás";
 }
 
 /** "3 da tarde" é 15h, "8 da noite" é 20h, "12 da noite" é meia-noite. */
@@ -491,30 +542,45 @@ function noPeriodo(h: number, periodo: Periodo): number {
 const doisDigitos = (n: number): string => String(n).padStart(2, "0");
 const horaTexto = (h: number, m: number): string => `${doisDigitos(h)}:${doisDigitos(m)}`;
 
-/** O que vem antes da hora; o `true` deixa o número sem "h" ("às 3"). */
-const PREFIXOS_HORA: readonly [readonly string[], boolean][] = [
-  [["por", "volta", "das"], true],
-  [["por", "volta", "de"], true],
-  [["ate", "as"], true],
-  [["pelas"], true],
-  [["as"], true],
-  [["a"], false],
+/**
+ * O que vem antes da hora e como o número sem "h" vale depois dele. `crase` é o "às" que precisa
+ * da crase escrita (a posição dele no prefixo) para aceitar o número sem "h".
+ */
+const PREFIXOS_HORA: readonly { seq: readonly string[]; numeroNu: NumeroNu; crase?: number }[] = [
+  { seq: ["por", "volta", "das"], numeroNu: "conferir" },
+  { seq: ["por", "volta", "de"], numeroNu: "conferir" },
+  { seq: ["ate", "as"], numeroNu: "livre", crase: 1 },
+  { seq: ["para", "as"], numeroNu: "livre", crase: 1 },
+  { seq: ["pra", "as"], numeroNu: "livre", crase: 1 },
+  { seq: ["pras"], numeroNu: "nao" },
+  { seq: ["pelas"], numeroNu: "conferir" },
+  { seq: ["as"], numeroNu: "livre", crase: 0 },
+  { seq: ["ao"], numeroNu: "nao" },
+  { seq: ["a"], numeroNu: "nao" },
 ];
 
-function horaComPrefixo(p: readonly Palavra[], i: number, conferir = true): Hora | null {
-  for (const [prefixo, nua] of PREFIXOS_HORA) {
-    const k = seguido(p, i, prefixo);
+/**
+ * A hora com o que vem antes dela. `doPeriodo` é a hora logo depois de um período ("à noite às
+ * 8"): o período já disse que é hora, e o número sem "h" vale.
+ */
+function horaComPrefixo(p: readonly Palavra[], i: number, doPeriodo = false): Hora | null {
+  for (const { seq, numeroNu, crase } of PREFIXOS_HORA) {
+    const k = seguido(p, i, seq);
     if (k === null) continue;
-    const hora = horaCore(p, k, nua, conferir);
+    const semCrase = crase !== undefined && !comCrase(p, i + crase);
+    const hora = horaCore(p, k, doPeriodo ? "livre" : semCrase ? "nao" : numeroNu);
     if (hora !== null) return hora;
   }
-  return horaCore(p, i, false);
+  return horaCore(p, i, "nao");
 }
 
 function reconhecerHora(p: readonly Palavra[], i: number): Achado | null {
   const hora = horaComPrefixo(p, i);
   if (hora === null) return null;
-  return { inicio: i, fim: hora.fim, campos: ["hora"], hora: horaTexto(hora.h, hora.m) };
+  const achado: Achado = { inicio: i, fim: hora.fim, campos: ["hora"], hora: horaTexto(hora.h, hora.m) };
+  // "às 3" sem período: 3h ou 15h, o que vier primeiro (resolvido com o dia).
+  if (hora.nua && hora.periodo === null && hora.h >= 1 && hora.h <= 11) achado.horaAmbigua = hora.h;
+  return achado;
 }
 
 /** "das 14h às 16h", "de 14h a 15h30", "14h-16h": a hora e a duração. */
@@ -528,12 +594,12 @@ function reconhecerIntervaloDeHoras(p: readonly Palavra[], i: number): Achado | 
     return intervalo(i, i + 1, n(1) * 60 + n(2), n(3) * 60 + n(4));
   }
   const prefixo = forma(p, i) === "das" || forma(p, i) === "de";
-  const primeira = horaCore(p, prefixo ? i + 1 : i, prefixo);
+  const primeira = horaCore(p, prefixo ? i + 1 : i, prefixo ? "conferir" : "nao");
   if (primeira === null) return null;
   for (const separador of [["ate", "as"], ["as"], ["a"], ["ate"], ["-"]]) {
     const k = seguido(p, primeira.fim, separador);
     if (k === null) continue;
-    const segunda = horaCore(p, k, true);
+    const segunda = horaCore(p, k, "conferir");
     if (segunda === null) continue;
     // Um dos dois tem de ter cara de hora: "de 2 a 3 kg" não é intervalo.
     if (primeira.nua && segunda.nua) return null;
@@ -578,7 +644,7 @@ function reconhecerPeriodo(p: readonly Palavra[], i: number): Achado | null {
   for (const [seq, periodo] of PERIODO_SOZINHO) {
     const k = seguido(p, i, seq);
     if (k === null) continue;
-    const hora = horaComPrefixo(p, k, false);
+    const hora = horaComPrefixo(p, k, true);
     if (hora !== null) {
       const h = hora.periodo === null ? noPeriodo(hora.h, periodo) : hora.h;
       return { inicio: i, fim: hora.fim, campos: ["hora"], hora: horaTexto(h, hora.m) };
@@ -676,10 +742,15 @@ function reconhecerDia(p: readonly Palavra[], i: number): Achado | null {
     const k = seguido(p, i, prefixo);
     if (k === null) continue;
     const dia = diaCore(p, k, true);
-    if (dia !== null) return { inicio: i, fim: dia.fim, campos: ["dia"], dia: dia.dia };
+    if (dia !== null) return achadoDoDia(i, dia);
   }
   const dia = diaCore(p, i, false);
-  return dia === null ? null : { inicio: i, fim: dia.fim, campos: ["dia"], dia: dia.dia };
+  return dia === null ? null : achadoDoDia(i, dia);
+}
+
+/** A data que não existe ("31/02") vira um achado recusado: ela e a hora ficam no título. */
+function achadoDoDia(inicio: number, { dia, fim }: { dia: DiaPedido | null; fim: number }): Achado {
+  return dia === null ? { inicio, fim, campos: [], recusada: true } : { inicio, fim, campos: ["dia"], dia };
 }
 
 const DATA_COM_BARRA = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?$/;
@@ -690,7 +761,7 @@ function diaCore(
   p: readonly Palavra[],
   j: number,
   comPrefixo: boolean,
-): { dia: DiaPedido; fim: number } | null {
+): { dia: DiaPedido | null; fim: number } | null {
   const f = forma(p, j);
   if (f === undefined) return null;
   if (f === "hoje" || f === "hj") return { dia: { tipo: "relativo", dias: 0 }, fim: j + 1 };
@@ -712,8 +783,11 @@ function diaCore(
       fim++;
     }
     if (!comPrefixo && !proxima && !feira && ORDINAIS.has(forma(p, fim) ?? "")) return null;
-    fim = seguido(p, fim, ["que", "vem"]) ?? fim;
-    return { dia: { tipo: "semana", semana: semana.semana }, fim };
+    const queVem = seguido(p, fim, ["que", "vem"]);
+    return {
+      dia: { tipo: "semana", semana: semana.semana, adiante: proxima || queVem !== null },
+      fim: queVem ?? fim,
+    };
   }
 
   // "dia 12", "dia 12 de outubro", "dia 12/10", "12/10", "25 de dezembro de 2026".
@@ -723,8 +797,7 @@ function diaCore(
   if (barra !== null) {
     if (UNIDADES_DE_MEDIDA.has(forma(p, n + 1) ?? "")) return null;
     const ano = barra[3] === undefined ? null : Number(barra[3].length === 2 ? `20${barra[3]}` : barra[3]);
-    const dia = data(Number(barra[1]), Number(barra[2]), ano);
-    return dia === null ? null : { dia, fim: n + 1 };
+    return { dia: data(Number(barra[1]), Number(barra[2]), ano), fim: n + 1 };
   }
   const numeroDoDia =
     forma(p, n) === "primeiro" ? 1 : /^\d{1,2}$/.test(forma(p, n) ?? "") ? Number(forma(p, n)) : null;
@@ -732,13 +805,11 @@ function diaCore(
   const mes = forma(p, n + 1) === "de" ? MESES.get(forma(p, n + 2) ?? "") : undefined;
   if (mes === undefined) {
     if (!comDia) return null;
-    const dia = data(numeroDoDia, null, null);
-    return dia === null ? null : { dia, fim: n + 1 };
+    return { dia: data(numeroDoDia, null, null), fim: n + 1 };
   }
   const anoTexto = forma(p, n + 3) === "de" ? forma(p, n + 4) : undefined;
   const ano = anoTexto !== undefined && /^\d{4}$/.test(anoTexto) ? Number(anoTexto) : null;
-  const dia = data(numeroDoDia, mes, ano);
-  return dia === null ? null : { dia, fim: ano === null ? n + 3 : n + 5 };
+  return { dia: data(numeroDoDia, mes, ano), fim: ano === null ? n + 3 : n + 5 };
 }
 
 /** O dia pedido, se ele pode existir (31/02 não pode; 29/02 sem ano espera o bissexto). */
@@ -1217,6 +1288,26 @@ function diaPadrao(
     if (regra === null) return passou ? somarDias(hoje, 1) : hoje;
     if (acertaODia(regra, hoje) && !passou) return hoje;
     return proximoDia(escreverRecorrencia(regra), hoje, hoje) ?? hoje;
+  } catch (erro) {
+    if (erro instanceof RangeError) return null;
+    throw erro;
+  }
+}
+
+/** O dia seguinte; no fim do calendário, `null`. */
+function diaSeguinte(dia: string): string | null {
+  try {
+    return somarDias(dia, 1);
+  } catch (erro) {
+    if (erro instanceof RangeError) return null;
+    throw erro;
+  }
+}
+
+/** A primeira ocorrência da regra depois do dia, quando ele mesmo não cai nela. */
+function primeiraDepois(regra: Regra, dia: string): string | null {
+  try {
+    return proximoDia(escreverRecorrencia(regra), dia, dia);
   } catch (erro) {
     if (erro instanceof RangeError) return null;
     throw erro;
