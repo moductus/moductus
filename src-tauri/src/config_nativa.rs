@@ -16,6 +16,7 @@ pub struct AtalhosConfig {
     pub sistema: String,
     pub dock: String,
     pub captura: String,
+    pub foco: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,7 +35,12 @@ pub struct PedidoAplicar {
 
 /// Atalhos pedidos que diferem dos atuais, na ordem em que serão registrados.
 pub fn atalhos_mudados(atuais: &atalhos::Atalhos, pedidos: &AtalhosConfig) -> Vec<(Acao, String)> {
-    [(Acao::Sistema, &pedidos.sistema), (Acao::Dock, &pedidos.dock), (Acao::Captura, &pedidos.captura)]
+    [
+        (Acao::Sistema, &pedidos.sistema),
+        (Acao::Dock, &pedidos.dock),
+        (Acao::Captura, &pedidos.captura),
+        (Acao::Foco, &pedidos.foco),
+    ]
         .into_iter()
         .filter(|(acao, novo)| atuais.get(acao).map(|a| !a.eq_ignore_ascii_case(novo)).unwrap_or(true))
         .map(|(acao, novo)| (acao, novo.clone()))
@@ -84,19 +90,27 @@ mod testes {
     fn le_o_pedido_do_servico() {
         let linha = r#"{"tipo":"aplicar","id":3,"mudou":["dock"],"config":{"tema":"papel",
             "dock":{"lado":"direita","modo":"esconder","forma":"flutuante"},
-            "atalhos":{"sistema":"Ctrl+Alt+N","dock":"Ctrl+Alt+D","captura":"Ctrl+Alt+K"},
+            "atalhos":{"sistema":"Ctrl+Alt+N","dock":"Ctrl+Alt+D","captura":"Ctrl+Alt+K","foco":"Ctrl+Alt+P"},
             "autostart":true}}"#;
         let p: PedidoAplicar = serde_json::from_str(linha).unwrap();
         assert_eq!(p.mudou, vec!["dock"]);
         assert_eq!(p.config.dock.lado, crate::appbar::Lado::Direita);
         assert_eq!(p.config.dock.modo, dock::Modo::Esconder);
         assert!(p.config.autostart);
+        assert_eq!(p.config.atalhos.foco, "Ctrl+Alt+P");
     }
 
     #[test]
     fn so_os_atalhos_diferentes_sao_trocados() {
         let atuais = atalhos::padrao();
-        let pedidos = AtalhosConfig { sistema: "ctrl+alt+n".into(), dock: "Ctrl+Alt+D".into(), captura: "Ctrl+Alt+K".into() };
+        let pedidos = AtalhosConfig {
+            sistema: "ctrl+alt+n".into(),
+            dock: "Ctrl+Alt+D".into(),
+            captura: "Ctrl+Alt+K".into(),
+            foco: "Ctrl+Alt+P".into(),
+        };
         assert_eq!(atalhos_mudados(&atuais, &pedidos), vec![(Acao::Captura, "Ctrl+Alt+K".to_string())]);
+        let pedidos = AtalhosConfig { foco: "Ctrl+Alt+F".into(), captura: "Ctrl+Alt+Space".into(), ..pedidos };
+        assert_eq!(atalhos_mudados(&atuais, &pedidos), vec![(Acao::Foco, "Ctrl+Alt+F".to_string())]);
     }
 }
