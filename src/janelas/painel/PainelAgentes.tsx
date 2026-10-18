@@ -56,6 +56,14 @@ function CartaoDeEstado({ cartao, aoDispensar }: { cartao: CartaoEstado; aoDispe
         setErro(e instanceof RecusaDoServico ? e.message : "Não consegui tentar agora. Tente de novo."),
       );
     }
+    if (acao.tipo === "liberar") {
+      // Liberado, o agente acorda e o cartão sai pelo `agentes.mudou`; a recusa já diz o motivo.
+      servico
+        .pedir("agentes.liberarTeto", { id: acao.agenteId })
+        .catch((e: unknown) =>
+          setErro(e instanceof RecusaDoServico ? e.message : "Não consegui liberar agora. Tente de novo."),
+        );
+    }
   };
   const [primeiro] = cartao.agentes as [Agente];
   return (

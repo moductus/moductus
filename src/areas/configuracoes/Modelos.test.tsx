@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { Agente, MudancaAgente, Provedor, SituacaoAgente } from "@moductus/contrato";
+import type { Agente, Cambio, MudancaAgente, Provedor, SituacaoAgente } from "@moductus/contrato";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -55,6 +55,15 @@ const agente = (id: string, nome: string, principal: string | null, reserva: str
   gatilhos: [],
   escoposMemoria: [],
   tetoDiarioCentavos: null,
+  tetoMoeda: "BRL",
+  gastoDeHoje: {
+    microdolares: 0,
+    centavos: null,
+    cotacaoDe: null,
+    limiteCentavos: null,
+    liberarCentavos: null,
+    pedeCotacao: false,
+  },
   deFabrica: true,
   camposPersonalizados: [],
   situacao: principal ? SITUACAO : { ...SITUACAO, estado: "dormindo", motivoSono: "sem_modelo" },
@@ -81,8 +90,26 @@ const PROVEDORES: Provedor[] = [
   },
 ];
 
+/** O Nuno com teto de R$ 5,00 e o gasto de hoje que o serviço contou pela cotação de 16/10. */
+const nunoComTeto = (mudar: Partial<Agente> = {}): Agente => ({
+  ...agente("nuno", "Nuno", "p1", null),
+  tetoDiarioCentavos: 500,
+  tetoMoeda: "BRL",
+  gastoDeHoje: {
+    microdolares: 206_000,
+    centavos: 112,
+    cotacaoDe: "2026-10-16",
+    limiteCentavos: 500,
+    liberarCentavos: 100,
+    pedeCotacao: false,
+  },
+  ...mudar,
+});
+
 /** Serviço que aceita a troca como o de verdade: aplica a mudança e devolve o agente. */
-function servico(provedores = PROVEDORES, inicial?: Agente[]) {
+function servico(provedores = PROVEDORES, inicial?: Agente[], cambioInicial: Cambio = { cotacoes: {} }) {
+  let cambio = cambioInicial;
+  const estadoConfig = () => ({ config: { cambio }, portable: false, falhasAtalhos: {} });
   let agentes = inicial ?? [
     agente("alba", "Alba", "p1", "p2"),
     agente("tula", "Tula", "p1", null),
@@ -117,9 +144,15 @@ function servico(provedores = PROVEDORES, inicial?: Agente[]) {
           latenciaMs: 2100,
           testadoEm: new Date().toISOString(),
         });
+      case "config.obter":
+        return Promise.resolve(estadoConfig());
+      case "config.definir":
+        cambio = (dados as { cambio: Cambio }).cambio;
+        return Promise.resolve(estadoConfig());
+      case "cambio.buscar":
+        return Promise.resolve({ moeda: "BRL", milionesimos: 5_432_100, data: "2026-10-16" });
       case "agentes.definir": {
         const m = dados as MudancaAgente;
-        if (m.tetoDiarioCentavos) return Promise.reject(new Error("teto sem moeda"));
         agentes = agentes.map((a) => (a.id === m.id ? { ...a, ...m } : a));
         return Promise.resolve(agentes.find((a) => a.id === m.id));
       }
@@ -163,6 +196,16 @@ const escolher = (rotulo: string, valor: string) =>
     lista(rotulo).dispatchEvent(new Event("change", { bubbles: true }));
   });
 const pedidosDe = (metodo: string) => falso.pedidos.filter((p) => p.metodo === metodo).map((p) => p.dados);
+async function digitar(rotulo: string, valor: string) {
+  const campo = todos("label").find((l): l is HTMLLabelElement => l.textContent === rotulo);
+  const entrada = campo && recipiente.querySelector<HTMLInputElement>(`#${CSS.escape(campo.htmlFor)}`);
+  expect(entrada, `campo ${rotulo}`).toBeTruthy();
+  const definirValor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    definirValor.call(entrada, valor);
+    entrada!.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
 
 describe("Modelos", () => {
   it("lista os provedores e o principal e a reserva de cada agente", async () => {
@@ -251,13 +294,127 @@ describe("Modelos", () => {
     expect(pedidosDe("agentes.definir")).toEqual([]);
   });
 
-  it("teto por dia: sem teto e o Definir travado, com a moeda pendente dita", async () => {
+  it("teto por dia: Definir abre o painel, e o teto grava com a moeda escolhida só com o sim", async () => {
     servico();
     await montar();
     const definir = todos("button").filter((b) => b.textContent === "Definir");
     expect(definir).toHaveLength(4);
-    expect(definir.every((b) => (b as HTMLButtonElement).disabled)).toBe(true);
-    expect(por(".config-pendente")!.textContent).toBe("moeda do teto a decidir");
+    expect(definir.every((b) => !(b as HTMLButtonElement).disabled)).toBe(true);
+    await act(async () => botao("Definir o teto da Tula").click());
+    // Real é o padrão; troca para dólar e escreve o valor.
+    const moedas = todos('[role="radiogroup"][aria-label="Moeda do teto da Tula"] [role="radio"]');
+    expect(moedas.map((m) => m.textContent)).toEqual(["R$", "US$", "€", "£"]);
+    expect(moedas[0]!.getAttribute("aria-checked")).toBe("true");
+    await act(async () => moedas[1]!.click());
+    await digitar("Teto por dia da Tula, em dólar", "10,5");
+    expect(pedidosDe("agentes.definir")).toEqual([]);
+    await act(async () => botao("Guardar o teto").click());
+    expect(pedidosDe("agentes.definir")).toEqual([
+      { id: "tula", tetoDiarioCentavos: 1050, tetoMoeda: "USD" },
+    ]);
+    expect(por(".config-modelos-painel")).toBeNull();
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("enquanto o teto grava, a moeda trava junto com o resto do painel", async () => {
+    servico();
+    const responder = falso.responder;
+    let soltar: () => void = () => {};
+    falso.responder = (metodo, dados) =>
+      metodo === "agentes.definir"
+        ? new Promise((resolve) => (soltar = () => resolve(responder(metodo, dados))))
+        : responder(metodo, dados);
+    await montar();
+    await act(async () => botao("Definir o teto da Tula").click());
+    const moedas = () => todos('[role="radiogroup"][aria-label="Moeda do teto da Tula"] [role="radio"]');
+    expect(moedas().every((m) => !(m as HTMLButtonElement).disabled)).toBe(true);
+    await digitar("Teto por dia da Tula, em real", "10");
+    await act(async () => botao("Guardar o teto").click());
+    expect(moedas().every((m) => (m as HTMLButtonElement).disabled)).toBe(true);
+    await act(async () => soltar());
+    expect(por(".config-modelos-painel")).toBeNull();
+  });
+
+  it("teto com valor que não é número não grava e diz como escrever", async () => {
+    servico();
+    await montar();
+    await act(async () => botao("Definir o teto da Faina").click());
+    await digitar("Teto por dia da Faina, em real", "dez");
+    expect(por('.config-modelos-painel [role="alert"]')!.textContent).toBe("Use um valor como 10,00.");
+    expect(botao("Guardar o teto")).toBeUndefined();
+  });
+
+  it("Hoje com teto: o gasto na moeda do teto como estimativa, com a data da cotação", async () => {
+    servico(PROVEDORES, [nunoComTeto()], {
+      cotacoes: { BRL: { milionesimos: 5_430_000, data: "2026-10-16", fonte: "digitada" } },
+    });
+    await montar();
+    const linha = todos("tbody tr").find((l) => l.textContent?.includes("Nuno"))!;
+    expect(linha.textContent).toContain("R$ 5,00");
+    expect(linha.textContent).toContain("≈ R$ 1,12 de R$ 5,00");
+    expect(linha.querySelector('[role="progressbar"]')!.getAttribute("aria-valuetext")).toBe(
+      "cerca de R$ 1,12 de R$ 5,00 hoje, estimativa pela cotação de 16/10",
+    );
+    // A cotação gravada aparece com a data e a origem.
+    expect(por('[aria-label="Cotação do teto"]')!.textContent).toContain(
+      "US$ 1 = R$ 5,43, de 16/10, digitada",
+    );
+  });
+
+  it("teto em real sem cotação: a tela pede a cotação, e a digitada grava com a data de hoje", async () => {
+    const semCotacao = nunoComTeto({
+      gastoDeHoje: { ...nunoComTeto().gastoDeHoje, centavos: null, cotacaoDe: null, pedeCotacao: true },
+    });
+    servico(PROVEDORES, [semCotacao]);
+    await montar();
+    expect(todos("tbody tr").find((l) => l.textContent?.includes("Nuno"))!.textContent).toContain(
+      "sem cotação",
+    );
+    const bloco = por('[aria-label="Cotação do teto"]')!;
+    expect(bloco.textContent).toContain("Sem cotação, o teto em real não vale. Digite quanto vale US$ 1.");
+    await digitar("Quanto vale US$ 1 em real", "5,43");
+    await act(async () => botao("Guardar").click());
+    const hoje = new Date();
+    const dia = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+    expect(pedidosDe("config.definir")).toEqual([
+      { cambio: { cotacoes: { BRL: { milionesimos: 5_430_000, data: dia, fonte: "digitada" } } } },
+    ]);
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("cotação digitada acima do máximo diz o limite e não grava", async () => {
+    servico(PROVEDORES, [nunoComTeto()]);
+    await montar();
+    await digitar("Quanto vale US$ 1 em real", "1.000.000,01");
+    expect(por('[aria-label="Cotação do teto"] [role="alert"]')!.textContent).toBe(
+      "A cotação vai até 1.000.000,00 por US$ 1. Confira o número.",
+    );
+    expect((botao("Guardar") as HTMLButtonElement).disabled).toBe(true);
+    await digitar("Quanto vale US$ 1 em real", "5,43");
+    expect(por('[aria-label="Cotação do teto"] [role="alert"]')).toBeNull();
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("Buscar cotação mostra o valor e a data da fonte e só grava com o sim, com a data da fonte", async () => {
+    servico(PROVEDORES, [nunoComTeto()]);
+    await montar();
+    await act(async () => botao("Buscar cotação").click());
+    expect(pedidosDe("cambio.buscar")).toEqual([{ moeda: "BRL" }]);
+    expect(por(".config-cotacao-buscada")!.textContent).toContain("A fonte dá US$ 1 = R$ 5,4321, de 16/10.");
+    expect(pedidosDe("config.definir")).toEqual([]);
+    await act(async () => botao("Usar esta cotação").click());
+    expect(pedidosDe("config.definir")).toEqual([
+      {
+        cambio: { cotacoes: { BRL: { milionesimos: 5_432_100, data: "2026-10-16", fonte: "frankfurter" } } },
+      },
+    ]);
+    expect(por(".config-cotacao-buscada")).toBeNull();
+  });
+
+  it("sem teto em outra moeda, não há cotação a pedir", async () => {
+    servico();
+    await montar();
+    expect(por('[aria-label="Cotação do teto"]')).toBeNull();
   });
 
   it("testar chama o teste de verdade do serviço e mostra a latência medida", async () => {

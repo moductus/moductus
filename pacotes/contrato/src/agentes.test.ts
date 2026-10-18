@@ -30,7 +30,16 @@ const nuno = {
   ],
   escoposMemoria: ["dev", "geral"],
   tetoDiarioCentavos: null,
+  tetoMoeda: "BRL",
   deFabrica: true,
+  gastoDeHoje: {
+    microdolares: 0,
+    centavos: null,
+    cotacaoDe: null,
+    limiteCentavos: null,
+    liberarCentavos: null,
+    pedeCotacao: false,
+  },
   camposPersonalizados: ["instrucoes", "gatilhos"],
   situacao: {
     estado: "dormindo",
@@ -72,6 +81,9 @@ describe("agente", () => {
     const { situacao: _situacao, ...semSituacao } = nuno;
     expect(Agente.safeParse(semSituacao).success).toBe(false);
     expect(Agente.safeParse({ ...nuno, tetoDiarioCentavos: -1 }).success).toBe(false);
+    // Moeda fora da lista curta (ADR-0040) e sem moeda não passam.
+    expect(Agente.safeParse({ ...nuno, tetoMoeda: "JPY" }).success).toBe(false);
+    expect(Agente.safeParse({ ...nuno, tetoMoeda: undefined }).success).toBe(false);
     expect(Agente.safeParse({ ...nuno, ferramentas: ["Bash"] }).success).toBe(false);
     expect(Agente.safeParse({ ...nuno, nome: "  " }).success).toBe(false);
   });

@@ -94,6 +94,8 @@ describe("configuração", () => {
         expediente: { inicio: "08:30", fim: "17:00" },
         foco: { focoMin: 50, pausaMin: 10, pausaLongaMin: 30, ciclosAtePausaLonga: 3 },
       },
+      // A cotação digitada do teto diário fica na configuração, com o dia (ADR-0040).
+      cambio: { cotacoes: { BRL: { milionesimos: 5_430_000, data: "2026-10-18", fonte: "digitada" } } },
     };
     // Uma chave por vez, como a interface manda.
     for (const [chave, valor] of Object.entries(escolhida))

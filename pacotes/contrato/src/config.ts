@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Cambio } from "./cambio.ts";
 
 /** Preferências do Moductus. Cada campo tem padrão: banco vazio é configuração válida. */
 export const Tema = z.enum(["automatico", "grafite", "papel", "vidro"]);
@@ -88,6 +89,8 @@ export const Config = z.object({
   autostart: z.boolean(),
   silencio: Silencio,
   dia: ConfigDia,
+  /** As cotações do teto diário (ADR-0040): digitadas ou buscadas e confirmadas; nenhuma de fábrica. */
+  cambio: Cambio,
 });
 export type Config = z.infer<typeof Config>;
 
@@ -106,6 +109,7 @@ export const CONFIG_PADRAO: Config = {
     expediente: { inicio: "09:00", fim: "18:00" },
     foco: { focoMin: 25, pausaMin: 5, pausaLongaMin: 15, ciclosAtePausaLonga: 4 },
   },
+  cambio: { cotacoes: {} },
 };
 
 /** Mudança parcial: só as chaves de primeiro nível que mudam. */

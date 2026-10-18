@@ -413,17 +413,61 @@
   font-weight: var(--peso-forte);
 }
 
-/* ---------- Pendente de decisão (moeda do teto) ---------- */
-/* Marcador tracejado do quadro: o que espera uma decisão do humano não parece valor. */
-.config-pendente {
-  display: inline-flex;
+/* ---------- Teto por dia e cotação (ConfigModelos*.dc.html, ADR-0040) ---------- */
+/* "Hoje" com teto: o gasto em cima e a barra do quanto do limite já foi, como no quadro. */
+.config-modelos-hoje {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+}
+
+/* A moeda, o valor e o "Tirar" lado a lado; sem largura, descem. */
+.config-modelos-teto-campos,
+.config-cotacao-campos {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  padding: 0 var(--esp-6);
-  border: var(--espessura-borda) dashed var(--aviso);
-  border-radius: var(--raio-selo);
-  font-size: var(--tipo-11);
-  color: var(--aviso);
-  white-space: nowrap;
+  gap: var(--esp-8);
+}
+
+.config-modelos-teto-campos .campo,
+.config-cotacao-campos .campo {
+  width: var(--largura-campo-valor);
+}
+
+.config-cotacoes {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+  list-style: none;
+}
+
+.config-cotacao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-12);
+  padding: var(--esp-12) var(--esp-16);
+}
+
+.config-cotacao + .config-cotacao {
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+/* O que a fonte deu, esperando o sim: ocupa a linha inteira, abaixo do campo. */
+.config-cotacao-buscada {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  padding-top: var(--esp-12);
+  border-top: var(--espessura-borda) solid var(--borda);
 }
 
 /* ---------- Tabela das seções (Modelos) ---------- */
@@ -515,8 +559,7 @@
   gap: var(--esp-8);
 }
 
-.config-modelos-rotulos,
-.config-modelos-pendencia {
+.config-modelos-rotulos {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -524,10 +567,6 @@
   gap: var(--esp-8);
   font-size: var(--tipo-12);
   color: var(--texto-3);
-}
-
-.config-modelos-pendencia {
-  justify-content: flex-start;
 }
 
 .config-modelos-textos {

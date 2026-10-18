@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { Id, Instante, InstanteEntrada, PedidoPagina, pagina } from "./comum.ts";
+import { MoedaTeto } from "./cambio.ts";
+import { Dia, Id, Instante, InstanteEntrada, PedidoPagina, pagina } from "./comum.ts";
 import { Cobranca, MotivoFalhaProvedor } from "./provedores.ts";
 
 /**
@@ -46,8 +47,10 @@ export const ConfigAgente = z.object({
   provedorReservaId: Id.nullable(),
   gatilhos: z.array(Gatilho),
   escoposMemoria: z.array(z.string().min(1)),
-  /** Teto de gasto por dia; `null` é sem teto (o padrão). */
+  /** Teto de gasto por dia, em centavos da `tetoMoeda`; `null` é sem teto (o padrão). */
   tetoDiarioCentavos: z.number().int().nonnegative().nullable(),
+  /** A moeda em que o teto vale (ADR-0040); fora do dólar, o teto só vale com cotação. */
+  tetoMoeda: MoedaTeto,
 });
 export type ConfigAgente = z.infer<typeof ConfigAgente>;
 
@@ -91,9 +94,31 @@ export const CampoDeFabrica = ConfigAgente.keyof().extract([
 ]);
 export type CampoDeFabrica = z.infer<typeof CampoDeFabrica>;
 
+/**
+ * O gasto de hoje contra o teto, como o serviço conta (ADR-0040). O custo é a estimativa da tabela
+ * de preços, só das execuções por token: assinatura não gasta. Na moeda do teto, fora do dólar, é
+ * convertido pela cotação gravada, e o valor é estimativa daquela data.
+ */
+export const GastoDeHoje = z.object({
+  /** O custo estimado de hoje, em microdólares. */
+  microdolares: z.number().int().nonnegative(),
+  /** O mesmo na moeda do teto, em centavos; `null` quando a moeda pede cotação e não há. */
+  centavos: z.number().int().nonnegative().nullable(),
+  /** O dia da cotação usada; `null` em dólar (sem conversão) ou sem cotação. */
+  cotacaoDe: Dia.nullable(),
+  /** O limite de hoje: o teto mais o que foi liberado; `null` sem teto. */
+  limiteCentavos: z.number().int().nonnegative().nullable(),
+  /** Quanto o "Liberar" solta a mais, a partir do gasto de agora; `null` sem teto. */
+  liberarCentavos: z.number().int().positive().nullable(),
+  /** Há teto em moeda sem cotação: o teto não vale, e a tela pede a cotação. */
+  pedeCotacao: z.boolean(),
+});
+export type GastoDeHoje = z.infer<typeof GastoDeHoje>;
+
 export const Agente = ConfigAgente.extend({
   id: Id,
   deFabrica: z.boolean(),
+  gastoDeHoje: GastoDeHoje,
   /**
    * Os campos em que o de fábrica difere da definição de fábrica, para o selo "personalizada" e a
    * lista do que muda ao restaurar. Vazia no que está como veio e no criado por você.

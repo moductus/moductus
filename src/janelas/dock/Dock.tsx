@@ -56,7 +56,7 @@ export function Dock() {
   const awake = useAwake();
   const servico = useServico();
   const canal = useCanal(servico);
-  const { situacoes: time, modelos } = useTime(canal);
+  const { situacoes: time, modelos, gastos } = useTime(canal);
   const pontos = usePontosTime(canal);
   // As sessões do terminal esperando você são do Nuno, que fica de olho nelas (Dock.dc.html).
   const esperandoNoTerminal = sessoesEsperando(usePendentesDoTerminal(canal) ?? []);
@@ -159,8 +159,9 @@ export function Dock() {
         data-ativo={aberta === "agentes" || undefined}
       >
         {AGENTES.map((agente) => {
-          // A cabeça segue o runtime: expressão, anel no tom do status e o status no rótulo.
-          const leitura = lerSituacao(time[agente], agora, modelos[agente] ?? null);
+          // A cabeça segue o runtime: expressão, anel no tom do status e o status no rótulo; no
+          // teto, a dica diz o gasto e o limite, como estimativa (Estados.dc.html).
+          const leitura = lerSituacao(time[agente], agora, modelos[agente] ?? null, gastos[agente] ?? null);
           const { expressao, moldura } = leitura;
           const avisos = pontos[agente] ?? 0;
           const esperando = agente === "nuno" ? esperandoNoTerminal : 0;

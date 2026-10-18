@@ -114,6 +114,11 @@ describe("configuração × dado", () => {
     ]);
     // O caminho do CLI é deste PC: no PC novo, a detecção acha o de lá.
     expect(tabelas.get("provedores")?.[1]).not.toHaveProperty("caminho");
+    // O teto e a moeda vão; o que foi liberado hoje por cima do teto é deste PC e deste dia.
+    const nuno = tabelas.get("agentes")?.find((a) => a.id === "nuno");
+    expect(nuno).toMatchObject({ teto_moeda: "BRL", teto_diario_centavos: null });
+    expect(nuno).not.toHaveProperty("teto_liberado_centavos");
+    expect(nuno).not.toHaveProperty("teto_liberado_ate");
     expect(tabelas.get("regras_permissao")?.map((r) => r.id)).toEqual(["r1"]);
     expect(tabelas.get("conexoes")).toEqual([expect.objectContaining({ id: "c1", conta: "gustavo" })]);
     expect(tabelas.get("notificacoes_preferencias")?.map((p) => p.id)).toEqual(["np1"]);
