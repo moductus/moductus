@@ -12,6 +12,8 @@ import { VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
+import { RepositorioAgenda, ServicoAgenda } from "./areas/agenda/agenda.ts";
+import { RepositorioTarefasDoDia } from "./areas/agenda/tarefas-do-dia.ts";
 import { RepositorioNotas, ServicoNotas } from "./areas/notas/notas.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ligarBandeja } from "./bandeja/bandeja.ts";
@@ -26,6 +28,7 @@ import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { ServicoGoogleAgenda } from "./conexoes/google/google-agenda.ts";
+import { ferramentasAgenda } from "./ferramentas/agenda/agenda.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
 import { ferramentasGithub } from "./ferramentas/github/github.ts";
 import { ferramentasSessoes } from "./ferramentas/sessoes/sessoes.ts";
@@ -81,8 +84,9 @@ const nativo: AplicadorNativo = {
 let servidor: ServidorWs | null = null;
 // Os vigias do Nuno (F2-26) nascem com o runtime; os eventos de antes disso não pedem julgamento.
 let vigiaNuno: VigiaNuno | null = null;
+const repositorioConfig = new RepositorioConfig(banco);
 const config = new ServicoConfig(
-  new RepositorioConfig(banco),
+  repositorioConfig,
   nativo,
   (estado: EstadoConfig) => servidor?.emitir("config.mudou", estado),
   portable(),
@@ -226,14 +230,29 @@ const provedores = registrarProvedores(
     ? aberturaMcpDoRuntime(servidorMcp, (execucaoId) => runtime.executorDaExecucao(execucaoId))
     : undefined,
 );
+const repositorioExecucoes = new RepositorioExecucoes(banco);
+// Agenda (F3-16): o local e o cache do Google, o livre no expediente de `config` e o encaixe da
+// Alba, que só o clique aplica e o histórico desfaz.
+const agenda = new ServicoAgenda(
+  {
+    repo: new RepositorioAgenda(banco),
+    tarefas: new RepositorioTarefasDoDia(banco),
+    chamadas: repositorioExecucoes,
+    lerDia: () => repositorioConfig.ler().dia,
+  },
+  {
+    mudou: (mudanca) => servidor?.emitir("agenda.mudou", mudanca),
+    calendarios: (calendarios) => servidor?.emitir("agenda.calendarios", calendarios),
+  },
+);
 // As ferramentas de cada área (F2-26: as do Nuno); cada agente só vê as da lista dele.
 const catalogo = new Catalogo([
   ...ferramentasSessoes(sessoes),
   ...ferramentasUso(sessoes),
   ...ferramentasGithub(github),
+  ...ferramentasAgenda(agenda),
 ]);
 const repositorioAgentes = new RepositorioAgentes(banco);
-const repositorioExecucoes = new RepositorioExecucoes(banco);
 // Quem rodava essas execuções era o serviço que parou: fecham como erro e os cartões delas expiram.
 const interrompidas = encerrarInterrompidas(repositorioExecucoes, aprovacoes);
 if (interrompidas.length > 0)
@@ -394,6 +413,14 @@ servidor = await abrirServidorWs(token, {
   "notas.definir": (mudanca) => notas.definir(mudanca),
   "notas.apagar": (pedido) => notas.apagar(pedido),
   "notas.buscar": (pedido) => notas.buscar(pedido),
+  "agenda.calendarios": () => agenda.calendarios(),
+  "agenda.definirCalendario": (mudanca) => agenda.definirCalendario(mudanca),
+  "agenda.consultar": (pedido) => agenda.consultar(pedido),
+  "agenda.obterEvento": (pedido) => agenda.obterEvento(pedido),
+  "agenda.criarEvento": (novo) => agenda.criarEvento(novo),
+  "agenda.definirEvento": (mudanca) => agenda.definirEvento(mudanca),
+  "agenda.apagarEvento": (pedido) => agenda.apagarEvento(pedido),
+  "agenda.aplicarSugestao": (pedido) => agenda.aplicarSugestao(pedido),
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
   ...semAtendente([
@@ -421,14 +448,6 @@ servidor = await abrirServidorWs(token, {
     "lembretes.adiar",
     "lembretes.concluir",
     "lembretes.cancelar",
-    "agenda.calendarios",
-    "agenda.definirCalendario",
-    "agenda.consultar",
-    "agenda.obterEvento",
-    "agenda.criarEvento",
-    "agenda.definirEvento",
-    "agenda.apagarEvento",
-    "agenda.aplicarSugestao",
     "foco.obter",
     "foco.iniciar",
     "foco.alternar",

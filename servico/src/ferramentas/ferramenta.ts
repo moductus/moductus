@@ -79,6 +79,11 @@ export interface DefinicaoFerramenta<E extends z.ZodObject> {
    * quando não dá mais para desfazer (o usuário já mexeu no que o agente criou, por exemplo).
    */
   desfazer?: (resultado: unknown, ctx: ContextoDesfazer) => void;
+  /**
+   * Só o clique do usuário faz (o encaixe da Alba aplicado na agenda): fica fora do recorte de
+   * todo agente, que não a vê nem a chama, e o catálogo a guarda só para o desfazer do histórico.
+   */
+  soPelaInterface?: boolean;
 }
 
 export type Validacao = { ok: true; valor: unknown } | { ok: false; erro: string };
@@ -99,6 +104,8 @@ export interface Ferramenta {
   cartao(entrada: unknown): TextoCartao | null;
   /** Só `interno` tem função inversa. */
   readonly desfazivel: boolean;
+  /** Fora do recorte dos agentes: só a interface faz, e o catálogo a guarda para desfazer. */
+  readonly soPelaInterface: boolean;
   /** Roda a função inversa, síncrona, com o valor que `executar` devolveu. */
   desfazer(resultado: unknown, ctx: ContextoDesfazer): void;
 }
@@ -156,6 +163,7 @@ export function ferramenta<E extends z.ZodObject>(definicao: DefinicaoFerramenta
       return definicao.cartao?.(valor as z.output<E>) ?? null;
     },
     desfazivel: desfazer !== undefined,
+    soPelaInterface: definicao.soPelaInterface === true,
     desfazer(resultado, ctx) {
       if (!desfazer) throw new Error(`${nome} não se desfaz`);
       const volta: unknown = desfazer(resultado, ctx);

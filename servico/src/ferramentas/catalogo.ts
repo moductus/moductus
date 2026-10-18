@@ -61,9 +61,14 @@ export class Catalogo {
     return this.porNome.get(nome) ?? this.porNomeModelo.get(nome) ?? null;
   }
 
-  /** O recorte de um agente pela lista de padrões dele (`agentes.ferramentas`). */
+  /**
+   * O recorte de um agente pela lista de padrões dele (`agentes.ferramentas`). O que só a interface
+   * faz não entra, nem pelo `dominio.*`.
+   */
   doAgente(padroes: readonly string[]): EscopoAgente {
-    return new EscopoAgente(this.todas().filter((f) => padroes.some((p) => cobre(p, f.nome))));
+    return new EscopoAgente(
+      this.todas().filter((f) => !f.soPelaInterface && padroes.some((p) => cobre(p, f.nome))),
+    );
   }
 }
 
