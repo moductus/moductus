@@ -157,6 +157,27 @@ describe("escopo por agente", () => {
     expect(rodou).toEqual([]);
   });
 
+  test("o que só a interface faz fica fora de todo agente, mas o catálogo acha pelo nome", async () => {
+    const { catalogo, rodou } = montar();
+    catalogo.registrar(
+      ferramenta({
+        nome: "tarefas.encaixar",
+        descricao: "Só com o clique",
+        entrada: z.object({}),
+        efeito: "interno",
+        soPelaInterface: true,
+        desfazer: () => {},
+        executar: () => null,
+      }),
+    );
+    expect(catalogo.obter("tarefas.encaixar")?.soPelaInterface).toBe(true);
+    const alba = catalogo.doAgente(["tarefas.*", "tarefas.encaixar"]);
+    expect(alba.capacidades().map((c) => c.nome)).toEqual(["tarefas.apagar", "tarefas.criar"]);
+    const r = await alba.executor(contexto("alba"))({ id: "c1", nome: "tarefas__encaixar", entrada: {} });
+    expect(r).toMatchObject({ ok: false });
+    expect(rodou).toEqual([]);
+  });
+
   test("nome repetido no catálogo é erro de montagem", () => {
     const { catalogo } = montar();
     const outra = ferramenta({

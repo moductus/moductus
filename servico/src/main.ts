@@ -12,9 +12,21 @@ import { VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
+import { RepositorioAgenda, ServicoAgenda } from "./areas/agenda/agenda.ts";
+import { RepositorioTarefasDoDia } from "./areas/agenda/tarefas-do-dia.ts";
+import {
+  motivoDaCasca,
+  PrimeiraAtividade,
+  RepositorioAtividade,
+  type MotivoAtividade,
+} from "./areas/dia/atividade.ts";
 import { RelogioDoDia } from "./areas/dia/relogio.ts";
+import { TempoDoDia } from "./areas/dia/tempo.ts";
 import { RepositorioLembretes, ServicoLembretes } from "./areas/lembretes/lembretes.ts";
 import { RepositorioNotas, ServicoNotas } from "./areas/notas/notas.ts";
+import { atendentesDasTarefas } from "./areas/tarefas/canal.ts";
+import { RepositorioTarefas } from "./areas/tarefas/repositorio.ts";
+import { ServicoTarefas } from "./areas/tarefas/tarefas.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ligarBandeja } from "./bandeja/bandeja.ts";
 import { converterPelaConfig, ServicoCambio, vigiarCotacao } from "./cambio/cambio.ts";
@@ -29,6 +41,7 @@ import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { ServicoGoogleAgenda } from "./conexoes/google/google-agenda.ts";
+import { ferramentasAgenda } from "./ferramentas/agenda/agenda.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
 import { ferramentasGithub } from "./ferramentas/github/github.ts";
 import { ferramentasSessoes } from "./ferramentas/sessoes/sessoes.ts";
@@ -237,14 +250,29 @@ const provedores = registrarProvedores(
     ? aberturaMcpDoRuntime(servidorMcp, (execucaoId) => runtime.executorDaExecucao(execucaoId))
     : undefined,
 );
+const repositorioExecucoes = new RepositorioExecucoes(banco);
+// Agenda (F3-16): o local e o cache do Google, o livre no expediente de `config` e o encaixe da
+// Alba, que só o clique aplica e o histórico desfaz.
+const agenda = new ServicoAgenda(
+  {
+    repo: new RepositorioAgenda(banco),
+    tarefas: new RepositorioTarefasDoDia(banco),
+    chamadas: repositorioExecucoes,
+    lerDia: () => repositorioConfig.ler().dia,
+  },
+  {
+    mudou: (mudanca) => servidor?.emitir("agenda.mudou", mudanca),
+    calendarios: (calendarios) => servidor?.emitir("agenda.calendarios", calendarios),
+  },
+);
 // As ferramentas de cada área (F2-26: as do Nuno); cada agente só vê as da lista dele.
 const catalogo = new Catalogo([
   ...ferramentasSessoes(sessoes),
   ...ferramentasUso(sessoes),
   ...ferramentasGithub(github),
+  ...ferramentasAgenda(agenda),
 ]);
 const repositorioAgentes = new RepositorioAgentes(banco);
-const repositorioExecucoes = new RepositorioExecucoes(banco);
 // Quem rodava essas execuções era o serviço que parou: fecham como erro e os cartões delas expiram.
 const interrompidas = encerrarInterrompidas(repositorioExecucoes, aprovacoes);
 if (interrompidas.length > 0)
@@ -347,7 +375,6 @@ const notas = new ServicoNotas(new RepositorioNotas(banco), {
   mudou: (mudanca) => servidor?.emitir("notas.mudou", mudanca),
 });
 // Relógio do dia (F3-17, ADR-0032): lembretes disparam por um timer próprio, sem modelo e sem rede.
-// Quando as Tarefas (F3-15) chegarem, o aviso `lembretes` delas chama `lembretes.mudaramPorFora`.
 const relogio = new RelogioDoDia();
 const lembretes = new ServicoLembretes(
   new RepositorioLembretes(banco),
@@ -358,6 +385,20 @@ const lembretes = new ServicoLembretes(
   },
 );
 relogio.registrar(lembretes);
+// Tarefas (F3-15): "hoje" no fuso de config; a tarefa com hora mantém o lembrete ligado a ela.
+const tarefas = new ServicoTarefas(
+  new RepositorioTarefas(banco),
+  { lerFuso: () => repositorioConfig.ler().dia.fuso, notas },
+  {
+    tarefas: (mudanca) => servidor?.emitir("tarefas.mudou", mudanca),
+    listas: (listas) => servidor?.emitir("listas.mudou", listas),
+    // O lembrete da tarefa muda pelas Tarefas: o relógio se rearma e o aviso da ocorrência trocada sai.
+    lembretes: (mudanca) => {
+      servidor?.emitir("lembretes.mudou", mudanca);
+      lembretes.mudaramPorFora(mudanca);
+    },
+  },
+);
 // Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
 // Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
 runtime.estados.vigiar();
@@ -442,6 +483,15 @@ servidor = await abrirServidorWs(token, {
   "notas.definir": (mudanca) => notas.definir(mudanca),
   "notas.apagar": (pedido) => notas.apagar(pedido),
   "notas.buscar": (pedido) => notas.buscar(pedido),
+  ...atendentesDasTarefas(tarefas),
+  "agenda.calendarios": () => agenda.calendarios(),
+  "agenda.definirCalendario": (mudanca) => agenda.definirCalendario(mudanca),
+  "agenda.consultar": (pedido) => agenda.consultar(pedido),
+  "agenda.obterEvento": (pedido) => agenda.obterEvento(pedido),
+  "agenda.criarEvento": (novo) => agenda.criarEvento(novo),
+  "agenda.definirEvento": (mudanca) => agenda.definirEvento(mudanca),
+  "agenda.apagarEvento": (pedido) => agenda.apagarEvento(pedido),
+  "agenda.aplicarSugestao": (pedido) => agenda.aplicarSugestao(pedido),
   "lembretes.listar": (pedido) => lembretes.listar(pedido),
   "lembretes.hoje": () => lembretes.hoje(),
   "lembretes.criar": (novo) => lembretes.criar(novo),
@@ -452,31 +502,6 @@ servidor = await abrirServidorWs(token, {
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
   ...semAtendente([
-    "listas.listar",
-    "listas.criar",
-    "listas.definir",
-    "listas.ordenar",
-    "listas.apagar",
-    "tarefas.listar",
-    "tarefas.obter",
-    "tarefas.criar",
-    "tarefas.definir",
-    "tarefas.concluir",
-    "tarefas.reabrir",
-    "tarefas.cancelar",
-    "tarefas.adiar",
-    "tarefas.mover",
-    "tarefas.ordenar",
-    "tarefas.apagar",
-    "tarefas.etiquetas",
-    "agenda.calendarios",
-    "agenda.definirCalendario",
-    "agenda.consultar",
-    "agenda.obterEvento",
-    "agenda.criarEvento",
-    "agenda.definirEvento",
-    "agenda.apagarEvento",
-    "agenda.aplicarSugestao",
     "foco.obter",
     "foco.iniciar",
     "foco.alternar",
@@ -516,9 +541,29 @@ const agendador = new Agendador({
   runtime,
 });
 agendador.vigiar();
+// A primeira atividade do dia (F3-27, ADR-0033): o desbloqueio ou o logon (a casca avisa
+// `atividade`), a retomada e a subida, depois das 05:00 no fuso de config, ou o horário fixo do
+// briefing. Uma vez por dia; o briefing que sai daqui é a F3-29.
+const primeiraAtividade = new PrimeiraAtividade(
+  new RepositorioAtividade(banco),
+  new TempoDoDia(() => repositorioConfig.ler().dia.fuso),
+  (inicio) => console.error(`dia: ${inicio.dia} começou (${inicio.motivo})`),
+);
+primeiraAtividade.vigiar();
 // O que venceu com o serviço parado vira atrasado, num aviso só; depois o timer fica armado.
 relogio.ligar().catch((erro: unknown) => console.error(`relógio do dia não ligou: ${String(erro)}`));
+/** Um sinal de atividade; banco com problema não derruba quem avisou. */
+function sinalDeAtividade(motivo: MotivoAtividade): void {
+  try {
+    primeiraAtividade.sinal(motivo);
+  } catch (erro) {
+    console.error(`dia: sinal de atividade (${motivo}) falhou: ${String(erro)}`);
+  }
+}
+sinalDeAtividade("subida");
+canal.aoAvisar("atividade", (aviso) => sinalDeAtividade(motivoDaCasca(aviso)));
 canal.aoAvisar("retomou", () => {
+  sinalDeAtividade("retomada");
   // Na volta da suspensão, os lembretes que venceram com o PC dormindo chegam juntos.
   relogio
     .retomar()
