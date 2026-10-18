@@ -15,14 +15,17 @@ const inserir = (db: DatabaseSync, id: string, excecoes?: string) =>
     .run(...(excecoes === undefined ? [id] : [id, excecoes]));
 
 describe("migração eventos-excecoes", () => {
-  test("sobe a partir da anterior: o evento que já existia fica sem exceção", () => {
+  test("sobe a partir da anterior: o evento que já existia fica sem exceção e sem fuso", () => {
     const db = new DatabaseSync(":memory:");
     migrar(db, MIGRACOES.slice(0, posicao));
     inserir(db, "e1");
 
     expect(migrar(db, MIGRACOES)).toEqual({ de: posicao, para: MIGRACOES.length });
     expect(versaoAtual(db)).toBe(MIGRACOES.length);
-    expect(db.prepare("SELECT excecoes FROM eventos WHERE id = 'e1'").get()).toEqual({ excecoes: "[]" });
+    expect(db.prepare("SELECT excecoes, fuso FROM eventos WHERE id = 'e1'").get()).toEqual({
+      excecoes: "[]",
+      fuso: null,
+    });
   });
 
   test("só lista JSON", () => {
@@ -32,5 +35,16 @@ describe("migração eventos-excecoes", () => {
     expect(() => inserir(db, "e2", '{"a":1}')).toThrow(/CHECK/);
     expect(() => inserir(db, "e3", "2026-10-27")).toThrow(/CHECK/);
     expect(() => inserir(db, "e4", null as unknown as string)).toThrow(/NOT NULL/);
+  });
+
+  test("fuso vazio é o do usuário; com nome, até 64 letras", () => {
+    const db = new DatabaseSync(":memory:");
+    migrar(db, MIGRACOES);
+    inserir(db, "e1");
+    expect(db.prepare("SELECT fuso FROM eventos WHERE id = 'e1'").get()).toEqual({ fuso: null });
+    const mudar = (fuso: string) => db.prepare("UPDATE eventos SET fuso = ? WHERE id = 'e1'").run(fuso);
+    mudar("America/New_York");
+    expect(() => mudar("")).toThrow(/CHECK/);
+    expect(() => mudar("x".repeat(65))).toThrow(/CHECK/);
   });
 });

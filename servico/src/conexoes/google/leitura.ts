@@ -27,7 +27,13 @@ export const FOLGA_AO_ABRIR_MS = 60_000;
 export const ESPERAS_DA_COTA_MS = [2_000, 4_000, 8_000] as const;
 
 /** Páginas de uma leitura: o que passa disso é o Google repetindo a mesma página, não agenda. */
-const MAXIMO_PAGINAS = 100;
+export const MAXIMO_PAGINAS = 100;
+
+/**
+ * Bytes de todas as páginas de um calendário somadas: as páginas ficam na memória até a leitura
+ * acabar, e uma agenda de verdade não chega perto disso (3 páginas cheias).
+ */
+export const MAXIMO_LEITURA_BYTES = 48 * 1024 * 1024;
 
 const MS_DIA = 86_400_000;
 
@@ -135,7 +141,22 @@ export class RepositorioLeituraGoogle {
     return apagados;
   }
 
-  /** Tira todo o cache de um calendário e o token: a próxima leitura dele é do zero (o 410). */
+  /**
+   * Tira o cache e o token de todos os calendários lidos, sem mexer neles: na subida com a conexão
+   * desligada, o calendário pode ter vindo de outro PC, junto com a escolha de ler, e fica.
+   */
+  limparCaches(): string[] {
+    return this.calendarios()
+      .filter((c) => c.espelho === 0)
+      .flatMap((c) => this.limparCache(c.id));
+  }
+
+  /** O 410: a próxima leitura do calendário é do zero, e a completa mantém os ids pelo id de lá. */
+  zerarToken(calendarioId: string): void {
+    this.db.prepare("UPDATE calendarios SET token_sincronizacao = NULL WHERE id = ?").run(calendarioId);
+  }
+
+  /** Tira todo o cache de um calendário e o token: a próxima leitura dele é do zero. */
   limparCache(calendarioId: string): string[] {
     const ids = (
       this.db.prepare("SELECT id FROM eventos WHERE calendario_id = ?").all(calendarioId) as { id: string }[]
@@ -180,12 +201,12 @@ export class RepositorioLeituraGoogle {
     };
     const gravar = this.db.prepare(
       `INSERT INTO eventos (id, calendario_id, titulo, descricao, inicio, fim, dia_inteiro, local, recorrencia,
-         id_externo, etag_externo, alertas, excecoes, criado_em, atualizado_em, origem)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?)
+         id_externo, etag_externo, alertas, excecoes, fuso, criado_em, atualizado_em, origem)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?, ?, ?)
        ON CONFLICT (calendario_id, id_externo) WHERE id_externo IS NOT NULL DO UPDATE SET
          titulo = excluded.titulo, descricao = excluded.descricao, inicio = excluded.inicio, fim = excluded.fim,
          dia_inteiro = excluded.dia_inteiro, local = excluded.local, recorrencia = excluded.recorrencia,
-         etag_externo = excluded.etag_externo,
+         etag_externo = excluded.etag_externo, fuso = excluded.fuso,
          excecoes = CASE WHEN ? THEN excluded.excecoes
            ELSE (SELECT json_group_array(value) FROM (
              SELECT value FROM json_each(eventos.excecoes) UNION SELECT value FROM json_each(excluded.excecoes)))
@@ -213,6 +234,7 @@ export class RepositorioLeituraGoogle {
         lido.idExterno,
         lido.etag,
         JSON.stringify(c.excecoes),
+        c.fuso,
         agora,
         agora,
         ORIGEM,
@@ -310,6 +332,8 @@ export interface DependenciasLeitura {
   aleatorio?: () => number;
   /** A espera da cota; o teste não espera de verdade. */
   esperar?: (ms: number) => Promise<void>;
+  /** O teto das páginas somadas de um calendário; o teste usa um pequeno. */
+  maximoLeituraBytes?: number;
 }
 
 const esperarDeVerdade = (ms: number) =>
@@ -321,10 +345,11 @@ const esperarDeVerdade = (ms: number) =>
  * A leitura dos calendários do Google da Alba (F3-23, ADR-0035): a lista de calendários da conta
  * (o principal entra lido; os outros você escolhe em `agenda.definirCalendario`), depois os eventos
  * de cada um lido, pelo `nextSyncToken`, no cache `eventos`. Lê ao subir e a cada 10 minutos com
- * variação, na retomada, ao abrir a área, ao conectar e ao escolher ler um calendário. O 410 apaga
- * o cache daquele calendário e lê do zero; 403 de cota e 429 esperam e tentam de novo, e se o
+ * variação, na retomada, ao abrir a área, ao conectar e ao escolher ler um calendário. O 410 lê
+ * aquele calendário do zero (os ids daqui ficam); 403 de cota e 429 esperam e tentam de novo, e se o
  * Google continuar recusando, a leitura para sem erro e volta no próximo ciclo. Qualquer outra
- * falha põe a conexão em erro e a Alba avisa uma vez. Desconectar esquece os calendários lidos.
+ * falha põe a conexão em erro e a Alba avisa uma vez. Desconectar esquece os calendários lidos;
+ * subir com a conexão desligada tira só o cache.
  */
 export class LeituraGoogleAgenda {
   private readonly agora: () => Date;
@@ -333,6 +358,8 @@ export class LeituraGoogleAgenda {
   private readonly enderecos: Pick<EnderecosGoogle, "calendario">;
   private readonly buscar: typeof fetch;
   private emAndamento: Promise<ResultadoLeitura> | null = null;
+  /** Pediram uma leitura enquanto outra corria (a escolha de um calendário): roda mais uma depois. */
+  private pendente = false;
   /** Muda a cada desconectar: a leitura que começou antes não grava depois. */
   private geracao = 0;
   private terminouEm: number | null = null;
@@ -354,9 +381,25 @@ export class LeituraGoogleAgenda {
     const leitura = this.ler(this.geracao).finally(() => {
       this.terminouEm = this.agora().getTime();
       if (this.emAndamento === leitura) this.emAndamento = null;
+      if (this.pendente) {
+        this.pendente = false;
+        void this.atualizar();
+      }
     });
     this.emAndamento = leitura;
     return leitura;
+  }
+
+  /**
+   * Você escolheu ler um calendário do Google: lê agora. Se uma leitura já está correndo, ela pode
+   * ter decidido os calendários antes da escolha; outra roda assim que ela terminar.
+   */
+  aoEscolherCalendario(): void {
+    if (this.emAndamento) {
+      this.pendente = true;
+      return;
+    }
+    void this.atualizar();
   }
 
   /** Abrir a área da agenda: lê, a não ser que a última leitura tenha acabado de terminar. */
@@ -411,8 +454,10 @@ export class LeituraGoogleAgenda {
 
   private async ler(geracao: number): Promise<ResultadoLeitura> {
     if (this.deps.google.conexao().estado === "desligada") {
-      // Calendário de uma conexão que já não existe (o serviço caiu no meio do desconectar) sai.
-      if (this.deps.repo.calendarios().some((c) => c.espelho === 0)) this.esquecer();
+      // Sem conexão não há cache que valha (o serviço caiu no meio do desconectar). Os calendários
+      // ficam: podem ter vindo de outro PC com a escolha de ler, e voltam a valer ao conectar.
+      const apagados = this.deps.repo.transacao(() => this.deps.repo.limparCaches());
+      this.avisarMudanca({ mudados: [], apagados }, false);
       return "desligada";
     }
     try {
@@ -489,8 +534,8 @@ export class LeituraGoogleAgenda {
       if (!(erro instanceof ErroCalendario && erro.falha === "sincronizacao-vencida") || ponto.completa)
         throw erro;
       if (geracao !== this.geracao) return;
-      const apagados = this.deps.repo.transacao(() => this.deps.repo.limparCache(calendario.id));
-      this.avisarMudanca({ mudados: [], apagados }, false);
+      // A completa substitui o cache e mantém os ids pelo id de lá: basta esquecer o token.
+      this.deps.repo.zerarToken(calendario.id);
       ponto = { completa: true, desde: this.limite() };
       leitura = await this.lerEventos(calendario.id_externo, ponto, acesso);
     }
@@ -515,12 +560,16 @@ export class LeituraGoogleAgenda {
     acesso: Acesso,
   ): Promise<{ itens: unknown[]; sincronizacao: string }> {
     const itens: unknown[] = [];
+    const teto = this.deps.maximoLeituraBytes ?? MAXIMO_LEITURA_BYTES;
+    let bytes = 0;
     let pagina: string | null = null;
     for (let n = 0; n < MAXIMO_PAGINAS; n++) {
       const atual: string | null = pagina;
       const resposta: Awaited<ReturnType<typeof paginaDeEventos>> = await acesso((token) =>
         paginaDeEventos(this.buscar, this.enderecos, token, calendarioId, ponto, atual),
       );
+      bytes += resposta.bytes;
+      if (bytes > teto) throw new ErroCalendario("rede", "a leitura passou do tamanho que uma agenda tem");
       itens.push(...resposta.itens);
       if (resposta.proxima === null) {
         if (resposta.sincronizacao === null) throw new ErroCalendario("rede", "a leitura terminou sem token");

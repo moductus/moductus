@@ -12,8 +12,11 @@ import type { EnderecosGoogle } from "./cliente.ts";
 /** Pedido ao Google que não responde nisso desiste: a rede caiu ou está lenta demais. */
 const LIMITE_PEDIDO_MS = 30_000;
 
-/** Uma página bem maior que isso não é do Google: é defeito, e não vale ler. */
-const MAXIMO_RESPOSTA_BYTES = 20 * 1024 * 1024;
+/**
+ * Uma página bem maior que isso não é do Google: é defeito, e não vale ler. O corpo é lido aos
+ * pedaços, contando, e o pedido é cancelado no teto, com ou sem `content-length`.
+ */
+export const MAXIMO_RESPOSTA_BYTES = 16 * 1024 * 1024;
 
 /** Eventos por página: o padrão do Google (250) e o máximo que ele aceita (2500). */
 export const EVENTOS_POR_PAGINA = 2500;
@@ -24,6 +27,13 @@ const MAXIMO_DESCRICAO = 10_000;
 const MAXIMO_LOCAL = 500;
 /** O tamanho que o contrato aceita para a regra (`Recorrencia`). */
 const MAXIMO_REGRA = 500;
+/** Id de evento ou de calendário maior que isso não é do Google (os de lá têm dezenas de letras). */
+const MAXIMO_ID = 1024;
+/** Uma linha `EXDATE` maior que isso, ou com mais datas, não é lida: é defeito, não agenda. */
+const MAXIMO_LINHA_EXDATE = 20_000;
+const MAXIMO_DATAS_POR_EXDATE = 1000;
+/** O nome mais longo da base de fusos do IANA tem 32 letras. */
+const MAXIMO_FUSO = 64;
 
 /**
  * Por que o pedido falhou: `sincronizacao-vencida` é o 410 do `syncToken` (a leitura recomeça do
@@ -61,21 +71,49 @@ function razoesDoErro(corpo: unknown): string[] {
   return erros.flatMap((e) => (ehObjeto(e) && typeof e.reason === "string" ? [e.reason] : []));
 }
 
-/** O corpo da resposta como JSON, com teto de tamanho; o que não for objeto é erro de rede. */
-async function lerCorpo(resposta: Response): Promise<unknown> {
+/**
+ * O corpo da resposta como JSON e quantos bytes ele tinha. Lê aos pedaços e desiste no
+ * {@link MAXIMO_RESPOSTA_BYTES}, cancelando o resto: o que o Google declara não basta, porque a
+ * resposta pode não declarar nada. JSON que não se lê volta `null`.
+ */
+async function lerCorpo(resposta: Response): Promise<{ corpo: unknown; bytes: number }> {
+  const grande = () => new ErroCalendario("rede", "resposta grande demais");
   const declarado = Number(resposta.headers.get("content-length") ?? "0");
-  if (declarado > MAXIMO_RESPOSTA_BYTES) throw new ErroCalendario("rede", "resposta grande demais");
-  const bruto = await resposta.text();
-  if (bruto.length > MAXIMO_RESPOSTA_BYTES) throw new ErroCalendario("rede", "resposta grande demais");
+  if (declarado > MAXIMO_RESPOSTA_BYTES) {
+    await resposta.body?.cancel().catch(() => undefined);
+    throw grande();
+  }
+  const partes: Uint8Array[] = [];
+  let bytes = 0;
+  if (resposta.body) {
+    const leitor = resposta.body.getReader();
+    for (;;) {
+      const { done, value } = await leitor.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > MAXIMO_RESPOSTA_BYTES) {
+        await leitor.cancel().catch(() => undefined);
+        throw grande();
+      }
+      partes.push(value);
+    }
+  }
   try {
-    return JSON.parse(bruto) as unknown;
+    return { corpo: JSON.parse(Buffer.concat(partes).toString("utf8")) as unknown, bytes };
   } catch {
-    return null;
+    return { corpo: null, bytes };
   }
 }
 
-/** Um GET na API com o token; a resposta de erro vira {@link ErroCalendario} pela falha. */
-async function pedir(buscar: typeof fetch, url: URL, tokenDeAcesso: string): Promise<Objeto> {
+/**
+ * Um GET na API com o token, com o corpo e o tamanho dele; a resposta de erro vira
+ * {@link ErroCalendario} pela falha.
+ */
+async function pedir(
+  buscar: typeof fetch,
+  url: URL,
+  tokenDeAcesso: string,
+): Promise<{ corpo: Objeto; bytes: number }> {
   let resposta: Response;
   try {
     resposta = await buscar(url, {
@@ -87,13 +125,13 @@ async function pedir(buscar: typeof fetch, url: URL, tokenDeAcesso: string): Pro
       erro instanceof Error && erro.name === "TimeoutError" ? "o Google não respondeu" : "sem rede";
     throw new ErroCalendario("rede", motivo);
   }
-  const corpo = await lerCorpo(resposta).catch((erro: unknown) => {
+  const { corpo, bytes } = await lerCorpo(resposta).catch((erro: unknown) => {
     if (erro instanceof ErroCalendario) throw erro;
     throw new ErroCalendario("rede", "a resposta não chegou inteira");
   });
   if (resposta.ok) {
     if (!ehObjeto(corpo)) throw new ErroCalendario("rede", "resposta sem forma");
-    return corpo;
+    return { corpo, bytes };
   }
   const status = resposta.status;
   if (status === 410) throw new ErroCalendario("sincronizacao-vencida", "HTTP 410", status);
@@ -123,13 +161,13 @@ export async function paginaDeCalendarios(
   const url = new URL(`${enderecos.calendario}/users/me/calendarList`);
   url.searchParams.set("maxResults", "250");
   if (pagina) url.searchParams.set("pageToken", pagina);
-  const corpo = await pedir(buscar, url, tokenDeAcesso);
+  const { corpo } = await pedir(buscar, url, tokenDeAcesso);
   const itens = Array.isArray(corpo.items) ? corpo.items : [];
   const calendarios: CalendarioLido[] = [];
   for (const item of itens) {
     if (!ehObjeto(item) || item.deleted === true) continue;
     const id = texto(item.id);
-    if (!id) continue;
+    if (!id || id.length > MAXIMO_ID) continue;
     const nome = (texto(item.summaryOverride) ?? texto(item.summary) ?? "").trim() || id;
     calendarios.push({
       idExterno: id,
@@ -157,17 +195,18 @@ export async function paginaDeEventos(
   calendarioId: string,
   ponto: PontoDeLeitura,
   pagina: string | null,
-): Promise<{ itens: unknown[]; proxima: string | null; sincronizacao: string | null }> {
+): Promise<{ itens: unknown[]; proxima: string | null; sincronizacao: string | null; bytes: number }> {
   const url = new URL(`${enderecos.calendario}/calendars/${encodeURIComponent(calendarioId)}/events`);
   url.searchParams.set("maxResults", String(EVENTOS_POR_PAGINA));
   if (ponto.completa) url.searchParams.set("timeMin", ponto.desde);
   else url.searchParams.set("syncToken", ponto.sincronizacao);
   if (pagina) url.searchParams.set("pageToken", pagina);
-  const corpo = await pedir(buscar, url, tokenDeAcesso);
+  const { corpo, bytes } = await pedir(buscar, url, tokenDeAcesso);
   return {
     itens: Array.isArray(corpo.items) ? corpo.items : [],
     proxima: texto(corpo.nextPageToken) || null,
     sincronizacao: texto(corpo.nextSyncToken) || null,
+    bytes,
   };
 }
 
@@ -181,6 +220,8 @@ export interface CamposLidos {
   local: string | null;
   recorrencia: string | null;
   excecoes: string[];
+  /** O fuso em que a regra anda (o `timeZone` do evento com hora); vazio é o do usuário. */
+  fuso: string | null;
 }
 
 /** A ocorrência de um recorrente que o Google tirou da regra: o id do recorrente e o início dela. */
@@ -216,6 +257,16 @@ function emUtc(ms: number): string | null {
   return INSTANTE.test(iso) ? iso : null;
 }
 
+/** O nome do fuso, se o Node o conhece; o que não conhece volta vazio (vale o do usuário). */
+function fusoConhecido(fuso: string | null): string | null {
+  if (fuso === null || fuso === "" || fuso.length > MAXIMO_FUSO) return null;
+  try {
+    return Intl.DateTimeFormat("en-US", { timeZone: fuso }).resolvedOptions().timeZone;
+  } catch {
+    return null;
+  }
+}
+
 /** Um `dateTime` do Google: com deslocamento ou `Z`, direto; sem, no relógio do `timeZone`. */
 function instanteDe(dataHora: string, fuso: string): string | null {
   const m = DATA_HORA.exec(dataHora);
@@ -244,12 +295,13 @@ function ponta(v: unknown, fuso: string): { diaInteiro: boolean; valor: string }
  * `EXDATE;VALUE=DATE:20261020`, `EXDATE:20261020T120000Z`) no formato do início do evento.
  */
 function lerExdate(linha: string, diaInteiro: boolean, fuso: string): string[] {
+  if (linha.length > MAXIMO_LINHA_EXDATE) return [];
   const doisPontos = linha.indexOf(":");
   if (doisPontos < 0) return [];
   const parametros = linha.slice(0, doisPontos).split(";").slice(1);
   const tzid = parametros.find((p) => /^TZID=/i.test(p))?.slice(5) ?? fuso;
   const inicios: string[] = [];
-  for (const valor of linha.slice(doisPontos + 1).split(",")) {
+  for (const valor of linha.slice(doisPontos + 1).split(",", MAXIMO_DATAS_POR_EXDATE)) {
     const m = VALOR_ICAL.exec(valor.trim());
     if (m === null) continue;
     const dia = `${m[1]}-${m[2]}-${m[3]}`;
@@ -312,9 +364,11 @@ function recusadoPorVoce(item: Objeto): boolean {
 export function lerEvento(item: unknown, fuso: string): EventoLido | null {
   if (!ehObjeto(item)) return null;
   const idExterno = texto(item.id);
-  if (!idExterno) return null;
-  const fusoDoEvento = (ehObjeto(item.start) ? texto(item.start.timeZone) : null) ?? fuso;
-  const doRecorrente = texto(item.recurringEventId);
+  if (!idExterno || idExterno.length > MAXIMO_ID) return null;
+  const fusoDeLa = fusoConhecido(ehObjeto(item.start) ? texto(item.start.timeZone) : null);
+  const fusoDoEvento = fusoDeLa ?? fuso;
+  const recorrenteId = texto(item.recurringEventId);
+  const doRecorrente = recorrenteId && recorrenteId.length <= MAXIMO_ID ? recorrenteId : null;
   const original = doRecorrente ? ponta(item.originalStartTime, fusoDoEvento) : null;
   const excecao = doRecorrente && original ? { doRecorrente, inicioOriginal: original.valor } : null;
 
@@ -352,6 +406,7 @@ export function lerEvento(item: unknown, fuso: string): EventoLido | null {
       local: cortar(item.location, MAXIMO_LOCAL),
       recorrencia: regra.recorrencia,
       excecoes: regra.excecoes,
+      fuso: inicio.diaInteiro ? null : fusoDeLa,
     },
   };
 }

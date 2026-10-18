@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { lerRecorrencia } from "../../areas/dia/recorrencia.ts";
-import { lerEvento } from "./calendario.ts";
+import { ErroCalendario, lerEvento, MAXIMO_RESPOSTA_BYTES, paginaDeEventos } from "./calendario.ts";
 
 const FUSO = "America/Sao_Paulo";
 
@@ -31,8 +31,47 @@ describe("lerEvento", () => {
         local: "Sala 2",
         recorrencia: null,
         excecoes: [],
+        fuso: FUSO,
       },
     });
+  });
+
+  test("o fuso do evento fica para a regra; o desconhecido e o do dia inteiro ficam vazios", () => {
+    const deNy = lerEvento(
+      comHora({
+        start: { dateTime: "2026-10-19T10:00:00-04:00", timeZone: "America/New_York" },
+        end: { dateTime: "2026-10-19T11:00:00-04:00", timeZone: "America/New_York" },
+      }),
+      FUSO,
+    );
+    expect(deNy?.tipo === "guardar" && deNy.campos.fuso).toBe("America/New_York");
+    const semFuso = lerEvento(
+      comHora({ start: { dateTime: "2026-10-19T10:00:00-03:00", timeZone: "Lua/Base" } }),
+      FUSO,
+    );
+    expect(semFuso?.tipo === "guardar" && semFuso.campos.fuso).toBeNull();
+    const diaInteiro = lerEvento(
+      { id: "d", start: { date: "2026-10-20", timeZone: FUSO }, end: { date: "2026-10-21" } },
+      FUSO,
+    );
+    expect(diaInteiro?.tipo === "guardar" && diaInteiro.campos.fuso).toBeNull();
+  });
+
+  test("id grande demais e EXDATE grande demais não entram", () => {
+    expect(lerEvento(comHora({ id: "x".repeat(1025) }), FUSO)).toBeNull();
+    const exdate = `EXDATE:${Array.from({ length: 2000 }, () => "20261026T130000Z").join(",")}`;
+    const lido = lerEvento(comHora({ recurrence: ["RRULE:FREQ=WEEKLY", exdate] }), FUSO);
+    expect(lido?.tipo === "guardar" && lido.campos.excecoes).toEqual([]);
+    const ocorrencia = lerEvento(
+      {
+        id: "y",
+        status: "cancelled",
+        recurringEventId: "r".repeat(2000),
+        originalStartTime: { date: "2026-10-26" },
+      },
+      FUSO,
+    );
+    expect(ocorrencia).toEqual({ tipo: "tirar", idExterno: "y", excecao: null });
   });
 
   test("data e hora sem deslocamento vale no fuso do evento", () => {
@@ -162,5 +201,62 @@ describe("lerEvento", () => {
   test("fim antes do início vira um evento sem duração", () => {
     const lido = lerEvento(comHora({ end: { dateTime: "2026-10-19T09:00:00-03:00" } }), FUSO);
     expect(lido?.tipo === "guardar" && lido.campos.fim).toBe("2026-10-19T13:00:00.000Z");
+  });
+});
+
+describe("a resposta do Google", () => {
+  const ENDERECOS = { calendario: "https://calendario.invalid/calendar/v3" };
+  const ler = (resposta: () => Response) =>
+    paginaDeEventos(
+      () => Promise.resolve(resposta()),
+      ENDERECOS,
+      "token",
+      "voce@gmail.com",
+      { completa: true, desde: "2026-10-12T13:00:00.000Z" },
+      null,
+    );
+
+  test("corpo grande sem content-length é cortado no teto, sem ler o resto", async () => {
+    const MB = new Uint8Array(1024 * 1024).fill(32);
+    let lidos = 0;
+    let cancelado = false;
+    const infinito = new ReadableStream<Uint8Array>({
+      pull(controle) {
+        lidos++;
+        controle.enqueue(MB);
+      },
+      cancel() {
+        cancelado = true;
+      },
+    });
+    const erro = await ler(() => new Response(infinito, { status: 200 })).catch((e: unknown) => e);
+    expect(erro).toBeInstanceOf(ErroCalendario);
+    expect((erro as ErroCalendario).message).toBe("resposta grande demais");
+    expect(cancelado).toBe(true);
+    expect(lidos).toBeLessThanOrEqual(MAXIMO_RESPOSTA_BYTES / MB.byteLength + 2);
+  });
+
+  test("content-length acima do teto nem começa a ler", async () => {
+    const erro = await ler(
+      () =>
+        new Response("{}", {
+          status: 200,
+          headers: { "content-length": String(MAXIMO_RESPOSTA_BYTES + 1) },
+        }),
+    ).catch((e: unknown) => e);
+    expect((erro as ErroCalendario).message).toBe("resposta grande demais");
+  });
+
+  test("JSON que não se lê é erro de rede, não derruba nada", async () => {
+    const erro = await ler(() => new Response('{"items": [', { status: 200 })).catch((e: unknown) => e);
+    expect(erro).toBeInstanceOf(ErroCalendario);
+    expect((erro as ErroCalendario).falha).toBe("rede");
+    expect((erro as ErroCalendario).message).toBe("resposta sem forma");
+  });
+
+  test("a página que veio inteira diz quantos bytes tinha", async () => {
+    const corpo = JSON.stringify({ items: [], nextSyncToken: "s" });
+    const pagina = await ler(() => new Response(corpo, { status: 200 }));
+    expect(pagina).toEqual({ itens: [], proxima: null, sincronizacao: "s", bytes: corpo.length });
   });
 });

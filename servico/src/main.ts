@@ -533,7 +533,7 @@ servidor = await abrirServidorWs(token, {
   "agenda.definirCalendario": (mudanca) => {
     const calendario = agenda.definirCalendario(mudanca);
     // Passou a ler um calendário do Google: os eventos dele vêm já.
-    if (calendario.fonte === "google" && mudanca.ler === true) void leituraGoogle?.atualizar();
+    if (calendario.fonte === "google" && mudanca.ler === true) leituraGoogle?.aoEscolherCalendario();
     return calendario;
   },
   "agenda.consultar": (pedido) => {

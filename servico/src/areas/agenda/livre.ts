@@ -63,6 +63,11 @@ export interface EventoParaExpandir {
    * migração 020), no formato do `inicio`: dia no de dia inteiro, instante no com hora.
    */
   excecoes?: readonly string[];
+  /**
+   * O fuso em que a regra anda (o `timeZone` do evento do Google; migração 020): "toda segunda às
+   * 10h de Nova York" segue o horário de verão de lá. Vazio é o fuso do usuário.
+   */
+  fuso?: string | null;
 }
 
 /** Uma ocorrência com o começo em ms, para ordenar e somar sem ler o texto de novo. */
@@ -152,19 +157,24 @@ export function ocorrenciasNoIntervalo(
       anotar(inicio);
       continue;
     }
+    // A regra anda no fuso do evento; os dias dele podem estar um antes ou um depois dos do
+    // usuário, e a conta exata de quem encosta no intervalo é a do `anotar`.
+    const fusoDaRegra = e.fuso ?? fuso;
+    const outroFuso = fusoDaRegra === fuso ? 0 : 1;
     // Um dia de folga além da duração (a ocorrência de ontem às 23h ainda pode estar no
     // intervalo), mas nunca antes do dia do início, com um de folga para o fuso.
     const desde = Math.max(
-      numeroDe - (Math.ceil(duracao / MS_DIA) + 1),
+      numeroDe - (Math.ceil(duracao / MS_DIA) + 1) - outroFuso,
       Math.floor(inicio / MS_DIA) - 1,
       PRIMEIRO_NUMERO,
     );
+    const ateDaRegra = Math.min(numeroAte + outroFuso, ULTIMO_NUMERO);
     const expansao = instantesNoIntervalo(
       e.recorrencia,
       new Date(inicio),
-      fuso,
+      fusoDaRegra,
       diaDoNumero(desde),
-      ate,
+      diaDoNumero(ateDaRegra),
       MAX_OCORRENCIAS_POR_EVENTO,
     );
     if (expansao.cortada) aoCortar(e.id);

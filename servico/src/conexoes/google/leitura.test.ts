@@ -20,6 +20,7 @@ import {
   ESPERAS_DA_COTA_MS,
   INTERVALO_LEITURA_MS,
   LeituraGoogleAgenda,
+  MAXIMO_PAGINAS,
   RepositorioLeituraGoogle,
   type MudancaCache,
 } from "./leitura.ts";
@@ -362,12 +363,38 @@ describe("leitura incremental", () => {
     expect(m.calendario(CONTA)!.token_sincronizacao).not.toBe(token);
   });
 
-  test("410: o cache daquele calendário sai e a leitura recomeça do zero", async () => {
+  test("o recorrente que volta sem as ocorrências tiradas guarda as exceções que já tinha", async () => {
+    const m = await montar();
+    semearSemana(m);
+    mexerNoSemanal(m);
+    const leitura = await m.conectar();
+    await leitura!.atualizar();
+
+    m.google.gravarEvento(CONTA, {
+      id: "semanal",
+      summary: "1:1 semanal",
+      start: sp("2026-10-12", "09:00"),
+      end: sp("2026-10-12", "09:30"),
+      recurrence: ["RRULE:FREQ=WEEKLY;BYDAY=MO"],
+    });
+    await leitura!.atualizar();
+    expect(m.hoje()).toEqual([
+      `${HOJE} Aniversário da Ana`,
+      `${utc(HOJE, "11:00")} 1:1 (adiado)`,
+      `${utc(HOJE, "14:00")} Dentista`,
+    ]);
+    const proximas = m.agenda.consultar({ de: "2026-10-26", ate: "2026-11-02" }).ocorrencias;
+    expect(proximas.map((o) => `${o.inicio} ${o.titulo}`)).toEqual([
+      `${utc("2026-11-02", "09:00")} 1:1 semanal`,
+    ]);
+  });
+
+  test("410: a leitura recomeça do zero, o que continua no Google guarda o id daqui", async () => {
     const m = await montar();
     semearSemana(m);
     const leitura = await m.conectar();
     await leitura!.atualizar();
-    const antigos = m.cache().map((e) => e.id);
+    const antes = new Map(m.cache().map((e) => [e.id_externo, e.id]));
     m.mudancas.length = 0;
     m.google.pedidosCalendario.length = 0;
 
@@ -379,8 +406,11 @@ describe("leitura incremental", () => {
     expect(eventos).toHaveLength(2);
     expect(eventos[0]).toContain("syncToken=");
     expect(eventos[1]).toContain("timeMin=");
-    expect(m.cache().map((e) => e.id_externo)).toEqual(["aniversario", "semanal"]);
-    expect(m.mudancas[0]?.apagados.sort()).toEqual([...antigos].sort());
+    expect(m.cache().map((e) => [e.id_externo, e.id])).toEqual([
+      ["aniversario", antes.get("aniversario")],
+      ["semanal", antes.get("semanal")],
+    ]);
+    expect(m.mudancas.flatMap((x) => x.apagados)).toEqual([antes.get("avulso")]);
     expect(m.conexao().estado).toBe("ligada");
     // O token novo vale: a próxima é incremental de novo.
     m.google.pedidosCalendario.length = 0;
@@ -578,5 +608,145 @@ describe("quando lê", () => {
     const [a, b] = await Promise.all([leitura!.atualizar(), leitura!.atualizar()]);
     expect([a, b]).toEqual(["lida", "lida"]);
     expect(m.pedidos().filter((p) => p.includes("calendarList"))).toHaveLength(1);
+  });
+});
+
+describe("volta 1", () => {
+  /** Um `fetch` que responde os eventos do jeito que o teste quer e deixa o resto com o Google falso. */
+  const comEventos =
+    (eventos: (url: URL) => Response | Promise<Response>): typeof fetch =>
+    (entrada, init) => {
+      const url = new URL(String(entrada));
+      return url.pathname.endsWith("/events") ? Promise.resolve(eventos(url)) : fetch(entrada, init);
+    };
+
+  test("a reunião semanal de Nova York segue o horário de verão de lá, vista de São Paulo", async () => {
+    const m = await montar();
+    const ny = (dia: string, hora: string, offset: string) => ({
+      dateTime: `${dia}T${hora}:00${offset}`,
+      timeZone: "America/New_York",
+    });
+    m.google.gravarEvento(CONTA, {
+      id: "ny",
+      summary: "Sync com NY",
+      start: ny(HOJE, "10:00", "-04:00"),
+      end: ny(HOJE, "10:30", "-04:00"),
+      recurrence: ["RRULE:FREQ=WEEKLY;BYDAY=MO"],
+    });
+    m.google.gravarEvento(CONTA, {
+      id: "ny_20261026T140000Z",
+      status: "cancelled",
+      recurringEventId: "ny",
+      originalStartTime: ny("2026-10-26", "10:00", "-04:00"),
+    });
+    const leitura = await m.conectar();
+    await leitura!.atualizar();
+    // Nova York sai do horário de verão em 01/11: 10h de lá passa de 11h para 12h em São Paulo.
+    const vezes = m.agenda.consultar({ de: HOJE, ate: "2026-11-09" }).ocorrencias.map((o) => o.inicio);
+    expect(vezes).toEqual([utc(HOJE, "11:00"), utc("2026-11-02", "12:00"), utc("2026-11-09", "12:00")]);
+  });
+
+  test("subir com a conexão desligada tira o cache e o token, mas o calendário e a escolha ficam", async () => {
+    const m = await montar();
+    // Como chega de outro PC (ou ficou de um desconectar que o serviço não terminou).
+    m.db
+      .prepare(
+        `INSERT INTO calendarios (id, nome, fonte, id_externo, ler, token_sincronizacao)
+         VALUES ('g1', 'Trabalho', 'google', 'trabalho@empresa.com', 1, 'sync:9')`,
+      )
+      .run();
+    m.db
+      .prepare(
+        `INSERT INTO eventos (id, calendario_id, titulo, inicio, fim, id_externo)
+         VALUES ('e1', 'g1', 'Velho', '2026-10-19T13:00:00.000Z', '2026-10-19T14:00:00.000Z', 'x')`,
+      )
+      .run();
+
+    expect(await m.leitura!.atualizar()).toBe("desligada");
+    expect(m.calendario("trabalho@empresa.com")).toMatchObject({
+      ler: 1,
+      apagado_em: null,
+      token_sincronizacao: null,
+    });
+    expect(m.cache()).toEqual([]);
+    expect(m.mudancas).toEqual([{ mudados: [], apagados: ["e1"] }]);
+    expect(m.google.pedidosCalendario).toEqual([]);
+  });
+
+  test("a escolha feita no meio de uma leitura roda outra assim que ela termina", async () => {
+    const m = await montar();
+    const feriados = "feriados@group.v.calendar.google.com";
+    m.google.calendarios.push({ id: feriados, summary: "Feriados" });
+    m.google.gravarEvento(feriados, {
+      id: "f1",
+      summary: "Feriado",
+      start: { date: "2026-11-02" },
+      end: { date: "2026-11-03" },
+    });
+    await (await m.conectar())!.atualizar();
+    let soltar: () => void = () => undefined;
+    const segura = new Promise<void>((pronto) => (soltar = pronto));
+    let segurou = false;
+    const leitura = new LeituraGoogleAgenda({
+      ...m.deps,
+      buscar: async (entrada, init) => {
+        // A leitura já escolheu os calendários e está no principal quando você escolhe o outro.
+        if (!segurou && String(entrada).includes("/events")) {
+          segurou = true;
+          await segura;
+        }
+        return fetch(entrada, init);
+      },
+    });
+    const primeira = leitura.atualizar();
+    await vi.waitFor(() => expect(segurou).toBe(true));
+    m.agenda.definirCalendario({ id: m.calendario(feriados)!.id, ler: true });
+    leitura.aoEscolherCalendario();
+    soltar();
+    expect(await primeira).toBe("lida");
+    await vi.waitFor(() => expect(m.cache().map((e) => e.id_externo)).toEqual(["f1"]));
+  });
+
+  test(`${MAXIMO_PAGINAS} páginas sem fim é erro, sem token e sem cache novo`, async () => {
+    const m = await montar();
+    await (await m.conectar())!.atualizar();
+    let pedidos = 0;
+    const leitura = new LeituraGoogleAgenda({
+      ...m.deps,
+      buscar: comEventos(() => {
+        pedidos++;
+        return Response.json({ items: [], nextPageToken: "de-novo" });
+      }),
+    });
+    const token = m.calendario(CONTA)!.token_sincronizacao;
+    expect(await leitura.atualizar()).toBe("erro");
+    expect(pedidos).toBe(MAXIMO_PAGINAS);
+    expect(m.calendario(CONTA)!.token_sincronizacao).toBe(token);
+    expect(m.conexao().ultimo_erro).toBe(AVISO_LEITURA);
+  });
+
+  test("a leitura que termina sem token é erro", async () => {
+    const m = await montar();
+    await (await m.conectar())!.atualizar();
+    const leitura = new LeituraGoogleAgenda({
+      ...m.deps,
+      buscar: comEventos(() => Response.json({ items: [] })),
+    });
+    expect(await leitura.atualizar()).toBe("erro");
+    expect(m.conexao().ultimo_erro).toBe(AVISO_LEITURA);
+  });
+
+  test("as páginas somadas passando do teto é erro, sem gravar nada", async () => {
+    const m = await montar();
+    m.google.porPagina = 1;
+    semearSemana(m);
+    const ligada = await m.conectar();
+    // A leitura que o conectar disparou termina antes de a de teto pequeno começar.
+    await ligada!.atualizar();
+    m.db.prepare("DELETE FROM eventos").run();
+    m.db.prepare("UPDATE calendarios SET token_sincronizacao = NULL").run();
+    const leitura = new LeituraGoogleAgenda({ ...m.deps, maximoLeituraBytes: 600 });
+    expect(await leitura.atualizar()).toBe("erro");
+    expect(m.cache()).toEqual([]);
   });
 });
