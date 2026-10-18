@@ -4,6 +4,7 @@ import {
   type SpawnOptionsWithoutStdio,
 } from "node:child_process";
 import { createInterface } from "node:readline";
+import { alvoDoCli, arquivoExiste, noPath, type AlvoCli } from "../executavel.ts";
 import type { ConfigProvedor, EventoAgente, PedidoDoAgente, Provedor } from "../provedor.ts";
 import type { FabricaProvedor } from "../registro.ts";
 import { LeitorStreamJson } from "./leitor.ts";
@@ -38,13 +39,18 @@ const SESSAO_PERDIDA = /no conversation found/i;
 
 class SessaoPerdida extends Error {}
 
+/** `alvo` é o programa que o adaptador iniciaria sem shell; os argumentos do CLI vêm depois de `alvo.antes`. */
 export type IniciarProcesso = (
   argumentos: string[],
   opcoes: SpawnOptionsWithoutStdio,
+  alvo: AlvoCli,
 ) => ChildProcessWithoutNullStreams;
 
 export interface OpcoesClaudeCli {
-  /** Executável do CLI; a detecção (F2-08) passa o caminho achado. */
+  /**
+   * O comando, procurado no PATH, quando o provedor não tem o caminho que a detecção achou
+   * (`ConfigProvedor.caminho`) ou esse caminho já não roda; sem isso, o `claude` do PATH.
+   */
   comando?: string;
   /**
    * Pasta de trabalho do CLI, própria do Moductus e sempre a mesma. O CLI lê `CLAUDE.md` e
@@ -110,6 +116,11 @@ const VARIAVEIS_DO_USUARIO = /^(MODUCTUS_.*|CLAUDE_CODE_PLUGIN_DIRS)$/i;
  * Lista conferida em https://code.claude.com/docs/en/env-vars em 09/10/2026 (no `-p`, a
  * `ANTHROPIC_API_KEY` vale sempre que existe, mesmo com login). O login da assinatura
  * (`CLAUDE_CODE_OAUTH_TOKEN`, do `claude setup-token`) continua passando.
+ *
+ * `ANTHROPIC_CUSTOM_HEADERS` também sai (ADR-0024): ela põe cabeçalhos quaisquer em toda chamada
+ * à API, e um `x-api-key` ou `Authorization` ali leva a chamada a uma chave de API ou a outra
+ * conta sem nenhuma das variáveis acima. Sem `ANTHROPIC_BASE_URL` não há gateway que precise
+ * dela; proxy da empresa vai por `HTTPS_PROXY`, que continua passando.
  */
 const VARIAVEIS_DE_COBRANCA_POR_TOKEN = new RegExp(
   "^(" +
@@ -117,6 +128,7 @@ const VARIAVEIS_DE_COBRANCA_POR_TOKEN = new RegExp(
       "ANTHROPIC_API_KEY",
       "ANTHROPIC_AUTH_TOKEN",
       "ANTHROPIC_BASE_URL",
+      "ANTHROPIC_CUSTOM_HEADERS",
       "ANTHROPIC_PROFILE",
       "ANTHROPIC_FEDERATION_RULE_ID",
       "ANTHROPIC_ORGANIZATION_ID",
@@ -262,13 +274,29 @@ export class ProvedorClaudeCli implements Provedor {
     sinal: AbortSignal,
     acesso: { url: string; token: string } | null,
   ): AsyncIterable<EventoAgente> {
-    const comando = this.opcoes.comando ?? "claude";
-    const iniciar: IniciarProcesso = this.opcoes.iniciar ?? ((args, o) => spawn(comando, args, o));
-    const processo = iniciar(argumentosDoClaude(pedido, this.config, acesso?.url ?? null), {
-      cwd: this.opcoes.pasta,
-      env: ambienteDoCli(process.env, acesso?.token ?? null),
-      windowsHide: true,
-    });
+    const { comando, alvo } = this.resolver();
+    if (!alvo) {
+      yield {
+        tipo: "erro",
+        falha: {
+          motivo: "ausente",
+          mensagem: `O Claude Code em ${comando} foi instalado pelo npm de um jeito que o Moductus não consegue rodar. Instale pelo instalador nativo ou escolha outro modelo para o agente.`,
+          voltaEm: null,
+        },
+      };
+      return;
+    }
+    const iniciar: IniciarProcesso =
+      this.opcoes.iniciar ?? ((args, o, a) => spawn(a.executavel, [...a.antes, ...args], o));
+    const processo = iniciar(
+      argumentosDoClaude(pedido, this.config, acesso?.url ?? null),
+      {
+        cwd: this.opcoes.pasta,
+        env: ambienteDoCli(process.env, acesso?.token ?? null),
+        windowsHide: true,
+      },
+      alvo,
+    );
     const saida = new Promise<{ codigo: number | null; erro: Error | null }>((resolve) => {
       processo.once("error", (erro) => resolve({ codigo: null, erro }));
       processo.once("close", (codigo) => resolve({ codigo, erro: null }));
@@ -336,6 +364,34 @@ export class ProvedorClaudeCli implements Provedor {
         sinal.removeEventListener("abort", aoAbortar);
       }
     }
+  }
+
+  /**
+   * O que rodar, sem shell (ADR-0037): o caminho que a detecção guardou no provedor, se ainda é um
+   * arquivo que roda; senão o primeiro do comando das opções (ou `claude`) no PATH que roda, com o
+   * `.cmd` do npm trocado pelo programa que ele chama. Assim o CLI instalado depois da última
+   * detecção roda, e um shim que não dá para rodar não esconde o `claude.exe` adiante no PATH.
+   * `alvo` nulo é shim que só rodaria pelo `cmd.exe`, e `comando` diz qual. Nada achado: o comando
+   * puro, e o `ENOENT` do processo vira `ausente`.
+   */
+  private resolver(): { comando: string; alvo: AlvoCli | null } {
+    let semAlvo: string | null = null;
+    const guardado = this.config.caminho ?? null;
+    if (guardado !== null && arquivoExiste(guardado)) {
+      const alvo = alvoDoCli(guardado, process.env);
+      if (alvo) return { comando: guardado, alvo };
+      semAlvo = guardado;
+    }
+    const comando = this.opcoes.comando ?? "claude";
+    // Comando que já é caminho não se procura no PATH.
+    const candidatos = /[\\/]/.test(comando) ? [comando].filter(arquivoExiste) : noPath(comando, process.env);
+    for (const candidato of candidatos) {
+      const alvo = alvoDoCli(candidato, process.env);
+      if (alvo) return { comando: candidato, alvo };
+      semAlvo ??= candidato;
+    }
+    if (semAlvo !== null) return { comando: semAlvo, alvo: null };
+    return { comando, alvo: { executavel: comando, antes: [] } };
   }
 
   /** Volta do nome do CLI ao do catálogo; ferramenta de fora do Moductus fica com o nome dela. */

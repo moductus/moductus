@@ -107,7 +107,8 @@ export const ProvedorDetectado = z.object({
   /**
    * Por que esta versão do Moductus não usa este CLI; `null` quando usa. `sem_adaptador`: ainda
    * não fala com ele (hoje só fala com o Claude Code). `instalado_pelo_npm`: o Claude Code achado
-   * é o `.cmd` do npm, e o adaptador roda o executável do instalador nativo.
+   * é um `.cmd` do npm em que o serviço não acha o programa que ele chama, e sem esse programa ele
+   * só rodaria por shell (ADR-0037).
    */
   impedimento: z.enum(["sem_adaptador", "instalado_pelo_npm"]).nullable(),
   /** A versão que o Moductus pede, quando a achada é mais velha; `null` quando serve ou não dá para saber. */

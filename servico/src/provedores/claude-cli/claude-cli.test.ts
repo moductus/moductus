@@ -1,8 +1,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { ferramenta, oferecida } from "../../ferramentas/ferramenta.ts";
@@ -13,12 +13,14 @@ import {
   argumentosDoClaude,
   fabricaClaudeCli,
   type AberturaMcp,
+  type IniciarProcesso,
   montarPrompt,
   ProvedorClaudeCli,
   type OpcoesClaudeCli,
   PRAZO_CHAMADA_MCP_MS,
   VARIAVEL_ACESSO_MCP,
 } from "./claude-cli.ts";
+import type { AlvoCli } from "../executavel.ts";
 import { PRAZO_PRE_TOOL_USE_S } from "./pre-tool-use.ts";
 
 const CLI_FALSO = fileURLToPath(new URL("./fixtures/cli-falso.mjs", import.meta.url));
@@ -84,25 +86,84 @@ interface Anotacao {
 function comCliFalso(saidas: string[], modos: string | string[] = "normal", extra: OpcoesClaudeCli = {}) {
   const listaDeModos = typeof modos === "string" ? [modos] : modos;
   const anotacao = (n: number) => join(pasta, `anotacao-${n}.json`);
+  /** O programa que o adaptador iniciaria em cada processo, na ordem. */
+  const alvos: AlvoCli[] = [];
+  const iniciar: IniciarProcesso = (argumentos, opcoes, alvo) => {
+    const n = processos.length;
+    const saida = saidas[n] ?? saidas.at(-1) ?? "-";
+    const modo = listaDeModos[n] ?? listaDeModos.at(-1) ?? "normal";
+    alvos.push(alvo);
+    const processo = spawn(
+      process.execPath,
+      [CLI_FALSO, saida, modo, anotacao(n), "--", ...argumentos],
+      opcoes,
+    );
+    processos.push(processo);
+    return processo;
+  };
   const provedor = new ProvedorClaudeCli(config({ modelo: "haiku" }), {
     pasta,
+    // O `claude` deste PC não entra: o CLI falso roda no lugar de qualquer programa.
+    comando: process.execPath,
     ...extra,
-    iniciar: (argumentos, opcoes) => {
-      const n = processos.length;
-      const saida = saidas[n] ?? saidas.at(-1) ?? "-";
-      const modo = listaDeModos[n] ?? listaDeModos.at(-1) ?? "normal";
-      const processo = spawn(
-        process.execPath,
-        [CLI_FALSO, saida, modo, anotacao(n), "--", ...argumentos],
-        opcoes,
-      );
-      processos.push(processo);
-      return processo;
-    },
+    iniciar,
   });
   /** O que o processo `n` recebeu; sem `n`, o último. */
   const anotado = (n = processos.length - 1) => JSON.parse(readFileSync(anotacao(n), "utf8")) as Anotacao;
-  return { provedor, anotado };
+  return { provedor, anotado, iniciar, alvos };
+}
+
+/** Um `claude.cmd` do npm de executável nativo cujo pacote foi apagado: só rodaria pelo `cmd.exe`. */
+function shimSemPacote(pastaDoShim: string): string {
+  mkdirSync(pastaDoShim, { recursive: true });
+  const shim = join(pastaDoShim, "claude.cmd");
+  writeFileSync(
+    shim,
+    `@ECHO off\r\n"%dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe"   %*\r\n`,
+  );
+  return shim;
+}
+
+/**
+ * Uma instalação pelo npm, como em `%APPDATA%\npm`: o `claude.cmd` no formato que o npm grava e,
+ * no lugar do `cli.js` do pacote, um script que entrega ao CLI falso os argumentos que recebeu.
+ */
+function npmComCliFalso(saida: string) {
+  const shim = join(pasta, "claude.cmd");
+  const anotacao = join(pasta, "anotacao-npm.json");
+  writeFileSync(
+    shim,
+    [
+      "@ECHO off",
+      "GOTO start",
+      ":find_dp0",
+      "SET dp0=%~dp0",
+      "EXIT /b",
+      ":start",
+      "SETLOCAL",
+      "CALL :find_dp0",
+      "",
+      'IF EXIST "%dp0%\\node.exe" (',
+      '  SET "_prog=%dp0%\\node.exe"',
+      ") ELSE (",
+      '  SET "_prog=node"',
+      "  SET PATHEXT=%PATHEXT:;.JS;=;%",
+      ")",
+      "",
+      'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\node_modules\\@anthropic-ai\\claude-code\\cli.js" %*',
+      "",
+    ].join("\r\n"),
+  );
+  const pacote = join(pasta, "node_modules", "@anthropic-ai", "claude-code");
+  mkdirSync(pacote, { recursive: true });
+  writeFileSync(
+    join(pacote, "cli.js"),
+    [
+      `process.argv.splice(2, 0, ${JSON.stringify(saida)}, "normal", ${JSON.stringify(anotacao)}, "--");`,
+      `import(${JSON.stringify(pathToFileURL(CLI_FALSO).href)});`,
+    ].join("\n"),
+  );
+  return { shim, anotacao };
 }
 
 describe("adaptador Claude Code CLI", () => {
@@ -202,6 +263,8 @@ describe("adaptador Claude Code CLI", () => {
       "ANTHROPIC_API_KEY",
       "ANTHROPIC_AUTH_TOKEN",
       "ANTHROPIC_BASE_URL",
+      // Um `x-api-key` aqui trocaria a assinatura por uma chave de API (ADR-0024).
+      "ANTHROPIC_CUSTOM_HEADERS",
       "ANTHROPIC_PROFILE",
       "ANTHROPIC_FEDERATION_RULE_ID",
       "ANTHROPIC_ORGANIZATION_ID",
@@ -387,6 +450,112 @@ describe("adaptador Claude Code CLI", () => {
         },
       },
     ]);
+  });
+
+  test.runIf(process.platform === "win32")(
+    "o Claude Code do npm roda pelo caminho guardado, pelo node e sem shell: os argumentos chegam inteiros",
+    async () => {
+      const { shim, anotacao } = npmComCliFalso(gravada("sessao-com-ferramenta.jsonl"));
+      // O shim não tem node.exe ao lado: vale o do PATH, como no npm global.
+      vi.stubEnv("PATH", dirname(process.execPath));
+      try {
+        // O comando das opções não existe: só o caminho guardado pela detecção faz o CLI rodar.
+        const provedor = new ProvedorClaudeCli(config({ caminho: shim }), {
+          comando: "claude-que-nao-existe-moductus",
+          pasta,
+        });
+        const instrucoes = 'Você é o Nuno. "Aspas", 100% & nada de | nem ^ para o cmd.exe.';
+        const eventos = await coletar(
+          provedor.executar(pedido({ instrucoes }), new AbortController().signal),
+        );
+
+        expect(eventos.at(-1)).toEqual({ tipo: "fim", continuacao: "78e523d4-fecc-4ec2-9fd7-87a2c33372d6" });
+        const { argumentos, entrada } = JSON.parse(readFileSync(anotacao, "utf8")) as Anotacao;
+        expect(entrada).toBe("Quais sessões de IA estão abertas agora?");
+        expect(argumentos[argumentos.indexOf("--append-system-prompt") + 1]).toBe(instrucoes);
+        expect(argumentos[argumentos.indexOf("--tools") + 1]).toBe("");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+    20_000,
+  );
+
+  test("caminho guardado que já não existe cai no comando de sempre", async () => {
+    const provedor = new ProvedorClaudeCli(config({ caminho: join(pasta, "desinstalado", "claude.exe") }), {
+      comando: "claude-que-nao-existe-moductus",
+      pasta,
+    });
+    const [evento] = await coletar(provedor.executar(pedido(), new AbortController().signal));
+    expect(evento).toMatchObject({ tipo: "erro", falha: { motivo: "ausente" } });
+    expect(evento?.tipo === "erro" && evento.falha.mensagem).toContain("(claude-que-nao-existe-moductus)");
+  });
+
+  test.runIf(process.platform === "win32")(
+    "sem caminho guardado, o shim do npm no PATH roda pelo node: o npm instalado depois da detecção",
+    async () => {
+      const { anotacao } = npmComCliFalso(gravada("sessao-com-ferramenta.jsonl"));
+      vi.stubEnv("PATH", `${pasta};${dirname(process.execPath)}`);
+      try {
+        const provedor = new ProvedorClaudeCli(config(), { pasta });
+        const eventos = await coletar(provedor.executar(pedido(), new AbortController().signal));
+
+        expect(eventos.at(-1)).toEqual({ tipo: "fim", continuacao: "78e523d4-fecc-4ec2-9fd7-87a2c33372d6" });
+        expect((JSON.parse(readFileSync(anotacao, "utf8")) as Anotacao).entrada).toBe(
+          "Quais sessões de IA estão abertas agora?",
+        );
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+    20_000,
+  );
+
+  test.runIf(process.platform === "win32")(
+    "shim guardado que não roda não esconde o claude.exe adiante no PATH",
+    async () => {
+      const shim = shimSemPacote(join(pasta, "npm"));
+      const nativo = join(pasta, "nativo");
+      mkdirSync(nativo);
+      writeFileSync(join(nativo, "claude.exe"), "");
+      vi.stubEnv("PATH", `${join(pasta, "npm")};${nativo}`);
+      try {
+        const { iniciar, alvos } = comCliFalso([gravada("sessao-com-ferramenta.jsonl")]);
+        const provedor = new ProvedorClaudeCli(config({ caminho: shim }), { pasta, iniciar });
+        const eventos = await coletar(provedor.executar(pedido(), new AbortController().signal));
+
+        expect(eventos.at(-1)).toMatchObject({ tipo: "fim" });
+        expect(alvos).toEqual([{ executavel: join(nativo, "claude.exe"), antes: [] }]);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+    20_000,
+  );
+
+  test("shim do npm sem o pacote que ele chama vira erro `ausente`, sem tentar o cmd.exe", async () => {
+    const shim = shimSemPacote(pasta);
+    // Nada no PATH que rode: o erro aponta o shim guardado.
+    vi.stubEnv("PATH", join(pasta, "vazia"));
+    const iniciar = vi.fn<IniciarProcesso>();
+    const provedor = new ProvedorClaudeCli(config({ caminho: shim }), { pasta, iniciar });
+    let eventos: EventoAgente[];
+    try {
+      eventos = await coletar(provedor.executar(pedido(), new AbortController().signal));
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(eventos).toEqual([
+      {
+        tipo: "erro",
+        falha: {
+          motivo: "ausente",
+          mensagem: `O Claude Code em ${shim} foi instalado pelo npm de um jeito que o Moductus não consegue rodar. Instale pelo instalador nativo ou escolha outro modelo para o agente.`,
+          voltaEm: null,
+        },
+      },
+    ]);
+    expect(iniciar).not.toHaveBeenCalled();
   });
 
   test("CLI que sai sem `result` falha a execução com o que escreveu no stderr", async () => {

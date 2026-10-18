@@ -226,11 +226,11 @@ O serviço inicia o CLI como subprocesso, envia o pedido e lê a saída estrutur
 **Como o Claude Code roda para um agente** (ADR-0017):
 - Numa pasta do Moductus (`claude-cli/` nos dados), sem **nenhuma ferramenta nativa**: Bash, Edit e Write ficam de fora, e se uma aparecer o `PreToolUse` do serviço nega com motivo legível. O agente age só pelo catálogo, com nível de efeito e desfazer.
 - Sem a configuração do usuário: `--setting-sources ""` e `CLAUDE_CODE_DISABLE_CLAUDE_MDS` e `CLAUDE_CODE_DISABLE_AUTO_MEMORY` no ambiente. Hooks, plugins, permissões, `CLAUDE.md` e memória do PC não entram (no teste, 34 mil tokens de entrada com a configuração contra 16 mil sem ela). O ambiente também não leva nenhum `MODUCTUS_*`, exceto o acesso da execução.
-- Sem variável que cobre por token: `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` e as de Bedrock e Vertex saem do ambiente, para "assinatura" ser verdade (ADR-0024).
+- Sem variável que cobre por token: `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_CUSTOM_HEADERS` e as de Bedrock e Vertex saem do ambiente, para "assinatura" ser verdade (ADR-0024).
 - A chamada `externo` espera o cartão no executor da execução, e o `--mcp-config` leva `timeout` de 24 h: sem ele o Claude Code desiste do MCP aos 60 s. Cartão decidido depois de a execução acabar não roda.
 - O `PreToolUse` é um hook `http` passado por `--settings` a cada execução, no mesmo servidor do MCP e com o mesmo token; se o serviço engasgar, a porta continua fechada pelo `--tools ""` e pelo `--allowedTools`.
 - Sessão que o CLI não acha mais no `--resume` recomeça do zero; trocar o provedor do agente não leva a sessão antiga para o novo. Limite de uso do CLI vira erro `limite`, com o horário de volta quando ele informa.
-- `claude.cmd` instalado pelo npm não é atendido: o adaptador chama o executável sem shell. A detecção marca esse Claude como impedimento (`instalado_pelo_npm`) e diz para instalar pelo instalador nativo (ADR-0025).
+- Sempre sem shell (ADR-0037): o adaptador roda o caminho que a detecção guardou no provedor e, sem ele ou se ele não roda, o primeiro `claude` do PATH que roda. O `claude.cmd` do npm roda pelo programa que o shim chama (`node.exe` com o script do pacote, ou o executável nativo). Shim de outra forma ou sem o pacote fica com o impedimento `instalado_pelo_npm`, e a detecção diz para instalar pelo instalador nativo (ADR-0025).
 
 ### Adaptadores de API — chave própria ou modelo local
 

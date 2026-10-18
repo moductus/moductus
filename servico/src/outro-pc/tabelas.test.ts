@@ -66,6 +66,9 @@ describe("configuração × dado", () => {
       "INSERT INTO provedores (id, tipo, nome, modelo, credencial) VALUES ('p1', 'anthropic', 'Claude', 'opus', 'moductus:anthropic')",
     ).run();
     db.prepare(
+      "INSERT INTO provedores (id, tipo, nome, caminho) VALUES ('p2', 'claude-cli', 'Claude Code', 'C:\\npm\\claude.cmd')",
+    ).run();
+    db.prepare(
       "INSERT INTO agentes (id, nome, funcao, personagem, provedor_id) VALUES ('meu', 'Meu', 'x', '{}', 'p1')",
     ).run();
     db.prepare(
@@ -107,7 +110,10 @@ describe("configuração × dado", () => {
     expect(tabelas.get("agentes")?.map((a) => a.id)).toEqual(["alba", "faina", "meu", "nuno", "tula"]);
     expect(tabelas.get("provedores")).toEqual([
       expect.objectContaining({ id: "p1", tipo: "anthropic", nome: "Claude", modelo: "opus" }),
+      expect.objectContaining({ id: "p2", tipo: "claude-cli" }),
     ]);
+    // O caminho do CLI é deste PC: no PC novo, a detecção acha o de lá.
+    expect(tabelas.get("provedores")?.[1]).not.toHaveProperty("caminho");
     expect(tabelas.get("regras_permissao")?.map((r) => r.id)).toEqual(["r1"]);
     expect(tabelas.get("conexoes")).toEqual([expect.objectContaining({ id: "c1", conta: "gustavo" })]);
     expect(tabelas.get("notificacoes_preferencias")?.map((p) => p.id)).toEqual(["np1"]);

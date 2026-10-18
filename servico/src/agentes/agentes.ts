@@ -86,6 +86,7 @@ interface LinhaProvedor {
   modelo: string | null;
   base_url: string | null;
   credencial: string | null;
+  caminho: string | null;
 }
 
 /** Leitura de `agentes` e `provedores` (migração 003). O que está na lixeira não aparece. */
@@ -112,7 +113,7 @@ export class RepositorioAgentes {
   provedor(id: string): ConfigProvedor | null {
     const linha = this.db
       .prepare(
-        "SELECT id, tipo, modelo, base_url, credencial FROM provedores WHERE id = ? AND apagado_em IS NULL",
+        "SELECT id, tipo, modelo, base_url, credencial, caminho FROM provedores WHERE id = ? AND apagado_em IS NULL",
       )
       .get(id) as unknown as LinhaProvedor | undefined;
     if (!linha) return null;
@@ -122,6 +123,7 @@ export class RepositorioAgentes {
       modelo: linha.modelo,
       baseUrl: linha.base_url,
       credencial: linha.credencial,
+      caminho: linha.caminho,
     };
   }
 
