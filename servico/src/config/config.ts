@@ -18,6 +18,23 @@ const NATIVAS: (keyof Config)[] = ["dock", "atalhos", "autostart"];
 export const AUTOSTART_NO_PORTABLE =
   "No modo portable o Moductus não inicia com o Windows. Instale para ligar esta opção.";
 
+const ehObjeto = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * O valor guardado de uma chave por cima do padrão dela, campo a campo: o que foi salvo por uma
+ * versão anterior (os atalhos sem o do foco) ganha só o que falta e fica com o resto.
+ */
+export function completarComPadrao(chave: keyof Config, valor: unknown): unknown {
+  const juntar = (padrao: unknown, salvo: unknown): unknown => {
+    if (!ehObjeto(padrao) || !ehObjeto(salvo)) return salvo;
+    const junto: Record<string, unknown> = { ...padrao };
+    for (const [campo, v] of Object.entries(salvo)) junto[campo] = juntar(padrao[campo], v);
+    return junto;
+  };
+  return juntar(CONFIG_PADRAO[chave], valor);
+}
+
 /** Leitura e gravação da tabela config: uma linha por chave de primeiro nível. */
 export class RepositorioConfig {
   constructor(private readonly db: DatabaseSync) {}
@@ -31,7 +48,9 @@ export class RepositorioConfig {
     const config: Record<string, unknown> = { ...CONFIG_PADRAO };
     for (const { chave, valor } of linhas) {
       if (!(chave in CONFIG_PADRAO)) continue;
-      const campo = Config.shape[chave as keyof Config].safeParse(JSON.parse(valor));
+      const campo = Config.shape[chave as keyof Config].safeParse(
+        completarComPadrao(chave as keyof Config, JSON.parse(valor)),
+      );
       if (campo.success) config[chave] = campo.data;
     }
     return Config.parse(config);

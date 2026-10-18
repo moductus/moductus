@@ -122,6 +122,7 @@ describe("agente", () => {
     expect(PedidoPausar.safeParse({ agenteId: "alba", ate: "2026-10-09T13:00:00.000Z" }).success).toBe(true);
     expect(PedidoPausar.safeParse({ agenteId: "alba" }).success).toBe(false);
     expect(PedidoPausar.safeParse({ ate: "amanhã" }).success).toBe(false);
+    expect(PedidoPausar.safeParse({ ate: "2026-10-09T13:00:00Z" }).success).toBe(false);
   });
 
   test("tentar agora pede só o id do agente e devolve o agente como ficou", () => {

@@ -137,6 +137,17 @@ describe("conexões", () => {
     expect(Conexao.safeParse({ ...github, estado: "quebrada" }).success).toBe(false);
   });
 
+  test("a agenda do Google já tem tipo de conexão", () => {
+    const google = {
+      tipo: "google-agenda",
+      estado: "desligada",
+      conta: null,
+      ultimoErro: null,
+      conectadaEm: null,
+    };
+    expect(Conexao.safeParse(google).success).toBe(true);
+  });
+
   test("Claude Code ligado diz o arquivo, os eventos, a porta e a cópia; sem cópia é null", () => {
     const ligada = {
       tipo: "hooks-claude-code",

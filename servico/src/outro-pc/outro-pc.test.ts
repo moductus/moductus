@@ -49,9 +49,14 @@ function pc(nativo: AplicadorNativo = aceita(), portable = false) {
 const MINHA: Config = {
   tema: "vidro",
   dock: { lado: "direita", modo: "inteligente", forma: "flutuante" },
-  atalhos: { sistema: "Ctrl+Alt+M", dock: "Ctrl+Alt+B", captura: "Ctrl+Shift+Space" },
+  atalhos: { sistema: "Ctrl+Alt+M", dock: "Ctrl+Alt+B", captura: "Ctrl+Shift+Space", foco: "Ctrl+Alt+F" },
   autostart: true,
   silencio: { horario: { ligado: true, inicio: "22:00", fim: "07:30" }, telaCheia: true, foco: false },
+  dia: {
+    fuso: "America/Manaus",
+    expediente: { inicio: "08:00", fim: "17:00" },
+    foco: { focoMin: 45, pausaMin: 10, pausaLongaMin: 20, ciclosAtePausaLonga: 3 },
+  },
 };
 
 const manifestoValido = (extra: Partial<Record<string, unknown>> = {}) => ({
@@ -280,6 +285,21 @@ describe("levar para outro PC: só configurações", () => {
     });
     const estado = await trabalho.outro.importar({ caminho, modo: "juntar" });
     expect(estado.config).toEqual({ ...CONFIG_PADRAO, tema: "grafite" });
+  });
+
+  test("arquivo da 0.6.0, sem o atalho do foco e sem o dia, importa com o padrão no que falta", async () => {
+    const trabalho = pc();
+    const antigos = { sistema: "Ctrl+Alt+M", dock: "Ctrl+Alt+B", captura: "Ctrl+Shift+Space" };
+    const caminho = arquivo({
+      "manifesto.json": manifestoValido({ versao_app: "0.6.0-alpha" }),
+      "config.json": { tema: "grafite", atalhos: antigos },
+    });
+    const estado = await trabalho.outro.importar({ caminho, modo: "substituir" });
+    expect(estado.config).toEqual({
+      ...CONFIG_PADRAO,
+      tema: "grafite",
+      atalhos: { ...antigos, foco: CONFIG_PADRAO.atalhos.foco },
+    });
   });
 
   test("a casca recusa um atalho do arquivo: o motivo volta e nada é gravado", async () => {

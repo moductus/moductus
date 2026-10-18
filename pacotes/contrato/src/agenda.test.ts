@@ -6,7 +6,10 @@ import {
   EventoAgenda,
   MudancaEvento,
   NovoEvento,
+  Ocorrencia,
   PedidoAgenda,
+  PedidoAplicarSugestao,
+  SugestaoAplicada,
 } from "./agenda.ts";
 import { METODOS } from "./metodos.ts";
 
@@ -100,10 +103,72 @@ describe("agenda", () => {
           livreMin: 300,
           planejadoMin: 420,
           cheio: true,
+          sugestoes: [
+            {
+              tarefaId: "01K7A0000000000000000000T1",
+              inicio: "2026-10-09T19:00:00.000Z",
+              fim: "2026-10-09T20:00:00.000Z",
+            },
+          ],
         },
       ],
     };
     expect(Agenda.parse(agenda)).toEqual(agenda);
     expect(METODOS["agenda.consultar"].saida.safeParse(agenda).success).toBe(true);
+    const [dia] = agenda.dias;
+    expect(Agenda.safeParse({ ...agenda, dias: [{ ...dia, sugestoes: undefined }] }).success).toBe(false);
+    const sugestao = dia!.sugestoes[0]!;
+    expect(
+      Agenda.safeParse({ ...agenda, dias: [{ ...dia, sugestoes: [{ ...sugestao, fim: sugestao.inicio }] }] })
+        .success,
+    ).toBe(false);
+  });
+
+  test("aplicar o encaixe devolve o evento e a chamada que o desfaz", () => {
+    const pedido = { tarefaId: "01K7A0000000000000000000T1", inicio: evento.inicio, fim: evento.fim };
+    expect(METODOS["agenda.aplicarSugestao"].entrada.parse(pedido)).toEqual(pedido);
+    expect(PedidoAplicarSugestao.safeParse({ ...pedido, fim: evento.inicio }).success).toBe(false);
+    const aplicada = {
+      evento,
+      chamadaId: "01K7A0000000000000000000C1",
+      desfazerAte: "2026-10-10T12:00:00.000Z",
+    };
+    expect(SugestaoAplicada.parse(aplicada)).toEqual(aplicada);
+    expect(METODOS["agenda.aplicarSugestao"].saida.safeParse({ evento }).success).toBe(false);
+  });
+
+  test("instante de entrada vai com milissegundos; a saída aceita sem", () => {
+    const semMs = "2026-10-09T13:00:00Z";
+    const { inicio, fim } = evento;
+    expect(NovoEvento.safeParse({ titulo: "Dentista", inicio: semMs, fim, diaInteiro: false }).success).toBe(
+      false,
+    );
+    expect(
+      MudancaEvento.safeParse({ id: "x", inicio, fim: "2026-10-09T14:00Z", diaInteiro: false }).success,
+    ).toBe(false);
+    expect(
+      PedidoAplicarSugestao.safeParse({ tarefaId: "t", inicio: semMs, fim: "2026-10-09T14:00:00.000Z" })
+        .success,
+    ).toBe(false);
+    expect(EventoAgenda.safeParse({ ...evento, inicio: semMs }).success).toBe(true);
+  });
+
+  test("evento lido sem título passa na saída; criar e mudar exigem texto", () => {
+    expect(EventoAgenda.safeParse({ ...evento, titulo: "" }).success).toBe(true);
+    const ocorrencia = {
+      eventoId: evento.id,
+      calendarioId: "google-primario",
+      titulo: "",
+      inicio: evento.inicio,
+      fim: evento.fim,
+      diaInteiro: false,
+      local: null,
+      recorrente: false,
+      editavel: false,
+    };
+    expect(Ocorrencia.safeParse(ocorrencia).success).toBe(true);
+    const { inicio, fim } = evento;
+    expect(NovoEvento.safeParse({ titulo: " ", inicio, fim, diaInteiro: false }).success).toBe(false);
+    expect(MudancaEvento.safeParse({ id: "x", titulo: "" }).success).toBe(false);
   });
 });

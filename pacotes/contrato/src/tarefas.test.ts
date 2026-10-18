@@ -67,6 +67,14 @@ describe("tarefas", () => {
     expect(Tarefa.safeParse({ ...tarefa, origem: "robo" }).success).toBe(false);
   });
 
+  test("como o banco: aberta sem data de conclusão, feita com, cancelada com ou sem", () => {
+    const concluidaEm = "2026-10-09T15:10:00.000Z";
+    expect(Tarefa.safeParse({ ...tarefa, estado: "aberta", concluidaEm }).success).toBe(false);
+    expect(Tarefa.safeParse({ ...tarefa, estado: "feita", concluidaEm: null }).success).toBe(false);
+    expect(Tarefa.safeParse({ ...tarefa, estado: "cancelada", concluidaEm: null }).success).toBe(true);
+    expect(Tarefa.safeParse({ ...tarefa, estado: "cancelada", concluidaEm }).success).toBe(true);
+  });
+
   test("nova tarefa só exige o título; hora pede o dia", () => {
     expect(NovaTarefa.parse({ titulo: "Comprar pão" })).toEqual({ titulo: "Comprar pão" });
     expect(NovaTarefa.safeParse({}).success).toBe(false);

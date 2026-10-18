@@ -24,7 +24,9 @@ import {
   MudancaEvento,
   NovoEvento,
   PedidoAgenda,
+  PedidoAplicarSugestao,
   PedidoEvento,
+  SugestaoAplicada,
 } from "./agenda.ts";
 import { Aprovacao, PedidoDecidir, PedidoRegra, RegraPermissao } from "./aprovacoes.ts";
 import { ContagensAreas } from "./areas.ts";
@@ -236,6 +238,8 @@ export const METODOS = {
   "agenda.criarEvento": metodo(NovoEvento, EventoAgenda),
   "agenda.definirEvento": metodo(MudancaEvento, EventoAgenda),
   "agenda.apagarEvento": metodo(PedidoEvento, Apagados),
+  /** Aplicar o encaixe da Alba: só com o clique, `interno`, com desfazer de 24 h. */
+  "agenda.aplicarSugestao": metodo(PedidoAplicarSugestao, SugestaoAplicada),
 
   "foco.obter": metodo(z.undefined(), EstadoFoco),
   "foco.iniciar": metodo(PedidoIniciarFoco, EstadoFoco),

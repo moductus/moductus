@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Id, Instante, PedidoPagina, pagina } from "./comum.ts";
+import { Id, Instante, InstanteEntrada, PedidoPagina, pagina } from "./comum.ts";
 import { Cobranca, MotivoFalhaProvedor } from "./provedores.ts";
 
 /**
@@ -115,7 +115,7 @@ export const PedidoLigarAgente = z.object({ id: Id, ligado: z.boolean() });
 export type PedidoLigarAgente = z.infer<typeof PedidoLigarAgente>;
 
 /** Pausar pela bandeja: um agente ou, sem `agenteId`, o time todo; `ate: null` é até retomar. */
-export const PedidoPausar = z.object({ agenteId: Id.optional(), ate: Instante.nullable() });
+export const PedidoPausar = z.object({ agenteId: Id.optional(), ate: InstanteEntrada.nullable() });
 export type PedidoPausar = z.infer<typeof PedidoPausar>;
 
 export const PedidoRetomar = z.object({ agenteId: Id.optional() });

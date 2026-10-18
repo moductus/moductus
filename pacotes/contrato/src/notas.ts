@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CamposOrigem, Id, Instante } from "./comum.ts";
+import { CamposOrigem, Id, Instante, InstanteEntrada } from "./comum.ts";
 
 /**
  * Notas (DATA.md §4; migração 015; ADR-0036): Markdown cru num campo próprio, que salva sozinho
@@ -45,7 +45,7 @@ export type NovaNota = z.infer<typeof NovaNota>;
  * que a janela conhece, e o serviço não grava sobre uma versão mais nova.
  */
 export const PedidoSalvarNota = z
-  .object({ id: Id, versao: Instante, titulo: Titulo.optional(), conteudo: Conteudo.optional() })
+  .object({ id: Id, versao: InstanteEntrada, titulo: Titulo.optional(), conteudo: Conteudo.optional() })
   .refine((p) => p.titulo !== undefined || p.conteudo !== undefined, {
     path: ["conteudo"],
     message: "diga o que salvar",

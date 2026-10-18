@@ -90,9 +90,14 @@ export const Tarefa = z
     atualizadoEm: Instante,
   })
   .refine((t) => t.hora === null || t.venceEm !== null, { path: ["hora"], message: "hora só com o dia" })
-  .refine((t) => (t.estado === "feita") === (t.concluidaEm !== null), {
+  // Como o banco (013): a aberta não tem data de conclusão, a feita tem e a cancelada fica livre.
+  .refine((t) => t.estado !== "aberta" || t.concluidaEm === null, {
     path: ["concluidaEm"],
-    message: "só a tarefa feita tem a data de conclusão",
+    message: "tarefa aberta não tem data de conclusão",
+  })
+  .refine((t) => t.estado !== "feita" || t.concluidaEm !== null, {
+    path: ["concluidaEm"],
+    message: "tarefa feita tem a data de conclusão",
   });
 export type Tarefa = z.infer<typeof Tarefa>;
 

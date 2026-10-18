@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CamposOrigem, Id, Instante, Recorrencia } from "./comum.ts";
+import { CamposOrigem, Id, Instante, InstanteEntrada, Recorrencia } from "./comum.ts";
 
 /**
  * Lembretes (DATA.md §2; migração 013; ADR-0032): o que dispara, ligado a uma tarefa, a um evento
@@ -43,7 +43,7 @@ export type Lembrete = z.infer<typeof Lembrete>;
 
 const camposLembrete = {
   texto: z.string().trim().min(1).max(500),
-  quando: Instante,
+  quando: InstanteEntrada,
   recorrencia: Recorrencia.nullable(),
   tarefaId: Id.nullable(),
   eventoId: Id.nullable(),
@@ -74,8 +74,8 @@ export type PedidoAdiarLembretes = z.infer<typeof PedidoAdiarLembretes>;
 
 /** Os de um intervalo de `quando` (ou de `adiadoAte`), ou só os de um estado. */
 export const PedidoListarLembretes = z.object({
-  de: Instante.optional(),
-  ate: Instante.optional(),
+  de: InstanteEntrada.optional(),
+  ate: InstanteEntrada.optional(),
   estados: z.array(EstadoLembrete).min(1).optional(),
 });
 export type PedidoListarLembretes = z.infer<typeof PedidoListarLembretes>;

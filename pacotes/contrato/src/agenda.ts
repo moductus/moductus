@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CamposOrigem, Dia, Id, Instante, Recorrencia } from "./comum.ts";
+import { CamposOrigem, Dia, Id, Instante, InstanteEntrada, Recorrencia } from "./comum.ts";
 
 /**
  * Agenda da Alba (DATA.md §2; migração 014; ADR-0035): calendários, eventos e o dia com os blocos
@@ -69,6 +69,12 @@ const MENSAGEM_QUANDO = {
 /** Início ou fim: instante UTC no evento com hora, dia no de dia inteiro. */
 const Ponta = z.union([Instante, Dia]);
 
+/** O mesmo na entrada: o instante vai no formato do banco, com milissegundos. */
+const PontaEntrada = z.union([InstanteEntrada, Dia]);
+
+/** Na saída o título é livre: evento lido do Google pode não ter; a entrada exige texto. */
+const TituloLido = z.string();
+
 /**
  * Um evento. `editavel` diz se dá para mudar por aqui (local e "Moductus"); o de outro calendário
  * abre só leitura, com "Pedir à Alba para mudar".
@@ -77,7 +83,7 @@ export const EventoAgenda = z
   .object({
     id: Id,
     calendarioId: Id,
-    titulo: z.string().trim().min(1),
+    titulo: TituloLido,
     descricao: z.string().nullable(),
     inicio: Ponta,
     fim: Ponta,
@@ -97,8 +103,8 @@ const camposEvento = {
   calendarioId: Id,
   titulo: z.string().trim().min(1).max(500),
   descricao: z.string().max(10_000).nullable(),
-  inicio: Ponta,
-  fim: Ponta,
+  inicio: PontaEntrada,
+  fim: PontaEntrada,
   diaInteiro: z.boolean(),
   local: z.string().max(500).nullable(),
   recorrencia: Recorrencia.nullable(),
@@ -149,7 +155,7 @@ export const Ocorrencia = z
   .object({
     eventoId: Id,
     calendarioId: Id,
-    titulo: z.string().trim().min(1),
+    titulo: TituloLido,
     inicio: Ponta,
     fim: Ponta,
     diaInteiro: z.boolean(),
@@ -167,9 +173,22 @@ export const BlocoLivre = z.object({
 });
 export type BlocoLivre = z.infer<typeof BlocoLivre>;
 
+const fimDepoisDoInicio = (b: { inicio: string; fim: string }) => Date.parse(b.fim) > Date.parse(b.inicio);
+const MENSAGEM_FIM_DEPOIS = { path: ["fim"], message: "o fim vem depois do início" };
+
+/**
+ * O encaixe que a Alba sugere (AreaTarefas.dc.html, "O bloco das 16h está livre"): uma tarefa de
+ * hoje num bloco livre. É só sugestão até você aplicar; quem calcula é o serviço (F3-16).
+ */
+export const SugestaoEncaixe = z
+  .object({ tarefaId: Id, inicio: Instante, fim: Instante })
+  .refine(fimDepoisDoInicio, MENSAGEM_FIM_DEPOIS);
+export type SugestaoEncaixe = z.infer<typeof SugestaoEncaixe>;
+
 /**
  * Um dia da agenda: os blocos livres dentro do expediente, quanto há de livre e quanto as tarefas
  * do dia estimam. `cheio` é o planejado passando do livre ("7h planejadas para 5h livres").
+ * `sugestoes` são os encaixes da Alba para o dia.
  */
 export const DiaDaAgenda = z.object({
   dia: Dia,
@@ -177,8 +196,27 @@ export const DiaDaAgenda = z.object({
   livreMin: z.number().int().nonnegative(),
   planejadoMin: z.number().int().nonnegative(),
   cheio: z.boolean(),
+  sugestoes: z.array(SugestaoEncaixe),
 });
 export type DiaDaAgenda = z.infer<typeof DiaDaAgenda>;
+
+/** Aplicar um encaixe: a tarefa e o bloco como a sugestão veio (ou como você o arrastou). */
+export const PedidoAplicarSugestao = z
+  .object({ tarefaId: Id, inicio: InstanteEntrada, fim: InstanteEntrada })
+  .refine(fimDepoisDoInicio, MENSAGEM_FIM_DEPOIS);
+export type PedidoAplicarSugestao = z.infer<typeof PedidoAplicarSugestao>;
+
+/**
+ * O que aplicar criou: o evento no calendário local com o título da tarefa, no bloco pedido, e a
+ * chamada que o desfaz por `execucoes.desfazer` até `desfazerAte` (24 h, como toda ação `interno`;
+ * AGENTS.md §4).
+ */
+export const SugestaoAplicada = z.object({
+  evento: EventoAgenda,
+  chamadaId: Id,
+  desfazerAte: Instante,
+});
+export type SugestaoAplicada = z.infer<typeof SugestaoAplicada>;
 
 export const Agenda = z.object({ ocorrencias: z.array(Ocorrencia), dias: z.array(DiaDaAgenda) });
 export type Agenda = z.infer<typeof Agenda>;

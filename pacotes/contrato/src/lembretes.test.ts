@@ -48,6 +48,14 @@ describe("lembretes", () => {
   test("novo pede texto e quando; adiar pede minutos entre 1 e um dia", () => {
     expect(NovoLembrete.safeParse({ texto: "Beber água", quando: lembrete.quando }).success).toBe(true);
     expect(NovoLembrete.safeParse({ texto: "Beber água" }).success).toBe(false);
+    // O instante vai como o banco guarda, com milissegundos.
+    expect(NovoLembrete.safeParse({ texto: "Beber água", quando: "2026-10-09T18:00:00Z" }).success).toBe(
+      false,
+    );
+    expect(
+      METODOS["lembretes.definir"].entrada.safeParse({ id: "l", quando: "2026-10-09T18:00Z" }).success,
+    ).toBe(false);
+    expect(METODOS["lembretes.listar"].entrada.safeParse({ de: "2026-10-09T00:00:00Z" }).success).toBe(false);
     expect(PedidoAdiarLembretes.safeParse({ ids: ["a", "b"], minutos: 30 }).success).toBe(true);
     expect(PedidoAdiarLembretes.safeParse({ ids: ["a"], minutos: 0 }).success).toBe(false);
     expect(PedidoLembretes.safeParse({ ids: [] }).success).toBe(false);

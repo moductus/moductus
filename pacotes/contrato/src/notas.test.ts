@@ -42,6 +42,10 @@ describe("notas", () => {
     ).toBe(true);
     expect(PedidoSalvarNota.safeParse({ id: nota.id, conteudo: "x" }).success).toBe(false);
     expect(PedidoSalvarNota.safeParse({ id: nota.id, versao: nota.atualizadoEm }).success).toBe(false);
+    // A versão é comparada como texto com o `atualizado_em` do banco: sem milissegundos não casa.
+    expect(
+      PedidoSalvarNota.safeParse({ id: nota.id, versao: "2026-10-08T12:00:00Z", conteudo: "x" }).success,
+    ).toBe(false);
   });
 
   test("versão mais nova em outra janela volta as duas, sem gravar", () => {

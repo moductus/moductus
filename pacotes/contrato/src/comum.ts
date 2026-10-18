@@ -11,6 +11,14 @@ export type Id = z.infer<typeof Id>;
 export const Instante = z.iso.datetime();
 export type Instante = z.infer<typeof Instante>;
 
+/**
+ * Instante que a janela manda: exatamente o formato do banco, com milissegundos e `Z`
+ * (`2026-10-09T14:30:00.000Z`, o de `toISOString()`). Assim o serviço grava e compara o texto
+ * como veio, sem normalizar. A saída aceita qualquer ISO UTC.
+ */
+export const InstanteEntrada = z.iso.datetime({ precision: 3 });
+export type InstanteEntrada = z.infer<typeof InstanteEntrada>;
+
 /** Data sem hora, `AAAA-MM-DD`. */
 export const Dia = z.iso.date();
 export type Dia = z.infer<typeof Dia>;

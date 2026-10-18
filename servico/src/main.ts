@@ -407,6 +407,7 @@ servidor = await abrirServidorWs(token, {
     "agenda.criarEvento",
     "agenda.definirEvento",
     "agenda.apagarEvento",
+    "agenda.aplicarSugestao",
     "foco.obter",
     "foco.iniciar",
     "foco.alternar",
