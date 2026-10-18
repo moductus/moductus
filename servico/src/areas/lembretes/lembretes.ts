@@ -185,6 +185,14 @@ export class RepositorioLembretes {
       .all(estado) as unknown as LinhaLembrete[];
   }
 
+  /** Quantos atrasados (`perdido`) vivos há: a contagem da área (`areas.contagens`). */
+  contarPerdidos(): number {
+    const r = this.db
+      .prepare("SELECT count(*) AS n FROM lembretes WHERE estado = 'perdido' AND apagado_em IS NULL")
+      .get() as { n: number };
+    return r.n;
+  }
+
   /** Os que esperam a hora e já chegaram a ela (índice `lembretes_proximo`). */
   vencidos(agora: string): LinhaLembrete[] {
     return this.db

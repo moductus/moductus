@@ -14,6 +14,10 @@ import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.t
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { RepositorioAgenda, ServicoAgenda } from "./areas/agenda/agenda.ts";
 import { RepositorioTarefasDoDia } from "./areas/agenda/tarefas-do-dia.ts";
+import { ServicoCaptura } from "./areas/captura/captura.ts";
+import { atendentesDaCaptura } from "./areas/captura/canal.ts";
+import { interpretePeloRuntime } from "./areas/captura/modelo.ts";
+import { ServicoContagens, sessoesEsperando } from "./areas/contagens.ts";
 import {
   motivoDaCasca,
   PrimeiraAtividade,
@@ -22,6 +26,8 @@ import {
 } from "./areas/dia/atividade.ts";
 import { RelogioDoDia } from "./areas/dia/relogio.ts";
 import { TempoDoDia } from "./areas/dia/tempo.ts";
+import { atendentesDoFoco, ouvirAtalhoDoFoco } from "./areas/foco/canal.ts";
+import { RepositorioFoco, ServicoFoco } from "./areas/foco/foco.ts";
 import { RepositorioLembretes, ServicoLembretes } from "./areas/lembretes/lembretes.ts";
 import { RepositorioNotas, ServicoNotas } from "./areas/notas/notas.ts";
 import { atendentesDasTarefas } from "./areas/tarefas/canal.ts";
@@ -99,17 +105,23 @@ const nativo: AplicadorNativo = {
 let servidor: ServidorWs | null = null;
 // Os vigias do Nuno (F2-26) nascem com o runtime; os eventos de antes disso não pedem julgamento.
 let vigiaNuno: VigiaNuno | null = null;
+// O foco (F3-18) nasce com o relógio do dia, mais adiante; até lá, ninguém está em foco.
+let foco: ServicoFoco | null = null;
 const repositorioConfig = new RepositorioConfig(banco);
 // A cotação nova vale já (F3-08), venha de config.definir ou de config.importar: os dois passam
 // pelo aviso abaixo. A reação (acordar quem saiu do teto) nasce com o runtime, mais adiante.
 let reagirACotacao: () => void = () => {};
 const cotacaoMudou = vigiarCotacao(repositorioConfig.ler().cambio, () => reagirACotacao());
+// As contagens das áreas (F3-20) nascem depois das áreas que contam; até lá, recontar não faz nada.
+let recontarAreas: () => void = () => {};
 const config = new ServicoConfig(
   repositorioConfig,
   nativo,
   (estado: EstadoConfig) => {
     servidor?.emitir("config.mudou", estado);
     cotacaoMudou(estado.config.cambio);
+    // O fuso pode ter mudado: o "hoje" das tarefas muda junto.
+    recontarAreas();
   },
   portable(),
 );
@@ -129,6 +141,8 @@ const notificacoes = new ServicoNotificacoes(
     agentes: () => agentesDoTime.agentes().map((a) => ({ id: a.id, nome: a.nome })),
     silencio: () => config.obter().config.silencio,
     windows: avisosPelaCasca(canal),
+    // Com um foco correndo, o Windows só mostra aprovações e lembretes; na pausa, tudo volta.
+    emFoco: () => foco?.emFoco() ?? false,
   },
   {
     estado: (estado) => servidor?.emitir("notificacoes.mudou", estado),
@@ -181,6 +195,7 @@ projetosDaCasca.mandar();
 const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {
   aprovacao: (aprovacao) => {
     servidor?.emitir("aprovacoes.mudou", aprovacao);
+    recontarAreas();
     avisarAprovacao(aprovacao).catch((erro: unknown) =>
       console.error(`notificações: aviso da aprovação falhou: ${String(erro)}`),
     );
@@ -193,6 +208,7 @@ const repositorioConexoes = new RepositorioConexoes(banco);
 const github = new ServicoGithub(new RepositorioGithub(banco), repositorioConexoes, executorGh(), {
   github: (situacao) => {
     servidor?.emitir("github.mudou", situacao);
+    recontarAreas();
     vigiaNuno?.aoLerGithub(situacao);
   },
   conexao: (conexao) => servidor?.emitir("conexoes.mudou", conexao),
@@ -438,12 +454,22 @@ const lembretes = new ServicoLembretes(
   {
     mudou: (mudanca) => {
       servidor?.emitir("lembretes.mudou", mudanca);
+      // Disparou, adiou, concluiu ou virou perdido: os atrasados das contagens mudam.
+      recontarAreas();
       espelhoGoogle?.aoMudar();
     },
     hoje: (hoje) => servidor?.emitir("lembretes.hoje", hoje),
   },
 );
 relogio.registrar(lembretes);
+// Foco (F3-18): o fim de cada etapa pelo mesmo relógio; a janela conta o tempo pelo fim planejado.
+const servicoFoco = new ServicoFoco(
+  new RepositorioFoco(banco),
+  { lerDia: () => repositorioConfig.ler().dia, notificacoes, relogio },
+  { mudou: (estado) => servidor?.emitir("foco.mudou", estado) },
+);
+foco = servicoFoco;
+relogio.registrar(servicoFoco);
 // Tarefas (F3-15): "hoje" no fuso de config; a tarefa com hora mantém o lembrete ligado a ela.
 const tarefas = new ServicoTarefas(
   new RepositorioTarefas(banco),
@@ -451,6 +477,7 @@ const tarefas = new ServicoTarefas(
   {
     tarefas: (mudanca) => {
       servidor?.emitir("tarefas.mudou", mudanca);
+      recontarAreas();
       // A tarefa com hora (e o lembrete dela, que é o alerta) vai ao "Moductus".
       espelhoGoogle?.aoMudar();
     },
@@ -459,9 +486,39 @@ const tarefas = new ServicoTarefas(
     lembretes: (mudanca) => {
       servidor?.emitir("lembretes.mudou", mudanca);
       lembretes.mudaramPorFora(mudanca);
+      recontarAreas();
+      espelhoGoogle?.aoMudar();
     },
   },
 );
+// Captura rápida (F3-32, ADR-0034): o entendedor de frases e, quando ele não reconhece nada além do
+// título, o modelo da Alba com prazo de 8 s. Lança pela área de cada tipo; o desfazer vale por 10 s.
+const captura = new ServicoCaptura({
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  tarefas,
+  lembretes,
+  agenda,
+  notas,
+  interpretar: interpretePeloRuntime(runtime, repositorioAgentes),
+  pediuLembrete: () => primeiroUso.lembretePedido(),
+});
+// Contagens das áreas (F3-20): a barra lateral do Sistema e os badges do dock leem daqui. As
+// sessões esperando são os pedidos do terminal, como o Nuno no dock.
+const leituraAprovacoes = new RepositorioAprovacoes(banco);
+const leituraLembretes = new RepositorioLembretes(banco);
+const leituraGithub = new RepositorioGithub(banco);
+const contagens = new ServicoContagens(
+  {
+    tarefasPendentes: () => tarefas.pendentesDeHoje(),
+    lembretesAtrasados: () => leituraLembretes.contarPerdidos(),
+    sessoesEsperando: () => sessoesEsperando(leituraAprovacoes.pendentes()),
+    devPrecisando: () => leituraGithub.contarPrecisandoDeMim(),
+  },
+  (novas) => servidor?.emitir("areas.contagens", novas),
+);
+recontarAreas = () => contagens.recontar();
+contagens.recontar();
+contagens.vigiar();
 // O calendário "Moductus" (F3-24, ADR-0035): tarefas com hora e lembretes com horário viram evento
 // com alerta no Google, pela fila de saída; o que você muda lá volta pelas áreas, como conexão.
 const pelaConexao = { origem: "conexao" } as const;
@@ -585,6 +642,7 @@ servidor = await abrirServidorWs(token, {
   "notas.apagar": (pedido) => notas.apagar(pedido),
   "notas.buscar": (pedido) => notas.buscar(pedido),
   ...atendentesDasTarefas(tarefas),
+  ...atendentesDoFoco(servicoFoco),
   // Abrir a área lê o Google de novo, se a última leitura não acabou de terminar (F3-23).
   "agenda.calendarios": () => {
     leituraGoogle?.aoAbrirArea();
@@ -612,27 +670,16 @@ servidor = await abrirServidorWs(token, {
   "lembretes.adiar": (pedido) => lembretes.adiar(pedido),
   "lembretes.concluir": (pedido) => lembretes.concluir(pedido),
   "lembretes.cancelar": (pedido) => lembretes.cancelar(pedido),
+  ...atendentesDaCaptura(captura),
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
   ...semAtendente([
-    "foco.obter",
-    "foco.iniciar",
-    "foco.alternar",
-    "foco.pausar",
-    "foco.retomar",
-    "foco.estender",
-    "foco.terminar",
-    "foco.pularPausa",
-    "foco.historico",
     "rotinas.listar",
     "rotinas.definir",
     "rotinas.hoje",
     "rotinas.agir",
-    "captura.entender",
-    "captura.lancar",
-    "captura.desfazer",
-    "areas.contagens",
   ]),
+  "areas.contagens": () => contagens.obter(),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
 canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });
@@ -679,12 +726,16 @@ function sinalDeAtividade(motivo: MotivoAtividade): void {
 }
 sinalDeAtividade("subida");
 canal.aoAvisar("atividade", (aviso) => sinalDeAtividade(motivoDaCasca(aviso)));
+// O atalho do foco (Ctrl+Alt+P) vem da casca e inicia, pausa ou retoma.
+ouvirAtalhoDoFoco(canal, servicoFoco);
 canal.aoAvisar("retomou", () => {
   sinalDeAtividade("retomada");
   // Na volta da suspensão, os lembretes que venceram com o PC dormindo chegam juntos.
   relogio
     .retomar()
     .catch((erro: unknown) => console.error(`relógio do dia: retomada falhou: ${String(erro)}`));
+  // O PC dormiu: o dia pode ter virado antes da próxima volta do relógio das contagens.
+  recontarAreas();
   agendador
     .retomar()
     .then(() => github.atualizar("conexao"))

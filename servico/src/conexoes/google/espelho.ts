@@ -211,7 +211,7 @@ const ORIGEM = "conexao";
 
 /**
  * O calendário "Moductus" (`calendarios` com `espelho`), a fila `agenda_saida` (014), o que já foi
- * ao Google (`agenda_espelho`, 021) e o que cada tarefa, lembrete e evento devia ser lá. Tarefas e
+ * ao Google (`agenda_espelho`, 022) e o que cada tarefa, lembrete e evento devia ser lá. Tarefas e
  * lembretes são lidos direto do banco: as áreas são donas deles, e a mudança que vem do Google
  * volta por elas (`adotar`), não por aqui.
  */

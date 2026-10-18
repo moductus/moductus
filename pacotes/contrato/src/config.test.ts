@@ -38,4 +38,10 @@ describe("config do dia", () => {
     const { foco: _foco, ...antigos } = CONFIG_PADRAO.atalhos;
     expect(Config.safeParse({ ...CONFIG_PADRAO, atalhos: antigos }).success).toBe(false);
   });
+
+  test("o foco pode ficar sem atalho (vazio); os outros, não", () => {
+    const atalhos = CONFIG_PADRAO.atalhos;
+    expect(Config.safeParse({ ...CONFIG_PADRAO, atalhos: { ...atalhos, foco: "" } }).success).toBe(true);
+    expect(Config.safeParse({ ...CONFIG_PADRAO, atalhos: { ...atalhos, sistema: "" } }).success).toBe(false);
+  });
 });

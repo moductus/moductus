@@ -43,7 +43,15 @@ export const TrechoReconhecido = z
   .refine((t) => t.fim > t.inicio, { path: ["fim"], message: "o trecho termina depois de começar" });
 export type TrechoReconhecido = z.infer<typeof TrechoReconhecido>;
 
-export const PedidoEntender = z.object({ texto: z.string().trim().min(1).max(1000) });
+/**
+ * `comModelo` deixa a captura perguntar ao modelo da Alba quando o código não reconhece nada além do
+ * título. Sem ele, a prévia é só a do código: a janela pede o modelo depois de uma pausa longa na
+ * digitação ou por um atalho, para cada tecla não virar uma execução.
+ */
+export const PedidoEntender = z.object({
+  texto: z.string().trim().min(1).max(1000),
+  comModelo: z.boolean().optional(),
+});
 export type PedidoEntender = z.infer<typeof PedidoEntender>;
 
 /**

@@ -116,6 +116,38 @@ describe("configuração", () => {
     expect(config.dia.foco).toEqual({ focoMin: 25, pausaMin: 5, pausaLongaMin: 15, ciclosAtePausaLonga: 4 });
   });
 
+  test("o Ctrl+Alt+P do padrão que colide com um atalho já salvo deixa o foco sem atalho, com o motivo", async () => {
+    const aplicados: Aplicacao[] = [];
+    const { db, servico } = montar(aceita(aplicados));
+    const antigos = { sistema: "alt+ctrl+p", dock: "Ctrl+Alt+D", captura: "Ctrl+Alt+Space" };
+    db.prepare("INSERT INTO config (chave, valor) VALUES (?, ?)").run("atalhos", JSON.stringify(antigos));
+    const estado = servico.obter();
+    // O atalho escolhido pelo usuário vale; o do foco fica vazio e não vai ser registrado.
+    expect(estado.config.atalhos).toEqual({ ...antigos, foco: "" });
+    expect(estado.falhasAtalhos).toEqual({
+      foco: "Ctrl+Alt+P já é o atalho para abrir o Sistema, então o foco ficou sem atalho. Escolha outro em Configurações.",
+    });
+    await servico.aplicarAoSubir();
+    expect(aplicados[0]?.config.atalhos.foco).toBe("");
+
+    // Escolhido um atalho para o foco, o motivo some.
+    const depois = await servico.definir({ atalhos: { ...estado.config.atalhos, foco: "Ctrl+Alt+F" } });
+    expect(depois.config.atalhos.foco).toBe("Ctrl+Alt+F");
+    expect(depois.falhasAtalhos).toEqual({});
+  });
+
+  test("sem colisão, o atalho do foco gravado pelo usuário e o do padrão ficam como estão", () => {
+    const { db, servico } = montar(aceita());
+    const salvos = {
+      sistema: "Ctrl+Alt+P",
+      dock: "Ctrl+Alt+D",
+      captura: "Ctrl+Alt+Space",
+      foco: "Ctrl+Alt+F",
+    };
+    db.prepare("INSERT INTO config (chave, valor) VALUES (?, ?)").run("atalhos", JSON.stringify(salvos));
+    expect(servico.obter()).toMatchObject({ config: { atalhos: salvos }, falhasAtalhos: {} });
+  });
+
   test("dia gravado pela metade completa com o padrão campo a campo", () => {
     const { db, servico } = montar(aceita());
     db.prepare("INSERT INTO config (chave, valor) VALUES (?, ?)").run(

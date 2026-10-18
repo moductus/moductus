@@ -38,8 +38,8 @@ const indices = `
   CREATE UNIQUE INDEX agenda_espelho_id_externo ON agenda_espelho (id_externo);
 `;
 
-export const m021: Migracao = {
-  versao: 21,
+export const m022: Migracao = {
+  versao: 22,
   nome: "agenda-espelho",
   sql: [agendaEspelho, indices].join("\n"),
 };

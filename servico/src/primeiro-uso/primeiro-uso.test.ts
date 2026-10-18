@@ -122,6 +122,21 @@ describe("primeiro uso", () => {
     expect(depois.servico.obter().missoes["nuno-sessao"]).toBe("feito");
   });
 
+  test("o primeiro lembrete pedido faz a missão da Alba; pulada, continua pulada", () => {
+    const { servico, eventos } = montar();
+    servico.lembretePedido();
+    expect(servico.obter().missoes["alba-lembrete"]).toBe("feito");
+    expect(eventos).toHaveLength(1);
+    servico.lembretePedido();
+    expect(eventos).toHaveLength(1);
+
+    const outro = montar();
+    outro.servico.marcar({ alvo: "missao", missao: "alba-lembrete", estado: "pulado" });
+    outro.servico.lembretePedido();
+    expect(outro.servico.obter().missoes["alba-lembrete"]).toBe("pulado");
+    expect(outro.eventos).toHaveLength(1);
+  });
+
   test("quem atualiza com preferências já gravadas não vê a configuração de novo", () => {
     const pasta = novaPasta();
     // Banco da versão anterior (só a migração 1), com uma preferência salva.

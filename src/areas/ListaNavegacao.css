@@ -51,17 +51,34 @@
   white-space: nowrap;
 }
 
-/* O Ctrl+N aparece no lugar da contagem, só quando o item tem a atenção. */
+/* O canto direito: a contagem em repouso; o Ctrl+N aparece no lugar dela, só com a atenção. */
+.navegacao-fim {
+  display: grid;
+  justify-items: end;
+}
+
+.navegacao-contagem,
 .navegacao-atalho {
+  grid-area: 1 / 1;
   font-family: var(--fonte-mono);
   font-size: var(--tipo-11);
   font-weight: var(--peso-normal);
+  font-variant-numeric: tabular-nums;
   color: var(--texto-3);
-  opacity: 0;
   transition: opacity var(--dur-entrada) ease-out;
+}
+
+.navegacao-atalho {
+  opacity: 0;
 }
 
 .navegacao-item:hover .navegacao-atalho,
 .navegacao-item:focus-visible .navegacao-atalho {
   opacity: 1;
+}
+
+/* O atalho vem antes no HTML para a contagem poder sair quando ele entra. */
+.navegacao-item:hover .navegacao-atalho ~ .navegacao-contagem,
+.navegacao-item:focus-visible .navegacao-atalho ~ .navegacao-contagem {
+  opacity: 0;
 }
