@@ -2,16 +2,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { EVENTOS, type Aprovacao, type ContagensAreas, type ItemGithub } from "@moductus/contrato";
+import { EVENTOS, type Aprovacao, type ContagensAreas } from "@moductus/contrato";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { abrirBanco } from "../banco/conexao.ts";
-import {
-  devPrecisando,
-  RepositorioContagens,
-  ServicoContagens,
-  sessoesEsperando,
-  type FontesContagens,
-} from "./contagens.ts";
+import { RepositorioGithub } from "../conexoes/github/github.ts";
+import { ServicoContagens, sessoesEsperando, type FontesContagens } from "./contagens.ts";
+import { RepositorioLembretes } from "./lembretes/lembretes.ts";
 import { RepositorioNotas, ServicoNotas } from "./notas/notas.ts";
 import { RepositorioTarefas } from "./tarefas/repositorio.ts";
 import { ServicoTarefas } from "./tarefas/tarefas.ts";
@@ -39,7 +35,7 @@ function montar() {
   bancos.push(db);
   const relogio = { agora: new Date(DOMINGO_23H30) };
   const avisos: { contagens: ContagensAreas; ms: number }[] = [];
-  const outras = { sessoes: 0, dev: 0 };
+  const outras = { sessoes: 0 };
   let recontar = () => {};
   const notas = new ServicoNotas(
     new RepositorioNotas(db),
@@ -52,18 +48,19 @@ function montar() {
     { tarefas: () => recontar(), listas: () => {}, lembretes: () => recontar() },
     { agora: () => relogio.agora },
   );
-  const repo = new RepositorioContagens(db);
+  const lembretes = new RepositorioLembretes(db);
+  const github = new RepositorioGithub(db);
   const contagens = new ServicoContagens(
     {
       tarefasPendentes: () => tarefas.pendentesDeHoje(),
-      lembretesAtrasados: () => repo.lembretesAtrasados(),
+      lembretesAtrasados: () => lembretes.contarPerdidos(),
       sessoesEsperando: () => outras.sessoes,
-      devPrecisando: () => outras.dev,
+      devPrecisando: () => github.contarPrecisandoDeMim(),
     },
     (c) => avisos.push({ contagens: c, ms: performance.now() }),
   );
   recontar = () => contagens.recontar();
-  return { db, relogio, tarefas, contagens, avisos, outras };
+  return { db, relogio, tarefas, contagens, avisos, outras, github };
 }
 
 const ZERO: ContagensAreas = {
@@ -135,9 +132,9 @@ describe("contagens das áreas", () => {
     contagens.recontar();
     contagens.recontar();
     expect(avisos).toHaveLength(1);
-    outras.dev = 3;
+    outras.sessoes = 3;
     contagens.recontar();
-    expect(avisos.map((a) => a.contagens.devPrecisando)).toEqual([0, 3]);
+    expect(avisos.map((a) => a.contagens.sessoesEsperando)).toEqual([0, 3]);
   });
 
   test("fonte que falha não derruba quem avisou: fica o último número dela", () => {
@@ -210,23 +207,29 @@ describe("devPrecisando", () => {
   const item = (
     numero: number,
     precisaDeMim: boolean,
-    estado: ItemGithub["estado"] = "aberto",
-  ): ItemGithub => ({
-    id: `g${numero}`,
+    estado: "aberto" | "fechado" | "mesclado" = "aberto",
+  ) => ({
     repositorio: "dono/repo",
     numero,
-    tipo: "pr",
+    tipo: "pr" as const,
     titulo: "t",
     autor: null,
     estado,
-    meuPapel: "revisor",
+    meuPapel: "revisor" as const,
     precisaDeMim,
     ciEstado: null,
     atualizadoNoGithub: null,
     url: "https://github.com/dono/repo/pull/1",
   });
 
-  test("conta os abertos que precisam de você", () => {
-    expect(devPrecisando([item(1, true), item(2, true), item(3, false), item(4, true, "mesclado")])).toBe(2);
+  test("conta no cache do GitHub os abertos que precisam de você", () => {
+    const { contagens, github } = montar();
+    github.substituir(
+      [item(1, true), item(2, true), item(3, false), item(4, true, "mesclado")],
+      "2026-10-18T12:00:00.000Z",
+    );
+    expect(contagens.obter().devPrecisando).toBe(2);
+    github.limpar();
+    expect(contagens.obter().devPrecisando).toBe(0);
   });
 });

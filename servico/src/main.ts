@@ -14,12 +14,7 @@ import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.t
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { RepositorioAgenda, ServicoAgenda } from "./areas/agenda/agenda.ts";
 import { RepositorioTarefasDoDia } from "./areas/agenda/tarefas-do-dia.ts";
-import {
-  devPrecisando,
-  RepositorioContagens,
-  ServicoContagens,
-  sessoesEsperando,
-} from "./areas/contagens.ts";
+import { ServicoContagens, sessoesEsperando } from "./areas/contagens.ts";
 import {
   motivoDaCasca,
   PrimeiraAtividade,
@@ -422,13 +417,14 @@ const tarefas = new ServicoTarefas(
 // Contagens das áreas (F3-20): a barra lateral do Sistema e os badges do dock leem daqui. As
 // sessões esperando são os pedidos do terminal, como o Nuno no dock.
 const leituraAprovacoes = new RepositorioAprovacoes(banco);
-const repositorioContagens = new RepositorioContagens(banco);
+const leituraLembretes = new RepositorioLembretes(banco);
+const leituraGithub = new RepositorioGithub(banco);
 const contagens = new ServicoContagens(
   {
     tarefasPendentes: () => tarefas.pendentesDeHoje(),
-    lembretesAtrasados: () => repositorioContagens.lembretesAtrasados(),
+    lembretesAtrasados: () => leituraLembretes.contarPerdidos(),
     sessoesEsperando: () => sessoesEsperando(leituraAprovacoes.pendentes()),
-    devPrecisando: () => devPrecisando(github.obter().itens),
+    devPrecisando: () => leituraGithub.contarPrecisandoDeMim(),
   },
   (novas) => servidor?.emitir("areas.contagens", novas),
 );

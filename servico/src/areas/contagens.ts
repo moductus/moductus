@@ -1,11 +1,11 @@
-import type { DatabaseSync } from "node:sqlite";
-import type { Aprovacao, ContagensAreas, ItemGithub } from "@moductus/contrato";
+import type { Aprovacao, ContagensAreas } from "@moductus/contrato";
 
 /**
  * As contagens das áreas (PRODUCT.md §4; contrato `areas.contagens`): o número da barra lateral
  * do Sistema e dos badges do dock. Uma conta só, aqui, para as duas janelas mostrarem o mesmo; a
- * janela não soma nada. Cada área diz o seu número (a regra de "hoje" é das Tarefas, a de "precisa
- * de você" é do GitHub); este serviço junta os quatro e avisa quando algum muda.
+ * janela não soma nada. Cada área diz o seu número (a regra de "hoje" é das Tarefas, a do atrasado
+ * é dos Lembretes, a de "precisa de você" é do GitHub); este serviço junta os quatro e avisa quando
+ * algum muda.
  *
  * Quem muda o que é contado (tarefa, lembrete, pedido de aprovação, leitura do GitHub, fuso) chama
  * {@link ServicoContagens.recontar}. A virada do dia não tem quem avise: {@link ServicoContagens.vigiar}
@@ -27,26 +27,6 @@ export type FontesContagens = Readonly<Record<keyof ContagensAreas, () => number
 export function sessoesEsperando(pedidos: readonly Aprovacao[]): number {
   const doTerminal = pedidos.filter((p) => p.estado === "pendente" && p.fonte !== "moductus");
   return new Set(doTerminal.map((p) => p.sessaoId ?? `pedido:${p.id}`)).size;
-}
-
-/** PRs, issues e CI abertos que pedem você, pelo `precisaDeMim` da leitura do GitHub. */
-export function devPrecisando(itens: readonly ItemGithub[]): number {
-  return itens.filter((i) => i.estado === "aberto" && i.precisaDeMim).length;
-}
-
-/**
- * Os lembretes atrasados pela tabela `lembretes` (migração 013): os `perdido`, que venceram com o
- * serviço parado ou o PC suspenso. Fica aqui até a área Lembretes (F3-17) ter a leitura dela.
- */
-export class RepositorioContagens {
-  constructor(private readonly db: DatabaseSync) {}
-
-  lembretesAtrasados(): number {
-    const r = this.db
-      .prepare("SELECT count(*) AS n FROM lembretes WHERE estado = 'perdido' AND apagado_em IS NULL")
-      .get() as { n: number };
-    return r.n;
-  }
 }
 
 const iguais = (a: ContagensAreas, b: ContagensAreas) => CAMPOS.every((c) => a[c] === b[c]);
