@@ -115,6 +115,16 @@ export class ServicoPrimeiroUso {
     this.nunoVisto = true;
   }
 
+  /**
+   * A captura lançou um lembrete pedido na frase: a missão da Alba ("peça um lembrete à Alba") está
+   * feita. Grava e avisa só na primeira vez; feita ou pulada, fica como está.
+   */
+  lembretePedido(): void {
+    if (this.obter().missoes["alba-lembrete"] === "pendente") {
+      this.marcar({ alvo: "missao", missao: "alba-lembrete", estado: "feito" });
+    }
+  }
+
   private publicar(): EstadoPrimeiroUso {
     const estado = this.obter();
     this.emitir(estado);

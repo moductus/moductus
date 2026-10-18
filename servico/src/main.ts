@@ -14,6 +14,9 @@ import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.t
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { RepositorioAgenda, ServicoAgenda } from "./areas/agenda/agenda.ts";
 import { RepositorioTarefasDoDia } from "./areas/agenda/tarefas-do-dia.ts";
+import { ServicoCaptura } from "./areas/captura/captura.ts";
+import { atendentesDaCaptura } from "./areas/captura/canal.ts";
+import { interpretePeloRuntime } from "./areas/captura/modelo.ts";
 import {
   motivoDaCasca,
   PrimeiraAtividade,
@@ -399,6 +402,17 @@ const tarefas = new ServicoTarefas(
     },
   },
 );
+// Captura rápida (F3-32, ADR-0034): o entendedor de frases e, quando ele não reconhece nada além do
+// título, o modelo da Alba com prazo de 8 s. Lança pela área de cada tipo; o desfazer vale por 10 s.
+const captura = new ServicoCaptura({
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  tarefas,
+  lembretes,
+  agenda,
+  notas,
+  interpretar: interpretePeloRuntime(runtime, repositorioAgentes),
+  pediuLembrete: () => primeiroUso.lembretePedido(),
+});
 // Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
 // Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
 runtime.estados.vigiar();
@@ -499,6 +513,7 @@ servidor = await abrirServidorWs(token, {
   "lembretes.adiar": (pedido) => lembretes.adiar(pedido),
   "lembretes.concluir": (pedido) => lembretes.concluir(pedido),
   "lembretes.cancelar": (pedido) => lembretes.cancelar(pedido),
+  ...atendentesDaCaptura(captura),
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
   ...semAtendente([
@@ -515,9 +530,6 @@ servidor = await abrirServidorWs(token, {
     "rotinas.definir",
     "rotinas.hoje",
     "rotinas.agir",
-    "captura.entender",
-    "captura.lancar",
-    "captura.desfazer",
     "areas.contagens",
   ]),
 });
