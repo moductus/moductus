@@ -13,6 +13,9 @@ import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { RepositorioNotas, ServicoNotas } from "./areas/notas/notas.ts";
+import { atendentesDasTarefas } from "./areas/tarefas/canal.ts";
+import { RepositorioTarefas } from "./areas/tarefas/repositorio.ts";
+import { ServicoTarefas } from "./areas/tarefas/tarefas.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ligarBandeja } from "./bandeja/bandeja.ts";
 import { abrirPelaCasca, projetosNaCasca } from "./casca/abrir.ts";
@@ -81,8 +84,9 @@ const nativo: AplicadorNativo = {
 let servidor: ServidorWs | null = null;
 // Os vigias do Nuno (F2-26) nascem com o runtime; os eventos de antes disso não pedem julgamento.
 let vigiaNuno: VigiaNuno | null = null;
+const repositorioConfig = new RepositorioConfig(banco);
 const config = new ServicoConfig(
-  new RepositorioConfig(banco),
+  repositorioConfig,
   nativo,
   (estado: EstadoConfig) => servidor?.emitir("config.mudou", estado),
   portable(),
@@ -313,6 +317,16 @@ const conversas = new ServicoConversas(
 const notas = new ServicoNotas(new RepositorioNotas(banco), {
   mudou: (mudanca) => servidor?.emitir("notas.mudou", mudanca),
 });
+// Tarefas (F3-15): "hoje" no fuso de config; a tarefa com hora mantém o lembrete ligado a ela.
+const tarefas = new ServicoTarefas(
+  new RepositorioTarefas(banco),
+  { lerFuso: () => repositorioConfig.ler().dia.fuso, notas },
+  {
+    tarefas: (mudanca) => servidor?.emitir("tarefas.mudou", mudanca),
+    listas: (listas) => servidor?.emitir("listas.mudou", listas),
+    lembretes: (mudanca) => servidor?.emitir("lembretes.mudou", mudanca),
+  },
+);
 // Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
 // Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
 runtime.estados.vigiar();
@@ -394,26 +408,10 @@ servidor = await abrirServidorWs(token, {
   "notas.definir": (mudanca) => notas.definir(mudanca),
   "notas.apagar": (pedido) => notas.apagar(pedido),
   "notas.buscar": (pedido) => notas.buscar(pedido),
+  ...atendentesDasTarefas(tarefas),
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
   ...semAtendente([
-    "listas.listar",
-    "listas.criar",
-    "listas.definir",
-    "listas.ordenar",
-    "listas.apagar",
-    "tarefas.listar",
-    "tarefas.obter",
-    "tarefas.criar",
-    "tarefas.definir",
-    "tarefas.concluir",
-    "tarefas.reabrir",
-    "tarefas.cancelar",
-    "tarefas.adiar",
-    "tarefas.mover",
-    "tarefas.ordenar",
-    "tarefas.apagar",
-    "tarefas.etiquetas",
     "lembretes.listar",
     "lembretes.hoje",
     "lembretes.criar",
