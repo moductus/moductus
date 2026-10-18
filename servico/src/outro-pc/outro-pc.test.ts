@@ -57,6 +57,7 @@ const MINHA: Config = {
     expediente: { inicio: "08:00", fim: "17:00" },
     foco: { focoMin: 45, pausaMin: 10, pausaLongaMin: 20, ciclosAtePausaLonga: 3 },
   },
+  cambio: { cotacoes: { EUR: { milionesimos: 920_000, data: "2026-10-16", fonte: "frankfurter" } } },
 };
 
 const manifestoValido = (extra: Partial<Record<string, unknown>> = {}) => ({

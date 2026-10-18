@@ -71,10 +71,12 @@ export const COLUNAS_QUE_NUNCA_VAO: readonly string[] = [
  * chega desligada no PC novo: estado, último erro, data de conexão e de leitura daqui não valem lá.
  * O calendário vai sem o `nextSyncToken` e a última leitura: o PC novo começa com o cache vazio e
  * tem de ler tudo de novo, não só o que mudou desde a leitura daqui. O provedor vai sem o caminho
- * do CLI neste PC: no PC novo, a detecção acha o de lá.
+ * do CLI neste PC: no PC novo, a detecção acha o de lá. O "Liberar" do teto vale só para o gasto de
+ * hoje deste PC.
  */
 const SITUACAO_DESTE_PC: Readonly<Record<string, readonly string[]>> = {
   provedores: ["caminho"],
+  agentes: ["teto_liberado_centavos", "teto_liberado_ate"],
   conexoes: ["estado", "ultimo_erro", "conectada_em", "lida_em"],
   calendarios: ["sincronizado_em", "token_sincronizacao"],
 };

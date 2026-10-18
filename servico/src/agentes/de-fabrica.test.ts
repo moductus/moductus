@@ -43,6 +43,7 @@ describe("agentes de fábrica", () => {
         provedorId: null,
         provedorReservaId: null,
         tetoDiarioCentavos: null,
+        tetoMoeda: "BRL",
       };
       expect(ConfigAgente.safeParse(config).success, id).toBe(true);
     }

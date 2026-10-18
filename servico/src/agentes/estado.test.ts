@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { abrirBanco } from "../banco/conexao.ts";
+import { converterPelaConfig, type ConverterCusto } from "../cambio/cambio.ts";
 import { Catalogo } from "../ferramentas/catalogo.ts";
 import { ProvedorFalso, roteiros } from "../provedores/falso.ts";
 import { RegistroProvedores } from "../provedores/registro.ts";
@@ -19,11 +20,12 @@ import {
   MENSAGEM_ACORDAR_PAUSADO,
   MENSAGEM_ACORDAR_SEM_MOTIVO,
   MENSAGEM_DESLIGADO,
+  MENSAGEM_LIBERAR_FORA_DO_TETO,
+  passoDoLiberar,
   PROVA_DO_PRINCIPAL_MS,
-  type ConverterCusto,
 } from "./estado.ts";
 import { RepositorioExecucoes } from "./execucoes.ts";
-import { Runtime, type PedidoExecucao, type ResultadoExecucao } from "./runtime.ts";
+import { Runtime, type EstimarCusto, type PedidoExecucao, type ResultadoExecucao } from "./runtime.ts";
 
 const pastas: string[] = [];
 const bancos: DatabaseSync[] = [];
@@ -73,7 +75,7 @@ function relogio() {
  * cadastrado para servir de reserva. O Nuno usa API (`openai-compativel` com `gpt-4o-mini`), para
  * as execuções terem custo estimado e o teto ter o que somar.
  */
-function montar(opcoes: { emCentavos?: ConverterCusto } = {}) {
+function montar(opcoes: { emCentavos?: ConverterCusto; estimarCusto?: EstimarCusto } = {}) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-estado-"));
   pastas.push(pasta);
   const db = abrirBanco(pasta);
@@ -103,6 +105,7 @@ function montar(opcoes: { emCentavos?: ConverterCusto } = {}) {
       agora: tempo.agora,
       programar: tempo.programar,
       ...(opcoes.emCentavos ? { emCentavos: opcoes.emCentavos } : {}),
+      ...(opcoes.estimarCusto ? { estimarCusto: opcoes.estimarCusto } : {}),
     },
   );
   const situacao = (id: string) => runtime.situacao(agentes.agente(id)!);
@@ -464,7 +467,117 @@ describe("provedor reserva", () => {
 
 describe("teto diário", () => {
   // gpt-4o-mini: 100 tokens de entrada e 20 de saída custam 27 µ$ pela tabela (provedores/precos.ts).
-  const UM_CENTAVO_POR_MICRODOLAR: ConverterCusto = (microdolares) => microdolares;
+  const UM_CENTAVO_POR_MICRODOLAR: ConverterCusto = (microdolares) => ({
+    centavos: microdolares,
+    cotacaoDe: "2026-10-09",
+  });
+  /** Toda execução por token custa US$ 1,00; assinatura continua sem custo. */
+  const UM_DOLAR: EstimarCusto = (provedor) =>
+    provedor.tipo === "claude-cli"
+      ? { cobranca: "assinatura", custoEstimadoMicrodolares: null }
+      : { cobranca: "por_token", custoEstimadoMicrodolares: 1_000_000 };
+  /** A cotação digitada em Configurações › Modelos: US$ 1 a R$ 5,00, de 16/10. */
+  const CINCO_REAIS = converterPelaConfig(() => ({
+    cotacoes: { BRL: { milionesimos: 5_000_000, data: "2026-10-16", fonte: "digitada" } },
+  }));
+
+  test("em real, com a cotação digitada: o custo em dólar é convertido e o agente dorme ao cruzar o teto", async () => {
+    const { db, runtime, falsos, agentes, guardado } = montar({
+      emCentavos: CINCO_REAIS,
+      estimarCusto: UM_DOLAR,
+    });
+    db.exec("UPDATE agentes SET teto_diario_centavos = 1000, teto_moeda = 'BRL' WHERE id = 'nuno'");
+    falsos["p-nuno"]!.roteirizar(roteiros.resposta("um"), roteiros.resposta("dois"));
+
+    await runtime.executar(pedir("nuno", "1"));
+    // US$ 1,00 a R$ 5,00: R$ 5,00 de R$ 10,00, estimativa da cotação de 16/10.
+    expect(runtime.estados.gastoDeHoje(agentes.agente("nuno")!)).toEqual({
+      microdolares: 1_000_000,
+      centavos: 500,
+      cotacaoDe: "2026-10-16",
+      limiteCentavos: 1000,
+      liberarCentavos: 200,
+      pedeCotacao: false,
+    });
+    expect(guardado("nuno")).toMatchObject({ estado: "ativo" });
+    await runtime.executar(pedir("nuno", "2"));
+    expect(guardado("nuno")).toMatchObject({ estado: "dormindo", motivo_sono: "teto" });
+  });
+
+  test("em dólar não há conversão: o teto vale sem cotação nenhuma", async () => {
+    const { db, runtime, falsos, guardado } = montar({ estimarCusto: UM_DOLAR });
+    db.exec("UPDATE agentes SET teto_diario_centavos = 200, teto_moeda = 'USD' WHERE id = 'nuno'");
+    falsos["p-nuno"]!.roteirizar(roteiros.resposta("um"), roteiros.resposta("dois"));
+    await runtime.executar(pedir("nuno", "1"));
+    expect(guardado("nuno")).toMatchObject({ estado: "ativo" });
+    await runtime.executar(pedir("nuno", "2"));
+    expect(guardado("nuno")).toMatchObject({ estado: "dormindo", motivo_sono: "teto" });
+  });
+
+  test("o mesmo teto em real, sem cotação, não vale: a tela pede a cotação", async () => {
+    const { db, runtime, falsos, agentes, guardado } = montar({ estimarCusto: UM_DOLAR });
+    db.exec("UPDATE agentes SET teto_diario_centavos = 200, teto_moeda = 'BRL' WHERE id = 'nuno'");
+    falsos["p-nuno"]!.roteirizar(roteiros.resposta("um"), roteiros.resposta("dois"));
+    const erro = vi.spyOn(console, "error").mockImplementation(() => {});
+    await runtime.executar(pedir("nuno", "1"));
+    await runtime.executar(pedir("nuno", "2"));
+    erro.mockRestore();
+    expect(guardado("nuno")).toMatchObject({ estado: "ativo" });
+    expect(runtime.estados.gastoDeHoje(agentes.agente("nuno")!)).toMatchObject({
+      microdolares: 2_000_000,
+      centavos: null,
+      pedeCotacao: true,
+    });
+  });
+
+  test("Liberar solta um passo a partir do gasto até a meia-noite, roda a fila e vale depois de reiniciar", async () => {
+    const { db, runtime, falsos, agentes, guardado } = montar({
+      emCentavos: CINCO_REAIS,
+      estimarCusto: UM_DOLAR,
+    });
+    db.exec("UPDATE agentes SET teto_diario_centavos = 1000, teto_moeda = 'BRL' WHERE id = 'nuno'");
+    falsos["p-nuno"]!.roteirizar(
+      roteiros.resposta("um"),
+      roteiros.resposta("dois"),
+      roteiros.resposta("liberado"),
+    );
+    expect(() => runtime.estados.liberarTeto("nuno")).toThrow(MENSAGEM_LIBERAR_FORA_DO_TETO("Nuno"));
+    await runtime.executar(pedir("nuno", "1"));
+    await runtime.executar(pedir("nuno", "2"));
+    const terceiro = acompanhar(runtime.executar(pedir("nuno", "3")));
+    await assentar();
+    expect(terceiro.resultado).toBeNull();
+
+    runtime.estados.liberarTeto("nuno");
+    const amanha = inicioDoDiaSeguinte(new Date(INICIO)).toISOString();
+    // R$ 10,00 gastos mais um quinto do teto: o limite de hoje passa a R$ 12,00.
+    expect(passoDoLiberar(1000)).toBe(200);
+    expect(
+      db
+        .prepare(
+          "SELECT estado, teto_liberado_centavos, teto_liberado_ate, origem FROM agentes WHERE id = 'nuno'",
+        )
+        .get(),
+    ).toEqual({ estado: "ativo", teto_liberado_centavos: 200, teto_liberado_ate: amanha, origem: "usuario" });
+    await vi.waitFor(() => expect(terceiro.resultado?.texto).toBe("liberado"));
+    // A terceira levou o gasto a R$ 15,00, acima dos R$ 12,00: dorme de novo.
+    expect(guardado("nuno")).toMatchObject({ estado: "dormindo", motivo_sono: "teto" });
+    // Um runtime novo (o serviço reiniciou) lê o que foi liberado do banco.
+    const outro = new Runtime(
+      {
+        agentes,
+        execucoes: new RepositorioExecucoes(db),
+        provedores: new RegistroProvedores(),
+        catalogo: new Catalogo([]),
+      },
+      { execucao: () => {}, agente: () => {} },
+      { agora: () => new Date(INICIO), emCentavos: CINCO_REAIS },
+    );
+    expect(outro.estados.gastoDeHoje(agentes.agente("nuno")!)).toMatchObject({
+      centavos: 1500,
+      limiteCentavos: 1200,
+    });
+  });
 
   test("atingido, o agente dorme até o dia seguinte e a fila roda na virada", async () => {
     const { db, runtime, falsos, tempo, situacao, guardado } = montar({

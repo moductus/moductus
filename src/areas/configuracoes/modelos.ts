@@ -3,6 +3,7 @@ import {
   type Agente,
   type Execucao,
   type FalhaProvedor,
+  type MoedaTeto,
   type MudancaAgente,
   type Provedor,
   type ProvedorDetectado,
@@ -169,10 +170,12 @@ export interface EscolhaModelo {
   reserva?: string | null;
 }
 
-/** O principal e a reserva que o painel mostra marcados. */
+/** O principal e a reserva que o painel mostra marcados, e o teto com a moeda, quando mexido. */
 export interface ModeloEscolhido {
   principal: string | null;
   reserva: string | null;
+  /** `centavos: null` é sem teto. */
+  teto?: { centavos: number | null; moeda: MoedaTeto };
 }
 
 /**
@@ -189,12 +192,24 @@ export function escolhaInicial(agente: Agente, escolha: EscolhaModelo = {}): Mod
   return { principal, reserva: reserva === principal ? null : reserva };
 }
 
-/** O pedido de gravar o que o painel tem marcado; `null` quando nada mudou ou falta o principal. */
+/**
+ * O pedido de gravar o que o painel tem marcado: só o que mudou. `null` quando nada mudou ou a
+ * troca de modelo ficou sem principal. Sem teto, trocar a moeda não muda nada.
+ */
 export function mudancaDoPainel(agente: Agente, escolhido: ModeloEscolhido): MudancaAgente | null {
-  if (!escolhido.principal) return null;
-  if (escolhido.principal === agente.provedorId && escolhido.reserva === agente.provedorReservaId)
-    return null;
-  return { id: agente.id, provedorId: escolhido.principal, provedorReservaId: escolhido.reserva };
+  const trocouModelo =
+    escolhido.principal !== agente.provedorId || escolhido.reserva !== agente.provedorReservaId;
+  if (trocouModelo && !escolhido.principal) return null;
+  const t = escolhido.teto;
+  const trocouTeto =
+    t !== undefined &&
+    (t.centavos !== agente.tetoDiarioCentavos || (t.centavos !== null && t.moeda !== agente.tetoMoeda));
+  if (!trocouModelo && !trocouTeto) return null;
+  return {
+    id: agente.id,
+    ...(trocouModelo ? { provedorId: escolhido.principal, provedorReservaId: escolhido.reserva } : {}),
+    ...(trocouTeto && t ? { tetoDiarioCentavos: t.centavos, tetoMoeda: t.moeda } : {}),
+  };
 }
 
 /** "14 execuções", "1 execução", "nenhuma"; acima do que a tela leu, "200 ou mais". */

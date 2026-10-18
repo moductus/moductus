@@ -1,6 +1,10 @@
 import {
+  MOEDAS_TETO,
   TIPOS_PROVEDOR_CLI,
   type Agente,
+  type CotacaoBuscada,
+  type MoedaComCotacao,
+  type MoedaTeto,
   type Provedor,
   type ProvedorDetectado,
   type TipoProvedorCli,
@@ -12,6 +16,7 @@ import { FalaAgente } from "../../componentes/FalaAgente.tsx";
 import { Icone } from "../../componentes/Icone.tsx";
 import { eAgente, type Agente as IdAgente } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
+import { Progresso } from "../../componentes/Progresso.tsx";
 import { fraseDaSituacao, lerSituacao, modeloDoAgente } from "../../componentes/personagem/situacao.ts";
 import { Seletor, type OpcaoSeletor } from "../../componentes/Seletor.tsx";
 import { Selo, type TomSelo } from "../../componentes/Selo.tsx";
@@ -26,6 +31,21 @@ import {
   type FormularioApi,
   type TipoApi,
 } from "../../janelas/sistema/primeiro-uso/modelo.ts";
+import {
+  cotacaoEmTexto,
+  cotacaoNoCampo,
+  diaCurto,
+  diaDeHoje,
+  dinheiro,
+  fonteDaEstimativa,
+  gastoContraOTeto,
+  lerCotacao,
+  lerTeto,
+  NOME_DA_MOEDA,
+  origemDaCotacao,
+  SIMBOLO,
+  valorNoCampo,
+} from "../../servico/teto.ts";
 import { comArtigo, deAgente } from "../agentes/nomes.ts";
 import { useAgora } from "../tempo.ts";
 import {
@@ -51,6 +71,12 @@ const PAPEL: Readonly<Record<IdAgente, string>> = {
   faina: "o serviço pesado",
   nuno: "dev e sessões de IA",
 };
+
+/** As moedas do teto pelo símbolo, na ordem do contrato (o real primeiro). */
+const OPCOES_MOEDA: readonly OpcaoSeletor<MoedaTeto>[] = MOEDAS_TETO.map((m) => ({
+  valor: m,
+  rotulo: SIMBOLO[m],
+}));
 
 const TIPOS_API: readonly OpcaoSeletor<TipoApi>[] = [
   { valor: "openai", rotulo: "OpenAI" },
@@ -146,6 +172,7 @@ export function SecaoModelos() {
             painel={painel}
             aoAbrir={setPainel}
           />
+          <Cotacoes modelos={m} agentes={agentes} agora={agora} />
           <p className="config-nota">
             A execução que está rodando termina no modelo de antes. No teto do dia, o agente dorme até a
             meia-noite e os pedidos esperam na fila.
@@ -601,10 +628,7 @@ function TabelaAgentes({
     <section className="config-modelos-grupo" aria-label="Agentes">
       <div className="config-modelos-rotulos">
         <span>Agentes</span>
-        <span className="config-modelos-pendencia">
-          trocar vale na próxima execução
-          <span className="config-pendente">moeda do teto a decidir</span>
-        </span>
+        <span>trocar vale na próxima execução</span>
       </div>
       <div className="config-tabela">
         <table>
@@ -675,10 +699,14 @@ function TabelaAgentes({
                     />
                   </td>
                   <td>
-                    <Teto />
+                    <TetoNaTabela
+                      agente={a}
+                      desativado={travado}
+                      aoAbrir={() => aoAbrir({ agenteId: a.id, escolha: {} })}
+                    />
                   </td>
                   <td>
-                    <Hoje lidas={modelos.execucoes[a.id]} agora={agora} />
+                    <Hoje agente={a} lidas={modelos.execucoes[a.id]} agora={agora} />
                   </td>
                 </tr>
               ),
@@ -774,25 +802,74 @@ function ListaProvedor({ rotulo, valor, provedores, tom, nenhuma, desativada, ao
 }
 
 /**
- * O teto por dia: a moeda ainda não foi decidida, então o serviço não grava valor que vale como
- * limite. A linha diz "sem teto" e o "Definir" fica travado, com o motivo ao lado.
+ * O teto por dia na tabela, na moeda dele (ADR-0040): o valor, ou "sem teto". "Definir" e "Mudar"
+ * abrem o painel do agente, onde o teto se escreve e só grava com o sim.
  */
-function Teto() {
-  const id = useId();
+function TetoNaTabela({
+  agente,
+  desativado,
+  aoAbrir,
+}: {
+  agente: Agente;
+  desativado: boolean;
+  aoAbrir: () => void;
+}) {
+  const teto = agente.tetoDiarioCentavos;
   return (
     <span className="config-modelos-teto">
-      <span className="config-modelos-sub">sem teto</span>
-      <Botao tamanho="pequeno" variante="fantasma" disabled aria-describedby={id}>
-        Definir
+      {teto === null ? (
+        <span className="config-modelos-sub">sem teto</span>
+      ) : (
+        <span className="config-modelos-numero">{dinheiro(teto, agente.tetoMoeda)}</span>
+      )}
+      <Botao
+        tamanho="pequeno"
+        variante="fantasma"
+        disabled={desativado}
+        aria-label={`${teto === null ? "Definir" : "Mudar"} o teto ${doAgente(agente)}`}
+        onClick={aoAbrir}
+      >
+        {teto === null ? "Definir" : "Mudar"}
       </Botao>
-      <span id={id} className="so-leitor">
-        A moeda do teto ainda não foi decidida.
-      </span>
     </span>
   );
 }
 
-function Hoje({ lidas, agora }: { lidas: ModelosDaSecao["execucoes"][string] | undefined; agora: Date }) {
+/**
+ * "Hoje": com teto, o gasto contra ele na moeda do teto, sempre como estimativa (sem cotação, o
+ * aviso de que o teto não vale); sem teto, quantas execuções o agente fez.
+ */
+function Hoje({
+  agente,
+  lidas,
+  agora,
+}: {
+  agente: Agente;
+  lidas: ModelosDaSecao["execucoes"][string] | undefined;
+  agora: Date;
+}) {
+  const gasto = gastoContraOTeto(agente.gastoDeHoje, agente.tetoMoeda);
+  if (gasto) {
+    if (gasto.semCotacao)
+      return (
+        <span className="config-modelos-sub" data-tom="aviso" aria-label={gasto.rotulo}>
+          {gasto.texto}
+        </span>
+      );
+    return (
+      <span className="config-modelos-hoje">
+        <span className="config-modelos-numero" aria-hidden="true">
+          {gasto.texto}
+        </span>
+        <Progresso
+          valor={gasto.pct ?? 0}
+          rotulo={`Gasto de hoje ${doAgente(agente)}`}
+          textoValor={gasto.rotulo}
+          tom={gasto.pct !== null && gasto.pct >= 100 ? "aviso" : "neutro"}
+        />
+      </span>
+    );
+  }
   if (!lidas) return <span className="config-modelos-sub">—</span>;
   const quantas = contarDeHoje(lidas.itens, agora);
   // Com mais páginas e todas as lidas de hoje, pode haver mais do que a tela leu.
@@ -822,6 +899,8 @@ function PainelAgente({
   const [inicial] = useState(() => escolhaInicial(agente, escolha));
   const [principal, setPrincipal] = useState<string | null>(inicial.principal);
   const [reserva, setReserva] = useState<string | null>(inicial.reserva);
+  const [moeda, setMoeda] = useState<MoedaTeto>(agente.tetoMoeda);
+  const [textoTeto, setTextoTeto] = useState(() => valorNoCampo(agente.tetoDiarioCentavos));
   const [gravando, setGravando] = useState(false);
   const marcado = useRef<HTMLInputElement>(null);
   const modelo = modeloDoAgente(agente.provedorId, provedores);
@@ -835,8 +914,14 @@ function PainelAgente({
     if (id === reserva) setReserva(principal);
     setPrincipal(id);
   };
-  const mudanca = mudancaDoPainel(agente, { principal, reserva });
+  const teto = lerTeto(textoTeto);
+  const tetoInvalido = teto === undefined;
+  const mudanca = tetoInvalido
+    ? null
+    : mudancaDoPainel(agente, { principal, reserva, teto: { centavos: teto, moeda } });
   const mudouPrincipal = principal !== agente.provedorId;
+  const mudouReserva = reserva !== agente.provedorReservaId;
+  const mudouTeto = mudanca !== null && "tetoDiarioCentavos" in mudanca;
   const confirmar = async () => {
     if (!mudanca) return;
     setGravando(true);
@@ -936,23 +1021,52 @@ function PainelAgente({
           </span>
         </div>
         <div className="config-modelos-coluna">
-          <span className="config-modelos-pendencia">
-            <span className="config-modelos-sub">Teto por dia</span>
-            <span className="config-pendente">moeda a decidir</span>
+          <span className="config-modelos-sub">Teto por dia</span>
+          <span className="config-modelos-teto-campos">
+            <Seletor
+              rotulo={`Moeda do teto ${doAgente(agente)}`}
+              opcoes={OPCOES_MOEDA}
+              valor={moeda}
+              aoMudar={setMoeda}
+            />
+            <Campo
+              rotulo={`Teto por dia ${doAgente(agente)}, em ${NOME_DA_MOEDA[moeda]}`}
+              rotuloOculto
+              inputMode="decimal"
+              placeholder="sem teto"
+              value={textoTeto}
+              disabled={travado}
+              aria-invalid={tetoInvalido || undefined}
+              onChange={(e) => setTextoTeto(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void confirmar();
+              }}
+            />
+            {textoTeto && (
+              <Botao
+                variante="fantasma"
+                tamanho="pequeno"
+                disabled={travado}
+                onClick={() => setTextoTeto("")}
+              >
+                Tirar
+              </Botao>
+            )}
           </span>
-          <Teto />
-          <span className="config-modelos-texto">
-            Sem teto por enquanto: o custo é medido em dólar e a moeda do teto ainda não foi decidida.
+          <span className="config-modelos-texto" role={tetoInvalido ? "alert" : undefined}>
+            {tetoInvalido ? "Use um valor como 10,00." : textoDoTeto(agente)}
           </span>
         </div>
       </div>
-      {mudanca && principal && (
+      {mudanca && (
         <div className="config-modelos-painel-fala">
           {eAgente(agente.id) ? (
             <FalaAgente agente={agente.id} tamanho="fala">
-              {mudouPrincipal
+              {mudouPrincipal && principal
                 ? falaDaTroca(nome(principal) ?? "modelo novo", nome(agente.provedorId))
-                : "A reserva nova vale a partir da próxima execução."}
+                : mudouReserva
+                  ? "A reserva nova vale a partir da próxima execução."
+                  : falaDoTeto(teto ?? null, moeda)}
             </FalaAgente>
           ) : (
             <p className="config-modelos-texto">A troca vale a partir da próxima execução.</p>
@@ -962,14 +1076,173 @@ function PainelAgente({
               Agora não
             </Botao>
             <Botao variante="primario" disabled={travado} onClick={() => void confirmar()}>
-              {mudouPrincipal
-                ? `Usar ${nome(principal) ?? "o novo"} ${emAgente(agente)}`
-                : "Guardar a reserva"}
+              {rotuloDoSim(
+                mudouPrincipal && principal ? (nome(principal) ?? "o novo") : null,
+                mudouReserva,
+                mudouTeto,
+                agente,
+              )}
             </Botao>
           </div>
         </div>
       )}
     </section>
+  );
+}
+
+/** O botão diz o que vai gravar: o modelo novo, a reserva, o teto, ou os dois últimos. */
+function rotuloDoSim(principalNovo: string | null, reserva: boolean, teto: boolean, agente: Agente): string {
+  if (principalNovo) return `Usar ${principalNovo} ${emAgente(agente)}`;
+  if (reserva && teto) return "Guardar a reserva e o teto";
+  return reserva ? "Guardar a reserva" : "Guardar o teto";
+}
+
+/** O que o teto gravado faz hoje, abaixo do campo (ConfigModelosAgente.dc.html). */
+function textoDoTeto(agente: Agente): string {
+  const gasto = gastoContraOTeto(agente.gastoDeHoje, agente.tetoMoeda);
+  if (!gasto)
+    return "Sem teto: o gasto não para o agente. Só conta o que vai pela API; assinatura não gasta.";
+  if (gasto.semCotacao)
+    return `Sem a cotação do dólar em ${NOME_DA_MOEDA[agente.tetoMoeda]}, o teto não vale. Digite a cotação abaixo da tabela.`;
+  return `Hoje: ${gasto.texto}, ${fonteDaEstimativa(agente.gastoDeHoje)}. No teto, ${comArtigoOuNome(agente)} dorme até a meia-noite.`;
+}
+
+/** A fala do agente quando só o teto muda (AGENTS.md §2 Voz, até duas frases). */
+function falaDoTeto(centavos: number | null, moeda: MoedaTeto): string {
+  if (centavos === null) return "Sem teto, o gasto do dia não me para.";
+  return `Com o teto de ${dinheiro(centavos, moeda)}, paro quando o gasto de hoje chegar lá. Vale já, para o que eu ainda for fazer.`;
+}
+
+/* ---------- Cotação do teto (ADR-0040) ---------- */
+
+/**
+ * As cotações que os tetos pedem: uma linha por moeda fora do dólar usada num teto. A cotação é
+ * digitada (padrão e reserva) ou buscada na fonte e confirmada; a data gravada é a da fonte.
+ */
+function Cotacoes({
+  modelos,
+  agentes,
+  agora,
+}: {
+  modelos: ModelosDaSecao;
+  agentes: readonly Agente[];
+  agora: Date;
+}) {
+  const usadas = new Set(agentes.filter((a) => a.tetoDiarioCentavos !== null).map((a) => a.tetoMoeda));
+  const moedas = MOEDAS_TETO.filter((m): m is MoedaComCotacao => m !== "USD" && usadas.has(m));
+  if (moedas.length === 0) return null;
+  return (
+    <section className="config-modelos-grupo" aria-label="Cotação do teto">
+      <div className="config-modelos-rotulos">
+        <span>Cotação do teto</span>
+        <span>o custo é medido em dólar; convertido, é estimativa</span>
+      </div>
+      <ul className="config-cotacoes">
+        {moedas.map((moeda) => (
+          <LinhaCotacao key={moeda} moeda={moeda} modelos={modelos} agora={agora} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function LinhaCotacao({
+  moeda,
+  modelos,
+  agora,
+}: {
+  moeda: MoedaComCotacao;
+  modelos: ModelosDaSecao;
+  agora: Date;
+}) {
+  const gravada = modelos.cambio?.cotacoes[moeda] ?? null;
+  const [texto, setTexto] = useState(() => (gravada ? cotacaoNoCampo(gravada.milionesimos) : ""));
+  // A cotação gravada que chega depois (a configuração respondeu, outra janela gravou) vai ao campo.
+  const [vista, setVista] = useState(gravada?.milionesimos);
+  if (gravada?.milionesimos !== vista) {
+    setVista(gravada?.milionesimos);
+    if (gravada) setTexto(cotacaoNoCampo(gravada.milionesimos));
+  }
+  const [buscando, setBuscando] = useState(false);
+  const [buscada, setBuscada] = useState<CotacaoBuscada | null>(null);
+  const digitada = lerCotacao(texto);
+  const travado = !modelos.conectado;
+  const nomeMoeda = NOME_DA_MOEDA[moeda];
+  const guardar = async () => {
+    if (digitada === null) return;
+    await modelos.gravarCotacao(moeda, { milionesimos: digitada, data: diaDeHoje(agora), fonte: "digitada" });
+  };
+  const buscar = async () => {
+    setBuscando(true);
+    setBuscada(await modelos.buscarCotacao(moeda));
+    setBuscando(false);
+  };
+  const usar = async () => {
+    if (!buscada) return;
+    const ok = await modelos.gravarCotacao(moeda, {
+      milionesimos: buscada.milionesimos,
+      data: buscada.data,
+      fonte: "frankfurter",
+    });
+    if (ok) {
+      setTexto(cotacaoNoCampo(buscada.milionesimos));
+      setBuscada(null);
+    }
+  };
+  return (
+    <li className="config-cotacao">
+      <span className="config-modelos-textos">
+        <span className="config-modelos-nome">Dólar em {nomeMoeda}</span>
+        {gravada ? (
+          <span className="config-modelos-sub">
+            {cotacaoEmTexto(moeda, gravada.milionesimos)}, {origemDaCotacao(gravada)}
+          </span>
+        ) : (
+          <span className="config-modelos-sub" data-tom="aviso">
+            Sem cotação, o teto em {nomeMoeda} não vale. Digite quanto vale US$ 1.
+          </span>
+        )}
+      </span>
+      <span className="config-cotacao-campos">
+        <Campo
+          rotulo={`Quanto vale US$ 1 em ${nomeMoeda}`}
+          rotuloOculto
+          inputMode="decimal"
+          placeholder={`${SIMBOLO[moeda]} por US$ 1`}
+          value={texto}
+          disabled={travado}
+          onChange={(e) => setTexto(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void guardar();
+          }}
+        />
+        <Botao
+          disabled={travado || digitada === null || digitada === gravada?.milionesimos}
+          onClick={() => void guardar()}
+        >
+          Guardar
+        </Botao>
+        <Botao variante="fantasma" disabled={travado || buscando} onClick={() => void buscar()}>
+          {buscando ? "Buscando" : "Buscar cotação"}
+        </Botao>
+      </span>
+      {buscada && (
+        <span className="config-cotacao-buscada" role="status">
+          <span className="config-modelos-texto">
+            A fonte dá {cotacaoEmTexto(moeda, buscada.milionesimos)}, de {diaCurto(buscada.data)}. É a taxa de
+            referência do dia: o que sair dela é estimativa.
+          </span>
+          <span className="config-rodape">
+            <Botao variante="fantasma" onClick={() => setBuscada(null)}>
+              Agora não
+            </Botao>
+            <Botao variante="primario" disabled={travado} onClick={() => void usar()}>
+              Usar esta cotação
+            </Botao>
+          </span>
+        </span>
+      )}
+    </li>
   );
 }
 

@@ -30,6 +30,7 @@ import {
 } from "./agenda.ts";
 import { Aprovacao, PedidoDecidir, PedidoRegra, RegraPermissao } from "./aprovacoes.ts";
 import { ContagensAreas } from "./areas.ts";
+import { CotacaoBuscada, PedidoBuscarCotacao } from "./cambio.ts";
 import { metodo } from "./canal.ts";
 import {
   LancamentoCaptura,
@@ -140,6 +141,8 @@ export const METODOS = {
   "config.exportar": metodo(PedidoExportar, ResultadoExportar),
   "config.previaImportar": metodo(PedidoImportar, PreviaImportar),
   "config.importar": metodo(PedidoImportar, EstadoConfig),
+  /** "Buscar cotação" (ADR-0040): consulta a fonte e devolve sem gravar; grava o que for confirmado. */
+  "cambio.buscar": metodo(PedidoBuscarCotacao, CotacaoBuscada),
   "primeiroUso.obter": metodo(z.undefined(), EstadoPrimeiroUso),
   "primeiroUso.concluir": metodo(PedidoConcluirPrimeiroUso, EstadoPrimeiroUso),
   "primeiroUso.marcar": metodo(PedidoMarcarTutorial, EstadoPrimeiroUso),
@@ -153,6 +156,8 @@ export const METODOS = {
   "agentes.retomar": metodo(PedidoRetomar, z.array(Agente)),
   /** "Tentar agora": só quem dorme por falha do provedor; limite de uso e teto recusam com o motivo. */
   "agentes.acordar": metodo(PedidoAgente, Agente),
+  /** "Liberar" no teto de hoje (ADR-0040): só quem dorme pelo teto; solta mais até a meia-noite. */
+  "agentes.liberarTeto": metodo(PedidoAgente, Agente),
   "agentes.capacidades": metodo(PedidoAgente, z.array(Capacidade)),
 
   "execucoes.listar": metodo(PedidoExecucoes, PaginaExecucoes),
