@@ -1,7 +1,8 @@
 //! Atalhos globais (PRODUCT §8): Ctrl+Alt+N abre o Sistema, Ctrl+Alt+D mostra o dock,
 //! dá o foco a ele (modo teclado) e esconde, nessa ordem (dock::alternar_visivel),
-//! Ctrl+Alt+Espaço abre a captura. Configuráveis; um atalho em
-//! conflito devolve o motivo e o anterior continua valendo.
+//! Ctrl+Alt+Espaço abre a captura e Ctrl+Alt+P inicia ou pausa o foco (quem decide é o serviço,
+//! pelo aviso `foco-alternar`). Configuráveis; um atalho em conflito devolve o motivo e o
+//! anterior continua valendo.
 
 use std::{collections::BTreeMap, str::FromStr, sync::Mutex};
 
@@ -15,6 +16,7 @@ pub enum Acao {
     Sistema,
     Dock,
     Captura,
+    Foco,
 }
 
 impl Acao {
@@ -23,6 +25,7 @@ impl Acao {
             Acao::Sistema => "abrir o Sistema",
             Acao::Dock => "mostrar o dock",
             Acao::Captura => "abrir a captura",
+            Acao::Foco => "iniciar ou pausar o foco",
         }
     }
 }
@@ -34,6 +37,7 @@ pub fn padrao() -> Atalhos {
         (Acao::Sistema, "Ctrl+Alt+N".to_string()),
         (Acao::Dock, "Ctrl+Alt+D".to_string()),
         (Acao::Captura, "Ctrl+Alt+Space".to_string()),
+        (Acao::Foco, "Ctrl+Alt+P".to_string()),
     ])
 }
 
@@ -70,7 +74,14 @@ fn executar(app: &AppHandle, acao: Acao) {
         Acao::Sistema => crate::janelas::sistema_alternar(app.clone()),
         Acao::Captura => crate::janelas::captura_alternar(app.clone()),
         Acao::Dock => crate::dock::alternar_visivel(),
+        // O foco é regra do serviço: a casca só avisa, e a janela fica sabendo pelo `foco.mudou`.
+        Acao::Foco => crate::servico::avisar(aviso_do_foco()),
     }
+}
+
+/// O aviso que leva o atalho do foco ao serviço (`servico/src/areas/foco/canal.ts`).
+fn aviso_do_foco() -> serde_json::Value {
+    serde_json::json!({ "tipo": "foco-alternar" })
 }
 
 pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
@@ -85,9 +96,10 @@ pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         .build()
 }
 
-/// Registra os atalhos ao subir. Um que o Windows recuse fica de fora e vai para o log.
+/// Registra os atalhos ao subir. Um que o Windows recuse fica de fora e vai para o log; o vazio é
+/// ação sem atalho e não registra nada.
 pub fn iniciar(app: &AppHandle, atalhos: Atalhos) {
-    for (acao, texto) in &atalhos {
+    for (acao, texto) in atalhos.iter().filter(|(_, t)| !t.is_empty()) {
         match Shortcut::from_str(texto).map_err(|e| e.to_string()).and_then(|s| app.global_shortcut().register(s).map_err(|e| e.to_string())) {
             Ok(()) => {}
             Err(e) => {
@@ -99,13 +111,29 @@ pub fn iniciar(app: &AppHandle, atalhos: Atalhos) {
     *ATUAIS.lock().unwrap() = Some(atalhos);
 }
 
+/// Os atalhos com a ação sem combinação: ela não responde a tecla nenhuma.
+fn sem_atalho(mut atalhos: Atalhos, acao: Acao) -> Atalhos {
+    atalhos.insert(acao, String::new());
+    atalhos
+}
+
 pub fn atuais() -> Atalhos {
     ATUAIS.lock().unwrap().clone().unwrap_or_else(padrao)
 }
 
-/// Troca o atalho de uma ação. Em conflito devolve o motivo e mantém o anterior.
+/// Troca o atalho de uma ação. Em conflito devolve o motivo e mantém o anterior. Vazio tira o
+/// atalho da ação (o do foco, quando o padrão colidia com um atalho salvo pelo usuário).
 pub fn definir(app: &AppHandle, acao: Acao, combinacao: &str) -> Result<Atalhos, String> {
     let atalhos = atuais();
+    if combinacao.is_empty() {
+        if let Some(anterior) = atalhos.get(&acao).and_then(|t| Shortcut::from_str(t).ok()) {
+            let _ = app.global_shortcut().unregister(anterior);
+        }
+        FALHAS.lock().unwrap().remove(&acao);
+        let atalhos = sem_atalho(atalhos, acao);
+        *ATUAIS.lock().unwrap() = Some(atalhos.clone());
+        return Ok(atalhos);
+    }
     let novo = validar(&atalhos, acao, combinacao)?;
     let anterior = atalhos.get(&acao).and_then(|t| Shortcut::from_str(t).ok());
     if anterior.map(|a| a.id()) == Some(novo.id()) {
@@ -159,11 +187,13 @@ mod testes {
     use super::*;
 
     #[test]
-    fn padrao_tem_os_tres_atalhos_do_produto() {
+    fn padrao_tem_os_quatro_atalhos_do_produto() {
         let p = padrao();
+        assert_eq!(p.len(), 4);
         assert_eq!(p[&Acao::Sistema], "Ctrl+Alt+N");
         assert_eq!(p[&Acao::Dock], "Ctrl+Alt+D");
         assert_eq!(p[&Acao::Captura], "Ctrl+Alt+Space");
+        assert_eq!(p[&Acao::Foco], "Ctrl+Alt+P");
         for (acao, texto) in &p {
             assert!(validar(&p, *acao, texto).is_ok(), "{texto}");
         }
@@ -179,5 +209,24 @@ mod testes {
     fn recusa_combinacao_invalida_ou_sem_modificador() {
         assert!(validar(&padrao(), Acao::Dock, "Ctrl+Alt+Nada").unwrap_err().contains("não é um atalho válido"));
         assert!(validar(&padrao(), Acao::Dock, "F5").unwrap_err().contains("precisa de Ctrl"));
+    }
+
+    #[test]
+    fn o_foco_conflita_com_os_outros_e_avisa_o_servico() {
+        let erro = validar(&padrao(), Acao::Foco, "Ctrl+Alt+D").unwrap_err();
+        assert_eq!(erro, "Ctrl+Alt+D já é o atalho para mostrar o dock");
+        let erro = validar(&padrao(), Acao::Sistema, "ctrl+alt+p").unwrap_err();
+        assert_eq!(erro, "ctrl+alt+p já é o atalho para iniciar ou pausar o foco");
+        assert_eq!(serde_json::to_value(Acao::Foco).unwrap(), "foco");
+        assert_eq!(aviso_do_foco(), serde_json::json!({ "tipo": "foco-alternar" }));
+    }
+
+    #[test]
+    fn foco_sem_atalho_libera_a_combinacao_para_os_outros() {
+        let atalhos = sem_atalho(padrao(), Acao::Foco);
+        assert_eq!(atalhos[&Acao::Foco], "");
+        assert!(validar(&atalhos, Acao::Sistema, "Ctrl+Alt+P").is_ok());
+        // O vazio não é uma combinação que outro atalho possa repetir.
+        assert!(validar(&atalhos, Acao::Dock, "").is_err());
     }
 }

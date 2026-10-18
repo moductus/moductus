@@ -253,7 +253,10 @@ export const METODOS = {
   "foco.pausar": metodo(z.undefined(), EstadoFoco),
   "foco.retomar": metodo(z.undefined(), EstadoFoco),
   "foco.estender": metodo(PedidoEstenderFoco, EstadoFoco),
-  /** "Terminar ciclo": fecha a etapa agora (antes da hora, fica interrompida) e segue para a próxima. */
+  /**
+   * "Terminar ciclo": fecha a etapa agora (antes da hora, fica interrompida) sem começar outra; no
+   * foco, a pausa fica proposta em `proxima`, e na pausa a rodada se encerra.
+   */
   "foco.terminar": metodo(z.undefined(), EstadoFoco),
   "foco.pularPausa": metodo(z.undefined(), EstadoFoco),
   "foco.historico": metodo(PedidoHistoricoFoco, HistoricoFoco),
