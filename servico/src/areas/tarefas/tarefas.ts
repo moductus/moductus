@@ -25,7 +25,7 @@ import { DO_USUARIO, type Carimbo } from "../../banco/tabela.ts";
 import { novoId } from "../../banco/ulid.ts";
 import { diasNoIntervalo, escreverRecorrencia, lerRecorrencia, proximoDia } from "../dia/recorrencia.ts";
 import { MENSAGEM_NOTA_DA_TAREFA } from "../notas/notas.ts";
-import { diasEntre, ehDia, instanteNoFuso, somarDias, TempoDoDia } from "../dia/tempo.ts";
+import { diasEntre, ehDia, instanteNoFuso, noFuso, somarDias, TempoDoDia } from "../dia/tempo.ts";
 import {
   RepositorioTarefas,
   type CamposTarefa,
@@ -54,8 +54,11 @@ import {
 
 export const MINUTOS_ANTES_PADRAO = 15;
 
-/** Quantos ids um pedido de ordenar ou adiar leva: entrada enorme não prende o serviço. */
-export const LIMITE_IDS = 5000;
+/**
+ * Quantos ids um pedido de ordenar ou adiar leva: entrada enorme não prende o serviço, que é uma
+ * linha só. Com 5000, adiar com hora (um lembrete por tarefa) passava de meio segundo.
+ */
+export const LIMITE_IDS = 1000;
 
 /** Erro com texto para quem usa; o que não for daqui sai pelo canal como erro genérico. */
 export class ErroDasTarefas extends Error {}
@@ -153,28 +156,45 @@ const camposDe = (t: LinhaTarefa): CamposTarefa => ({
   estado: t.estado,
   concluida_em: t.concluida_em,
   ordem: t.ordem,
+  fechada_em: t.fechada_em,
+  gerada_por: t.gerada_por,
 });
 
 /** A tarefa como o lembrete a vê: dia, hora, título e se está aberta. */
-type BaseDoLembrete = Pick<LinhaTarefa, "id" | "titulo" | "vence_em" | "hora" | "estado">;
+type BaseDoLembrete = Pick<LinhaTarefa, "id" | "titulo" | "vence_em" | "hora" | "estado" | "fechada_em">;
 
 /**
  * A próxima de uma recorrente: o primeiro dia da regra depois do dia dela que não fique para trás
  * de hoje (a atrasada concluída hoje volta hoje, a de hoje volta no próximo). Com `COUNT`, a regra
  * da próxima conta só o que sobra. `null` quando a regra acabou ou o Moductus não a expande.
+ *
+ * O `UNTIL` com hora vale pelo instante: com `Z`, lido no fuso; a tarefa com hora passa dele se a
+ * hora dela no dia passa, a sem hora, se o dia passa.
  */
 export function proximaOcorrencia(
   recorrencia: string,
   venceEm: string | null,
   hoje: string,
+  quando: { hora: string | null; fuso: string } = { hora: null, fuso: "UTC" },
 ): { dia: string; recorrencia: string } | null {
   const leitura = lerRecorrencia(recorrencia);
   if (!leitura.entendida) return null;
-  const inicio = venceEm ?? hoje;
-  const ontem = somarDias(hoje, -1);
-  const depoisDe = inicio > ontem ? inicio : ontem;
+  // Dia que não existe (vindo de outro PC) conta como sem dia.
+  const inicio = venceEm !== null && ehDia(venceEm) ? venceEm : hoje;
+  // Não fica para trás de hoje: depois de ontem, ou do próprio início se ele não é de antes de hoje.
+  const depoisDe = inicio >= hoje ? inicio : somarDias(hoje, -1);
   const dia = proximoDia(recorrencia, inicio, depoisDe);
   if (dia === null) return null;
+  const ate = leitura.regra.ate;
+  if (ate !== null && ate.hora !== null) {
+    const limite = ate.utc ? noFuso(new Date(`${ate.dia}T${ate.hora}Z`), quando.fuso) : null;
+    const limiteDia = limite?.dia ?? ate.dia;
+    const limiteHora =
+      limite === null ? ate.hora : `${limite.hora}:${String(limite.segundo).padStart(2, "0")}`;
+    const passou =
+      quando.hora === null ? dia > limiteDia : `${dia}T${quando.hora}:00` > `${limiteDia}T${limiteHora}`;
+    if (passou) return null;
+  }
   if (leitura.regra.contagem === null) return { dia, recorrencia };
   // As ocorrências do início até a próxima, as duas inclusive: as de antes dela já foram.
   const passadas = diasNoIntervalo(recorrencia, inicio, inicio, dia).ocorrencias.length - 1;
@@ -187,6 +207,10 @@ export class ServicoTarefas {
   private readonly agora: () => Date;
   private readonly gerarId: () => string;
   private readonly tempo: TempoDoDia;
+  /** O último instante gravado, em ms: cada operação grava um instante maior que o da anterior. */
+  private ultimoInstante = 0;
+  /** O fuso e os instantes já calculados na operação em curso (um pedido de milhares repete a conta). */
+  private daVez: { fuso: string; instantes: Map<string, number> } | null = null;
 
   constructor(
     private readonly repo: RepositorioTarefas,
@@ -196,7 +220,8 @@ export class ServicoTarefas {
   ) {
     this.agora = opcoes.agora ?? (() => new Date());
     this.gerarId = opcoes.gerarId ?? novoId;
-    this.tempo = new TempoDoDia(deps.lerFuso, this.agora);
+    // Durante uma operação o fuso é lido uma vez só (no serviço, cada leitura vai ao banco).
+    this.tempo = new TempoDoDia(() => this.daVez?.fuso ?? deps.lerFuso(), this.agora);
   }
 
   // Listas
@@ -245,7 +270,12 @@ export class ServicoTarefas {
   ordenarListas(pedido: PedidoOrdenar, carimbo: Carimbo = DO_USUARIO): Lista[] {
     const ids = idsDoPedido(pedido.ids);
     return this.operar((r, agora) => {
-      const listas = ids.map((id) => this.exigirLista(id));
+      const vivas = new Map(this.repo.listas().map((l) => [l.id, l]));
+      const listas = ids.map((id) => {
+        const l = vivas.get(id);
+        if (l === undefined) throw new ErroDasTarefas(MENSAGEM_LISTA_NAO_ENCONTRADA);
+        return l;
+      });
       listas.forEach((l, ordem) => {
         if (l.ordem === ordem) return;
         this.repo.definirLista(
@@ -295,7 +325,8 @@ export class ServicoTarefas {
         filtro.dia = { op: "=", dia: hoje };
         filtro.feitasEntre = {
           de: this.tempo.inicioDoDia(hoje).toISOString(),
-          ate: this.tempo.inicioDoDia(this.tempo.amanha()).toISOString(),
+          // O amanhã do mesmo hoje: ler o relógio de novo poderia cair depois da meia-noite.
+          ate: this.tempo.inicioDoDia(somarDias(hoje, 1)).toISOString(),
         };
         break;
       case "atrasadas":
@@ -344,6 +375,8 @@ export class ServicoTarefas {
         estado: "aberta",
         concluida_em: null,
         ordem: this.repo.proximaOrdemDeTarefa(listaId, mae?.id ?? null),
+        fechada_em: null,
+        gerada_por: null,
       };
       conferirDiaEHora(campos, nova.lembreteMinutosAntes);
       const id = this.gerarId();
@@ -432,16 +465,13 @@ export class ServicoTarefas {
           : pedido.para === "amanha"
             ? this.tempo.amanha()
             : pedido.para;
-      const tarefas = ids.map((id) => this.exigir(id));
-      for (const atual of tarefas) {
+      for (const atual of this.exigirVarias(ids)) {
         const campos = { ...camposDe(atual), vence_em: dia };
         if (pedido.hora !== undefined) campos.hora = pedido.hora;
         conferirDiaEHora(campos, undefined);
         this.gravar(atual, campos, undefined, r, agora, carimbo);
       }
-      return this.paraTarefas(this.repo.tarefasDosIds(ids)).sort(
-        (a, b) => ids.indexOf(a.id) - ids.indexOf(b.id),
-      );
+      return this.paraTarefas(this.exigirVarias(ids));
     });
   }
 
@@ -461,8 +491,7 @@ export class ServicoTarefas {
       }
       if (paiId !== null) {
         // A mãe nova passa pela conferência; a que já era continua valendo mesmo fechada.
-        const mae =
-          paiId === atual.tarefa_pai_id ? this.repo.tarefa(paiId) : this.novaMae(paiId, atual, filhas.length);
+        const mae = paiId === atual.tarefa_pai_id ? this.repo.tarefa(paiId) : this.novaMae(paiId, atual);
         if (mae !== null) {
           if (pedido.listaId !== undefined && pedido.listaId !== mae.lista_id) {
             throw new ErroDasTarefas(MENSAGEM_LISTA_DA_MAE);
@@ -492,14 +521,13 @@ export class ServicoTarefas {
   ordenar(pedido: PedidoOrdenar, carimbo: Carimbo = DO_USUARIO): Tarefa[] {
     const ids = idsDoPedido(pedido.ids);
     return this.operar((r, agora) => {
-      const tarefas = ids.map((id) => this.exigir(id));
-      tarefas.forEach((atual, ordem) => {
-        if (atual.ordem !== ordem)
-          this.gravar(atual, { ...camposDe(atual), ordem }, undefined, r, agora, carimbo);
+      // Só a posição muda: o lembrete e o fechamento não dependem dela.
+      this.exigirVarias(ids).forEach((atual, ordem) => {
+        if (atual.ordem === ordem) return;
+        this.repo.ordemDaTarefa(atual.id, ordem, agora, carimbo);
+        r.tarefas.add(atual.id);
       });
-      return this.paraTarefas(this.repo.tarefasDosIds(ids)).sort(
-        (a, b) => ids.indexOf(a.id) - ids.indexOf(b.id),
-      );
+      return this.paraTarefas(this.exigirVarias(ids));
     });
   }
 
@@ -558,10 +586,19 @@ export class ServicoTarefas {
       lembretesRemovidos: new Set(),
       listas: false,
     };
-    const agora = this.agora().toISOString();
-    const resultado = this.repo.transacao(() => fazer(r, agora));
-    this.avisar(r);
-    return resultado;
+    // Sempre crescente, mesmo duas operações no mesmo milissegundo ou com o relógio voltando: a marca
+    // do fechamento é comparada por igualdade, e um instante repetido traria de volta o que não deve.
+    const ms = Math.max(this.agora().getTime(), this.ultimoInstante + 1);
+    this.ultimoInstante = ms;
+    const agora = new Date(ms).toISOString();
+    this.daVez = { fuso: this.deps.lerFuso(), instantes: new Map() };
+    try {
+      const resultado = this.repo.transacao(() => fazer(r, agora));
+      this.avisar(r);
+      return resultado;
+    } finally {
+      this.daVez = null;
+    }
   }
 
   private avisar(r: Registro): void {
@@ -575,15 +612,15 @@ export class ServicoTarefas {
     }
     const lembretes = [...r.lembretes].filter((id) => !r.lembretesRemovidos.has(id));
     if (lembretes.length > 0 || r.lembretesRemovidos.size > 0) {
-      const vivos = lembretes.map((id) => this.repo.lembrete(id)).filter((l) => l !== null);
+      const vivos = this.repo.lembretesDosIds(lembretes);
       this.avisos.lembretes({ lembretes: vivos.map(paraLembrete), removidos: [...r.lembretesRemovidos] });
     }
   }
 
   /**
-   * Grava a tarefa e cuida do lembrete dela. Fechar manda o lembrete à lixeira com o instante do
-   * fechamento; reabrir traz de volta o que foi com ele. Enquanto a tarefa está fechada, cada escrita
-   * nela leva o carimbo desse lembrete junto, para o reabrir ainda achá-lo.
+   * Grava a tarefa e cuida do lembrete dela. Fechar marca a tarefa (`fechada_em`) e manda os
+   * lembretes à lixeira com o mesmo instante; reabrir traz de volta os que têm a marca. Enquanto a
+   * tarefa está fechada a marca não muda, venha a escrita daqui ou de outra área.
    */
   private gravar(
     antes: LinhaTarefa,
@@ -596,7 +633,9 @@ export class ServicoTarefas {
     const fechadaAntes = antes.estado !== "aberta";
     const fechadaDepois = campos.estado !== "aberta";
     const alvo = this.lembreteProprio(antes);
-    this.repo.gravarTarefa(antes.id, campos, agora, carimbo);
+    const marca = !fechadaDepois ? null : fechadaAntes ? (antes.fechada_em ?? agora) : agora;
+    const gravados: CamposTarefa = { ...campos, fechada_em: marca };
+    this.repo.gravarTarefa(antes.id, gravados, agora, carimbo);
     r.tarefas.add(antes.id);
     if (!fechadaAntes && fechadaDepois) {
       const ids = this.repo.idsDosLembretes([antes.id]);
@@ -605,26 +644,24 @@ export class ServicoTarefas {
       return;
     }
     if (fechadaAntes && !fechadaDepois) {
-      const ids = this.repo.idsDosLembretesApagadosEm(antes.id, antes.atualizado_em);
+      if (antes.fechada_em === null) return;
+      const ids = this.repo.idsDosLembretesApagadosEm(antes.id, antes.fechada_em);
       this.repo.restaurarLembretes(ids, agora, carimbo);
       ids.forEach((id) => r.lembretes.add(id));
       return;
     }
     const minutosAtuais = alvo === null ? null : this.minutosAntes(antes, alvo);
     const desejo = desejoDoLembrete(antes, campos, minutosPedidos, alvo, minutosAtuais);
-    if (fechadaAntes) {
-      // O lembrete que a tarefa fechada perde não é mais carimbado: o reabrir não o traz.
-      const fica = this.repo
-        .idsDosLembretesApagadosEm(antes.id, antes.atualizado_em)
-        .filter((id) => !(desejo === null && id === alvo?.id));
-      this.repo.recarimbarLembretesApagados(fica, agora);
+    // O lembrete que a tarefa fechada perde fica sem a marca: o reabrir não o traz.
+    if (fechadaAntes && desejo === null && alvo !== null) {
+      this.repo.marcarLembretesApagados([alvo.id], agora, agora);
     }
-    this.ajustarLembrete({ id: antes.id, ...campos }, alvo, desejo, r, agora, carimbo);
+    this.ajustarLembrete({ id: antes.id, ...gravados }, alvo, desejo, r, agora, carimbo);
   }
 
   /**
    * Põe o lembrete como o desejo manda: cria, muda o horário (volta a agendado), muda só o texto ou
-   * tira. O da tarefa fechada fica na lixeira, com o instante da última escrita dela.
+   * tira. O da tarefa fechada fica na lixeira, com a marca do fechamento dela.
    */
   private ajustarLembrete(
     tarefa: BaseDoLembrete,
@@ -652,7 +689,7 @@ export class ServicoTarefas {
     if (alvo === null) {
       const id = this.gerarId();
       this.repo.criarLembrete({ id, texto: tarefa.titulo, quando, tarefaId: tarefa.id }, agora, carimbo);
-      if (fechada) this.repo.apagarLembretes([id], agora, carimbo);
+      if (fechada) this.repo.marcarLembretesApagados([id], tarefa.fechada_em ?? agora, agora);
       else r.lembretes.add(id);
       return;
     }
@@ -665,7 +702,7 @@ export class ServicoTarefas {
   /** O lembrete da tarefa: o vivo, se ela está aberta; o que foi com o fechamento, se fechada. */
   private lembreteProprio(t: LinhaTarefa): LinhaLembrete | null {
     if (t.estado === "aberta") return this.repo.lembretesDasTarefas([t.id]).get(t.id) ?? null;
-    return this.repo.lembreteApagadoEm(t.id, t.atualizado_em);
+    return t.fechada_em === null ? null : this.repo.lembreteApagadoEm(t.id, t.fechada_em);
   }
 
   /** Fecha a tarefa e as subtarefas abertas; a recorrente gera a próxima. Volta o id da próxima. */
@@ -676,11 +713,12 @@ export class ServicoTarefas {
     agora: string,
     carimbo: Carimbo,
   ): string | null {
-    // O que a próxima herda é lido antes de fechar: o lembrete da aberta é o vivo.
-    // Só a aberta gera a próxima: a cancelada que vira feita já gerou a dela ao ser descartada.
+    // O que a próxima herda é lido antes de fechar: o lembrete da aberta é o vivo. Só a aberta gera,
+    // e só se a próxima que ela já gerou não está viva (fechar, reabrir e fechar de novo não duplica).
     const filhas = this.repo.subtarefas([atual.id]);
-    const heranca =
-      atual.recorrencia === null || atual.estado !== "aberta" ? null : this.heranca(atual, filhas);
+    const gera =
+      atual.recorrencia !== null && atual.estado === "aberta" && this.repo.geradaPor(atual.id) === null;
+    const heranca = gera ? this.heranca(atual, filhas) : null;
     const concluidaEm = estado === "feita" ? agora : null;
     for (const filha of filhas) {
       if (filha.estado !== "aberta") continue;
@@ -713,6 +751,24 @@ export class ServicoTarefas {
       agora,
       carimbo,
     );
+    this.levarProximaIntocada(atual, r, agora, carimbo);
+  }
+
+  /**
+   * Reabrir a recorrente leva para a lixeira a próxima que ela gerou, se ninguém a tocou (aberta e
+   * nunca escrita depois de nascer, nem as subtarefas). A que alguém mexeu fica.
+   */
+  private levarProximaIntocada(atual: LinhaTarefa, r: Registro, agora: string, carimbo: Carimbo): void {
+    const proxima = this.repo.geradaPor(atual.id);
+    if (proxima === null) return;
+    const juntas = [proxima, ...this.repo.subtarefas([proxima.id])];
+    if (!juntas.every((t) => t.estado === "aberta" && t.criado_em === t.atualizado_em)) return;
+    this.mandarParaLixeira(
+      juntas.map((t) => t.id),
+      r,
+      agora,
+      carimbo,
+    );
   }
 
   /** O lembrete e as etiquetas da tarefa e de cada subtarefa, para a próxima ocorrência. */
@@ -735,8 +791,8 @@ export class ServicoTarefas {
 
   /**
    * A próxima ocorrência: os mesmos campos no dia seguinte da regra, aberta e por último entre as
-   * irmãs; o lembrete com os mesmos minutos, as etiquetas e as subtarefas de novo abertas, com o
-   * dia de cada uma andando o mesmo tanto.
+   * irmãs, ligada à de onde nasceu (`gerada_por`); o lembrete com os mesmos minutos, as etiquetas e
+   * as subtarefas de novo abertas, com o dia de cada uma andando o mesmo tanto.
    */
   private criarProxima(
     atual: LinhaTarefa,
@@ -745,12 +801,17 @@ export class ServicoTarefas {
     agora: string,
     carimbo: Carimbo,
   ): string | null {
-    const proxima = proximaOcorrencia(atual.recorrencia!, atual.vence_em, this.tempo.hoje());
+    const venceEm = atual.vence_em !== null && ehDia(atual.vence_em) ? atual.vence_em : null;
+    const proxima = proximaOcorrencia(atual.recorrencia!, venceEm, this.tempo.hoje(), {
+      hora: venceEm === null ? null : atual.hora,
+      fuso: this.tempo.fuso,
+    });
     if (proxima === null) return null;
-    const salto = atual.vence_em === null ? 0 : diasEntre(atual.vence_em, proxima.dia);
+    const salto = venceEm === null ? 0 : diasEntre(venceEm, proxima.dia);
     const nova = (
       base: LinhaTarefa,
       paiId: string | null,
+      geradaPor: string | null,
       venceEm: string | null,
       hora: string | null,
       recorrencia: string | null,
@@ -766,6 +827,8 @@ export class ServicoTarefas {
         estado: "aberta",
         concluida_em: null,
         ordem: this.repo.proximaOrdemDeTarefa(base.lista_id, paiId),
+        fechada_em: null,
+        gerada_por: geradaPor,
       };
       const id = this.gerarId();
       this.repo.criarTarefa(id, campos, agora, carimbo);
@@ -777,6 +840,7 @@ export class ServicoTarefas {
     const id = nova(
       atual,
       atual.tarefa_pai_id,
+      atual.id,
       proxima.dia,
       atual.hora,
       proxima.recorrencia,
@@ -784,10 +848,12 @@ export class ServicoTarefas {
       heranca.etiquetas,
     );
     for (const filha of heranca.filhas) {
-      const dia = filha.linha.vence_em === null ? null : diaQueAnda(filha.linha.vence_em, salto);
+      const valido = filha.linha.vence_em !== null && ehDia(filha.linha.vence_em);
+      const dia = valido ? diaQueAnda(filha.linha.vence_em!, salto) : null;
       nova(
         filha.linha,
         id,
+        null,
         dia,
         dia === null ? null : filha.linha.hora,
         filha.linha.recorrencia,
@@ -813,6 +879,7 @@ export class ServicoTarefas {
     const chaves = new Set<string>();
     for (const bruto of nomes) {
       const nome = bruto.normalize("NFC").trim();
+      if (nome === "" || nome.length > TAMANHO_ETIQUETA) throw new ErroDasTarefas(MENSAGEM_ETIQUETA_NOME);
       const chave = nomeChave(nome);
       if (chaves.has(chave)) continue;
       chaves.add(chave);
@@ -829,7 +896,7 @@ export class ServicoTarefas {
   }
 
   private quandoToca(dia: string, hora: string, minutos: number): string {
-    const quando = new Date(this.tempo.instante(dia, hora).getTime() - minutos * 60_000);
+    const quando = new Date(this.instanteDe(dia, hora, this.tempo.fuso) - minutos * 60_000);
     if (quando.getUTCFullYear() < 1) throw new ErroDasTarefas(MENSAGEM_LEMBRETE_FORA);
     return quando.toISOString();
   }
@@ -840,9 +907,19 @@ export class ServicoTarefas {
    */
   private minutosAntes(t: BaseDoLembrete, lembrete: LinhaLembrete, fuso = this.tempo.fuso): number | null {
     if (t.vence_em === null || t.hora === null || !ehDia(t.vence_em)) return null;
-    const hora = instanteNoFuso(t.vence_em, t.hora, fuso).getTime();
+    const hora = this.instanteDe(t.vence_em, t.hora, fuso);
     const minutos = (hora - Date.parse(lembrete.quando)) / 60_000;
     return Number.isInteger(minutos) && minutos >= 0 && minutos <= 40_320 ? minutos : null;
+  }
+
+  /** O instante (ms) de hora no dia, no fuso, guardado durante a operação. */
+  private instanteDe(dia: string, hora: string, fuso: string): number {
+    const chave = `${fuso} ${dia} ${hora}`;
+    const guardado = this.daVez?.instantes.get(chave);
+    if (guardado !== undefined) return guardado;
+    const ms = instanteNoFuso(dia, hora, fuso).getTime();
+    this.daVez?.instantes.set(chave, ms);
+    return ms;
   }
 
   private paraTarefa(linha: LinhaTarefa): Tarefa {
@@ -853,10 +930,16 @@ export class ServicoTarefas {
     const ids = linhas.map((l) => l.id);
     const etiquetas = this.repo.etiquetasDasTarefas(ids);
     const lembretes = this.repo.lembretesDasTarefas(ids);
+    const dasFechadas = this.repo.lembretesDasFechadas(
+      linhas.flatMap((l) =>
+        l.estado !== "aberta" && l.fechada_em !== null ? [{ id: l.id, fechadaEm: l.fechada_em }] : [],
+      ),
+    );
     const fuso = this.tempo.fuso;
     return linhas.map((l) => {
-      const lembrete =
-        l.estado === "aberta" ? lembretes.get(l.id) : this.repo.lembreteApagadoEm(l.id, l.atualizado_em);
+      const lembrete = l.estado === "aberta" ? lembretes.get(l.id) : dasFechadas.get(l.id);
+      // Dia que não existe (vindo de outro PC) sai como sem dia, e a hora junto: o contrato o recusaria.
+      const diaValido = l.vence_em !== null && ehDia(l.vence_em);
       return {
         id: l.id,
         listaId: l.lista_id,
@@ -865,8 +948,8 @@ export class ServicoTarefas {
         notas: l.notas,
         notaId: l.nota_id,
         prioridade: l.prioridade,
-        venceEm: l.vence_em,
-        hora: l.hora,
+        venceEm: diaValido ? l.vence_em : null,
+        hora: diaValido ? l.hora : null,
         duracaoEstimadaMin: l.duracao_estimada_min,
         recorrencia: l.recorrencia,
         estado: l.estado,
@@ -889,6 +972,16 @@ export class ServicoTarefas {
     return t;
   }
 
+  /** As vivas dos ids, na ordem do pedido, numa leitura só; id que não existe recusa o pedido. */
+  private exigirVarias(ids: readonly string[]): LinhaTarefa[] {
+    const linhas = new Map(this.repo.tarefasDosIds(ids).map((l) => [l.id, l]));
+    return ids.map((id) => {
+      const linha = linhas.get(id);
+      if (linha === undefined) throw new ErroDasTarefas(MENSAGEM_TAREFA_NAO_ENCONTRADA);
+      return linha;
+    });
+  }
+
   private exigirLista(id: string): LinhaLista {
     const l = this.repo.lista(id);
     if (l === null) throw new ErroDasTarefas(MENSAGEM_LISTA_NAO_ENCONTRADA);
@@ -896,9 +989,10 @@ export class ServicoTarefas {
   }
 
   /** A mãe para onde a tarefa vai: ela não pode ter subtarefas (um nível só). */
-  private novaMae(paiId: string, tarefa: LinhaTarefa, filhas: number): LinhaTarefa {
+  private novaMae(paiId: string, tarefa: LinhaTarefa): LinhaTarefa {
     if (paiId === tarefa.id) throw new ErroDasTarefas(MENSAGEM_ELA_MESMA);
-    if (filhas > 0) throw new ErroDasTarefas(MENSAGEM_UM_NIVEL);
+    // Conta as filhas da lixeira também, como o gatilho da 013: elas ainda podem voltar.
+    if (this.repo.temFilhas(tarefa.id)) throw new ErroDasTarefas(MENSAGEM_UM_NIVEL);
     return this.exigirMae(paiId, tarefa.id);
   }
 

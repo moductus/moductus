@@ -16,6 +16,7 @@ import { RepositorioTarefas } from "./repositorio.ts";
 import {
   LIMITE_IDS,
   MENSAGEM_ENTRADA_ARQUIVADA,
+  MENSAGEM_ETIQUETA_NOME,
   MENSAGEM_ELA_MESMA,
   MENSAGEM_ETIQUETA_REPETIDA,
   MENSAGEM_HORA_SEM_DIA,
@@ -38,6 +39,9 @@ afterEach(() => {
   for (const db of bancos.splice(0)) if (db.isOpen) db.close();
   for (const p of pastas.splice(0)) rmSync(p, { recursive: true, force: true });
 });
+
+/** Quanto um pedido de milhares de ids pode levar (a meta é bem menos; folga para a máquina do CI). */
+const PRAZO_LOTE_MS = 1000;
 
 /** Domingo, 18/10/2026, 09:00 em São Paulo (UTC−3, sem horário de verão). */
 const DOMINGO_9H = "2026-10-18T12:00:00.000Z";
@@ -752,6 +756,144 @@ describe("contrato", () => {
     db.prepare(
       "INSERT INTO lembretes (id, texto, quando, tarefa_id) VALUES ('l1', 'Torta', '2026-03-02T12:45:00.000Z', 'torta')",
     ).run();
-    expect(tarefas.listar({}).map((t) => [t.id, t.lembreteMinutosAntes])).toEqual([["torta", null]]);
+    const lista = tarefas.listar({});
+    confere("tarefas.listar", lista);
+    expect(lista.map((t) => [t.id, t.venceEm, t.hora, t.lembreteMinutosAntes])).toEqual([
+      ["torta", null, null, null],
+    ]);
+    // A recorrente com esse dia conta de hoje.
+    db.prepare("UPDATE tarefas SET recorrencia = 'FREQ=DAILY' WHERE id = 'torta'").run();
+    const r = tarefas.concluir({ id: "torta" });
+    confere("tarefas.concluir", r);
+    expect(r.proxima).toMatchObject({ venceEm: "2026-10-19" });
+  });
+});
+
+describe("volta 1 da revisão", () => {
+  test("concluir, reabrir e concluir de novo não gera uma segunda próxima", () => {
+    const { tarefas, andar } = montar();
+    const t = tarefas.criar({ titulo: "Água", venceEm: "2026-10-18", recorrencia: "FREQ=DAILY" });
+    andar();
+    const primeira = tarefas.concluir({ id: t.id }).proxima!;
+    andar();
+    tarefas.reabrir({ id: t.id });
+    // A próxima intocada vai para a lixeira com o reabrir.
+    expect(() => tarefas.obter({ id: primeira.id })).toThrow(MENSAGEM_TAREFA_NAO_ENCONTRADA);
+    andar();
+    const segunda = tarefas.concluir({ id: t.id }).proxima!;
+    expect(segunda.venceEm).toBe("2026-10-19");
+    expect(tarefas.listar({ vista: "proximas" }).map((x) => x.id)).toEqual([segunda.id]);
+  });
+
+  test("COUNT=3: cancelar, reabrir e cancelar de novo deixa uma próxima só, com COUNT=2", () => {
+    const { tarefas, andar } = montar();
+    const t = tarefas.criar({ titulo: "Dose", venceEm: "2026-10-18", recorrencia: "FREQ=DAILY;COUNT=3" });
+    andar();
+    tarefas.cancelar({ id: t.id });
+    andar();
+    tarefas.reabrir({ id: t.id });
+    andar();
+    tarefas.cancelar({ id: t.id });
+    expect(tarefas.listar({ vista: "proximas" }).map((x) => [x.venceEm, x.recorrencia])).toEqual([
+      ["2026-10-19", "FREQ=DAILY;COUNT=2"],
+    ]);
+  });
+
+  test("a próxima que alguém mexeu fica no reabrir, e fechar de novo não gera outra", () => {
+    const { tarefas, andar } = montar();
+    const t = tarefas.criar({ titulo: "Água", venceEm: "2026-10-18", recorrencia: "FREQ=DAILY" });
+    andar();
+    const proxima = tarefas.concluir({ id: t.id }).proxima!;
+    andar();
+    tarefas.definir({ id: proxima.id, prioridade: 2 });
+    andar();
+    tarefas.reabrir({ id: t.id });
+    expect(tarefas.obter({ id: proxima.id }).prioridade).toBe(2);
+    andar();
+    expect(tarefas.concluir({ id: t.id }).proxima).toBeNull();
+    expect(tarefas.listar({ vista: "proximas" }).map((x) => x.id)).toEqual([proxima.id]);
+  });
+
+  test("tarefa com filha na lixeira não vira subtarefa, com o erro da regra", () => {
+    const { tarefas } = montar();
+    const m1 = tarefas.criar({ titulo: "M1" });
+    const f1 = tarefas.criar({ titulo: "F1", tarefaPaiId: m1.id });
+    const m2 = tarefas.criar({ titulo: "M2" });
+    tarefas.apagar({ id: f1.id });
+    expect(() => tarefas.mover({ id: m1.id, tarefaPaiId: m2.id })).toThrow(MENSAGEM_UM_NIVEL);
+  });
+
+  test("o lembrete volta pela marca do fechamento, mesmo com outra área escrevendo na tarefa", () => {
+    const { db, tarefas, andar } = montar();
+    const t = tarefas.criar({ titulo: "Remédio", venceEm: "2026-10-19", hora: "20:00" });
+    const id = lembretesDe(db, t.id)[0]!.id;
+    andar();
+    tarefas.concluir({ id: t.id });
+    andar();
+    // Como a agenda ao ligar o encaixe (tarefas-do-dia.ts): grava atualizado_em sem passar por aqui.
+    db.prepare("UPDATE tarefas SET atualizado_em = ? WHERE id = ?").run("2026-10-18T12:00:05.000Z", t.id);
+    expect(tarefas.obter({ id: t.id }).lembreteMinutosAntes).toBe(15);
+    andar();
+    expect(tarefas.reabrir({ id: t.id }).lembreteMinutosAntes).toBe(15);
+    expect(vivos(db, t.id).map((l) => l.id)).toEqual([id]);
+  });
+
+  test("no mesmo milissegundo: o lembrete tirado da fechada não volta, e a sem hora não ganha lembrete", () => {
+    // O relógio não anda entre as operações.
+    const { db, tarefas } = montar();
+    const a = tarefas.criar({ titulo: "a", venceEm: "2026-10-19", hora: "20:00" });
+    tarefas.cancelar({ id: a.id });
+    expect(tarefas.definir({ id: a.id, lembreteMinutosAntes: null }).lembreteMinutosAntes).toBeNull();
+    expect(tarefas.reabrir({ id: a.id }).lembreteMinutosAntes).toBeNull();
+    expect(vivos(db, a.id)).toEqual([]);
+
+    const b = tarefas.criar({ titulo: "b", venceEm: "2026-10-19", hora: "20:00" });
+    tarefas.definir({ id: b.id, hora: null });
+    tarefas.concluir({ id: b.id });
+    tarefas.reabrir({ id: b.id });
+    expect(vivos(db, b.id)).toEqual([]);
+  });
+
+  test("UNTIL com hora em UTC vale pelo instante no fuso", () => {
+    const sp = { hora: "22:00", fuso: "America/Sao_Paulo" };
+    // 02:00 UTC do dia 19 é 23:00 do dia 18 em São Paulo: a das 22:00 do dia 19 já passou.
+    expect(proximaOcorrencia("FREQ=DAILY;UNTIL=20261019T020000Z", "2026-10-18", "2026-10-18", sp)).toBeNull();
+    // Até 02:00 UTC do dia 20 (23:00 do dia 19): a das 22:00 do dia 19 ainda vale.
+    expect(proximaOcorrencia("FREQ=DAILY;UNTIL=20261020T020000Z", "2026-10-18", "2026-10-18", sp)?.dia).toBe(
+      "2026-10-19",
+    );
+    // Sem Z, no relógio do fuso: 21:00 do dia 19 vem antes das 22:00.
+    expect(proximaOcorrencia("FREQ=DAILY;UNTIL=20261019T210000", "2026-10-18", "2026-10-18", sp)).toBeNull();
+    // Tarefa sem hora: vale o dia do UNTIL no fuso.
+    expect(
+      proximaOcorrencia("FREQ=DAILY;UNTIL=20261019T020000Z", "2026-10-18", "2026-10-18", {
+        hora: null,
+        fuso: "America/Sao_Paulo",
+      }),
+    ).toBeNull();
+  });
+
+  test("etiqueta só de espaço é recusada pela regra", () => {
+    const { tarefas } = montar();
+    expect(() => tarefas.criar({ titulo: "x", etiquetas: ["   "] })).toThrow(MENSAGEM_ETIQUETA_NOME);
+  });
+
+  test("ordenar e adiar o máximo de ids cabem no prazo", () => {
+    const { db, tarefas, andar } = montar();
+    const ids = Array.from({ length: LIMITE_IDS }, (_, i) => `t${String(i).padStart(5, "0")}`);
+    const inserir = db.prepare(
+      "INSERT INTO tarefas (id, lista_id, titulo, ordem) VALUES (?, 'entrada', ?, ?)",
+    );
+    ids.forEach((id, i) => inserir.run(id, id, i));
+    andar();
+    let inicio = performance.now();
+    tarefas.ordenar({ ids: [...ids].reverse() });
+    const ordenar = performance.now() - inicio;
+    inicio = performance.now();
+    tarefas.adiar({ ids, para: "amanha", hora: "10:00" });
+    const adiar = performance.now() - inicio;
+    console.info(`ordenar ${LIMITE_IDS}: ${ordenar.toFixed(0)} ms; adiar: ${adiar.toFixed(0)} ms`);
+    expect(ordenar).toBeLessThan(PRAZO_LOTE_MS);
+    expect(adiar).toBeLessThan(PRAZO_LOTE_MS);
   });
 });
