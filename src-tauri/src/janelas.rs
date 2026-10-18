@@ -14,7 +14,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewWindow, WebviewWindowBuilder};
 use windows::Win32::{
     Foundation::{HWND, RECT},
     Graphics::Gdi::{GetMonitorInfoW, MonitorFromRect, MONITORINFO, MONITOR_DEFAULTTONEAREST},
@@ -288,11 +288,30 @@ pub fn sistema_abrir(app: AppHandle, area: String) {
 
 // ---------- captura ----------
 
-/// Centraliza a captura no monitor principal, um pouco acima do meio.
-pub fn retangulo_captura(monitor: RECT, largura: i32, altura: i32) -> RECT {
+/// Largura do cartão da captura em pixels lógicos (Captura.dc.html): a janela é o cartão.
+pub const LARGURA_CAPTURA: f64 = 640.0;
+/// A altura que a captura segue ao crescer: o cartão com a prévia e o "Na verdade é" cabe com
+/// folga; mais que isso é pedido fora do normal e fica no teto.
+pub const ALTURA_MAXIMA_CAPTURA: f64 = 560.0;
+pub const ALTURA_MINIMA_CAPTURA: f64 = 48.0;
+/// Altura de referência para o ponto de abertura: o topo da captura fica no mesmo lugar com ou
+/// sem prévia, e ela cresce para baixo.
+pub const ALTURA_ANCORA_CAPTURA: f64 = 72.0;
+
+/// Centraliza a captura no monitor principal, com o topo um pouco acima do meio: o centro da
+/// altura de referência (`ancora`) no terço de cima, qualquer que seja a altura de agora.
+pub fn retangulo_captura(monitor: RECT, largura: i32, altura: i32, ancora: i32) -> RECT {
     let x = monitor.left + (monitor.right - monitor.left - largura) / 2;
-    let y = monitor.top + (monitor.bottom - monitor.top) / 3 - altura / 2;
+    let y = monitor.top + (monitor.bottom - monitor.top) / 3 - ancora / 2;
     RECT { left: x, top: y, right: x + largura, bottom: y + altura }
+}
+
+/// A altura pedida pela interface, dentro dos limites; o que não é número vira o mínimo.
+pub fn altura_captura(pedida: f64) -> f64 {
+    if !pedida.is_finite() {
+        return ALTURA_MINIMA_CAPTURA;
+    }
+    pedida.clamp(ALTURA_MINIMA_CAPTURA, ALTURA_MAXIMA_CAPTURA)
 }
 
 #[tauri::command]
@@ -306,10 +325,22 @@ pub fn captura_alternar(app: AppHandle) {
     unsafe {
         let _ = GetWindowRect(hwnd(&captura), &mut rc);
     }
-    let alvo = retangulo_captura(appbar::monitor_principal(), rc.right - rc.left, rc.bottom - rc.top);
+    let escala = captura.scale_factor().unwrap_or(1.0);
+    let ancora = (ALTURA_ANCORA_CAPTURA * escala).round() as i32;
+    let alvo = retangulo_captura(appbar::monitor_principal(), rc.right - rc.left, rc.bottom - rc.top, ancora);
     let _ = captura.set_position(PhysicalPosition::new(alvo.left, alvo.top));
     let _ = captura.show();
     let _ = captura.set_focus();
+}
+
+/// A captura tem a altura do cartão: a interface mede e pede, e a janela cresce para baixo,
+/// com a largura sempre a do cartão. Só a própria captura pede.
+#[tauri::command]
+pub fn captura_altura(janela: WebviewWindow, altura: f64) {
+    if janela.label() != "captura" {
+        return;
+    }
+    let _ = janela.set_size(LogicalSize::new(LARGURA_CAPTURA, altura_captura(altura)));
 }
 
 #[tauri::command]
@@ -392,7 +423,37 @@ mod testes {
     #[test]
     fn captura_fica_centralizada_no_terco_de_cima() {
         let m = RECT { left: 0, top: 0, right: 2560, bottom: 1440 };
-        let r = retangulo_captura(m, 640, 72);
+        let r = retangulo_captura(m, 640, 72, 72);
         assert_eq!((r.left, r.top, r.right, r.bottom), (960, 444, 1600, 516));
+    }
+
+    /// Com a prévia aberta (mais alta), o topo é o mesmo: a captura cresce para baixo.
+    #[test]
+    fn captura_com_previa_abre_com_o_mesmo_topo() {
+        let m = RECT { left: 0, top: 0, right: 2560, bottom: 1440 };
+        let r = retangulo_captura(m, 640, 300, 72);
+        assert_eq!((r.left, r.top, r.right, r.bottom), (960, 444, 1600, 744));
+    }
+
+    #[test]
+    fn altura_da_captura_fica_nos_limites() {
+        assert_eq!(altura_captura(268.0), 268.0);
+        assert_eq!(altura_captura(0.0), ALTURA_MINIMA_CAPTURA);
+        assert_eq!(altura_captura(10_000.0), ALTURA_MAXIMA_CAPTURA);
+        assert_eq!(altura_captura(f64::NAN), ALTURA_MINIMA_CAPTURA);
+        assert_eq!(altura_captura(f64::INFINITY), ALTURA_MINIMA_CAPTURA);
+    }
+
+    /// A captura é posicionada pelo retângulo externo e o cartão ocupa a janela inteira: com a
+    /// sombra do Windows, a moldura invisível tirava 16 px da largura e 30 da altura (656x81 por
+    /// fora, 640x42 por dentro).
+    #[test]
+    fn captura_nao_tem_moldura_do_windows() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let janelas = conf["app"]["windows"].as_array().unwrap();
+        let captura = janelas.iter().find(|j| j["label"] == "captura").unwrap();
+        assert_eq!(captura["shadow"], false, "captura com sombra do Windows");
+        assert_eq!(captura["decorations"], false, "captura com decoração");
+        assert_eq!(captura["width"].as_f64(), Some(LARGURA_CAPTURA));
     }
 }
