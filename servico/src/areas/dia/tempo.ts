@@ -211,6 +211,11 @@ export class TempoDoDia {
     return somarDias(this.hoje(), 1);
   }
 
+  /** O instante de agora, para contar "daqui a 20 min" sem passar pelo relógio de parede. */
+  instanteDeAgora(): Date {
+    return this.agora();
+  }
+
   /** Agora lido no fuso. */
   momento(): NoFuso {
     return noFuso(this.agora(), this.fuso);

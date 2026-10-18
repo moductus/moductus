@@ -60,7 +60,7 @@ export interface EventoParaExpandir {
   editavel: boolean;
   /**
    * Os inícios que a regra não gera mais (a ocorrência cancelada ou mudada de lugar no Google;
-   * migração 018), no formato do `inicio`: dia no de dia inteiro, instante no com hora.
+   * migração 020), no formato do `inicio`: dia no de dia inteiro, instante no com hora.
    */
   excecoes?: readonly string[];
 }

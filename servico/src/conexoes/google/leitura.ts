@@ -54,7 +54,7 @@ export interface MudancaCache {
 
 /**
  * Os calendários do Google e o cache dos eventos deles (`calendarios` e `eventos` da migração 014,
- * com as exceções da 018). Evento que sai do Google sai do cache de vez, sem lixeira: a fonte é o
+ * com as exceções da 020). Evento que sai do Google sai do cache de vez, sem lixeira: a fonte é o
  * Google, e a linha não viaja para outro PC. O "Moductus" (o espelho) não é lido por aqui.
  */
 export class RepositorioLeituraGoogle {

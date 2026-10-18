@@ -14,7 +14,19 @@ import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.t
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { RepositorioAgenda, ServicoAgenda } from "./areas/agenda/agenda.ts";
 import { RepositorioTarefasDoDia } from "./areas/agenda/tarefas-do-dia.ts";
+import {
+  motivoDaCasca,
+  PrimeiraAtividade,
+  RepositorioAtividade,
+  type MotivoAtividade,
+} from "./areas/dia/atividade.ts";
+import { RelogioDoDia } from "./areas/dia/relogio.ts";
+import { TempoDoDia } from "./areas/dia/tempo.ts";
+import { RepositorioLembretes, ServicoLembretes } from "./areas/lembretes/lembretes.ts";
 import { RepositorioNotas, ServicoNotas } from "./areas/notas/notas.ts";
+import { atendentesDasTarefas } from "./areas/tarefas/canal.ts";
+import { RepositorioTarefas } from "./areas/tarefas/repositorio.ts";
+import { ServicoTarefas } from "./areas/tarefas/tarefas.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ligarBandeja } from "./bandeja/bandeja.ts";
 import { converterPelaConfig, ServicoCambio, vigiarCotacao } from "./cambio/cambio.ts";
@@ -403,6 +415,31 @@ const conversas = new ServicoConversas(
 const notas = new ServicoNotas(new RepositorioNotas(banco), {
   mudou: (mudanca) => servidor?.emitir("notas.mudou", mudanca),
 });
+// Relógio do dia (F3-17, ADR-0032): lembretes disparam por um timer próprio, sem modelo e sem rede.
+const relogio = new RelogioDoDia();
+const lembretes = new ServicoLembretes(
+  new RepositorioLembretes(banco),
+  { lerFuso: () => repositorioConfig.ler().dia.fuso, notificacoes, relogio },
+  {
+    mudou: (mudanca) => servidor?.emitir("lembretes.mudou", mudanca),
+    hoje: (hoje) => servidor?.emitir("lembretes.hoje", hoje),
+  },
+);
+relogio.registrar(lembretes);
+// Tarefas (F3-15): "hoje" no fuso de config; a tarefa com hora mantém o lembrete ligado a ela.
+const tarefas = new ServicoTarefas(
+  new RepositorioTarefas(banco),
+  { lerFuso: () => repositorioConfig.ler().dia.fuso, notas },
+  {
+    tarefas: (mudanca) => servidor?.emitir("tarefas.mudou", mudanca),
+    listas: (listas) => servidor?.emitir("listas.mudou", listas),
+    // O lembrete da tarefa muda pelas Tarefas: o relógio se rearma e o aviso da ocorrência trocada sai.
+    lembretes: (mudanca) => {
+      servidor?.emitir("lembretes.mudou", mudanca);
+      lembretes.mudaramPorFora(mudanca);
+    },
+  },
+);
 // Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
 // Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
 runtime.estados.vigiar();
@@ -487,6 +524,7 @@ servidor = await abrirServidorWs(token, {
   "notas.definir": (mudanca) => notas.definir(mudanca),
   "notas.apagar": (pedido) => notas.apagar(pedido),
   "notas.buscar": (pedido) => notas.buscar(pedido),
+  ...atendentesDasTarefas(tarefas),
   // Abrir a área lê o Google de novo, se a última leitura não acabou de terminar (F3-23).
   "agenda.calendarios": () => {
     leituraGoogle?.aoAbrirArea();
@@ -507,33 +545,16 @@ servidor = await abrirServidorWs(token, {
   "agenda.definirEvento": (mudanca) => agenda.definirEvento(mudanca),
   "agenda.apagarEvento": (pedido) => agenda.apagarEvento(pedido),
   "agenda.aplicarSugestao": (pedido) => agenda.aplicarSugestao(pedido),
+  "lembretes.listar": (pedido) => lembretes.listar(pedido),
+  "lembretes.hoje": () => lembretes.hoje(),
+  "lembretes.criar": (novo) => lembretes.criar(novo),
+  "lembretes.definir": (mudanca) => lembretes.definir(mudanca),
+  "lembretes.adiar": (pedido) => lembretes.adiar(pedido),
+  "lembretes.concluir": (pedido) => lembretes.concluir(pedido),
+  "lembretes.cancelar": (pedido) => lembretes.cancelar(pedido),
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
   ...semAtendente([
-    "listas.listar",
-    "listas.criar",
-    "listas.definir",
-    "listas.ordenar",
-    "listas.apagar",
-    "tarefas.listar",
-    "tarefas.obter",
-    "tarefas.criar",
-    "tarefas.definir",
-    "tarefas.concluir",
-    "tarefas.reabrir",
-    "tarefas.cancelar",
-    "tarefas.adiar",
-    "tarefas.mover",
-    "tarefas.ordenar",
-    "tarefas.apagar",
-    "tarefas.etiquetas",
-    "lembretes.listar",
-    "lembretes.hoje",
-    "lembretes.criar",
-    "lembretes.definir",
-    "lembretes.adiar",
-    "lembretes.concluir",
-    "lembretes.cancelar",
     "foco.obter",
     "foco.iniciar",
     "foco.alternar",
@@ -575,7 +596,33 @@ const agendador = new Agendador({
   runtime,
 });
 agendador.vigiar();
+// A primeira atividade do dia (F3-27, ADR-0033): o desbloqueio ou o logon (a casca avisa
+// `atividade`), a retomada e a subida, depois das 05:00 no fuso de config, ou o horário fixo do
+// briefing. Uma vez por dia; o briefing que sai daqui é a F3-29.
+const primeiraAtividade = new PrimeiraAtividade(
+  new RepositorioAtividade(banco),
+  new TempoDoDia(() => repositorioConfig.ler().dia.fuso),
+  (inicio) => console.error(`dia: ${inicio.dia} começou (${inicio.motivo})`),
+);
+primeiraAtividade.vigiar();
+// O que venceu com o serviço parado vira atrasado, num aviso só; depois o timer fica armado.
+relogio.ligar().catch((erro: unknown) => console.error(`relógio do dia não ligou: ${String(erro)}`));
+/** Um sinal de atividade; banco com problema não derruba quem avisou. */
+function sinalDeAtividade(motivo: MotivoAtividade): void {
+  try {
+    primeiraAtividade.sinal(motivo);
+  } catch (erro) {
+    console.error(`dia: sinal de atividade (${motivo}) falhou: ${String(erro)}`);
+  }
+}
+sinalDeAtividade("subida");
+canal.aoAvisar("atividade", (aviso) => sinalDeAtividade(motivoDaCasca(aviso)));
 canal.aoAvisar("retomou", () => {
+  sinalDeAtividade("retomada");
+  // Na volta da suspensão, os lembretes que venceram com o PC dormindo chegam juntos.
+  relogio
+    .retomar()
+    .catch((erro: unknown) => console.error(`relógio do dia: retomada falhou: ${String(erro)}`));
   agendador
     .retomar()
     .then(() => github.atualizar("conexao"))

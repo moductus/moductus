@@ -22,6 +22,8 @@ mod midia;
 mod notificacao;
 mod registro;
 mod servico;
+// Avisa o serviço pelo canal do sidecar quando a sessão é desbloqueada (a primeira atividade do dia).
+mod sessao_windows;
 mod tela_cheia;
 
 use tauri::{Manager, RunEvent, WindowEvent};
@@ -82,6 +84,7 @@ pub fn run() {
             dock::iniciar(&janela_dock, dock::Configuracao::default());
             acessibilidade::iniciar(app.handle().clone(), dock::hwnd_de(&janela_dock));
             energia::iniciar(dock::hwnd_de(&janela_dock));
+            sessao_windows::iniciar(dock::hwnd_de(&janela_dock));
             janelas::criar(app.handle())?;
             for rotulo in JANELAS {
                 if app.get_webview_window(rotulo).is_none() {

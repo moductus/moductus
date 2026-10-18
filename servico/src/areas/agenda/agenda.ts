@@ -100,7 +100,7 @@ interface LinhaEvento {
   recorrencia: string | null;
   id_externo: string | null;
   alertas: string;
-  /** Lista JSON dos inícios que a regra não gera mais (migração 018). */
+  /** Lista JSON dos inícios que a regra não gera mais (migração 020). */
   excecoes: string;
   origem: Origem;
   agente_id: string | null;

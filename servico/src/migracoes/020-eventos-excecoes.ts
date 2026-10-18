@@ -8,8 +8,8 @@ import type { Migracao } from "../banco/migracoes.ts";
  * outro evento no cache. Sem isso, a reunião cancelada ou adiada apareceria do mesmo jeito. O
  * evento do local nunca tem exceção: a lista fica vazia.
  */
-export const m018: Migracao = {
-  versao: 18,
+export const m020: Migracao = {
+  versao: 20,
   nome: "eventos-excecoes",
   sql: `ALTER TABLE eventos ADD COLUMN excecoes TEXT NOT NULL DEFAULT '[]'
     CHECK (json_valid(excecoes) AND json_type(excecoes) = 'array');`,
