@@ -350,6 +350,14 @@ export class ServicoTarefas {
     return this.paraTarefas([...linhas, ...filhas]);
   }
 
+  /**
+   * As pendentes de hoje, a contagem da área (`areas.contagens`): as abertas de hoje e as
+   * atrasadas, que o Hoje mostra junto. Subtarefa com dia conta como as outras.
+   */
+  pendentesDeHoje(): number {
+    return this.repo.contarAbertasAte(this.tempo.hoje());
+  }
+
   obter(pedido: PedidoTarefa): Tarefa {
     return this.paraTarefa(this.exigir(pedido.id));
   }
