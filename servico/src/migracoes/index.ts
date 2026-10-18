@@ -16,6 +16,7 @@ import { m014 } from "./014-agenda-foco.ts";
 import { m015 } from "./015-notas.ts";
 import { m016 } from "./016-provedores-caminho.ts";
 import { m017 } from "./017-agentes-teto-moeda.ts";
+import { m018 } from "./018-tarefas-fechamento.ts";
 
 /** Todas as migrações, em ordem. Migração publicada não muda: corrige-se com outra. */
 export const MIGRACOES: readonly Migracao[] = [
@@ -36,4 +37,5 @@ export const MIGRACOES: readonly Migracao[] = [
   m015,
   m016,
   m017,
+  m018,
 ];
