@@ -12,6 +12,9 @@ import {
   type AvisoWindows,
 } from "../../notificacoes/notificacoes.ts";
 import { GUARDA_MS, RelogioDoDia } from "../dia/relogio.ts";
+import { RepositorioNotas, ServicoNotas } from "../notas/notas.ts";
+import { RepositorioTarefas } from "../tarefas/repositorio.ts";
+import { ServicoTarefas } from "../tarefas/tarefas.ts";
 import {
   MENSAGEM_NAO_ENCONTRADO,
   MENSAGEM_TAREFA,
@@ -321,7 +324,7 @@ describe("recorrentes", () => {
     expect(unico(lembretes.listar({}))).toMatchObject({
       estado: "disparado",
       quando: iso(sp("2026-10-09", "15:00")),
-      recorrencia: "FREQ=DAILY;COUNT=2",
+      recorrencia: "FREQ=DAILY;COUNT=3",
     });
     // O aviso de ontem não decide pelo de hoje.
     await notificacoes.aoClicar(primeiro.id, "feito");
@@ -333,7 +336,7 @@ describe("recorrentes", () => {
     expect(unico(feito.lembretes)).toMatchObject({
       estado: "agendado",
       quando: iso(sp("2026-10-10", "15:00")),
-      recorrencia: "FREQ=DAILY;COUNT=1",
+      recorrencia: "FREQ=DAILY;COUNT=3",
     });
 
     await vi.advanceTimersByTimeAsync(DIA);
@@ -405,5 +408,174 @@ describe("pedidos", () => {
     lembretes.mudaramPorFora({ lembretes: [], removidos: ["l1"] });
     await vi.advanceTimersByTimeAsync(0);
     expect(casca.retirados).toEqual([casca.mostrados[0]?.id]);
+  });
+
+  test("o intervalo é o de quando ele toca: o adiado sai do dia de antes e entra no do adiamento", async () => {
+    const { lembretes } = montar({ agora: sp(HOJE, "09:00") });
+    const a = await lembretes.criar({ texto: "A", quando: iso(sp(HOJE, "10:00")) });
+    await lembretes.adiar({ ids: [a.id], minutos: 24 * 60 });
+    expect(lembretes.listar({ de: iso(sp(HOJE, "00:00")), ate: iso(sp(HOJE, "23:59")) })).toEqual([]);
+    const depois = lembretes.listar({
+      de: iso(sp("2026-10-09", "00:00")),
+      ate: iso(sp("2026-10-09", "23:59")),
+    });
+    expect(depois.map((l) => l.id)).toEqual([a.id]);
+  });
+});
+
+describe("com as Tarefas", () => {
+  /** A área Tarefas de verdade, avisando os lembretes como o main.ts liga. */
+  function comTarefas(m: ReturnType<typeof montar>) {
+    const notas = new ServicoNotas(new RepositorioNotas(m.db), { mudou: () => {} });
+    const mudancas: MudancaLembretes[] = [];
+    const tarefas = new ServicoTarefas(
+      new RepositorioTarefas(m.db),
+      { lerFuso: () => m.config.fuso, notas },
+      {
+        tarefas: () => {},
+        listas: () => {},
+        lembretes: (mudanca) => {
+          mudancas.push(mudanca);
+          m.lembretes.mudaramPorFora(mudanca);
+        },
+      },
+    );
+    return { tarefas, mudancas };
+  }
+
+  test("tarefa reagendada ou apagada com o lembrete tocando: o relógio segue e o aviso velho sai", async () => {
+    const m = montar();
+    const { casca, relogio, lembretes } = m;
+    const { tarefas, mudancas } = comTarefas(m);
+    await relogio.ligar();
+    const t = tarefas.criar({ titulo: "Ligar para o contador", venceEm: HOJE, hora: "15:00" });
+    await vi.advanceTimersByTimeAsync(15 * MIN);
+    const primeiro = unico(casca.mostrados);
+    expect(primeiro).toMatchObject({ titulo: "Ligar para o contador", corpo: "Tarefa de hoje às 15:00" });
+
+    // A tarefa vai para as 16:00: o lembrete volta a agendado às 15:45 e o aviso das 14:45 sai.
+    tarefas.definir({ id: t.id, hora: "16:00" });
+    await vi.advanceTimersByTimeAsync(0);
+    const lembrete = unico(lembretes.listar({}));
+    expect(mudancas.at(-1)?.anteriores).toEqual([{ id: lembrete.id, quando: iso(sp(HOJE, "14:45")) }]);
+    expect(casca.retirados).toEqual([primeiro.id]);
+    expect(lembrete).toMatchObject({ estado: "agendado", quando: iso(sp(HOJE, "15:45")) });
+
+    await vi.advanceTimersByTimeAsync(60 * MIN);
+    const segundo = casca.mostrados[1] as AvisoWindows;
+    expect(segundo.corpo).toBe("Tarefa de hoje às 16:00");
+
+    // Apagar a tarefa leva o lembrete junto, e o aviso dele.
+    tarefas.apagar({ id: t.id });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(casca.retirados).toEqual([primeiro.id, segundo.id]);
+    expect(lembretes.hoje().tocando).toEqual([]);
+  });
+});
+
+describe("volta 1", () => {
+  test("o recorrente tocando entra como chegando pela próxima, e o relógio arma os 30 min antes", async () => {
+    const { relogio, lembretes } = montar({ agora: sp(HOJE, "14:50") });
+    await relogio.ligar();
+    const criado = await lembretes.criar({
+      texto: "Beber água",
+      quando: iso(sp(HOJE, "15:00")),
+      recorrencia: "FREQ=DAILY",
+    });
+    await vi.advanceTimersByTimeAsync(10 * MIN);
+    expect(unico(lembretes.hoje().tocando).id).toBe(criado.id);
+
+    vi.setSystemTime(sp("2026-10-09", "14:00"));
+    expect(lembretes.proximo(new Date())).toEqual(sp("2026-10-09", "14:30"));
+    expect(lembretes.hoje().chegando).toBeNull();
+    vi.setSystemTime(sp("2026-10-09", "14:31"));
+    const chegando = lembretes.hoje().chegando;
+    confere("lembretes.hoje", lembretes.hoje());
+    expect(chegando).toMatchObject({
+      id: criado.id,
+      estado: "agendado",
+      quando: iso(sp("2026-10-09", "15:00")),
+    });
+  });
+
+  test("horário de verão: o pulo vale só no dia do pulo, e a hora local volta a ser a do início", async () => {
+    const m = montar({ agora: new Date("2026-03-07T06:00:00.000Z") });
+    m.config.fuso = "America/New_York";
+    // 02:30 em Nova York, todo dia; em 8/3 as 02:30 não existem (02:00 vira 03:00).
+    const criado = await m.lembretes.criar({
+      texto: "Remédio",
+      quando: "2026-03-07T07:30:00.000Z",
+      recorrencia: "FREQ=DAILY;COUNT=5",
+    });
+    vi.setSystemTime(new Date("2026-03-07T08:00:00.000Z"));
+    const dia8 = unico((await m.lembretes.concluir({ ids: [criado.id] })).lembretes);
+    expect(dia8.quando).toBe("2026-03-08T07:30:00.000Z"); // 03:30 EDT
+    vi.setSystemTime(new Date("2026-03-08T08:00:00.000Z"));
+    const dia9 = unico((await m.lembretes.concluir({ ids: [criado.id] })).lembretes);
+    expect(dia9.quando).toBe("2026-03-09T06:30:00.000Z"); // 02:30 EDT de novo
+    expect(dia9.recorrencia).toBe("FREQ=DAILY;COUNT=5");
+    // O COUNT conta do início: 7, 8, 9, 10 e 11 de março.
+    vi.setSystemTime(new Date("2026-03-11T08:00:00.000Z"));
+    expect(await m.lembretes.concluir({ ids: [criado.id] })).toEqual({
+      lembretes: [],
+      removidos: [criado.id],
+    });
+  });
+
+  test("UNTIL: o recorrente acaba no último dia da regra", async () => {
+    const { lembretes } = montar();
+    const criado = await lembretes.criar({
+      texto: "Tomar o antibiótico",
+      quando: iso(sp(HOJE, "15:00")),
+      recorrencia: "FREQ=DAILY;UNTIL=20261009T235959Z",
+    });
+    const dia9 = unico((await lembretes.concluir({ ids: [criado.id] })).lembretes);
+    expect(dia9.quando).toBe(iso(sp("2026-10-09", "15:00")));
+    expect(await lembretes.concluir({ ids: [criado.id] })).toEqual({ lembretes: [], removidos: [criado.id] });
+  });
+
+  test("o único atrasado que volta a tocar leva o aviso agrupado junto", async () => {
+    const { casca, relogio, lembretes } = montar({ agora: sp(HOJE, "14:00") });
+    await lembretes.criar({ texto: "Beber água", quando: iso(sp(HOJE, "15:00")), recorrencia: "FREQ=DAILY" });
+    vi.setSystemTime(sp(HOJE, "16:00"));
+    await relogio.ligar();
+    const agrupado = unico(casca.mostrados);
+    expect(agrupado.titulo).toBe("1 lembrete passou enquanto o Moductus estava fechado");
+
+    await vi.advanceTimersByTimeAsync(23 * 60 * MIN);
+    expect(casca.mostrados.map((a) => a.titulo)).toEqual([agrupado.titulo, "Beber água"]);
+    expect(casca.retirados).toContain(agrupado.id);
+    expect(lembretes.hoje().atrasados).toEqual([]);
+  });
+
+  test("canal dock: toca só no painel Hoje, sem aviso do Windows, nem no agrupado", async () => {
+    const { casca, relogio, lembretes } = montar({ agora: sp(HOJE, "14:20") });
+    await relogio.ligar();
+    const quieto = await lembretes.criar({ texto: "Alongar", quando: iso(sp(HOJE, "14:30")), canal: "dock" });
+    await vi.advanceTimersByTimeAsync(10 * MIN);
+    expect(casca.mostrados).toEqual([]);
+    expect(unico(lembretes.hoje().tocando).id).toBe(quieto.id);
+
+    await lembretes.criar({ texto: "Postura", quando: iso(sp(HOJE, "15:00")), canal: "dock" });
+    vi.setSystemTime(sp(HOJE, "16:00"));
+    await relogio.retomar();
+    expect(casca.mostrados).toEqual([]);
+    expect(unico(lembretes.hoje().atrasados).texto).toBe("Postura");
+  });
+
+  test("cada atrasado com a ausência em que venceu: o cartão só mostra a que vale para todos", async () => {
+    const { relogio, lembretes } = montar({ agora: sp(HOJE, "14:20") });
+    await relogio.ligar();
+    // Escrito para um horário que já passou: atrasado sem ausência.
+    const quieto = await lembretes.criar({ texto: "Antigo", quando: iso(sp(HOJE, "13:00")) });
+    await vi.advanceTimersByTimeAsync(0);
+    await lembretes.criar({ texto: "Da suspensão", quando: iso(sp(HOJE, "14:30")) });
+    vi.setSystemTime(sp(HOJE, "16:05"));
+    await relogio.retomar();
+    expect(lembretes.hoje().atrasados).toHaveLength(2);
+    expect(lembretes.hoje().ausencia).toBeNull();
+
+    await lembretes.concluir({ ids: [quieto.id] });
+    expect(lembretes.hoje().ausencia).toEqual({ de: iso(sp(HOJE, "14:20")), ate: iso(sp(HOJE, "16:05")) });
   });
 });

@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { FOLGA_DO_TIMER_MS, GUARDA_MS, RelogioDoDia, type Conferencia } from "./relogio.ts";
+import {
+  ESPERA_DEPOIS_DA_FALHA_MS,
+  FOLGA_DO_TIMER_MS,
+  GUARDA_MS,
+  RelogioDoDia,
+  type Conferencia,
+} from "./relogio.ts";
 
 const INICIO = new Date("2026-10-08T17:00:00.000Z");
 
@@ -113,6 +119,47 @@ describe("relógio do dia", () => {
     await vi.advanceTimersByTimeAsync(GUARDA_MS);
     expect(boa.conferencias).toHaveLength(2);
     expect(erro).toHaveBeenCalledWith(expect.stringContaining("quebrada falhou"));
+    erro.mockRestore();
+  });
+
+  test("a fonte que falha com algo vencido não gira em falso: tenta de novo alguns segundos depois", async () => {
+    const relogio = new RelogioDoDia();
+    const f = fonte();
+    f.falha = true;
+    f.proximoEm = em(-1_000);
+    relogio.registrar(f);
+    const erro = vi.spyOn(console, "error").mockImplementation(() => {});
+    await relogio.ligar();
+    await vi.advanceTimersByTimeAsync(ESPERA_DEPOIS_DA_FALHA_MS * 2);
+    expect(f.conferencias.map((c) => c.agora)).toEqual([
+      em(0),
+      em(ESPERA_DEPOIS_DA_FALHA_MS),
+      em(ESPERA_DEPOIS_DA_FALHA_MS * 2),
+    ]);
+    erro.mockRestore();
+  });
+
+  test("uma falha fora das fontes não quebra a fila: a conferência seguinte ainda roda", async () => {
+    let quebra = true;
+    const relogio = new RelogioDoDia({
+      agora: () => {
+        if (quebra) {
+          quebra = false;
+          throw new Error("relógio do sistema");
+        }
+        return new Date();
+      },
+    });
+    const f = fonte();
+    relogio.registrar(f);
+    const erro = vi.spyOn(console, "error").mockImplementation(() => {});
+    await relogio.ligar();
+    expect(f.conferencias).toHaveLength(0);
+    await relogio.retomar();
+    expect(f.conferencias).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(GUARDA_MS);
+    expect(f.conferencias).toHaveLength(2);
+    expect(erro).toHaveBeenCalledWith(expect.stringContaining("conferência falhou"));
     erro.mockRestore();
   });
 

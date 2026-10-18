@@ -6,6 +6,7 @@ import {
   PedidoLembretes,
   PedidoListarLembretes,
   type Apagados,
+  type Ausencia as AusenciaDoCartao,
   type CanalLembrete,
   type EstadoLembrete,
   type Lembrete,
@@ -16,7 +17,7 @@ import {
 import { colunasDeOrigem, DO_USUARIO, type Carimbo } from "../../banco/tabela.ts";
 import { novoId } from "../../banco/ulid.ts";
 import type { BotaoAviso, NovoAviso, ServicoNotificacoes } from "../../notificacoes/notificacoes.ts";
-import { escreverRecorrencia, lerRecorrencia, proximoInstante } from "../dia/recorrencia.ts";
+import { lerRecorrencia, proximoInstante } from "../dia/recorrencia.ts";
 import type { Ausencia, Conferencia, FonteDoRelogio } from "../dia/relogio.ts";
 import { TempoDoDia } from "../dia/tempo.ts";
 
@@ -27,10 +28,12 @@ import { TempoDoDia } from "../dia/tempo.ts";
  * (`disparado`) ou a que passou sem tocar (`perdido`).
  *
  * - **Disparo:** grava `disparado` e `disparado_em` numa transação e avisa como notificação do
- *   tipo `lembrete` em nome da Alba, com **Adiar 10 min** e **Feito** no aviso do Windows.
- * - **Recorrente:** a próxima ocorrência vem da regra a partir do `quando` (o `COUNT` desconta as
- *   que ficaram para trás). Tocando ou perdido, ele toca de novo na próxima, que toma o lugar da
- *   anterior; Feito o volta a `agendado` na próxima depois de agora; regra que acabou sai.
+ *   tipo `lembrete` em nome da Alba, com **Adiar 10 min** e **Feito** no aviso do Windows. O canal
+ *   `dock` só aparece no painel Hoje, sem aviso.
+ * - **Recorrente:** a regra conta do início dela (`inicio_recorrencia`, o DTSTART), que não anda: a
+ *   hora local de toda ocorrência vem dele, e o `COUNT` também. Tocando ou perdido, ele toca de novo
+ *   na próxima, que toma o lugar da anterior; Feito o volta a `agendado` na próxima depois de agora;
+ *   regra que acabou sai.
  * - **Atrasado:** o que o relógio só confere mais de 2 min depois da hora vira `perdido`, sem tocar.
  *   Se foi numa ausência (serviço parado, PC suspenso), os dessa vez saem juntos num aviso só.
  *   Escrito para um horário que já passou há mais de 2 min também vira `perdido`, quieto.
@@ -62,10 +65,13 @@ const PREFIXO = "lembrete";
 export const REFERENCIA_ATRASADOS = "lembretes:atrasados";
 /** Quantos textos o aviso agrupado mostra antes do "e mais N". */
 const TEXTOS_NO_AGRUPADO = 3;
-/** Teto de passos ao andar uma regra: um recorrente esquecido por anos não trava o serviço. */
+/** Teto de passos ao andar uma regra a partir de uma ocorrência achada. */
 const PASSOS_MAXIMOS = 5000;
-/** Sem `COUNT`, o andar salta direto para perto do alvo: alguns dias antes dele. */
-const SALTO_MS = 8 * 86_400_000;
+/**
+ * As janelas em que a última ocorrência antes de um limite é procurada, da menor para a maior: o
+ * diário acha na primeira, o mensal e o anual nas seguintes, sem andar uma a uma desde o início.
+ */
+const JANELAS_MS = [8, 64, 400, 4000, 40_000].map((dias) => dias * 86_400_000);
 
 /**
  * A referência do aviso é a da ocorrência (`lembrete:<id>@<quando>`): o aviso de uma ocorrência que
@@ -78,6 +84,7 @@ export interface LinhaLembrete {
   texto: string;
   quando: string;
   recorrencia: string | null;
+  inicio_recorrencia: string | null;
   tarefa_id: string | null;
   evento_id: string | null;
   estado: EstadoLembrete;
@@ -92,7 +99,7 @@ export interface LinhaLembrete {
 }
 
 const COLUNAS =
-  "id, texto, quando, recorrencia, tarefa_id, evento_id, estado, disparado_em, adiado_ate, canal, origem, agente_id, execucao_id, criado_em, atualizado_em";
+  "id, texto, quando, recorrencia, inicio_recorrencia, tarefa_id, evento_id, estado, disparado_em, adiado_ate, canal, origem, agente_id, execucao_id, criado_em, atualizado_em";
 /** A hora em que o lembrete toca: a do adiamento, ou a da ocorrência. */
 const VENCIMENTO = "coalesce(adiado_ate, quando)";
 const ESPERANDO = "estado IN ('agendado', 'adiado')";
@@ -120,6 +127,7 @@ export interface CamposLembrete {
   texto: string;
   quando: string;
   recorrencia: string | null;
+  inicio_recorrencia: string | null;
   canal: CanalLembrete;
   estado: EstadoLembrete;
   disparado_em: string | null;
@@ -130,13 +138,14 @@ const camposDe = (l: LinhaLembrete): CamposLembrete => ({
   texto: l.texto,
   quando: l.quando,
   recorrencia: l.recorrencia,
+  inicio_recorrencia: l.inicio_recorrencia,
   canal: l.canal,
   estado: l.estado,
   disparado_em: l.disparado_em,
   adiado_ate: l.adiado_ate,
 });
 
-/** `lembretes` da migração 013. O que está na lixeira não aparece. */
+/** `lembretes` das migrações 013 e 019. O que está na lixeira não aparece. */
 export class RepositorioLembretes {
   constructor(private readonly db: DatabaseSync) {}
 
@@ -147,15 +156,17 @@ export class RepositorioLembretes {
     return linha ?? null;
   }
 
-  /** Os de um intervalo de `quando` ou de `adiado_ate`, e só dos estados pedidos. */
+  /** Os que tocam num intervalo (a hora do adiamento, ou a da ocorrência), e só dos estados pedidos. */
   lista(filtro: { de?: string; ate?: string; estados?: readonly EstadoLembrete[] }): LinhaLembrete[] {
     const filtros = ["apagado_em IS NULL"];
     const valores: string[] = [];
-    if (filtro.de !== undefined || filtro.ate !== undefined) {
-      const de = filtro.de ?? "";
-      const ate = filtro.ate ?? "￿";
-      filtros.push("((quando >= ? AND quando <= ?) OR (adiado_ate >= ? AND adiado_ate <= ?))");
-      valores.push(de, ate, de, ate);
+    if (filtro.de !== undefined) {
+      filtros.push(`${VENCIMENTO} >= ?`);
+      valores.push(filtro.de);
+    }
+    if (filtro.ate !== undefined) {
+      filtros.push(`${VENCIMENTO} <= ?`);
+      valores.push(filtro.ate);
     }
     if (filtro.estados) {
       filtros.push(`estado IN (${filtro.estados.map(() => "?").join(", ")})`);
@@ -197,7 +208,7 @@ export class RepositorioLembretes {
     return linha ?? null;
   }
 
-  /** Os recorrentes tocando ou perdidos: tocam de novo na próxima ocorrência. */
+  /** Os recorrentes tocando ou perdidos: tocam de novo na próxima (índice da 019). */
   recorrentesParados(): LinhaLembrete[] {
     return this.db
       .prepare(
@@ -215,15 +226,16 @@ export class RepositorioLembretes {
     const origem = colunasDeOrigem(carimbo);
     this.db
       .prepare(
-        `INSERT INTO lembretes (id, texto, quando, recorrencia, tarefa_id, evento_id, estado, disparado_em,
-           adiado_ate, canal, criado_em, atualizado_em, origem, agente_id, execucao_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO lembretes (id, texto, quando, recorrencia, inicio_recorrencia, tarefa_id, evento_id, estado,
+           disparado_em, adiado_ate, canal, criado_em, atualizado_em, origem, agente_id, execucao_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         l.id,
         l.texto,
         l.quando,
         l.recorrencia,
+        l.inicio_recorrencia,
         l.tarefaId,
         l.eventoId,
         l.estado,
@@ -244,27 +256,25 @@ export class RepositorioLembretes {
       c.texto,
       c.quando,
       c.recorrencia,
+      c.inicio_recorrencia,
       c.canal,
       c.estado,
       c.disparado_em,
       c.adiado_ate,
       agora,
     ];
+    const campos = `texto = ?, quando = ?, recorrencia = ?, inicio_recorrencia = ?, canal = ?, estado = ?,
+      disparado_em = ?, adiado_ate = ?, atualizado_em = ?`;
     if (carimbo === null) {
       this.db
-        .prepare(
-          `UPDATE lembretes SET texto = ?, quando = ?, recorrencia = ?, canal = ?, estado = ?, disparado_em = ?,
-             adiado_ate = ?, atualizado_em = ? WHERE id = ? AND apagado_em IS NULL`,
-        )
+        .prepare(`UPDATE lembretes SET ${campos} WHERE id = ? AND apagado_em IS NULL`)
         .run(...valores, id);
       return;
     }
     const origem = colunasDeOrigem(carimbo);
     this.db
       .prepare(
-        `UPDATE lembretes SET texto = ?, quando = ?, recorrencia = ?, canal = ?, estado = ?, disparado_em = ?,
-           adiado_ate = ?, atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
-         WHERE id = ? AND apagado_em IS NULL`,
+        `UPDATE lembretes SET ${campos}, origem = ?, agente_id = ?, execucao_id = ? WHERE id = ? AND apagado_em IS NULL`,
       )
       .run(...valores, origem.origem, origem.agente_id, origem.execucao_id, id);
   }
@@ -312,70 +322,59 @@ export class RepositorioLembretes {
   }
 }
 
-/** Uma ocorrência de um lembrete: o instante e a regra que vale a partir dele (com o `COUNT` que resta). */
+/**
+ * Uma ocorrência de um lembrete: o instante, a regra e o início dela (o DTSTART), de onde vêm a
+ * hora local das ocorrências e a contagem do `COUNT`.
+ */
 export interface Ocorrencia {
   quando: Date;
+  inicio: Date;
   recorrencia: string | null;
 }
 
-/** A ocorrência seguinte, ou `null` sem regra, com a regra acabada ou fora do subconjunto. */
+/** A primeira ocorrência da regra depois de `depoisDe`, ou `null` sem regra, acabada ou fora do subconjunto. */
+function proximaDaRegra(o: Ocorrencia, depoisDe: Date, fuso: string): Ocorrencia | null {
+  if (o.recorrencia === null || !lerRecorrencia(o.recorrencia).entendida) return null;
+  const quando = proximoInstante(o.recorrencia, o.inicio, fuso, depoisDe);
+  return quando === null ? null : { ...o, quando };
+}
+
+/** A ocorrência seguinte. */
 export function seguinte(o: Ocorrencia, fuso: string): Ocorrencia | null {
-  if (o.recorrencia === null) return null;
-  const leitura = lerRecorrencia(o.recorrencia);
-  if (!leitura.entendida) return null;
-  const proxima = proximoInstante(o.recorrencia, o.quando, fuso, o.quando);
-  if (proxima === null) return null;
-  const { contagem } = leitura.regra;
-  // A regra passa a contar da ocorrência nova: o COUNT perde a que ficou para trás.
-  const recorrencia =
-    contagem === null ? o.recorrencia : escreverRecorrencia({ ...leitura.regra, contagem: contagem - 1 });
-  return { quando: proxima, recorrencia };
+  return proximaDaRegra(o, o.quando, fuso);
 }
 
-/** A última ocorrência até `limite`, a partir de `o` (que fica, se a seguinte já passa do limite). */
-export function ultimaAte(o: Ocorrencia, limite: Date, fuso: string): Ocorrencia {
-  let atual = saltar(o, new Date(limite.getTime() - SALTO_MS), fuso);
-  if (atual.quando.getTime() > limite.getTime()) atual = o;
-  for (let i = 0; i < PASSOS_MAXIMOS; i++) {
-    const s = seguinte(atual, fuso);
-    if (s === null || s.quando.getTime() > limite.getTime()) break;
-    atual = s;
-  }
-  return atual;
-}
-
-/** A primeira ocorrência depois de `limite`, ou `null` se a regra acaba antes. */
+/** A primeira ocorrência depois de `limite` (e depois de `o`), ou `null` se a regra acaba antes. */
 export function primeiraDepois(o: Ocorrencia, limite: Date, fuso: string): Ocorrencia | null {
-  let atual = o;
-  const salto = saltar(o, new Date(limite.getTime() - SALTO_MS), fuso);
-  if (salto !== o) {
-    // O salto já é a primeira depois de alguns dias antes do limite: se passou dele, é a resposta.
-    if (salto.quando.getTime() > limite.getTime()) return salto;
-    atual = salto;
-  }
-  for (let i = 0; i < PASSOS_MAXIMOS; i++) {
-    const s = seguinte(atual, fuso);
-    if (s === null) return null;
-    atual = s;
-    if (atual.quando.getTime() > limite.getTime()) return atual;
-  }
-  return null;
+  return proximaDaRegra(o, new Date(Math.max(limite.getTime(), o.quando.getTime())), fuso);
 }
 
 /**
- * Sem `COUNT`, a regra vale igual a partir de qualquer ocorrência: salta direto para a primeira
- * depois de `depoisDe`, sem andar uma a uma (um diário esquecido por um ano). Com `COUNT`, anda.
+ * A última ocorrência até `limite`, a partir de `o` (que fica, se a seguinte já passa do limite).
+ * Procura numa janela antes do limite, que cresce até achar: nada de andar uma a uma desde `o`.
  */
-function saltar(o: Ocorrencia, depoisDe: Date, fuso: string): Ocorrencia {
-  if (o.recorrencia === null || depoisDe.getTime() <= o.quando.getTime()) return o;
-  const leitura = lerRecorrencia(o.recorrencia);
-  if (!leitura.entendida || leitura.regra.contagem !== null) return o;
-  const salto = proximoInstante(o.recorrencia, o.quando, fuso, depoisDe);
-  return salto === null ? o : { quando: salto, recorrencia: o.recorrencia };
+export function ultimaAte(o: Ocorrencia, limite: Date, fuso: string): Ocorrencia {
+  if (o.recorrencia === null || limite.getTime() <= o.quando.getTime()) return o;
+  for (const janela of JANELAS_MS) {
+    const desde = Math.max(o.quando.getTime(), limite.getTime() - janela);
+    const achada = proximaDaRegra(o, new Date(desde), fuso);
+    if (achada !== null && achada.quando.getTime() <= limite.getTime()) {
+      let atual = achada;
+      for (let i = 0; i < PASSOS_MAXIMOS; i++) {
+        const s = seguinte(atual, fuso);
+        if (s === null || s.quando.getTime() > limite.getTime()) break;
+        atual = s;
+      }
+      return atual;
+    }
+    if (desde === o.quando.getTime()) return o;
+  }
+  return o;
 }
 
 const ocorrenciaDe = (l: LinhaLembrete): Ocorrencia => ({
   quando: new Date(l.quando),
+  inicio: new Date(l.inicio_recorrencia ?? l.quando),
   recorrencia: l.recorrencia,
 });
 
@@ -407,8 +406,13 @@ export class ServicoLembretes implements FonteDoRelogio {
   private readonly agora: () => Date;
   private readonly gerarId: () => string;
   private readonly tempo: TempoDoDia;
-  /** A ausência em que os atrasados de agora venceram, para o cartão; some com eles. */
-  private ausencia: { de: string; ate: string } | null = null;
+  /**
+   * A ausência em que cada atrasado venceu, para o cartão; `null` quando não se sabe (serviço
+   * parado, ou escrito para um horário que já passou). Fica em memória: some ao reiniciar.
+   */
+  private readonly ausencias = new Map<string, AusenciaDoCartao | null>();
+  /** A próxima ocorrência de cada recorrente parado, calculada uma vez por ocorrência e fuso. */
+  private readonly proximas = new Map<string, { chave: string; proxima: Ocorrencia | null }>();
   /** Se há um aviso agrupado de atrasados que pode estar na Central de Notificações. */
   private atrasadosAvisados: boolean;
   private ultimoHoje: string | null = null;
@@ -433,23 +437,41 @@ export class ServicoLembretes implements FonteDoRelogio {
   }
 
   /**
-   * O lembrete do painel Hoje: o próximo a tocar, se faltam 30 min ou menos; os que estão tocando;
-   * os atrasados, com a ausência em que venceram, quando se sabe.
+   * O lembrete do painel Hoje: o próximo a tocar, se faltam 30 min ou menos (o recorrente que está
+   * tocando ou perdido entra pela próxima ocorrência dele, como agendado); os que estão tocando;
+   * os atrasados, com a ausência em que venceram quando todos venceram na mesma.
    */
   hoje(): LembretesDeHoje {
     const agora = this.agora();
-    const proximo = this.repo.primeiroEsperando(agora.toISOString());
-    const chegando =
-      proximo !== null &&
-      Date.parse(proximo.adiado_ate ?? proximo.quando) - agora.getTime() <= ANTECEDENCIA_MS
-        ? paraLembrete(proximo)
-        : null;
-    const atrasados = this.repo.doEstado("perdido", "quando").map(paraLembrete);
+    const fuso = this.fontes.lerFuso();
+    let chegando: Lembrete | null = null;
+    let hora = Number.POSITIVE_INFINITY;
+    const esperando = this.repo.primeiroEsperando(agora.toISOString());
+    if (esperando !== null) {
+      chegando = paraLembrete(esperando);
+      hora = Date.parse(esperando.adiado_ate ?? esperando.quando);
+    }
+    for (const { linha, proxima } of this.proximosDosParados(fuso)) {
+      const t = proxima.quando.getTime();
+      if (t <= agora.getTime() || t >= hora) continue;
+      hora = t;
+      chegando = {
+        ...paraLembrete(linha),
+        quando: proxima.quando.toISOString(),
+        estado: "agendado",
+        adiadoAte: null,
+      };
+    }
+    if (hora - agora.getTime() > ANTECEDENCIA_MS) chegando = null;
+    const linhasAtrasadas = this.repo.doEstado("perdido", "quando");
+    for (const id of this.ausencias.keys()) {
+      if (!linhasAtrasadas.some((l) => l.id === id)) this.ausencias.delete(id);
+    }
     return {
       chegando,
       tocando: this.repo.doEstado("disparado", "disparado_em").map(paraLembrete),
-      atrasados,
-      ausencia: atrasados.length > 0 ? this.ausencia : null,
+      atrasados: linhasAtrasadas.map(paraLembrete),
+      ausencia: this.ausenciaComum(linhasAtrasadas),
     };
   }
 
@@ -460,6 +482,7 @@ export class ServicoLembretes implements FonteDoRelogio {
     if (tarefaId !== null && !this.repo.tarefaViva(tarefaId)) throw new Error(MENSAGEM_TAREFA);
     if (eventoId !== null && !this.repo.eventoVivo(eventoId)) throw new Error(MENSAGEM_EVENTO);
     const id = this.gerarId();
+    const recorrencia = novo.recorrencia ?? null;
     this.repo.criar(
       {
         id,
@@ -467,7 +490,8 @@ export class ServicoLembretes implements FonteDoRelogio {
         eventoId,
         texto: novo.texto,
         quando: novo.quando,
-        recorrencia: novo.recorrencia ?? null,
+        recorrencia,
+        inicio_recorrencia: recorrencia === null ? null : novo.quando,
         canal: novo.canal ?? "windows",
         estado: "agendado",
         disparado_em: null,
@@ -481,28 +505,27 @@ export class ServicoLembretes implements FonteDoRelogio {
     return lembrete;
   }
 
-  /** Texto, horário, repetição e canal. Mudar o `quando` volta o lembrete a agendado. */
+  /**
+   * Texto, horário, repetição e canal. Mudar o `quando` volta o lembrete a agendado; mudar o
+   * horário ou a regra faz a regra contar de novo a partir do `quando`.
+   */
   async definir(entrada: MudancaLembrete, carimbo: Carimbo = DO_USUARIO): Promise<Lembrete> {
     const mudanca = MudancaLembrete.parse(entrada);
     const atual = this.exigir(mudanca.id);
     const reagendou = mudanca.quando !== undefined && mudanca.quando !== atual.quando;
+    const quando = mudanca.quando ?? atual.quando;
+    const recorrencia = mudanca.recorrencia === undefined ? atual.recorrencia : mudanca.recorrencia;
+    const regraNova = reagendou || recorrencia !== atual.recorrencia;
     const campos: CamposLembrete = {
       ...camposDe(atual),
       texto: mudanca.texto ?? atual.texto,
-      recorrencia: mudanca.recorrencia === undefined ? atual.recorrencia : mudanca.recorrencia,
+      recorrencia,
+      inicio_recorrencia: recorrencia === null ? null : regraNova ? quando : atual.inicio_recorrencia,
       canal: mudanca.canal ?? atual.canal,
-      ...(reagendou
-        ? { quando: mudanca.quando ?? atual.quando, estado: "agendado" as const, adiado_ate: null }
-        : {}),
+      ...(reagendou ? { quando, estado: "agendado" as const, adiado_ate: null } : {}),
     };
-    if (
-      campos.texto === atual.texto &&
-      campos.recorrencia === atual.recorrencia &&
-      campos.canal === atual.canal &&
-      !reagendou
-    ) {
+    if (campos.texto === atual.texto && !regraNova && campos.canal === atual.canal)
       return paraLembrete(atual);
-    }
     this.repo.gravar(atual.id, campos, this.instante(), carimbo);
     const lembrete = paraLembrete(this.exigir(atual.id));
     this.mudou({ lembretes: [lembrete], removidos: [] });
@@ -545,8 +568,7 @@ export class ServicoLembretes implements FonteDoRelogio {
     const removidos: string[] = [];
     this.repo.transacao(() => {
       for (const l of linhas) {
-        const limite = new Date(Math.max(agora.getTime(), Date.parse(l.quando)));
-        const proxima = primeiraDepois(ocorrenciaDe(l), limite, fuso);
+        const proxima = primeiraDepois(ocorrenciaDe(l), agora, fuso);
         if (proxima === null) {
           this.repo.apagar([l.id], agora.toISOString(), carimbo);
           removidos.push(l.id);
@@ -555,7 +577,7 @@ export class ServicoLembretes implements FonteDoRelogio {
         const campos: CamposLembrete = {
           ...camposDe(l),
           quando: proxima.quando.toISOString(),
-          recorrencia: proxima.recorrencia,
+          inicio_recorrencia: proxima.inicio.toISOString(),
           estado: "agendado",
           adiado_ate: null,
         };
@@ -582,17 +604,18 @@ export class ServicoLembretes implements FonteDoRelogio {
 
   /**
    * Outra área mudou lembretes (as Tarefas criam, reagendam e levam o da tarefa junto) e já avisou
-   * as janelas: o relógio se rearma, o painel Hoje se atualiza, e o aviso do que saiu é retirado.
+   * as janelas: o relógio se rearma, o painel Hoje se atualiza, e sai o aviso do que foi embora e
+   * da ocorrência que mudou de horário (`anteriores`).
    */
   mudaramPorFora(mudanca: MudancaLembretes): void {
     this.fontes.relogio?.mudou();
     this.emitirHoje();
-    const quandos = mudanca.removidos.flatMap((id) => {
+    const removidos = mudanca.removidos.flatMap((id) => {
       const quando = this.repo.quandoDe(id);
       return quando === null ? [] : [{ id, quando }];
     });
-    this.resolver(quandos).catch((erro: unknown) =>
-      console.error(`lembretes: aviso do que saiu não retirado: ${String(erro)}`),
+    this.resolver([...removidos, ...(mudanca.anteriores ?? [])]).catch((erro: unknown) =>
+      console.error(`lembretes: aviso do que mudou não retirado: ${String(erro)}`),
     );
   }
 
@@ -607,13 +630,16 @@ export class ServicoLembretes implements FonteDoRelogio {
     const horas: number[] = [];
     const primeiro = this.repo.primeiroEsperando(null);
     if (primeiro !== null) horas.push(Date.parse(primeiro.adiado_ate ?? primeiro.quando));
-    for (const l of this.repo.recorrentesParados()) {
-      const s = seguinte(ocorrenciaDe(l), fuso);
-      if (s !== null) horas.push(s.quando.getTime());
-    }
+    const futuras: number[] = [];
     const chegando = this.repo.primeiroEsperando(agora.toISOString());
-    if (chegando !== null) {
-      const entrada = Date.parse(chegando.adiado_ate ?? chegando.quando) - ANTECEDENCIA_MS;
+    if (chegando !== null) futuras.push(Date.parse(chegando.adiado_ate ?? chegando.quando));
+    for (const { proxima } of this.proximosDosParados(fuso)) {
+      const t = proxima.quando.getTime();
+      horas.push(t);
+      if (t > agora.getTime()) futuras.push(t);
+    }
+    if (futuras.length > 0) {
+      const entrada = Math.min(...futuras) - ANTECEDENCIA_MS;
       if (entrada > agora.getTime()) horas.push(entrada);
     }
     return horas.length === 0 ? null : new Date(Math.min(...horas));
@@ -626,54 +652,61 @@ export class ServicoLembretes implements FonteDoRelogio {
   async conferir({ agora, ausencia }: Conferencia): Promise<void> {
     const fuso = this.fontes.lerFuso();
     const devidos = this.devidos(agora, fuso);
-    if (devidos.length === 0) {
-      this.emitirHoje();
-      return;
-    }
     const instante = agora.toISOString();
     const tocaram: { antes: LinhaLembrete; depois: LinhaLembrete }[] = [];
     const perdidos: { antes: LinhaLembrete; depois: LinhaLembrete }[] = [];
-    this.repo.transacao(() => {
-      for (const { linha, vencimento } of devidos) {
-        // O recorrente vai até a última ocorrência que já chegou: as que ficaram no meio não tocam.
-        const ocorrencia = ultimaAte(ocorrenciaDe(linha), agora, fuso);
-        const hora = Math.max(vencimento, ocorrencia.quando.getTime());
-        const perdeu = agora.getTime() - hora > TOLERANCIA_MS;
-        const campos: CamposLembrete = {
-          ...camposDe(linha),
-          quando: ocorrencia.quando.toISOString(),
-          recorrencia: ocorrencia.recorrencia,
-          estado: perdeu ? "perdido" : "disparado",
-          disparado_em: perdeu ? linha.disparado_em : instante,
-          adiado_ate: null,
-        };
-        this.repo.gravar(linha.id, campos, instante, null);
-        const depois = this.exigir(linha.id);
-        (perdeu ? perdidos : tocaram).push({ antes: linha, depois });
-      }
-    });
-    this.avisos.mudou({
-      lembretes: [...tocaram, ...perdidos].map((m) => paraLembrete(m.depois)),
-      removidos: [],
-    });
+    if (devidos.length > 0) {
+      this.repo.transacao(() => {
+        for (const { linha, vencimento } of devidos) {
+          // O recorrente vai até a última ocorrência que já chegou: as que ficaram no meio não tocam.
+          const ocorrencia = ultimaAte(ocorrenciaDe(linha), agora, fuso);
+          const hora = Math.max(vencimento, ocorrencia.quando.getTime());
+          const perdeu = agora.getTime() - hora > TOLERANCIA_MS;
+          const campos: CamposLembrete = {
+            ...camposDe(linha),
+            quando: ocorrencia.quando.toISOString(),
+            inicio_recorrencia: linha.recorrencia === null ? null : ocorrencia.inicio.toISOString(),
+            estado: perdeu ? "perdido" : "disparado",
+            disparado_em: perdeu ? linha.disparado_em : instante,
+            adiado_ate: null,
+          };
+          this.repo.gravar(linha.id, campos, instante, null);
+          const depois = this.exigir(linha.id);
+          (perdeu ? perdidos : tocaram).push({ antes: linha, depois });
+        }
+      });
+      this.avisos.mudou({
+        lembretes: [...tocaram, ...perdidos].map((m) => paraLembrete(m.depois)),
+        removidos: [],
+      });
+    }
 
     // O aviso da ocorrência que deu lugar a outra sai da Central de Notificações.
     await this.resolver(
       [...tocaram, ...perdidos].filter((m) => m.antes.estado === "disparado").map((m) => m.antes),
       { atrasados: false },
     );
-    for (const { depois } of tocaram) await this.avisar(this.avisoDoLembrete(depois));
-    if (perdidos.length > 0 && ausencia !== null) {
-      this.ausencia =
-        ausencia.de === null ? null : { de: ausencia.de.toISOString(), ate: ausencia.ate.toISOString() };
-      if (this.atrasadosAvisados) await this.resolverAtrasados();
-      await this.avisar(
-        avisoDosAtrasados(
-          perdidos.map((m) => m.depois),
-          ausencia,
-        ),
-      );
-      this.atrasadosAvisados = true;
+    // O canal `dock` só aparece no painel Hoje. O `calendario` avisa no Windows até o envio ao
+    // Google chegar (F3-24).
+    for (const { depois } of tocaram) {
+      if (depois.canal !== "dock") await this.avisar(this.avisoDoLembrete(depois));
+    }
+    if (perdidos.length > 0) {
+      const doCartao =
+        ausencia === null || ausencia.de === null
+          ? null
+          : { de: ausencia.de.toISOString(), ate: ausencia.ate.toISOString() };
+      for (const { depois } of perdidos) this.ausencias.set(depois.id, doCartao);
+      const avisados = perdidos.map((m) => m.depois).filter((l) => l.canal !== "dock");
+      if (ausencia !== null && avisados.length > 0) {
+        if (this.atrasadosAvisados) await this.resolverAtrasados();
+        await this.avisar(avisoDosAtrasados(avisados, ausencia));
+        this.atrasadosAvisados = true;
+      }
+    }
+    // O único atrasado pode ter voltado a tocar (recorrente): o aviso agrupado sai.
+    if (this.atrasadosAvisados && this.repo.doEstado("perdido", "quando").length === 0) {
+      await this.resolverAtrasados();
     }
     this.emitirHoje();
   }
@@ -683,12 +716,44 @@ export class ServicoLembretes implements FonteDoRelogio {
     const devidos = this.repo
       .vencidos(agora.toISOString())
       .map((linha) => ({ linha, vencimento: Date.parse(linha.adiado_ate ?? linha.quando) }));
-    for (const linha of this.repo.recorrentesParados()) {
-      const s = seguinte(ocorrenciaDe(linha), fuso);
-      if (s !== null && s.quando.getTime() <= agora.getTime())
-        devidos.push({ linha, vencimento: s.quando.getTime() });
+    for (const { linha, proxima } of this.proximosDosParados(fuso)) {
+      if (proxima.quando.getTime() <= agora.getTime())
+        devidos.push({ linha, vencimento: proxima.quando.getTime() });
     }
     return devidos;
+  }
+
+  /**
+   * A próxima ocorrência de cada recorrente tocando ou perdido. A regra só é recalculada quando a
+   * ocorrência, a regra ou o fuso mudam: o relógio pergunta a cada minuto.
+   */
+  private proximosDosParados(fuso: string): { linha: LinhaLembrete; proxima: Ocorrencia }[] {
+    const parados = this.repo.recorrentesParados();
+    const vivos = new Set(parados.map((l) => l.id));
+    for (const id of this.proximas.keys()) if (!vivos.has(id)) this.proximas.delete(id);
+    const resultado: { linha: LinhaLembrete; proxima: Ocorrencia }[] = [];
+    for (const linha of parados) {
+      const chave = `${linha.quando}|${linha.inicio_recorrencia ?? ""}|${linha.recorrencia ?? ""}|${fuso}`;
+      let guardada = this.proximas.get(linha.id);
+      if (guardada?.chave !== chave) {
+        guardada = { chave, proxima: seguinte(ocorrenciaDe(linha), fuso) };
+        this.proximas.set(linha.id, guardada);
+      }
+      if (guardada.proxima !== null) resultado.push({ linha, proxima: guardada.proxima });
+    }
+    return resultado;
+  }
+
+  /** A ausência do cartão, se todos os atrasados venceram na mesma; se não, o cartão não inventa. */
+  private ausenciaComum(atrasados: readonly LinhaLembrete[]): AusenciaDoCartao | null {
+    let comum: AusenciaDoCartao | null = null;
+    for (const l of atrasados) {
+      const a = this.ausencias.get(l.id) ?? null;
+      if (a === null) return null;
+      if (comum !== null && (comum.de !== a.de || comum.ate !== a.ate)) return null;
+      comum = a;
+    }
+    return comum;
   }
 
   /** O botão do aviso do Windows: só vale para o lembrete tocando, na mesma ocorrência do aviso. */
@@ -752,7 +817,7 @@ export class ServicoLembretes implements FonteDoRelogio {
 
   /**
    * Tira o ponto e o aviso do Windows da ocorrência que já foi resolvida. Sem atrasados, o aviso
-   * agrupado também sai, e a ausência deles some.
+   * agrupado também sai.
    */
   private async resolver(
     linhas: readonly { id: string; quando: string }[],
@@ -773,7 +838,6 @@ export class ServicoLembretes implements FonteDoRelogio {
 
   private async resolverAtrasados(): Promise<void> {
     this.atrasadosAvisados = false;
-    if (this.repo.doEstado("perdido", "quando").length === 0) this.ausencia = null;
     try {
       await this.fontes.notificacoes.resolvido(REFERENCIA_ATRASADOS);
     } catch (erro) {

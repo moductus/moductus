@@ -19,6 +19,9 @@ export const GUARDA_MS = 60_000;
  */
 export const FOLGA_DO_TIMER_MS = 30_000;
 
+/** Depois de uma conferência com falha, o timer espera isto antes de tentar de novo. */
+export const ESPERA_DEPOIS_DA_FALHA_MS = 5_000;
+
 /** O tempo em que o relógio não olhou: `de` é nulo quando não se sabe (o serviço estava parado). */
 export interface Ausencia {
   de: Date | null;
@@ -105,25 +108,42 @@ export class RelogioDoDia {
     }).catch(() => {});
   }
 
+  /**
+   * Uma conferência na fila. Nada que falhe dentro dela quebra a fila nem desarma o relógio: a
+   * falha vai ao log e o timer volta, alguns segundos depois, para não girar em falso sobre uma
+   * fonte que falha de novo a cada tentativa.
+   */
   private conferir(ausencia: () => Ausencia | null): Promise<void> {
     this.fila = this.fila.then(async () => {
       if (!this.ligado) return;
-      this.desarmar();
-      const conferencia: Conferencia = { agora: this.agora(), ausencia: ausencia() };
-      for (const fonte of this.fontes) {
-        try {
-          await fonte.conferir(conferencia);
-        } catch (erro) {
-          console.error(`relógio do dia: ${fonte.nome} falhou: ${String(erro)}`);
+      let falhou = false;
+      try {
+        this.desarmar();
+        const conferencia: Conferencia = { agora: this.agora(), ausencia: ausencia() };
+        for (const fonte of this.fontes) {
+          try {
+            await fonte.conferir(conferencia);
+          } catch (erro) {
+            falhou = true;
+            console.error(`relógio do dia: ${fonte.nome} falhou: ${String(erro)}`);
+          }
         }
+        this.ultima = conferencia.agora;
+      } catch (erro) {
+        falhou = true;
+        console.error(`relógio do dia: conferência falhou: ${String(erro)}`);
       }
-      this.ultima = conferencia.agora;
-      this.armar();
+      try {
+        this.armar(falhou ? ESPERA_DEPOIS_DA_FALHA_MS : 0);
+      } catch (erro) {
+        console.error(`relógio do dia: não armou: ${String(erro)}`);
+      }
     });
     return this.fila;
   }
 
-  private armar(): void {
+  /** Arma o timer até o próximo das fontes, não antes de `minimoMs` nem depois da guarda. */
+  private armar(minimoMs = 0): void {
     if (!this.ligado) return;
     this.desarmar();
     const agora = this.agora().getTime();
@@ -136,7 +156,7 @@ export class RelogioDoDia {
         console.error(`relógio do dia: ${fonte.nome} não disse o próximo: ${String(erro)}`);
       }
     }
-    this.alvo = Math.max(alvo, agora);
+    this.alvo = Math.max(alvo, agora + minimoMs);
     const timer = setTimeout(() => this.tique(), this.alvo - agora);
     timer.unref();
     this.timer = timer;
