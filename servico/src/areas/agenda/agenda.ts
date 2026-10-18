@@ -100,6 +100,8 @@ interface LinhaEvento {
   recorrencia: string | null;
   id_externo: string | null;
   alertas: string;
+  /** Lista JSON dos inícios que a regra não gera mais (migração 018). */
+  excecoes: string;
   origem: Origem;
   agente_id: string | null;
   execucao_id: string | null;
@@ -111,7 +113,7 @@ interface LinhaEvento {
 }
 
 const COLUNAS_EVENTO = `e.id, e.calendario_id, e.titulo, e.descricao, e.inicio, e.fim, e.dia_inteiro, e.local,
-  e.recorrencia, e.id_externo, e.alertas, e.origem, e.agente_id, e.execucao_id, e.criado_em, e.atualizado_em,
+  e.recorrencia, e.id_externo, e.alertas, e.excecoes, e.origem, e.agente_id, e.execucao_id, e.criado_em, e.atualizado_em,
   (c.fonte = 'local' OR c.espelho = 1) AS editavel, c.espelho`;
 
 const paraEvento = (l: LinhaEvento): EventoAgenda => ({
@@ -143,6 +145,7 @@ const paraExpandir = (l: LinhaEvento): EventoParaExpandir => ({
   local: l.local,
   recorrencia: l.recorrencia,
   editavel: l.editavel === 1,
+  excecoes: JSON.parse(l.excecoes) as string[],
 });
 
 /** Os campos que se gravam de um evento. */

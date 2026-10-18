@@ -29,6 +29,7 @@ import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { ServicoGoogleAgenda } from "./conexoes/google/google-agenda.ts";
+import { LeituraGoogleAgenda, RepositorioLeituraGoogle } from "./conexoes/google/leitura.ts";
 import { ferramentasAgenda } from "./ferramentas/agenda/agenda.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
 import { ferramentasGithub } from "./ferramentas/github/github.ts";
@@ -183,12 +184,18 @@ const github = new ServicoGithub(new RepositorioGithub(banco), repositorioConexo
   },
   conexao: (conexao) => servidor?.emitir("conexoes.mudou", conexao),
 });
+// A leitura dos calendários do Google (F3-23) nasce com a agenda, mais adiante: ela sabe da conexão
+// pelo aviso abaixo (conectou: lê; desconectou: esquece).
+let leituraGoogle: LeituraGoogleAgenda | null = null;
 // Google Agenda da Alba (F3-22): OAuth no navegador pela casca, refresh token no Gerenciador.
 const googleAgenda = new ServicoGoogleAgenda({
   conexoes: repositorioConexoes,
   credenciais: credenciaisPelaCasca(canal),
   abrir: abrirPelaCasca(canal),
-  avisar: (conexao) => servidor?.emitir("conexoes.mudou", conexao),
+  avisar: (conexao) => {
+    servidor?.emitir("conexoes.mudou", conexao);
+    leituraGoogle?.aoMudarConexao(conexao);
+  },
 });
 const conexoes = new ServicoConexoes(
   repositorioConexoes,
@@ -253,6 +260,40 @@ const agenda = new ServicoAgenda(
     calendarios: (calendarios) => servidor?.emitir("agenda.calendarios", calendarios),
   },
 );
+// Os calendários do Google no cache da agenda (F3-23, ADR-0035): a cada 10 min com variação, na
+// retomada, ao abrir a área e ao escolher ler um calendário. A falha vira a fala de erro da Alba.
+leituraGoogle = new LeituraGoogleAgenda({
+  google: googleAgenda,
+  repo: new RepositorioLeituraGoogle(banco),
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  avisos: {
+    eventos: ({ mudados, apagados }) => {
+      const eventos = mudados.flatMap((id) => {
+        try {
+          return [agenda.obterEvento({ id })];
+        } catch {
+          return [];
+        }
+      });
+      servidor?.emitir("agenda.mudou", { eventos, apagados });
+    },
+    calendarios: () => servidor?.emitir("agenda.calendarios", agenda.calendarios()),
+    erro: ({ titulo, corpo }) => {
+      notificacoes
+        .avisar({
+          agenteId: "alba",
+          tipo: "erro",
+          titulo,
+          corpo,
+          referencia: "conexao:google-agenda",
+          origem: "conexao",
+        })
+        .catch((erro: unknown) =>
+          console.error(`notificações: aviso da leitura do Google falhou: ${String(erro)}`),
+        );
+    },
+  },
+});
 // As ferramentas de cada área (F2-26: as do Nuno); cada agente só vê as da lista dele.
 const catalogo = new Catalogo([
   ...ferramentasSessoes(sessoes),
@@ -446,9 +487,21 @@ servidor = await abrirServidorWs(token, {
   "notas.definir": (mudanca) => notas.definir(mudanca),
   "notas.apagar": (pedido) => notas.apagar(pedido),
   "notas.buscar": (pedido) => notas.buscar(pedido),
-  "agenda.calendarios": () => agenda.calendarios(),
-  "agenda.definirCalendario": (mudanca) => agenda.definirCalendario(mudanca),
-  "agenda.consultar": (pedido) => agenda.consultar(pedido),
+  // Abrir a área lê o Google de novo, se a última leitura não acabou de terminar (F3-23).
+  "agenda.calendarios": () => {
+    leituraGoogle?.aoAbrirArea();
+    return agenda.calendarios();
+  },
+  "agenda.definirCalendario": (mudanca) => {
+    const calendario = agenda.definirCalendario(mudanca);
+    // Passou a ler um calendário do Google: os eventos dele vêm já.
+    if (calendario.fonte === "google" && mudanca.ler === true) void leituraGoogle?.atualizar();
+    return calendario;
+  },
+  "agenda.consultar": (pedido) => {
+    leituraGoogle?.aoAbrirArea();
+    return agenda.consultar(pedido);
+  },
   "agenda.obterEvento": (pedido) => agenda.obterEvento(pedido),
   "agenda.criarEvento": (novo) => agenda.criarEvento(novo),
   "agenda.definirEvento": (mudanca) => agenda.definirEvento(mudanca),
@@ -511,6 +564,8 @@ sessoes.vigiar();
 aprovacoes.vigiar();
 // GitHub pelo `gh` (F2-25): lê agora e a cada 15 min, se a conexão não estiver desligada.
 github.vigiar();
+// Calendários do Google (F3-23): lê agora e a cada 10 min com variação, se a conexão não estiver desligada.
+leituraGoogle.vigiar();
 // Agendador (F2-17): horário, intervalo e evento. As áreas avisam os eventos internos por
 // `agendador.emitir` (o tipo `EmitirEvento`). Na volta da suspensão (a casca avisa), depois do
 // prazo para a rede voltar, o que venceu dispara uma vez só e o GitHub é lido (AGENTS.md §6).
@@ -524,7 +579,9 @@ canal.aoAvisar("retomou", () => {
   agendador
     .retomar()
     .then(() => github.atualizar("conexao"))
-    .catch((erro: unknown) => console.error(`github: leitura na retomada falhou: ${String(erro)}`));
+    .catch((erro: unknown) => console.error(`github: leitura na retomada falhou: ${String(erro)}`))
+    // O Google também, depois do prazo para a rede voltar que o agendador já esperou.
+    .finally(() => void leituraGoogle?.atualizar());
 });
 tokenDosHooks(credenciaisPelaCasca(canal))
   .then((tokenHooks) => abrirReceptorHooks(tokenHooks, atenderHooks(sessoes, aprovacoes), portaDosHooks()))
