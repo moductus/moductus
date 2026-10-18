@@ -1,6 +1,20 @@
 import type { BlocoLivre, DiaDaAgenda, Expediente, Ocorrencia, SugestaoEncaixe } from "@moductus/contrato";
-import { diasNoIntervalo, instantesNoIntervalo } from "../dia/recorrencia.ts";
-import { diasEntre, inicioDoDia, instanteNoFuso, somarDias } from "../dia/tempo.ts";
+import {
+  diasNoIntervalo,
+  instantesNoIntervalo,
+  lerRecorrencia,
+  type Frequencia,
+} from "../dia/recorrencia.ts";
+import {
+  PRIMEIRO_NUMERO,
+  ULTIMO_NUMERO,
+  diaDoNumero,
+  diasEntre,
+  inicioDoDia,
+  instanteNoFuso,
+  numeroDoDia,
+  somarDias,
+} from "../dia/tempo.ts";
 
 /**
  * As contas do dia da agenda (DATA.md §2, AGENTS.md §2 Alba): as ocorrências de um intervalo, os
@@ -19,6 +33,19 @@ const PASSO_DO_AGORA_MS = 5 * MS_MIN;
 
 /** Encaixes por dia: os das 3 prioridades, como o briefing; mais que isso é lotar a agenda. */
 export const MAX_SUGESTOES_POR_DIA = 3;
+
+/**
+ * Ocorrências de um evento numa consulta. Em 62 dias, o recorrente que se escreve por aqui não
+ * chega perto; o que passa disso veio de fora com a duração maior que a regra (cada ocorrência
+ * cobrindo as seguintes) e o resto fica de fora, para a consulta não travar o serviço.
+ */
+export const MAX_OCORRENCIAS_POR_EVENTO = 500;
+
+/** O último instante que o calendário escreve (9999-12-31T23:59:59.999Z). */
+const ULTIMO_INSTANTE_MS = (ULTIMO_NUMERO + 1) * MS_DIA - 1;
+
+/** O período de cada frequência em dias: o mês pelo mais curto e o ano pelo de 365. */
+const DIAS_DO_PERIODO: Record<Frequencia, number> = { DAILY: 1, WEEKLY: 7, MONTHLY: 28, YEARLY: 365 };
 
 /** Um evento como está no banco, com o que a ocorrência precisa. */
 export interface EventoParaExpandir {
@@ -42,17 +69,24 @@ interface Expandida {
 /**
  * As vezes em que cada evento acontece de `de` a `ate` (dias no fuso, inclusive): o que encosta no
  * intervalo entra, também o que começou antes e ainda não acabou (a reunião que atravessa a meia-
- * noite, o evento de três dias). O recorrente aparece uma vez por ocorrência; a regra que o
- * Moductus não expande fica só com o início, como em `recorrencia.ts`.
+ * noite, o evento de três dias). O recorrente aparece uma vez por ocorrência, até
+ * {@link MAX_OCORRENCIAS_POR_EVENTO} (o corte é avisado por `aoCortar`); a regra que o Moductus
+ * não expande fica só com o início, como em `recorrencia.ts`. O calendário vai até 9999-12-31: a
+ * ocorrência que acabaria depois dele fica de fora.
  */
 export function ocorrenciasNoIntervalo(
   eventos: readonly EventoParaExpandir[],
   de: string,
   ate: string,
   fuso: string,
+  aoCortar: (eventoId: string) => void = () => {},
 ): Ocorrencia[] {
   const comeco = inicioDoDia(de, fuso).getTime();
-  const fimDoIntervalo = inicioDoDia(somarDias(ate, 1), fuso).getTime();
+  const numeroDe = numeroDoDia(de);
+  const numeroAte = numeroDoDia(ate);
+  // O último dia do calendário não tem dia seguinte: depois dele não há nada.
+  const fimDoIntervalo =
+    numeroAte >= ULTIMO_NUMERO ? Number.POSITIVE_INFINITY : inicioDoDia(somarDias(ate, 1), fuso).getTime();
   const expandidas: Expandida[] = [];
   for (const e of eventos) {
     const base = {
@@ -66,31 +100,63 @@ export function ocorrenciasNoIntervalo(
     };
     if (e.diaInteiro) {
       const dias = diasEntre(e.inicio, e.fim);
-      // O que começou até `dias - 1` antes de `de` ainda está acontecendo nele.
-      const desde = somarDias(de, -(dias - 1));
-      for (const dia of diasNoIntervalo(e.recorrencia, e.inicio, desde, ate).ocorrencias) {
+      const anotar = (dia: string) =>
         expandidas.push({
           ocorrencia: { ...base, inicio: dia, fim: somarDias(dia, dias) },
           ordem: inicioDoDia(dia, fuso).getTime(),
         });
+      if (e.recorrencia === null) {
+        if (e.inicio <= ate && e.fim > de) anotar(e.inicio);
+        continue;
       }
+      // O que começou até `dias - 1` antes de `de` ainda está acontecendo nele; antes do início do
+      // próprio evento não há o que procurar.
+      const desde = Math.max(numeroDe - (dias - 1), numeroDoDia(e.inicio));
+      const ultimo = Math.min(numeroAte, ULTIMO_NUMERO - dias);
+      if (ultimo < desde) continue;
+      const expansao = diasNoIntervalo(
+        e.recorrencia,
+        e.inicio,
+        diaDoNumero(desde),
+        diaDoNumero(ultimo),
+        MAX_OCORRENCIAS_POR_EVENTO,
+      );
+      if (expansao.cortada) aoCortar(e.id);
+      for (const dia of expansao.ocorrencias) anotar(dia);
       continue;
     }
     const inicio = Date.parse(e.inicio);
     const duracao = Date.parse(e.fim) - inicio;
-    // Um dia de folga além da duração: a ocorrência de ontem às 23h ainda pode estar no intervalo.
-    const desde = somarDias(de, -(Math.ceil(duracao / MS_DIA) + 1));
-    for (const quando of instantesNoIntervalo(e.recorrencia, new Date(inicio), fuso, desde, ate)
-      .ocorrencias) {
-      const ini = quando.getTime();
+    const anotar = (ini: number) => {
       const fim = ini + duracao;
       const encosta = ini < fimDoIntervalo && (fim > comeco || (duracao === 0 && ini >= comeco));
-      if (!encosta) continue;
+      if (!encosta || fim > ULTIMO_INSTANTE_MS) return;
       expandidas.push({
         ocorrencia: { ...base, inicio: new Date(ini).toISOString(), fim: new Date(fim).toISOString() },
         ordem: ini,
       });
+    };
+    if (e.recorrencia === null) {
+      anotar(inicio);
+      continue;
     }
+    // Um dia de folga além da duração (a ocorrência de ontem às 23h ainda pode estar no
+    // intervalo), mas nunca antes do dia do início, com um de folga para o fuso.
+    const desde = Math.max(
+      numeroDe - (Math.ceil(duracao / MS_DIA) + 1),
+      Math.floor(inicio / MS_DIA) - 1,
+      PRIMEIRO_NUMERO,
+    );
+    const expansao = instantesNoIntervalo(
+      e.recorrencia,
+      new Date(inicio),
+      fuso,
+      diaDoNumero(desde),
+      ate,
+      MAX_OCORRENCIAS_POR_EVENTO,
+    );
+    if (expansao.cortada) aoCortar(e.id);
+    for (const quando of expansao.ocorrencias) anotar(quando.getTime());
   }
   return expandidas
     .sort(
@@ -101,6 +167,24 @@ export function ocorrenciasNoIntervalo(
         a.ocorrencia.eventoId.localeCompare(b.ocorrencia.eventoId),
     )
     .map((e) => e.ocorrencia);
+}
+
+/**
+ * Se o evento recorrente dura mais que o período da regra (o diário com mais de um dia, o semanal
+ * com mais de sete): cada ocorrência cobriria as seguintes. O período é a frequência vezes o
+ * `INTERVAL`, com o mês de 28 dias e o ano de 365. A regra que o Moductus não expande fica de fora.
+ */
+export function duracaoPassaDoPeriodo(
+  e: Pick<EventoParaExpandir, "inicio" | "fim" | "diaInteiro" | "recorrencia">,
+): boolean {
+  if (e.recorrencia === null) return false;
+  const leitura = lerRecorrencia(e.recorrencia);
+  if (!leitura.entendida) return false;
+  const periodoMs = DIAS_DO_PERIODO[leitura.regra.frequencia] * leitura.regra.intervalo * MS_DIA;
+  const duracaoMs = e.diaInteiro
+    ? diasEntre(e.inicio, e.fim) * MS_DIA
+    : Date.parse(e.fim) - Date.parse(e.inicio);
+  return duracaoMs > periodoMs;
 }
 
 /** Um intervalo em ms, com o fim de fora. */
@@ -178,10 +262,12 @@ export function montarDias(e: EntradaDias): DiaDaAgenda[] {
     .map((o) => ({ inicio: Date.parse(o.inicio), fim: Date.parse(o.fim) }));
   const daqui = Math.ceil(e.agora.getTime() / PASSO_DO_AGORA_MS) * PASSO_DO_AGORA_MS;
   const dias: DiaDaAgenda[] = [];
-  for (let dia = e.de; dia <= e.ate; dia = somarDias(dia, 1)) {
+  // Por número: o dia seguinte a 9999-12-31 não existe.
+  for (let n = numeroDoDia(e.de); n <= numeroDoDia(e.ate); n++) {
+    const dia = diaDoNumero(n);
     const janela = {
       inicio: Math.max(instanteNoFuso(dia, e.expediente.inicio, e.fuso).getTime(), daqui),
-      fim: instanteNoFuso(dia, e.expediente.fim, e.fuso).getTime(),
+      fim: Math.min(instanteNoFuso(dia, e.expediente.fim, e.fuso).getTime(), ULTIMO_INSTANTE_MS),
     };
     const livres = janela.inicio < janela.fim ? blocosLivres(janela, ocupadas) : [];
     const livreMin = livres.reduce((soma, b) => soma + b.minutos, 0);

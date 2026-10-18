@@ -23,8 +23,14 @@ import { colunasDeOrigem, DO_USUARIO, type Carimbo } from "../../banco/tabela.ts
 import { novoId } from "../../banco/ulid.ts";
 import { RecusaDesfazer, type ContextoDesfazer } from "../../ferramentas/ferramenta.ts";
 import { lerRecorrencia } from "../dia/recorrencia.ts";
-import { diaNoFuso, somarDias } from "../dia/tempo.ts";
-import { montarDias, ocorrenciasNoIntervalo, type EventoParaExpandir } from "./livre.ts";
+import { PRIMEIRO_NUMERO, ULTIMO_NUMERO, diaNoFuso, numeroDoDia, somarDias } from "../dia/tempo.ts";
+import {
+  MAX_OCORRENCIAS_POR_EVENTO,
+  duracaoPassaDoPeriodo,
+  montarDias,
+  ocorrenciasNoIntervalo,
+  type EventoParaExpandir,
+} from "./livre.ts";
 import type { RepositorioTarefasDoDia } from "./tarefas-do-dia.ts";
 
 /**
@@ -43,6 +49,8 @@ export const MENSAGEM_SO_LEITURA = "este calendário é só leitura por aqui: pe
 export const MENSAGEM_NOME_SO_DO_LOCAL = "nome e cor só mudam no calendário local";
 export const MENSAGEM_REGRA_DE_FORA = (motivo: string) =>
   `o Moductus não sabe repetir este evento (${motivo})`;
+export const MENSAGEM_DURACAO_PASSA_DA_REGRA =
+  "o evento dura mais que o intervalo entre as repetições: encurte o evento ou espace a regra";
 export const MENSAGEM_TAREFA_NAO_ENCONTRADA = "tarefa não encontrada";
 export const MENSAGEM_TAREFA_FECHADA = "a tarefa não está aberta";
 export const MENSAGEM_TAREFA_COM_HORA = "a tarefa já tem hora marcada";
@@ -200,16 +208,17 @@ export class RepositorioAgenda {
   /**
    * Os eventos vivos dos calendários lidos que podem encostar no intervalo. É uma peneira larga
    * (texto do dia contra texto do instante, com um dia de folga de cada lado, o que cobre qualquer
-   * fuso); a conta exata é a da expansão. O recorrente que começou antes entra sempre.
+   * fuso); a conta exata é a da expansão. O recorrente que começou antes entra sempre. Sem
+   * `antesDe` (o intervalo chega ao fim do calendário), não há teto.
    */
-  eventosQuePodemEncostar(desde: string, antesDe: string): LinhaEvento[] {
+  eventosQuePodemEncostar(desde: string, antesDe: string | null): LinhaEvento[] {
     return this.db
       .prepare(
         `SELECT ${COLUNAS_EVENTO} FROM eventos e JOIN calendarios c ON c.id = e.calendario_id
           WHERE e.apagado_em IS NULL AND c.apagado_em IS NULL AND c.ler = 1
-            AND e.inicio < ? AND (e.recorrencia IS NOT NULL OR e.fim >= ?)`,
+            AND (? IS NULL OR e.inicio < ?) AND (e.recorrencia IS NOT NULL OR e.fim >= ?)`,
       )
-      .all(antesDe, desde) as unknown as LinhaEvento[];
+      .all(antesDe, antesDe, desde) as unknown as LinhaEvento[];
   }
 
   /** O evento vivo, de calendário vivo. */
@@ -401,8 +410,20 @@ export class ServicoAgenda {
   consultar(pedido: PedidoAgenda): Agenda {
     const { fuso, expediente } = this.deps.lerDia();
     const agora = this.agora();
-    const linhas = this.deps.repo.eventosQuePodemEncostar(somarDias(pedido.de, -1), somarDias(pedido.ate, 2));
-    const ocorrencias = ocorrenciasNoIntervalo(linhas.map(paraExpandir), pedido.de, pedido.ate, fuso);
+    // A folga da peneira para nas pontas do calendário (0001-01-01 e 9999-12-31).
+    const desde = numeroDoDia(pedido.de) > PRIMEIRO_NUMERO ? somarDias(pedido.de, -1) : pedido.de;
+    const antesDe = numeroDoDia(pedido.ate) + 2 <= ULTIMO_NUMERO ? somarDias(pedido.ate, 2) : null;
+    const linhas = this.deps.repo.eventosQuePodemEncostar(desde, antesDe);
+    const ocorrencias = ocorrenciasNoIntervalo(
+      linhas.map(paraExpandir),
+      pedido.de,
+      pedido.ate,
+      fuso,
+      (eventoId) =>
+        console.error(
+          `agenda: o evento ${eventoId} passou de ${MAX_OCORRENCIAS_POR_EVENTO} ocorrências de ${pedido.de} a ${pedido.ate}; o resto ficou de fora`,
+        ),
+    );
     const dias = montarDias({
       de: pedido.de,
       ate: pedido.ate,
@@ -435,6 +456,7 @@ export class ServicoAgenda {
       recorrencia: regraQueSeRepete(novo.recorrencia ?? null),
       alertas: novo.alertas ?? [],
     };
+    if (duracaoPassaDoPeriodo(campos)) throw new Error(MENSAGEM_DURACAO_PASSA_DA_REGRA);
     const id = this.gerarId();
     const agora = this.agora().toISOString();
     this.deps.repo.transacao(() => {
@@ -460,6 +482,9 @@ export class ServicoAgenda {
         mudanca.recorrencia === undefined ? atual.recorrencia : regraQueSeRepete(mudanca.recorrencia),
       alertas: mudanca.alertas ?? (JSON.parse(atual.alertas) as number[]),
     };
+    // Só quem mexe no quando ou na regra é conferido: renomear o que já veio assim não é recusado.
+    const mexeNoQuando = mudanca.inicio !== undefined || mudanca.recorrencia !== undefined;
+    if (mexeNoQuando && duracaoPassaDoPeriodo(campos)) throw new Error(MENSAGEM_DURACAO_PASSA_DA_REGRA);
     const agora = this.agora().toISOString();
     this.deps.repo.transacao(() => {
       this.deps.repo.mudarEvento(atual.id, campos, agora, carimbo);

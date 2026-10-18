@@ -3,13 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { CALENDARIO_LOCAL, METODOS, type MudancaAgenda, type NovoEvento } from "@moductus/contrato";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { MENSAGENS_DESFAZER, RepositorioExecucoes, ServicoExecucoes } from "../../agentes/execucoes.ts";
 import { abrirBanco } from "../../banco/conexao.ts";
 import { Catalogo } from "../../ferramentas/catalogo.ts";
 import { ferramentasAgenda } from "../../ferramentas/agenda/agenda.ts";
 import {
   FERRAMENTA_APLICAR_SUGESTAO,
+  MENSAGEM_DURACAO_PASSA_DA_REGRA,
   MENSAGEM_ENCAIXE_MUDOU,
   MENSAGEM_NOME_SO_DO_LOCAL,
   MENSAGEM_REGRA_DE_FORA,
@@ -20,11 +21,13 @@ import {
   RepositorioAgenda,
   ServicoAgenda,
 } from "./agenda.ts";
+import { MAX_OCORRENCIAS_POR_EVENTO } from "./livre.ts";
 import { RepositorioTarefasDoDia } from "./tarefas-do-dia.ts";
 
 const pastas: string[] = [];
 const bancos: DatabaseSync[] = [];
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const db of bancos.splice(0)) if (db.isOpen) db.close();
   for (const p of pastas.splice(0)) rmSync(p, { recursive: true, force: true });
 });
@@ -41,7 +44,10 @@ const sp = (dia: string, hora: string) => new Date(`${dia}T${hora}:00.000-03:00`
  * Banco migrado de verdade (com o calendário local da 014 e as listas da 013), um relógio que o
  * teste acerta, o expediente padrão (09:00 às 18:00) e o desfazer do histórico com o catálogo.
  */
-function montar(agora = sp(DIA, "07:00")) {
+function montar(
+  agora = sp(DIA, "07:00"),
+  { fuso = FUSO, expediente = { inicio: "09:00", fim: "18:00" } } = {},
+) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-agenda-"));
   pastas.push(pasta);
   const db = abrirBanco(pasta);
@@ -55,7 +61,7 @@ function montar(agora = sp(DIA, "07:00")) {
       repo: new RepositorioAgenda(db),
       tarefas: new RepositorioTarefasDoDia(db),
       chamadas: execucoes,
-      lerDia: () => ({ fuso: FUSO, expediente: { inicio: "09:00", fim: "18:00" } }),
+      lerDia: () => ({ fuso, expediente }),
     },
     { mudou: (m) => avisos.push(m), calendarios: (c) => listas.push(c) },
     { agora: () => relogio.agora },
@@ -83,6 +89,33 @@ function googleComEvento(db: DatabaseSync, titulo: string, inicio: string, fim: 
      VALUES (?, ?, ?, ?, ?, ?, 'conexao')`,
   ).run(`ev-${titulo}`, calendario, titulo, inicio, fim, `ext-ev-${titulo}`);
   return { calendario, evento: `ev-${titulo}` };
+}
+
+/** Um evento do cache do Google como veio de lá, sem passar pelas recusas da escrita local. */
+function doGoogle(
+  db: DatabaseSync,
+  id: string,
+  inicio: string,
+  fim: string,
+  extra: { diaInteiro?: boolean; recorrencia?: string } = {},
+) {
+  db.prepare(
+    `INSERT OR IGNORE INTO calendarios (id, nome, fonte, id_externo, ler)
+     VALUES ('g-cache', 'Cache', 'google', 'ext-cache', 1)`,
+  ).run();
+  db.prepare(
+    `INSERT INTO eventos (id, calendario_id, titulo, inicio, fim, dia_inteiro, recorrencia, id_externo, origem)
+     VALUES (?, 'g-cache', ?, ?, ?, ?, ?, ?, 'conexao')`,
+  ).run(id, id, inicio, fim, extra.diaInteiro ? 1 : 0, extra.recorrencia ?? null, `ext-${id}`);
+}
+
+/** O que a consulta pode levar, mesmo no pior evento: o serviço é uma linha só. */
+const PRAZO_MS = 1_000;
+
+function cronometrar<T>(fazer: () => T): { valor: T; ms: number } {
+  const inicio = performance.now();
+  const valor = fazer();
+  return { valor, ms: performance.now() - inicio };
 }
 
 interface Tarefa {
@@ -268,6 +301,162 @@ describe("horário livre e dia cheio", () => {
     expect(d.planejadoMin).toBe(120 + 45 + 30);
     // Mesma prioridade e mesma ordem: desempata pelo id.
     expect(d.sugestoes.map((s) => s.tarefaId)).toEqual(["filha-de-mae-sem", "mae"]);
+  });
+
+  test("no dia em que o horário de verão começa, o expediente tem uma hora a menos e a reunião segue às 10h", () => {
+    // Nova York, 08/03/2026: às 02:00 o relógio pula para 03:00 (de UTC−5 para UTC−4).
+    const m = montar("2026-03-07T12:00:00.000Z", {
+      fuso: "America/New_York",
+      expediente: { inicio: "01:00", fim: "18:00" },
+    });
+    marcar(m, "Reunião", "2026-03-07T15:00:00.000Z", "2026-03-07T16:00:00.000Z", {
+      recorrencia: "FREQ=DAILY",
+    });
+    tarefa(m.db, { id: "comprovantes", venceEm: "2026-03-08", duracao: 60 });
+    const d = dia(m, "2026-03-08");
+    // 10h do relógio, agora em UTC−4: 14:00Z, não 15:00Z.
+    expect(d.ocorrencias.map((o) => [o.inicio, o.fim])).toEqual([
+      ["2026-03-08T14:00:00.000Z", "2026-03-08T15:00:00.000Z"],
+    ]);
+    // 01:00 (UTC−5) a 18:00 (UTC−4) são 16 h, menos a reunião.
+    expect(d.livres).toEqual([
+      { inicio: "2026-03-08T06:00:00.000Z", fim: "2026-03-08T14:00:00.000Z", minutos: 480 },
+      { inicio: "2026-03-08T15:00:00.000Z", fim: "2026-03-08T22:00:00.000Z", minutos: 420 },
+    ]);
+    expect(d.livreMin).toBe(900);
+    expect(d.sugestoes).toEqual([
+      { tarefaId: "comprovantes", inicio: "2026-03-08T06:00:00.000Z", fim: "2026-03-08T07:00:00.000Z" },
+    ]);
+  });
+});
+
+describe("limites do calendário e da expansão", () => {
+  test("evento com fim em 9026 não derruba a consulta: aparece e ocupa o dia", () => {
+    const m = montar();
+    doGoogle(m.db, "sem-fim", sp(DIA, "10:00"), "9026-01-01T00:00:00.000Z");
+    doGoogle(m.db, "ferias-sem-fim", DIA, "9026-01-01", { diaInteiro: true });
+    const { valor: d, ms } = cronometrar(() => dia(m));
+    expect(ms).toBeLessThan(PRAZO_MS);
+    expect(d.ocorrencias.map((o) => [o.eventoId, o.inicio, o.fim])).toEqual([
+      ["ferias-sem-fim", DIA, "9026-01-01"],
+      ["sem-fim", sp(DIA, "10:00"), "9026-01-01T00:00:00.000Z"],
+    ]);
+    expect(d.livres).toEqual([{ inicio: sp(DIA, "09:00"), fim: sp(DIA, "10:00"), minutos: 60 }]);
+    // Semanas depois, os dois continuam acontecendo.
+    expect(m.agenda.consultar({ de: "2026-11-16", ate: "2026-11-16" }).ocorrencias).toHaveLength(2);
+  });
+
+  test("recorrente que cobre as próprias repetições: teto de ocorrências por consulta, com o corte no log", () => {
+    const m = montar();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Diário de 1026 a 2026, como pode vir do Google: cada ocorrência dura mil anos.
+    doGoogle(m.db, "mil-anos", "1026-01-01T13:00:00.000Z", "2026-12-31T13:00:00.000Z", {
+      recorrencia: "FREQ=DAILY",
+    });
+    doGoogle(m.db, "mil-anos-dia-inteiro", "1026-01-01", "2026-12-31", {
+      diaInteiro: true,
+      recorrencia: "FREQ=DAILY",
+    });
+    const { valor: agenda, ms } = cronometrar(() => m.agenda.consultar({ de: DIA, ate: DIA }));
+    expect(ms).toBeLessThan(PRAZO_MS);
+    confere("agenda.consultar", agenda);
+    const de = (id: string) => agenda.ocorrencias.filter((o) => o.eventoId === id).length;
+    expect(de("mil-anos")).toBe(MAX_OCORRENCIAS_POR_EVENTO);
+    expect(de("mil-anos-dia-inteiro")).toBe(MAX_OCORRENCIAS_POR_EVENTO);
+    expect(agenda.dias[0]?.livreMin).toBe(0);
+    const cortados = log.mock.calls.map(
+      (c) => /o evento (\S+) passou de 500 ocorrências/.exec(String(c[0]))?.[1],
+    );
+    expect(cortados.sort()).toEqual(["mil-anos", "mil-anos-dia-inteiro"]);
+  });
+
+  test("recorrente que dura mais que o período da regra é recusado na escrita", () => {
+    const m = montar();
+    expect(() =>
+      marcar(m, "Plantão diário", sp(DIA, "10:00"), sp("2026-10-20", "11:00"), { recorrencia: "FREQ=DAILY" }),
+    ).toThrow(MENSAGEM_DURACAO_PASSA_DA_REGRA);
+    expect(() =>
+      m.agenda.criarEvento({
+        titulo: "Oito dias toda semana",
+        inicio: DIA,
+        fim: "2026-10-27",
+        diaInteiro: true,
+        recorrencia: "FREQ=WEEKLY",
+      }),
+    ).toThrow(MENSAGEM_DURACAO_PASSA_DA_REGRA);
+    // O mês conta pelo mais curto: 28 dias.
+    expect(() =>
+      marcar(m, "Mês longo", sp(DIA, "10:00"), sp("2026-11-16", "10:01"), { recorrencia: "FREQ=MONTHLY" }),
+    ).toThrow(MENSAGEM_DURACAO_PASSA_DA_REGRA);
+    // No limite do período, ou com o INTERVAL que espaça as repetições, entra.
+    marcar(m, "Plantão de 24 h", sp(DIA, "10:00"), sp("2026-10-20", "10:00"), { recorrencia: "FREQ=DAILY" });
+    m.agenda.criarEvento({
+      titulo: "A semana inteira",
+      inicio: DIA,
+      fim: "2026-10-26",
+      diaInteiro: true,
+      recorrencia: "FREQ=WEEKLY",
+    });
+    marcar(m, "Dia sim, dia não", sp(DIA, "10:00"), sp("2026-10-21", "09:00"), {
+      recorrencia: "FREQ=DAILY;INTERVAL=2",
+    });
+
+    // Mudar o quando ou a regra passa pela mesma conta.
+    const daily = marcar(m, "Daily", sp(DIA, "09:30"), sp(DIA, "10:00"), { recorrencia: "FREQ=DAILY" });
+    expect(() =>
+      m.agenda.definirEvento({
+        id: daily.id,
+        inicio: sp(DIA, "09:30"),
+        fim: sp("2026-10-21", "09:30"),
+        diaInteiro: false,
+      }),
+    ).toThrow(MENSAGEM_DURACAO_PASSA_DA_REGRA);
+    const congresso = m.agenda.criarEvento({
+      titulo: "Congresso",
+      inicio: DIA,
+      fim: "2026-10-22",
+      diaInteiro: true,
+    });
+    expect(() => m.agenda.definirEvento({ id: congresso.id, recorrencia: "FREQ=DAILY" })).toThrow(
+      MENSAGEM_DURACAO_PASSA_DA_REGRA,
+    );
+    // O que já está gravado assim (vindo de antes) ainda se renomeia.
+    m.db.prepare("UPDATE eventos SET fim = ? WHERE id = ?").run(sp("2026-10-22", "09:30"), daily.id);
+    expect(m.agenda.definirEvento({ id: daily.id, titulo: "Daily do time" }).titulo).toBe("Daily do time");
+  });
+
+  test("intervalo nas pontas do calendário não lança; a ocorrência que passaria de 9999-12-31 fica de fora", () => {
+    const m = montar();
+    marcar(m, "Último dia", sp("9999-12-31", "10:00"), sp("9999-12-31", "11:00"));
+    marcar(m, "Diária no fim", sp("9999-12-30", "12:00"), sp("9999-12-30", "13:00"), {
+      recorrencia: "FREQ=DAILY",
+    });
+    m.agenda.criarEvento({
+      titulo: "Dia a dia",
+      inicio: "9999-12-30",
+      fim: "9999-12-31",
+      diaInteiro: true,
+      recorrencia: "FREQ=DAILY",
+    });
+    for (const pedido of [
+      { de: "9999-12-30", ate: "9999-12-31" },
+      { de: "9999-12-31", ate: "9999-12-31" },
+      { de: "0001-01-01", ate: "0001-01-02" },
+    ]) {
+      confere("agenda.consultar", m.agenda.consultar(pedido));
+    }
+    const fim = m.agenda.consultar({ de: "9999-12-30", ate: "9999-12-31" });
+    expect(fim.dias.map((d) => [d.dia, d.livreMin])).toEqual([
+      ["9999-12-30", 480],
+      ["9999-12-31", 420],
+    ]);
+    // A de dia inteiro em 31/12 acabaria em 10000-01-01.
+    expect(fim.ocorrencias.map((o) => [o.titulo, o.inicio])).toEqual([
+      ["Dia a dia", "9999-12-30"],
+      ["Diária no fim", sp("9999-12-30", "12:00")],
+      ["Último dia", sp("9999-12-31", "10:00")],
+      ["Diária no fim", sp("9999-12-31", "12:00")],
+    ]);
   });
 });
 
