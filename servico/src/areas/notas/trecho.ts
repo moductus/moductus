@@ -52,7 +52,8 @@ export function trechoCorrido(pedacos: readonly Pedaco[], maximo?: number): Trec
     const limpa = semMarcaDeBloco(linha);
     if (limpa.length === 0) continue;
     if (saida.length > 0) for (const c of SEPARADOR) saida.push({ c, marcada: false });
-    saida.push(...limpa);
+    // Um a um: espalhar uma linha de centenas de milhares de letras no `push` estoura a pilha.
+    for (const letra of limpa) saida.push(letra);
   }
   return paraTrecho(maximo === undefined ? saida : cortar(saida, maximo));
 }
@@ -154,16 +155,68 @@ export function lerSnippet(snippet: string, abre: string, fecha: string): Pedaco
   return pedacos;
 }
 
+/** Quanto de cada pedaço do snippet entra no trecho da busca, em unidades UTF-16. */
+export const TAMANHO_DO_PEDACO = 80;
+
+/**
+ * Encurta os pedaços longos do snippet antes de montar o trecho: o FTS5 conta palavras, e uma
+ * palavra pode ter centenas de milhares de letras (link colado, fileira de traços). Fica sempre o
+ * lado que encosta no destaque: o que bateu guarda o começo; o contexto antes do primeiro destaque,
+ * o fim; o depois do último (ou o de um trecho sem destaque), o começo; o do meio, as duas pontas.
+ */
+export function encurtarPedacos(pedacos: readonly Pedaco[], maximo = TAMANHO_DO_PEDACO): Pedaco[] {
+  const primeiro = pedacos.findIndex((p) => p.marcado);
+  const ultimo = pedacos.findLastIndex((p) => p.marcado);
+  const saida: Pedaco[] = [];
+  pedacos.forEach((pedaco, i) => {
+    const { texto } = pedaco;
+    if (texto.length <= maximo) saida.push(pedaco);
+    else if (pedaco.marcado) {
+      saida.push(
+        { texto: pontaInicial(texto, maximo), marcado: true },
+        { texto: RETICENCIAS, marcado: false },
+      );
+    } else if (primeiro < 0 || i > ultimo) {
+      saida.push({ texto: pontaInicial(texto, maximo) + RETICENCIAS, marcado: false });
+    } else if (i < primeiro) {
+      saida.push({ texto: RETICENCIAS + pontaFinal(texto, maximo), marcado: false });
+    } else {
+      const metade = Math.floor(maximo / 2);
+      saida.push({
+        texto: pontaInicial(texto, metade) + RETICENCIAS + pontaFinal(texto, metade),
+        marcado: false,
+      });
+    }
+  });
+  return saida;
+}
+
+/** As primeiras `n` unidades, sem partir um par substituto (emoji) ao meio. */
+function pontaInicial(texto: string, n: number): string {
+  const corte = ehAlto(texto.charCodeAt(n - 1)) ? n - 1 : n;
+  return texto.slice(0, corte);
+}
+
+/** As últimas `n` unidades, sem partir um par substituto ao meio. */
+function pontaFinal(texto: string, n: number): string {
+  const inicio = texto.length - n;
+  return texto.slice(ehBaixo(texto.charCodeAt(inicio)) ? inicio + 1 : inicio);
+}
+
+const ehAlto = (u: number) => u >= 0xd800 && u <= 0xdbff;
+const ehBaixo = (u: number) => u >= 0xdc00 && u <= 0xdfff;
+
 /**
  * A busca do usuário na sintaxe do FTS5: cada palavra entre aspas e como prefixo ("amanh" acha
- * "amanhã" enquanto se digita), todas exigidas. Aspas do texto saem, para nada virar operador
- * (`OR`, `NEAR`, `-`, `*`). Sem nenhuma letra ou número, não há o que buscar: `null`.
+ * "amanhã" enquanto se digita), todas exigidas. A aspa do texto vai dobrada (o escape do FTS5), para
+ * nada virar operador (`OR`, `NEAR`, `-`, `*`). Caractere de controle separa palavras como o espaço:
+ * o NUL dentro da string corta a consulta no SQLite. Sem nenhuma letra ou número, não há o que
+ * buscar: `null`.
  */
 export function consultaFts(texto: string): string | null {
   const termos = texto
-    .split(/\s+/u)
-    .map((t) => t.replaceAll('"', ""))
+    .split(/[\s\p{Cc}]+/u)
     .filter((t) => /[\p{L}\p{N}]/u.test(t))
-    .map((t) => `"${t}"*`);
+    .map((t) => `"${t.replaceAll('"', '""')}"*`);
   return termos.length > 0 ? termos.join(" ") : null;
 }

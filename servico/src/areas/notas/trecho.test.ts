@@ -1,5 +1,12 @@
 import { describe, expect, test } from "vitest";
-import { comecoDoTexto, consultaFts, lerSnippet, TAMANHO_DO_COMECO, trechoCorrido } from "./trecho.ts";
+import {
+  comecoDoTexto,
+  consultaFts,
+  encurtarPedacos,
+  lerSnippet,
+  TAMANHO_DO_COMECO,
+  trechoCorrido,
+} from "./trecho.ts";
 
 describe("começo do texto", () => {
   test("cada linha vira um pedaço, sem as marcas de bloco do Markdown", () => {
@@ -101,6 +108,61 @@ describe("snippet do FTS5", () => {
     expect(lerSnippet("", "<a>", "</a>")).toEqual([]);
     expect(lerSnippet("sem nada", "<a>", "</a>")).toEqual([{ texto: "sem nada", marcado: false }]);
   });
+
+  test("uma palavra de 300 mil letras não estoura a pilha ao montar o trecho", () => {
+    const enorme = "x".repeat(300_000);
+    expect(trechoCorrido([{ texto: enorme, marcado: false }]).texto).toHaveLength(300_000);
+  });
+
+  test("pedaço longo fica com o lado que encosta no destaque, e o destaque sobrevive", () => {
+    const antes = "a".repeat(1000);
+    const meio = `${"b".repeat(500)} ${"c".repeat(500)}`;
+    const depois = "d".repeat(1000);
+    const curtos = encurtarPedacos(
+      [
+        { texto: antes, marcado: false },
+        { texto: "amanhã", marcado: true },
+        { texto: meio, marcado: false },
+        { texto: "x".repeat(300_000), marcado: true },
+        { texto: depois, marcado: false },
+      ],
+      10,
+    );
+    expect(curtos).toEqual([
+      { texto: "…aaaaaaaaaa", marcado: false },
+      { texto: "amanhã", marcado: true },
+      { texto: "bbbbb…ccccc", marcado: false },
+      { texto: "xxxxxxxxxx", marcado: true },
+      { texto: "…", marcado: false },
+      { texto: "dddddddddd…", marcado: false },
+    ]);
+    const trecho = trechoCorrido(curtos);
+    expect(trecho.destaques.map((d) => trecho.texto.slice(d.inicio, d.fim))).toEqual([
+      "amanhã",
+      "xxxxxxxxxx",
+    ]);
+  });
+
+  test("sem destaque, fica o começo; o corte não parte um emoji ao meio", () => {
+    expect(encurtarPedacos([{ texto: "abcdefghijkl", marcado: false }], 4)).toEqual([
+      { texto: "abcd…", marcado: false },
+    ]);
+    expect(encurtarPedacos([{ texto: "abc🎉defgh", marcado: false }], 4)).toEqual([
+      { texto: "abc…", marcado: false },
+    ]);
+    expect(
+      encurtarPedacos(
+        [
+          { texto: "abcdef🎉gh", marcado: false },
+          { texto: "z", marcado: true },
+        ],
+        3,
+      ),
+    ).toEqual([
+      { texto: "…gh", marcado: false },
+      { texto: "z", marcado: true },
+    ]);
+  });
 });
 
 describe("consulta do FTS5", () => {
@@ -108,8 +170,13 @@ describe("consulta do FTS5", () => {
     expect(consultaFts("ligar  amanha")).toBe('"ligar"* "amanha"*');
   });
 
-  test("operadores e aspas do usuário não viram sintaxe", () => {
-    expect(consultaFts('a OR "b" NEAR(c) -d')).toBe('"a"* "OR"* "b"* "NEAR(c)"* "-d"*');
+  test("operadores e aspas do usuário não viram sintaxe; a aspa vai dobrada, não some", () => {
+    expect(consultaFts('a OR "b" NEAR(c) -d')).toBe('"a"* "OR"* """b"""* "NEAR(c)"* "-d"*');
+    expect(consultaFts('a"b')).toBe('"a""b"*');
+  });
+
+  test("caractere de controle separa palavras como o espaço", () => {
+    expect(consultaFts("a\u0000b\u0001c")).toBe('"a"* "b"* "c"*');
   });
 
   test("sem letra nem número, não há busca", () => {

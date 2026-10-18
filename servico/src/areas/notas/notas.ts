@@ -19,7 +19,7 @@ import {
 import { nomeChave } from "../../banco/nome-chave.ts";
 import { colunasDeOrigem, DO_USUARIO, type Carimbo } from "../../banco/tabela.ts";
 import { novoId } from "../../banco/ulid.ts";
-import { comecoDoTexto, consultaFts, lerSnippet, trechoCorrido } from "./trecho.ts";
+import { comecoDoTexto, consultaFts, encurtarPedacos, lerSnippet, trechoCorrido } from "./trecho.ts";
 
 /**
  * Notas (PRODUCT.md §5 "Notas", DATA.md §4, ADR-0036): Markdown cru que salva sozinho com a versão
@@ -337,7 +337,7 @@ export class ServicoNotas {
     const abre = marcaSorteada();
     const fecha = marcaSorteada();
     return this.repo.buscar(consulta, pedido.limite ?? LIMITE_BUSCA, abre, fecha).map((linha) => {
-      const { texto, destaques } = trechoCorrido(lerSnippet(linha.trecho, abre, fecha));
+      const { texto, destaques } = trechoCorrido(encurtarPedacos(lerSnippet(linha.trecho, abre, fecha)));
       return { ...paraResumo(linha), trecho: texto, destaques };
     });
   }

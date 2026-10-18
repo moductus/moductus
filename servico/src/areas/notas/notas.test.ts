@@ -337,6 +337,31 @@ describe("busca", () => {
     expect(notas.buscar({ texto: "- * :" })).toEqual([]);
   });
 
+  test("NUL e outros controles na busca separam palavras, sem erro do SQLite", () => {
+    const { notas } = montar();
+    const nota = notas.criar({ conteudo: "ligar pro banco" });
+    expect(notas.buscar({ texto: "ligar\u0000banco" }).map((n) => n.id)).toEqual([nota.id]);
+    expect(notas.buscar({ texto: "\u0000\u0001" })).toEqual([]);
+  });
+
+  test('a aspa no meio da palavra é escapada, não apagada: a"b não vira ab', () => {
+    const { notas } = montar();
+    const separado = notas.criar({ conteudo: "a b" });
+    notas.criar({ conteudo: "ab" });
+    expect(notas.buscar({ texto: 'a"b' }).map((n) => n.id)).toEqual([separado.id]);
+  });
+
+  test("uma palavra de 300 mil letras não derruba a busca, e o trecho fica curto com o destaque", () => {
+    const { notas } = montar();
+    const nota = notas.criar({ conteudo: `ver ${"x".repeat(300_000)} amanhã ${"-".repeat(300_000)} fim` });
+    const achada = unica(notas.buscar({ texto: "amanha" }));
+    confere("notas.buscar", [achada]);
+    expect(achada.id).toBe(nota.id);
+    expect(achada.trecho.length).toBeLessThan(400);
+    expect(achada.destaques.map((d) => achada.trecho.slice(d.inicio, d.fim))).toEqual(["amanhã"]);
+    expect(unica(notas.buscar({ texto: "xxx" })).destaques).toHaveLength(1);
+  });
+
   test("o limite corta os resultados", () => {
     const { notas } = montar();
     for (let i = 0; i < 5; i++) notas.criar({ titulo: `Nota ${i} do dia` });
