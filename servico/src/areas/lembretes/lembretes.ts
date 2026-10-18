@@ -387,6 +387,11 @@ export interface FontesLembretes {
   notificacoes: NotificacoesDoLembrete;
   /** O relógio do dia, para se rearmar a cada mudança. */
   relogio?: { mudou(): void };
+  /**
+   * Se o lembrete já está no calendário "Moductus" do Google, sem nada na fila (F3-24): o do canal
+   * `calendario` então toca no celular, e o Windows não avisa de novo.
+   */
+  noGoogle?: (lembreteId: string) => boolean;
 }
 
 export interface AvisosLembretes {
@@ -686,10 +691,12 @@ export class ServicoLembretes implements FonteDoRelogio {
       [...tocaram, ...perdidos].filter((m) => m.antes.estado === "disparado").map((m) => m.antes),
       { atrasados: false },
     );
-    // O canal `dock` só aparece no painel Hoje. O `calendario` avisa no Windows até o envio ao
-    // Google chegar (F3-24).
+    // O canal `dock` só aparece no painel Hoje. O `calendario` toca pelo celular quando o evento dele
+    // já chegou ao "Moductus" (F3-24); sem Google, ou com o envio na fila, avisa no Windows.
     for (const { depois } of tocaram) {
-      if (depois.canal !== "dock") await this.avisar(this.avisoDoLembrete(depois));
+      if (depois.canal === "dock") continue;
+      if (depois.canal === "calendario" && this.fontes.noGoogle?.(depois.id) === true) continue;
+      await this.avisar(this.avisoDoLembrete(depois));
     }
     if (perdidos.length > 0) {
       const doCartao =

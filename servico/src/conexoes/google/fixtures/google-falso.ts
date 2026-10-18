@@ -10,6 +10,8 @@ import type { ClienteOAuth, EnderecosGoogle } from "../cliente.ts";
  * o redirecionamento que o Google faria depois do consentimento. A Calendar API (F3-23) tem a
  * lista de calendários e os eventos de cada um, com `timeMin`, páginas, `nextSyncToken` (o que
  * mudou desde ele, com os apagados como `cancelled`), o 410 do token vencido e as respostas de cota.
+ * A escrita (F3-24) cria e confere calendário e insere, muda (PATCH) e apaga evento, com o 409 do
+ * `id` repetido, o 404 do que não existe e o 410 do já apagado, como o Google.
  */
 
 /** Um calendário da lista da conta, como o `calendarList` devolve. */
@@ -77,6 +79,14 @@ export interface GoogleFalso {
   pedidosCalendario: URL[];
   /** Os tokens de acesso dados deixam de valer, como quando o Google os recusa antes de vencer. */
   esquecerAcessos(): void;
+  /** Muda um evento como você faria no celular: junta os campos e o etag muda. */
+  mudarEvento(calendarioId: string, id: string, mudanca: Record<string, unknown>): void;
+  /** Os eventos vivos de um calendário, como estão agora. */
+  eventosDe(calendarioId: string): Record<string, unknown>[];
+  /** Apaga o calendário inteiro, com os eventos, como você faria nas configurações do Google. */
+  apagarCalendario(id: string): void;
+  /** As escritas na Calendar API (POST, PATCH, DELETE), em ordem. */
+  escritas: { metodo: string; rota: string; corpo: Record<string, unknown> | null }[];
   fechar(): Promise<void>;
 }
 
@@ -128,7 +138,74 @@ export async function abrirGoogleFalso(
       : {}),
   });
 
-  const calendarioApi = (req: IncomingMessage, res: ServerResponse, url: URL) => {
+  const lerJson = (req: IncomingMessage) =>
+    new Promise<Record<string, unknown> | null>((pronto) => {
+      const partes: Buffer[] = [];
+      req.on("data", (p: Buffer) => partes.push(p));
+      req.on("end", () => {
+        try {
+          pronto(JSON.parse(Buffer.concat(partes).toString()) as Record<string, unknown>);
+        } catch {
+          pronto(null);
+        }
+      });
+    });
+
+  let calendariosCriados = 0;
+  /** O etag que o Google dá a cada versão de um evento. */
+  const etagDe = (n: number) => `"e${n}"`;
+
+  /** As escritas: calendário novo, e inserir, mudar e apagar evento num calendário que existe. */
+  const escritaApi = (
+    res: ServerResponse,
+    metodo: string,
+    rota: string,
+    corpo: Record<string, unknown> | null,
+  ) => {
+    falso.escritas.push({ metodo, rota, corpo });
+    if (rota === "/calendars" && metodo === "POST") {
+      const id = `moductus-${++calendariosCriados}@group.calendar.google.com`;
+      falso.calendarios.push({ id, summary: String(corpo?.summary ?? "") });
+      return responder(res, 200, { kind: "calendar#calendar", id, summary: corpo?.summary, etag: '"c1"' });
+    }
+    const m = /^\/calendars\/([^/]+)\/events(?:\/([^/]+))?$/.exec(rota);
+    const calendarioId = m ? decodeURIComponent(m[1]!) : "";
+    if (!m || !falso.calendarios.some((c) => c.id === calendarioId)) return erroGoogle(res, 404, "notFound");
+    const doCalendario = eventos.get(calendarioId) ?? new Map<string, EventoGuardado>();
+    eventos.set(calendarioId, doCalendario);
+    const eventoId = m[2] === undefined ? null : decodeURIComponent(m[2]);
+    if (eventoId === null && metodo === "POST") {
+      const id = typeof corpo?.id === "string" ? corpo.id : `gerado${++serie}`;
+      if (!/^[a-v0-9]{5,1024}$/.test(id)) return erroGoogle(res, 400, "invalid");
+      if (doCalendario.has(id)) return erroGoogle(res, 409, "duplicate");
+      const n = ++versao;
+      const guardado = { ...corpo, id, etag: etagDe(n), status: "confirmed" };
+      doCalendario.set(id, { corpo: guardado, versao: n, cancelado: false });
+      return responder(res, 200, guardado);
+    }
+    const atual = eventoId === null ? undefined : doCalendario.get(eventoId);
+    if (!atual || eventoId === null) return erroGoogle(res, 404, "notFound");
+    if (metodo === "PATCH") {
+      const n = ++versao;
+      const guardado = { ...atual.corpo, ...corpo, id: eventoId, etag: etagDe(n) };
+      doCalendario.set(eventoId, { corpo: guardado, versao: n, cancelado: atual.cancelado });
+      return responder(res, 200, { ...guardado, status: atual.cancelado ? "cancelled" : "confirmed" });
+    }
+    if (metodo === "DELETE") {
+      if (atual.cancelado) return erroGoogle(res, 410, "deleted");
+      doCalendario.set(eventoId, { ...atual, versao: ++versao, cancelado: true });
+      res.writeHead(204);
+      return res.end();
+    }
+    return erroGoogle(res, 400, "invalid");
+  };
+
+  const calendarioApi = (
+    req: IncomingMessage,
+    res: ServerResponse,
+    url: URL,
+    corpo: Record<string, unknown> | null,
+  ) => {
     falso.pedidosCalendario.push(url);
     const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
     if (!token || !acessos.has(token)) return erroGoogle(res, 401, "authError");
@@ -138,8 +215,17 @@ export async function abrirGoogleFalso(
       return erroGoogle(res, falso.cota.status, "rateLimitExceeded");
     }
     const rota = url.pathname.slice("/calendar/v3".length);
+    const metodo = req.method ?? "GET";
+    if (metodo !== "GET") return escritaApi(res, metodo, rota, corpo);
     if (rota === "/users/me/calendarList") {
       return responder(res, 200, { kind: "calendar#calendarList", items: falso.calendarios });
+    }
+    const calendario = /^\/calendars\/([^/]+)$/.exec(rota);
+    if (calendario) {
+      const id = decodeURIComponent(calendario[1]!);
+      return falso.calendarios.some((c) => c.id === id)
+        ? responder(res, 200, { kind: "calendar#calendar", id })
+        : erroGoogle(res, 404, "notFound");
     }
     const m = /^\/calendars\/([^/]+)\/events$/.exec(rota);
     const calendarioId = m ? decodeURIComponent(m[1]!) : "";
@@ -182,7 +268,7 @@ export async function abrirGoogleFalso(
     void (async () => {
       const endereco = new URL(req.url ?? "/", "http://127.0.0.1");
       const rota = endereco.pathname;
-      if (rota.startsWith("/calendar/v3/")) return calendarioApi(req, res, endereco);
+      if (rota.startsWith("/calendar/v3/")) return calendarioApi(req, res, endereco, await lerJson(req));
       if (rota === "/primary") {
         const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
         return token && acessos.has(token)
@@ -299,6 +385,23 @@ export async function abrirGoogleFalso(
     porPagina: 250,
     pedidosCalendario: [],
     esquecerAcessos: () => acessos.clear(),
+    mudarEvento(calendarioId, id, mudanca) {
+      const atual = eventos.get(calendarioId)?.get(id);
+      if (!atual) throw new Error(`o evento ${id} não existe no Google falso`);
+      const n = ++versao;
+      eventos.get(calendarioId)!.set(id, {
+        corpo: { ...atual.corpo, ...mudanca, etag: etagDe(n) },
+        versao: n,
+        cancelado: atual.cancelado,
+      });
+    },
+    eventosDe: (calendarioId) =>
+      [...(eventos.get(calendarioId)?.values() ?? [])].filter((e) => !e.cancelado).map((e) => e.corpo),
+    apagarCalendario(id) {
+      falso.calendarios = falso.calendarios.filter((c) => c.id !== id);
+      eventos.delete(id);
+    },
+    escritas: [],
     abrir: {
       endereco(endereco) {
         const url = new URL(endereco);

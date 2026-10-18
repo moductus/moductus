@@ -7,6 +7,9 @@ import type { EnderecosGoogle } from "./cliente.ts";
  * `nextSyncToken`). Aqui só o pedido e a leitura da resposta; o que entra no cache e quando ler
  * é da `LeituraGoogleAgenda`. Resposta grande ou malformada vira erro, nunca trava o serviço, e o
  * token de acesso não aparece em mensagem nenhuma.
+ *
+ * A escrita (F3-24) é só no calendário "Moductus": criar e conferir o calendário, e inserir, mudar
+ * e apagar evento nele. Quando e o quê é do `EspelhoGoogleAgenda`.
  */
 
 /** Pedido ao Google que não responde nisso desiste: a rede caiu ou está lenta demais. */
@@ -105,19 +108,33 @@ async function lerCorpo(resposta: Response): Promise<{ corpo: unknown; bytes: nu
   }
 }
 
+/** O que vai num pedido que escreve: o método e, menos no DELETE, o corpo em JSON. */
+interface Envio {
+  metodo: "POST" | "PATCH" | "DELETE";
+  corpo?: Objeto;
+}
+
 /**
- * Um GET na API com o token, com o corpo e o tamanho dele; a resposta de erro vira
- * {@link ErroCalendario} pela falha.
+ * Um pedido à API com o token (GET, ou o que `envio` disser), com o corpo e o tamanho dele; a
+ * resposta de erro vira {@link ErroCalendario} pela falha. O DELETE responde sem corpo: vale o
+ * objeto vazio.
  */
 async function pedir(
   buscar: typeof fetch,
   url: URL,
   tokenDeAcesso: string,
+  envio: Envio | null = null,
 ): Promise<{ corpo: Objeto; bytes: number }> {
   let resposta: Response;
   try {
     resposta = await buscar(url, {
-      headers: { authorization: `Bearer ${tokenDeAcesso}`, accept: "application/json" },
+      method: envio?.metodo ?? "GET",
+      headers: {
+        authorization: `Bearer ${tokenDeAcesso}`,
+        accept: "application/json",
+        ...(envio?.corpo ? { "content-type": "application/json" } : {}),
+      },
+      ...(envio?.corpo ? { body: JSON.stringify(envio.corpo) } : {}),
       signal: AbortSignal.timeout(LIMITE_PEDIDO_MS),
     });
   } catch (erro) {
@@ -130,6 +147,7 @@ async function pedir(
     throw new ErroCalendario("rede", "a resposta não chegou inteira");
   });
   if (resposta.ok) {
+    if (envio?.metodo === "DELETE") return { corpo: {}, bytes };
     if (!ehObjeto(corpo)) throw new ErroCalendario("rede", "resposta sem forma");
     return { corpo, bytes };
   }
@@ -208,6 +226,98 @@ export async function paginaDeEventos(
     sincronizacao: texto(corpo.nextSyncToken) || null,
     bytes,
   };
+}
+
+/** Cria um calendário secundário da conta (o "Moductus") e devolve o id que o Google deu. */
+export async function criarCalendario(
+  buscar: typeof fetch,
+  enderecos: Pick<EnderecosGoogle, "calendario">,
+  tokenDeAcesso: string,
+  campos: { nome: string; fuso: string },
+): Promise<{ idExterno: string }> {
+  const url = new URL(`${enderecos.calendario}/calendars`);
+  const { corpo } = await pedir(buscar, url, tokenDeAcesso, {
+    metodo: "POST",
+    corpo: { summary: campos.nome, timeZone: campos.fuso },
+  });
+  const id = texto(corpo.id);
+  if (!id || id.length > MAXIMO_ID) throw new ErroCalendario("rede", "o calendário criado veio sem id");
+  return { idExterno: id };
+}
+
+/** Confere que o calendário existe e é acessível: o 404 (ou o 403) diz que não. */
+export async function conferirCalendario(
+  buscar: typeof fetch,
+  enderecos: Pick<EnderecosGoogle, "calendario">,
+  tokenDeAcesso: string,
+  calendarioId: string,
+): Promise<void> {
+  const url = new URL(`${enderecos.calendario}/calendars/${encodeURIComponent(calendarioId)}`);
+  await pedir(buscar, url, tokenDeAcesso);
+}
+
+/** O que o Google respondeu a uma escrita de evento: o etag novo e se o evento está cancelado. */
+export interface EventoEscrito {
+  etag: string | null;
+  cancelado: boolean;
+}
+
+const urlDoEvento = (
+  enderecos: Pick<EnderecosGoogle, "calendario">,
+  calendarioId: string,
+  eventoId: string | null,
+) =>
+  new URL(
+    `${enderecos.calendario}/calendars/${encodeURIComponent(calendarioId)}/events${
+      eventoId === null ? "" : `/${encodeURIComponent(eventoId)}`
+    }`,
+  );
+
+const escrito = (corpo: Objeto): EventoEscrito => ({
+  etag: cortar(corpo.etag, 200),
+  cancelado: corpo.status === "cancelled",
+});
+
+/** `events.insert`. O corpo leva o `id` escolhido aqui: repetir o pedido dá 409, nunca dois eventos. */
+export async function inserirEvento(
+  buscar: typeof fetch,
+  enderecos: Pick<EnderecosGoogle, "calendario">,
+  tokenDeAcesso: string,
+  calendarioId: string,
+  evento: Record<string, unknown>,
+): Promise<EventoEscrito> {
+  const { corpo } = await pedir(buscar, urlDoEvento(enderecos, calendarioId, null), tokenDeAcesso, {
+    metodo: "POST",
+    corpo: evento,
+  });
+  return escrito(corpo);
+}
+
+/** `events.patch`: só os campos que vão mudam; o resto do evento (cor, convidados) fica. */
+export async function mudarEvento(
+  buscar: typeof fetch,
+  enderecos: Pick<EnderecosGoogle, "calendario">,
+  tokenDeAcesso: string,
+  calendarioId: string,
+  eventoId: string,
+  evento: Record<string, unknown>,
+): Promise<EventoEscrito> {
+  const { corpo } = await pedir(buscar, urlDoEvento(enderecos, calendarioId, eventoId), tokenDeAcesso, {
+    metodo: "PATCH",
+    corpo: evento,
+  });
+  return escrito(corpo);
+}
+
+/** `events.delete`. Quem chama decide o que o 404 e o 410 (já apagado) querem dizer. */
+export async function apagarEvento(
+  buscar: typeof fetch,
+  enderecos: Pick<EnderecosGoogle, "calendario">,
+  tokenDeAcesso: string,
+  calendarioId: string,
+  eventoId: string,
+): Promise<void> {
+  await pedir(buscar, urlDoEvento(enderecos, calendarioId, eventoId), tokenDeAcesso, { metodo: "DELETE" });
 }
 
 /** Os campos que se gravam de um evento lido do Google, no formato da tabela `eventos`. */

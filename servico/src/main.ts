@@ -41,6 +41,7 @@ import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { ServicoGoogleAgenda } from "./conexoes/google/google-agenda.ts";
+import { EspelhoGoogleAgenda, RepositorioEspelhoGoogle } from "./conexoes/google/espelho.ts";
 import { LeituraGoogleAgenda, RepositorioLeituraGoogle } from "./conexoes/google/leitura.ts";
 import { ferramentasAgenda } from "./ferramentas/agenda/agenda.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
@@ -199,6 +200,9 @@ const github = new ServicoGithub(new RepositorioGithub(banco), repositorioConexo
 // A leitura dos calendários do Google (F3-23) nasce com a agenda, mais adiante: ela sabe da conexão
 // pelo aviso abaixo (conectou: lê; desconectou: esquece).
 let leituraGoogle: LeituraGoogleAgenda | null = null;
+// O espelho no calendário "Moductus" (F3-24) nasce depois das Tarefas e dos Lembretes, que adotam
+// o que mudou no Google; as áreas o avisam a cada mudança, e a conexão, ao conectar.
+let espelhoGoogle: EspelhoGoogleAgenda | null = null;
 // Google Agenda da Alba (F3-22): OAuth no navegador pela casca, refresh token no Gerenciador.
 const googleAgenda = new ServicoGoogleAgenda({
   conexoes: repositorioConexoes,
@@ -207,6 +211,7 @@ const googleAgenda = new ServicoGoogleAgenda({
   avisar: (conexao) => {
     servidor?.emitir("conexoes.mudou", conexao);
     leituraGoogle?.aoMudarConexao(conexao);
+    espelhoGoogle?.aoMudarConexao(conexao);
   },
 });
 const conexoes = new ServicoConexoes(
@@ -268,7 +273,11 @@ const agenda = new ServicoAgenda(
     lerDia: () => repositorioConfig.ler().dia,
   },
   {
-    mudou: (mudanca) => servidor?.emitir("agenda.mudou", mudanca),
+    mudou: (mudanca) => {
+      servidor?.emitir("agenda.mudou", mudanca);
+      // O evento do "Moductus" entrou na fila de saída: o espelho manda.
+      espelhoGoogle?.aoMudar();
+    },
     calendarios: (calendarios) => servidor?.emitir("agenda.calendarios", calendarios),
   },
 );
@@ -419,9 +428,18 @@ const notas = new ServicoNotas(new RepositorioNotas(banco), {
 const relogio = new RelogioDoDia();
 const lembretes = new ServicoLembretes(
   new RepositorioLembretes(banco),
-  { lerFuso: () => repositorioConfig.ler().dia.fuso, notificacoes, relogio },
   {
-    mudou: (mudanca) => servidor?.emitir("lembretes.mudou", mudanca),
+    lerFuso: () => repositorioConfig.ler().dia.fuso,
+    notificacoes,
+    relogio,
+    // O do canal `calendario` que já está no "Moductus" toca pelo celular (F3-24).
+    noGoogle: (id) => espelhoGoogle?.chegouAoGoogle(id) ?? false,
+  },
+  {
+    mudou: (mudanca) => {
+      servidor?.emitir("lembretes.mudou", mudanca);
+      espelhoGoogle?.aoMudar();
+    },
     hoje: (hoje) => servidor?.emitir("lembretes.hoje", hoje),
   },
 );
@@ -431,7 +449,11 @@ const tarefas = new ServicoTarefas(
   new RepositorioTarefas(banco),
   { lerFuso: () => repositorioConfig.ler().dia.fuso, notas },
   {
-    tarefas: (mudanca) => servidor?.emitir("tarefas.mudou", mudanca),
+    tarefas: (mudanca) => {
+      servidor?.emitir("tarefas.mudou", mudanca);
+      // A tarefa com hora (e o lembrete dela, que é o alerta) vai ao "Moductus".
+      espelhoGoogle?.aoMudar();
+    },
     listas: (listas) => servidor?.emitir("listas.mudou", listas),
     // O lembrete da tarefa muda pelas Tarefas: o relógio se rearma e o aviso da ocorrência trocada sai.
     lembretes: (mudanca) => {
@@ -440,6 +462,44 @@ const tarefas = new ServicoTarefas(
     },
   },
 );
+// O calendário "Moductus" (F3-24, ADR-0035): tarefas com hora e lembretes com horário viram evento
+// com alerta no Google, pela fila de saída; o que você muda lá volta pelas áreas, como conexão.
+const pelaConexao = { origem: "conexao" } as const;
+espelhoGoogle = new EspelhoGoogleAgenda({
+  google: googleAgenda,
+  repo: new RepositorioEspelhoGoogle(banco),
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  adotar: {
+    tarefa: (id, mudanca) => void tarefas.definir({ id, ...mudanca }, pelaConexao),
+    lembrete: async (id, mudanca) => void (await lembretes.definir({ id, ...mudanca }, pelaConexao)),
+  },
+  avisos: {
+    eventos: ({ mudados, apagados }) => {
+      const eventos = mudados.flatMap((id) => {
+        try {
+          return [agenda.obterEvento({ id })];
+        } catch {
+          return [];
+        }
+      });
+      servidor?.emitir("agenda.mudou", { eventos, apagados });
+    },
+    recriado: ({ titulo, corpo }) => {
+      notificacoes
+        .avisar({
+          agenteId: "alba",
+          tipo: "aviso",
+          titulo,
+          corpo,
+          referencia: "conexao:google-agenda:moductus",
+          origem: "conexao",
+        })
+        .catch((erro: unknown) =>
+          console.error(`notificações: aviso do calendário "Moductus" falhou: ${String(erro)}`),
+        );
+    },
+  },
+});
 // Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
 // Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
 runtime.estados.vigiar();
@@ -587,6 +647,8 @@ aprovacoes.vigiar();
 github.vigiar();
 // Calendários do Google (F3-23): lê agora e a cada 10 min com variação, se a conexão não estiver desligada.
 leituraGoogle.vigiar();
+// O "Moductus" (F3-24): garante o calendário, lê de volta e manda a fila, agora e a cada 10 min.
+espelhoGoogle.vigiar();
 // Agendador (F2-17): horário, intervalo e evento. As áreas avisam os eventos internos por
 // `agendador.emitir` (o tipo `EmitirEvento`). Na volta da suspensão (a casca avisa), depois do
 // prazo para a rede voltar, o que venceu dispara uma vez só e o GitHub é lido (AGENTS.md §6).
@@ -628,7 +690,10 @@ canal.aoAvisar("retomou", () => {
     .then(() => github.atualizar("conexao"))
     .catch((erro: unknown) => console.error(`github: leitura na retomada falhou: ${String(erro)}`))
     // O Google também, depois do prazo para a rede voltar que o agendador já esperou.
-    .finally(() => void leituraGoogle?.atualizar());
+    .finally(() => {
+      void leituraGoogle?.atualizar();
+      void espelhoGoogle?.sincronizar();
+    });
 });
 tokenDosHooks(credenciaisPelaCasca(canal))
   .then((tokenHooks) => abrirReceptorHooks(tokenHooks, atenderHooks(sessoes, aprovacoes), portaDosHooks()))
