@@ -27,8 +27,11 @@ export type FonteCotacao = z.infer<typeof FonteCotacao>;
  * do teto não depender de ponto flutuante. `data` é o dia da cotação: o da digitação, ou o que a
  * fonte deu (não o de hoje).
  */
+/** A maior cotação aceita: 1.000.000 por US$ 1 (a tela e a busca dizem isso em vez de só recusar). */
+export const COTACAO_MAXIMA_MILIONESIMOS = 1_000_000_000_000;
+
 export const Cotacao = z.object({
-  milionesimos: z.number().int().positive().max(1_000_000_000_000),
+  milionesimos: z.number().int().positive().max(COTACAO_MAXIMA_MILIONESIMOS),
   data: Dia,
   fonte: FonteCotacao,
 });

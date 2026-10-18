@@ -32,6 +32,7 @@ import {
   type TipoApi,
 } from "../../janelas/sistema/primeiro-uso/modelo.ts";
 import {
+  cotacaoAcimaDoMaximo,
   cotacaoEmTexto,
   cotacaoNoCampo,
   diaCurto,
@@ -41,6 +42,7 @@ import {
   gastoContraOTeto,
   lerCotacao,
   lerTeto,
+  MENSAGEM_COTACAO_ALTA,
   NOME_DA_MOEDA,
   origemDaCotacao,
   SIMBOLO,
@@ -1025,7 +1027,7 @@ function PainelAgente({
           <span className="config-modelos-teto-campos">
             <Seletor
               rotulo={`Moeda do teto ${doAgente(agente)}`}
-              opcoes={OPCOES_MOEDA}
+              opcoes={travado ? OPCOES_MOEDA.map((o) => ({ ...o, desativada: true })) : OPCOES_MOEDA}
               valor={moeda}
               aoMudar={setMoeda}
             />
@@ -1166,6 +1168,7 @@ function LinhaCotacao({
   const [buscando, setBuscando] = useState(false);
   const [buscada, setBuscada] = useState<CotacaoBuscada | null>(null);
   const digitada = lerCotacao(texto);
+  const acimaDoMaximo = cotacaoAcimaDoMaximo(texto);
   const travado = !modelos.conectado;
   const nomeMoeda = NOME_DA_MOEDA[moeda];
   const guardar = async () => {
@@ -1193,7 +1196,11 @@ function LinhaCotacao({
     <li className="config-cotacao">
       <span className="config-modelos-textos">
         <span className="config-modelos-nome">Dólar em {nomeMoeda}</span>
-        {gravada ? (
+        {acimaDoMaximo ? (
+          <span className="config-modelos-sub" data-tom="aviso" role="alert">
+            {MENSAGEM_COTACAO_ALTA}
+          </span>
+        ) : gravada ? (
           <span className="config-modelos-sub">
             {cotacaoEmTexto(moeda, gravada.milionesimos)}, {origemDaCotacao(gravada)}
           </span>
@@ -1211,6 +1218,7 @@ function LinhaCotacao({
           placeholder={`${SIMBOLO[moeda]} por US$ 1`}
           value={texto}
           disabled={travado}
+          aria-invalid={acimaDoMaximo || undefined}
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") void guardar();

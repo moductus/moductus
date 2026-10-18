@@ -1,4 +1,10 @@
-import type { Cambio, CotacaoBuscada, MoedaComCotacao, MoedaTeto } from "@moductus/contrato";
+import {
+  COTACAO_MAXIMA_MILIONESIMOS,
+  type Cambio,
+  type CotacaoBuscada,
+  type MoedaComCotacao,
+  type MoedaTeto,
+} from "@moductus/contrato";
 import { z } from "zod";
 
 /**
@@ -40,6 +46,30 @@ export const converterPelaConfig =
   (microdolares, moeda) =>
     converter(microdolares, moeda, cambio());
 
+/** A mesma cotação para o teto: o mesmo valor e o mesmo dia em cada moeda (a fonte não muda a conta). */
+function mesmaCotacao(a: Cambio, b: Cambio): boolean {
+  const moedas = new Set([...Object.keys(a.cotacoes), ...Object.keys(b.cotacoes)]) as Set<MoedaComCotacao>;
+  for (const moeda of moedas) {
+    const x = a.cotacoes[moeda];
+    const y = b.cotacoes[moeda];
+    if (x?.milionesimos !== y?.milionesimos || x?.data !== y?.data) return false;
+  }
+  return true;
+}
+
+/**
+ * Quem ouve a configuração mudada (por `config.definir` ou por `config.importar`, que passam pelo
+ * mesmo aviso) e chama `mudou` só quando a cotação de alguma moeda mudou de verdade.
+ */
+export function vigiarCotacao(inicial: Cambio, mudou: () => void): (cambio: Cambio) => void {
+  let anterior = inicial;
+  return (cambio) => {
+    if (mesmaCotacao(anterior, cambio)) return;
+    anterior = cambio;
+    mudou();
+  };
+}
+
 /** Sem configuração: só o dólar, que não precisa de cotação. */
 export const SO_DOLAR: ConverterCusto = (microdolares, moeda) =>
   converter(microdolares, moeda, { cotacoes: {} });
@@ -71,6 +101,8 @@ export const MENSAGEM_FONTE_FORA =
   "Não consegui buscar a cotação agora. A cotação gravada continua valendo; dá para digitar outra.";
 export const MENSAGEM_FONTE_ESTRANHA =
   "A fonte de cotação respondeu algo que não reconheço. A cotação gravada continua valendo; dá para digitar outra.";
+export const MENSAGEM_FONTE_ALTA = (moeda: MoedaComCotacao) =>
+  `A fonte deu para ${moeda} uma cotação acima de 1.000.000 por US$ 1, o máximo aceito. A cotação gravada continua valendo; dá para digitar outra.`;
 
 export interface OpcoesCambio {
   /** O `fetch`; o teste troca por um falso, sem rede. */
@@ -123,6 +155,7 @@ export class ServicoCambio {
     if (!lida.success || lida.data.quote !== moeda) throw new Error(MENSAGEM_FONTE_ESTRANHA);
     const milionesimos = Math.round(lida.data.rate * 1_000_000);
     if (milionesimos <= 0) throw new Error(MENSAGEM_FONTE_ESTRANHA);
+    if (milionesimos > COTACAO_MAXIMA_MILIONESIMOS) throw new Error(MENSAGEM_FONTE_ALTA(moeda));
     const cotacao: CotacaoBuscada = { moeda, milionesimos, data: lida.data.date };
     this.cache.set(moeda, { cotacao, em: agora });
     return cotacao;

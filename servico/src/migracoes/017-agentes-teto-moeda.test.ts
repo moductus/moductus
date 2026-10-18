@@ -47,6 +47,9 @@ describe("migração agentes-teto-moeda", () => {
     );
     expect(() => mudar(db, "teto_liberado_ate = NULL")).toThrow(/CHECK/);
     expect(() => mudar(db, "teto_liberado_centavos = 0")).toThrow(/CHECK/);
+    // O fim é instante exato, com milissegundos e Z, para a comparação como texto valer.
+    expect(() => mudar(db, "teto_liberado_ate = '2026-10-19'")).toThrow(/CHECK/);
+    expect(() => mudar(db, "teto_liberado_ate = '2026-10-19T03:00:00Z'")).toThrow(/CHECK/);
     mudar(db, "teto_liberado_centavos = NULL, teto_liberado_ate = NULL");
   });
 });

@@ -14,7 +14,7 @@ import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.t
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ligarBandeja } from "./bandeja/bandeja.ts";
-import { converterPelaConfig, ServicoCambio } from "./cambio/cambio.ts";
+import { converterPelaConfig, ServicoCambio, vigiarCotacao } from "./cambio/cambio.ts";
 import { abrirPelaCasca, projetosNaCasca } from "./casca/abrir.ts";
 import { ambientePelaCasca } from "./casca/ambiente.ts";
 import { avisosPelaCasca, CLIQUE_NO_AVISO, lerClique } from "./casca/avisos.ts";
@@ -80,10 +80,18 @@ const nativo: AplicadorNativo = {
 let servidor: ServidorWs | null = null;
 // Os vigias do Nuno (F2-26) nascem com o runtime; os eventos de antes disso não pedem julgamento.
 let vigiaNuno: VigiaNuno | null = null;
+const repositorioConfig = new RepositorioConfig(banco);
+// A cotação nova vale já (F3-08), venha de config.definir ou de config.importar: os dois passam
+// pelo aviso abaixo. A reação (acordar quem saiu do teto) nasce com o runtime, mais adiante.
+let reagirACotacao: () => void = () => {};
+const cotacaoMudou = vigiarCotacao(repositorioConfig.ler().cambio, () => reagirACotacao());
 const config = new ServicoConfig(
-  new RepositorioConfig(banco),
+  repositorioConfig,
   nativo,
-  (estado: EstadoConfig) => servidor?.emitir("config.mudou", estado),
+  (estado: EstadoConfig) => {
+    servidor?.emitir("config.mudou", estado);
+    cotacaoMudou(estado.config.cambio);
+  },
   portable(),
 );
 const primeiroUso = new ServicoPrimeiroUso(new RepositorioPrimeiroUso(banco), (estado) =>
@@ -268,6 +276,14 @@ function emitirAgente(agenteId: string): void {
 }
 // Pausar pela bandeja (F2-18): o menu do ícone mostra o estado de cada agente e se refaz quando muda.
 const bandeja = ligarBandeja({ agentes, canal });
+// A cotação mudou: o gasto de hoje muda, e o teto vale de novo para cada agente (acorda ou adormece).
+reagirACotacao = () => {
+  for (const agente of repositorioAgentes.agentes()) {
+    runtime.estados.tetoMudou(agente.id);
+    emitirAgente(agente.id);
+  }
+  bandeja.atualizar();
+};
 // "Buscar cotação" (ADR-0040): só quando o usuário pede, e o valor só vale depois de confirmado.
 const cambio = new ServicoCambio();
 // Provedores (F2-08): detecção dos CLIs, configuração e o teste de verdade, pelo registro do runtime.
@@ -326,18 +342,7 @@ conversas
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
   "config.obter": () => config.obter(),
-  "config.definir": async (mudanca) => {
-    const estado = await config.definir(mudanca);
-    // A cotação nova vale já: o gasto de hoje muda, e quem dormia pelo teto pode ter saído dele.
-    if (mudanca.cambio) {
-      for (const agente of repositorioAgentes.agentes()) {
-        runtime.estados.tetoMudou(agente.id);
-        emitirAgente(agente.id);
-      }
-      bandeja.atualizar();
-    }
-    return estado;
-  },
+  "config.definir": (mudanca) => config.definir(mudanca),
   "cambio.buscar": (pedido) => cambio.buscar(pedido.moeda),
   "config.exportar": (pedido) => outroPc.exportar(pedido),
   "config.previaImportar": (pedido) => outroPc.previa(pedido),

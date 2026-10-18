@@ -1,14 +1,16 @@
-import type { Cambio } from "@moductus/contrato";
+import { COTACAO_MAXIMA_MILIONESIMOS, type Cambio } from "@moductus/contrato";
 import { describe, expect, test } from "vitest";
 import {
   CACHE_DA_COTACAO_MS,
   converter,
   ENDERECO_FRANKFURTER,
+  MENSAGEM_FONTE_ALTA,
   MENSAGEM_FONTE_ESTRANHA,
   MENSAGEM_FONTE_FORA,
   MENSAGEM_FONTE_SEM_MOEDA,
   ServicoCambio,
   SO_DOLAR,
+  vigiarCotacao,
 } from "./cambio.ts";
 
 const CINCO_E_MEIO: Cambio = {
@@ -36,6 +38,32 @@ describe("conversão do custo para a moeda do teto", () => {
       cotacoes: { GBP: { milionesimos: 999_999_999_999, data: "2026-10-16", fonte: "digitada" } },
     };
     expect(converter(10_000_000_000, "GBP", caro)?.centavos).toBe(999_999_999_999);
+  });
+});
+
+describe("vigia da cotação", () => {
+  test("avisa só quando o valor ou o dia de alguma moeda muda", () => {
+    let avisos = 0;
+    const ouvir = vigiarCotacao(CINCO_E_MEIO, () => avisos++);
+    // Outra chave da configuração mudou; a cotação, igual (mesmo com outra fonte), não avisa.
+    ouvir({ cotacoes: { BRL: { milionesimos: 5_500_000, data: "2026-10-16", fonte: "frankfurter" } } });
+    expect(avisos).toBe(0);
+    ouvir({ cotacoes: { BRL: { milionesimos: 5_400_000, data: "2026-10-16", fonte: "digitada" } } });
+    expect(avisos).toBe(1);
+    ouvir({ cotacoes: { BRL: { milionesimos: 5_400_000, data: "2026-10-17", fonte: "digitada" } } });
+    expect(avisos).toBe(2);
+    // Moeda nova e moeda que sai também contam.
+    ouvir({
+      cotacoes: {
+        BRL: { milionesimos: 5_400_000, data: "2026-10-17", fonte: "digitada" },
+        EUR: { milionesimos: 920_000, data: "2026-10-17", fonte: "digitada" },
+      },
+    });
+    expect(avisos).toBe(3);
+    ouvir({ cotacoes: {} });
+    expect(avisos).toBe(4);
+    ouvir({ cotacoes: {} });
+    expect(avisos).toBe(4);
   });
 });
 
@@ -123,5 +151,20 @@ describe("buscar cotação na fonte (Frankfurter v2, HTTP simulado)", () => {
     await expect(cambio.buscar("BRL")).rejects.toThrow(MENSAGEM_FONTE_ESTRANHA);
     await expect(cambio.buscar("BRL")).rejects.toThrow(MENSAGEM_FONTE_ESTRANHA);
     await expect(cambio.buscar("BRL")).rejects.toThrow(MENSAGEM_FONTE_ESTRANHA);
+  });
+
+  test("taxa acima do máximo do contrato: a mensagem diz o limite, e nada fica guardado", async () => {
+    const { buscar } = fonte(() =>
+      Promise.resolve(resposta({ date: "2026-10-16", base: "USD", quote: "BRL", rate: 1_000_000.5 })),
+    );
+    const cambio = new ServicoCambio({ buscar });
+    await expect(cambio.buscar("BRL")).rejects.toThrow(MENSAGEM_FONTE_ALTA("BRL"));
+    // No limite exato ainda vale.
+    const noLimite = new ServicoCambio({
+      buscar: fonte(() =>
+        Promise.resolve(resposta({ date: "2026-10-16", base: "USD", quote: "BRL", rate: 1_000_000 })),
+      ).buscar,
+    });
+    expect((await noLimite.buscar("BRL")).milionesimos).toBe(COTACAO_MAXIMA_MILIONESIMOS);
   });
 });

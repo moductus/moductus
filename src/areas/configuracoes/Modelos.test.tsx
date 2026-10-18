@@ -316,6 +316,25 @@ describe("Modelos", () => {
     expect(auditar(recipiente)).toEqual([]);
   });
 
+  it("enquanto o teto grava, a moeda trava junto com o resto do painel", async () => {
+    servico();
+    const responder = falso.responder;
+    let soltar: () => void = () => {};
+    falso.responder = (metodo, dados) =>
+      metodo === "agentes.definir"
+        ? new Promise((resolve) => (soltar = () => resolve(responder(metodo, dados))))
+        : responder(metodo, dados);
+    await montar();
+    await act(async () => botao("Definir o teto da Tula").click());
+    const moedas = () => todos('[role="radiogroup"][aria-label="Moeda do teto da Tula"] [role="radio"]');
+    expect(moedas().every((m) => !(m as HTMLButtonElement).disabled)).toBe(true);
+    await digitar("Teto por dia da Tula, em real", "10");
+    await act(async () => botao("Guardar o teto").click());
+    expect(moedas().every((m) => (m as HTMLButtonElement).disabled)).toBe(true);
+    await act(async () => soltar());
+    expect(por(".config-modelos-painel")).toBeNull();
+  });
+
   it("teto com valor que não é número não grava e diz como escrever", async () => {
     servico();
     await montar();
@@ -360,6 +379,19 @@ describe("Modelos", () => {
     expect(pedidosDe("config.definir")).toEqual([
       { cambio: { cotacoes: { BRL: { milionesimos: 5_430_000, data: dia, fonte: "digitada" } } } },
     ]);
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("cotação digitada acima do máximo diz o limite e não grava", async () => {
+    servico(PROVEDORES, [nunoComTeto()]);
+    await montar();
+    await digitar("Quanto vale US$ 1 em real", "1.000.000,01");
+    expect(por('[aria-label="Cotação do teto"] [role="alert"]')!.textContent).toBe(
+      "A cotação vai até 1.000.000,00 por US$ 1. Confira o número.",
+    );
+    expect((botao("Guardar") as HTMLButtonElement).disabled).toBe(true);
+    await digitar("Quanto vale US$ 1 em real", "5,43");
+    expect(por('[aria-label="Cotação do teto"] [role="alert"]')).toBeNull();
     expect(auditar(recipiente)).toEqual([]);
   });
 

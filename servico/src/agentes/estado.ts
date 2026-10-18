@@ -1,5 +1,6 @@
 import type { GastoDeHoje, MotivoSono } from "@moductus/contrato";
 import { SO_DOLAR, type ConverterCusto } from "../cambio/cambio.ts";
+import { cobrancaDoTipo } from "../provedores/precos.ts";
 import type { AgenteGuardado, EstadoGuardado, MotivoSonoGuardado, RepositorioAgentes } from "./agentes.ts";
 import type { RepositorioExecucoes } from "./execucoes.ts";
 
@@ -77,7 +78,7 @@ export interface SonoDaExecucao {
 }
 
 export interface DependenciasEstados {
-  agentes: Pick<RepositorioAgentes, "agente" | "agentes" | "mudarEstado" | "liberarTeto">;
+  agentes: Pick<RepositorioAgentes, "agente" | "agentes" | "mudarEstado" | "liberarTeto" | "provedor">;
   execucoes: Pick<RepositorioExecucoes, "custoDesde">;
 }
 
@@ -282,12 +283,15 @@ export class EstadosAgentes {
 
   /**
    * O teto, a moeda dele ou a cotação mudou: quem dormia pelo teto e já não está nele acorda, e a
-   * fila roda. Quem continua no teto continua dormindo.
+   * fila roda; quem estava ativo e já passou do teto novo dorme já, sem esperar a próxima vez.
    */
   tetoMudou(agenteId: string): void {
     const agente = this.deps.agentes.agente(agenteId);
-    if (agente?.estado === "dormindo" && agente.motivoSono === "teto" && !this.chegouAoTeto(agente)) {
+    if (!agente) return;
+    if (agente.estado === "dormindo" && agente.motivoSono === "teto" && !this.chegouAoTeto(agente)) {
       this.mudar(agenteId, ATIVO, ["dormindo"], "usuario");
+    } else if (agente.estado === "ativo" && this.chegouAoTeto(agente)) {
+      this.dormirNoTeto(agenteId);
     }
   }
 
@@ -304,13 +308,15 @@ export class EstadosAgentes {
       teto !== null && agente.tetoLiberadoAte !== null && Date.parse(agente.tetoLiberadoAte) > agora.getTime()
         ? (agente.tetoLiberadoCentavos ?? 0)
         : 0;
+    const limite = teto === null ? null : teto + liberado;
     return {
       microdolares,
       centavos: conversao?.centavos ?? null,
       cotacaoDe: conversao?.cotacaoDe ?? null,
-      limiteCentavos: teto === null ? null : teto + liberado,
+      limiteCentavos: limite,
       liberarCentavos: teto === null ? null : passoDoLiberar(teto),
-      pedeCotacao: teto !== null && conversao === null,
+      // Limite zero vale sem cotação: zero é zero em qualquer moeda.
+      pedeCotacao: limite !== null && limite > 0 && conversao === null,
     };
   }
 
@@ -417,11 +423,13 @@ export class EstadosAgentes {
   /**
    * O gasto de hoje chegou ao limite do agente (o teto mais o que foi liberado). Só o que custou
    * conta (assinatura não gasta). Em dólar não há conversão; em outra moeda, sem cotação gravada o
-   * teto não vale: nada de número inventado.
+   * teto não vale: nada de número inventado. Limite zero é "não gastar nada": a primeira execução
+   * paga do dia já não roda, em qualquer moeda (zero não precisa de cotação).
    */
   private chegouAoTeto(agente: AgenteGuardado): boolean {
     if (agente.tetoDiarioCentavos === null) return false;
     const hoje = this.gastoDeHoje(agente);
+    if (hoje.limiteCentavos === 0) return this.vaiCobrar(agente);
     if (hoje.microdolares <= 0) return false;
     if (hoje.centavos === null || hoje.limiteCentavos === null) {
       if (!this.tetoSemCambioAvisado.has(agente.id)) {
@@ -432,6 +440,30 @@ export class EstadosAgentes {
     }
     this.tetoSemCambioAvisado.delete(agente.id);
     return hoje.centavos >= hoje.limiteCentavos;
+  }
+
+  /**
+   * A próxima execução do agente cobra por uso: o provedor que vai atendê-la (a reserva, enquanto
+   * o principal está fora) é de API. Assinatura (CLI) não gasta dinheiro.
+   */
+  private vaiCobrar(agente: AgenteGuardado, provedorId?: string | null): boolean {
+    const id =
+      provedorId !== undefined
+        ? provedorId
+        : agente.provedorId && agente.provedorReservaId && this.naReserva(agente.id)
+          ? agente.provedorReservaId
+          : agente.provedorId;
+    const provedor = id ? this.deps.agentes.provedor(id) : null;
+    return provedor !== null && cobrancaDoTipo(provedor.tipo) === "por_token";
+  }
+
+  /**
+   * Antes de repetir na reserva o pedido que o principal não atendeu: com limite zero e reserva de
+   * API, a repetição já seria gasto, e não roda (o agente dorme pela falha do principal).
+   */
+  barradoNoTetoZero(agente: AgenteGuardado, provedorId: string): boolean {
+    if (agente.tetoDiarioCentavos === null) return false;
+    return this.gastoDeHoje(agente).limiteCentavos === 0 && this.vaiCobrar(agente, provedorId);
   }
 
   /** Dormindo ou pausado com hora, e a hora já passou. */

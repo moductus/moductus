@@ -256,6 +256,11 @@ export class Runtime {
         this.estados.depoisDaExecucao(agente.id, null, false);
         return tentativa.resultado;
       }
+      // Teto zero e reserva de API: repetir já seria gasto. Dorme pela falha, como sem reserva.
+      if (this.estados.barradoNoTetoZero(agente, reserva.id)) {
+        this.estados.depoisDaExecucao(agente.id, sono, false);
+        return tentativa.resultado;
+      }
       tentativa = await this.tentar(pedido, agente, reserva, true);
     }
     const { resultado } = tentativa;

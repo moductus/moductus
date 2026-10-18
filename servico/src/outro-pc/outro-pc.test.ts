@@ -5,6 +5,7 @@ import { CONFIG_PADRAO, Manifesto, VERSAO_FORMATO, type Config, type EstadoConfi
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { afterEach, describe, expect, test } from "vitest";
 import { abrirBanco } from "../banco/conexao.ts";
+import { vigiarCotacao } from "../cambio/cambio.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "../config/config.ts";
 import { ServicoOutroPc } from "./outro-pc.ts";
 
@@ -170,6 +171,37 @@ describe("levar para outro PC: só configurações", () => {
     const caminho = arquivo({ "manifesto.json": manifestoValido(), "config.json": { dock: MINHA.dock } });
     const estado = await trabalho.outro.importar({ caminho, modo: "substituir" });
     expect(estado.config).toEqual({ ...CONFIG_PADRAO, dock: MINHA.dock });
+  });
+
+  test("a cotação que chega pela importação passa pelo aviso da configuração, como no main", async () => {
+    const db = abrirBanco(pasta());
+    bancos.push(db);
+    const repo = new RepositorioConfig(db);
+    let cotacaoMudou = 0;
+    const vigia = vigiarCotacao(repo.ler().cambio, () => cotacaoMudou++);
+    const config = new ServicoConfig(repo, aceita(), (e) => vigia(e.config.cambio), false);
+    const outro = new ServicoOutroPc(config, db, {
+      versaoApp: "0.5.0-alpha",
+      versaoEsquema: 1,
+      pcOrigem: "casa",
+    });
+
+    // Sem cambio no arquivo, juntar não mexe na cotação: nada a reagir.
+    const semCambio = arquivo({ "manifesto.json": manifestoValido(), "config.json": { tema: "papel" } });
+    await outro.importar({ caminho: semCambio, modo: "juntar" });
+    expect(cotacaoMudou).toBe(0);
+
+    const comCambio = arquivo({
+      "manifesto.json": manifestoValido(),
+      "config.json": { cambio: MINHA.cambio },
+    });
+    await outro.importar({ caminho: comCambio, modo: "juntar" });
+    expect(config.obter().config.cambio).toEqual(MINHA.cambio);
+    expect(cotacaoMudou).toBe(1);
+
+    // Substituir com um arquivo sem cambio volta ao padrão (sem cotação): mudou de novo.
+    await outro.importar({ caminho: semCambio, modo: "substituir" });
+    expect(cotacaoMudou).toBe(2);
   });
 
   test("prévia: lista o que muda, chave a chave, e não grava nada", async () => {

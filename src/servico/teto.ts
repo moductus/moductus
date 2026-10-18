@@ -1,4 +1,10 @@
-import type { Cotacao, GastoDeHoje, MoedaComCotacao, MoedaTeto } from "@moductus/contrato";
+import {
+  COTACAO_MAXIMA_MILIONESIMOS,
+  type Cotacao,
+  type GastoDeHoje,
+  type MoedaComCotacao,
+  type MoedaTeto,
+} from "@moductus/contrato";
 
 /**
  * O teto diário na moeda do usuário em texto (ADR-0040). Quem conta é o serviço: o gasto de hoje,
@@ -42,8 +48,11 @@ export function diaCurto(dia: string): string {
 function lerDecimal(texto: string, casas: number): number | null {
   const limpo = texto.trim().replace(/\s/g, "");
   if (!limpo) return null;
-  // Com vírgula, o ponto é de milhar; sem vírgula, um ponto só é a casa decimal.
-  const normal = limpo.includes(",") ? limpo.replace(/\./g, "").replace(",", ".") : limpo;
+  // Com vírgula, o ponto é de milhar e só vem antes dela ("10,5.0" não é número); sem vírgula,
+  // um ponto só é a casa decimal.
+  const virgula = limpo.indexOf(",");
+  if (virgula >= 0 && limpo.includes(".", virgula)) return null;
+  const normal = virgula >= 0 ? limpo.replace(/\./g, "").replace(",", ".") : limpo;
   const casou = /^(\d+)(?:\.(\d+))?$/.exec(normal);
   if (!casou) return null;
   const [, inteiro, fracao = ""] = casou;
@@ -58,10 +67,19 @@ export function lerTeto(texto: string): number | null | undefined {
   return lerDecimal(texto, 2) ?? undefined;
 }
 
-/** A cotação digitada em milionésimos ("5,43" é 5.430.000); zero e inválido são `null`. */
+/** A cotação digitada em milionésimos ("5,43" é 5.430.000); zero, inválido e acima do máximo são `null`. */
 export function lerCotacao(texto: string): number | null {
   const valor = lerDecimal(texto, 6);
-  return valor !== null && valor > 0 ? valor : null;
+  return valor !== null && valor > 0 && valor <= COTACAO_MAXIMA_MILIONESIMOS ? valor : null;
+}
+
+/** O que a tela diz quando o número digitado passa do que o contrato aceita. */
+export const MENSAGEM_COTACAO_ALTA = `A cotação vai até ${cotacaoNoCampo(COTACAO_MAXIMA_MILIONESIMOS)} por US$ 1. Confira o número.`;
+
+/** O número digitado é válido, mas passa do máximo: a tela avisa em vez de só travar o "Guardar". */
+export function cotacaoAcimaDoMaximo(texto: string): boolean {
+  const valor = lerDecimal(texto, 6);
+  return valor !== null && valor > COTACAO_MAXIMA_MILIONESIMOS;
 }
 
 /** "5,43" para o campo, com as casas que a cotação tem. */
@@ -101,10 +119,30 @@ export function fonteDaEstimativa(gasto: GastoDeHoje): string {
   return gasto.cotacaoDe ? `estimativa pela cotação de ${diaCurto(gasto.cotacaoDe)}` : "estimativa";
 }
 
+/**
+ * O gasto contra o limite para a dica do dock no teto (Estados.dc.html, "o valor ao passar o
+ * mouse"): "≈ R$ 10,00 de R$ 10,00, estimativa pela cotação de 16/10". `null` sem número.
+ */
+export function gastoNaDica(gasto: GastoDeHoje, moeda: MoedaTeto): string | null {
+  if (gasto.limiteCentavos === null) return null;
+  const limite = dinheiro(gasto.limiteCentavos, moeda);
+  if (gasto.centavos === null) return gasto.limiteCentavos === 0 ? `teto de ${limite}` : null;
+  return `≈ ${dinheiro(gasto.centavos, moeda)} de ${limite}, ${fonteDaEstimativa(gasto)}`;
+}
+
 /** `null` quando o agente não tem teto: a coluna fica com o número de execuções. */
 export function gastoContraOTeto(gasto: GastoDeHoje, moeda: MoedaTeto): GastoMostrado | null {
   if (gasto.limiteCentavos === null) return null;
   const limite = dinheiro(gasto.limiteCentavos, moeda);
+  // Teto zero vale sem cotação (nada pago roda): não há o que converter nem o que pedir.
+  if (gasto.centavos === null && gasto.limiteCentavos === 0) {
+    return {
+      texto: `teto de ${limite}`,
+      rotulo: `teto de ${limite} hoje: nada pago roda`,
+      pct: 100,
+      semCotacao: false,
+    };
+  }
   if (gasto.centavos === null) {
     return {
       texto: "sem cotação",

@@ -631,6 +631,56 @@ describe("teto diário", () => {
     erro.mockRestore();
   });
 
+  test("teto 0,00 é não gastar nada: a primeira execução paga do dia não roda, nem sem cotação", async () => {
+    // Em real e sem cotação nenhuma: zero é zero em qualquer moeda.
+    const { db, runtime, falsos, agentes, guardado } = montar({ estimarCusto: UM_DOLAR });
+    db.exec("UPDATE agentes SET teto_diario_centavos = 0, teto_moeda = 'BRL' WHERE id = 'nuno'");
+    falsos["p-nuno"]!.roteirizar(roteiros.resposta("liberado"));
+    const primeiro = acompanhar(runtime.executar(pedir("nuno", "1")));
+    await assentar();
+    expect(primeiro.resultado).toBeNull();
+    expect(falsos["p-nuno"]!.pedidos).toHaveLength(0);
+    expect(guardado("nuno")).toMatchObject({ estado: "dormindo", motivo_sono: "teto" });
+    // O teto vale sem cotação, e a tela não a pede.
+    expect(runtime.estados.gastoDeHoje(agentes.agente("nuno")!)).toMatchObject({
+      limiteCentavos: 0,
+      pedeCotacao: false,
+    });
+    // Liberar solta uma unidade a partir do zero, e a fila roda.
+    runtime.estados.liberarTeto("nuno");
+    expect(runtime.estados.gastoDeHoje(agentes.agente("nuno")!)).toMatchObject({ limiteCentavos: 100 });
+    await vi.waitFor(() => expect(primeiro.resultado?.texto).toBe("liberado"));
+  });
+
+  test("teto 0,00 com principal de assinatura: a reserva de API não é tentada no lugar dele", async () => {
+    const { db, runtime, falsos, guardado } = montar({ estimarCusto: UM_DOLAR });
+    // A reserva da Alba é a API do Nuno.
+    db.exec("UPDATE agentes SET teto_diario_centavos = 0, provedor_reserva_id = 'p-nuno' WHERE id = 'alba'");
+    falsos["p-alba"]!.roteirizar(roteiros.falha("fora_do_ar"));
+    const r = await runtime.executar(pedir("alba", "1"));
+    expect(r.execucao).toMatchObject({ estado: "erro", provedorId: "p-alba" });
+    expect(falsos["p-nuno"]!.pedidos).toHaveLength(0);
+    // Dorme pela falha do principal, como se não houvesse reserva; não pelo teto até amanhã.
+    expect(guardado("alba")).toMatchObject({ estado: "dormindo", motivo_sono: "fora_do_ar" });
+  });
+
+  test("teto mudado para abaixo do gasto põe o agente ativo para dormir já, e subir o teto acorda", async () => {
+    const { db, runtime, falsos, guardado } = montar({ emCentavos: CINCO_REAIS, estimarCusto: UM_DOLAR });
+    db.exec("UPDATE agentes SET teto_diario_centavos = 1000, teto_moeda = 'BRL' WHERE id = 'nuno'");
+    falsos["p-nuno"]!.roteirizar(roteiros.resposta("um"));
+    await runtime.executar(pedir("nuno", "1"));
+    expect(guardado("nuno")).toMatchObject({ estado: "ativo" });
+
+    // R$ 5,00 gastos, teto novo de R$ 4,00: dorme sem esperar o próximo pedido.
+    db.exec("UPDATE agentes SET teto_diario_centavos = 400 WHERE id = 'nuno'");
+    runtime.estados.tetoMudou("nuno");
+    expect(guardado("nuno")).toMatchObject({ estado: "dormindo", motivo_sono: "teto" });
+
+    db.exec("UPDATE agentes SET teto_diario_centavos = 2000 WHERE id = 'nuno'");
+    runtime.estados.tetoMudou("nuno");
+    expect(guardado("nuno")).toMatchObject({ estado: "ativo" });
+  });
+
   test("assinatura não gasta: o teto não para quem roda pelo CLI", async () => {
     const { db, runtime, falsos, guardado } = montar({ emCentavos: UM_CENTAVO_POR_MICRODOLAR });
     db.exec("UPDATE agentes SET teto_diario_centavos = 0 WHERE id = 'alba'");
