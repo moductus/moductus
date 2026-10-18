@@ -7,6 +7,7 @@ import {
   formatarLatencia,
   FORMULARIO_API_VAZIO,
   novoDaApi,
+  precisaEntrar,
   precisaInstalar,
   situacaoDoCli,
   substituicao,
@@ -32,6 +33,19 @@ describe("como instalar", () => {
 
   it("cada CLI tem a página de instalação em https://, que é o que a casca abre", () => {
     for (const c of CLIS) expect(COMO_INSTALAR[c.tipo]).toMatch(/^https:\/\/[a-z0-9.-]+\//);
+  });
+});
+
+describe("entrar", () => {
+  it("aparece só para o CLI que serve e está sem login; sem saber o login, não", () => {
+    expect(precisaEntrar({ ...claude, logado: false })).toBe(true);
+    expect(precisaEntrar(claude)).toBe(false);
+    expect(precisaEntrar({ ...claude, logado: null })).toBe(false);
+    expect(precisaEntrar(undefined)).toBe(false);
+    // Antes de entrar, falta instalar, atualizar ou um Moductus que fale com ele.
+    expect(precisaEntrar({ ...claude, logado: false, impedimento: "instalado_pelo_npm" })).toBe(false);
+    expect(precisaEntrar({ ...claude, logado: false, impedimento: "sem_adaptador" })).toBe(false);
+    expect(precisaEntrar({ ...claude, logado: false, versaoMinima: "2.1.257" })).toBe(false);
   });
 });
 

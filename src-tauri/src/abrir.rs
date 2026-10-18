@@ -1,10 +1,13 @@
-//! O que a casca abre fora dela (ADR-0038): endereço `https://` no navegador padrão e arquivo ou
-//! pasta dentro das raízes autorizadas, no programa padrão ou no Explorer.
+//! O que a casca abre fora dela (ADR-0038): endereço `https://` no navegador padrão, arquivo ou
+//! pasta dentro das raízes autorizadas, no programa padrão ou no Explorer, e o terminal com o login
+//! de um CLI da lista fixa ([`LOGINS_CLI`]), escolhido por chave e só pela interface
+//! (`abrir_terminal`).
 //!
 //! Chegam aqui o serviço, pelo canal do sidecar (`{"tipo":"abrir","id","op",…}`), e a interface,
-//! pelos comandos `abrir_endereco`, `abrir_arquivo` e `abrir_settings_claude`. Nenhuma ferramenta
-//! do catálogo chama `abrir`: só cliques do usuário e o fluxo de autorização. A validação mora
-//! aqui, não na interface nem no serviço: quem pede não decide o que pode ser aberto.
+//! pelos comandos `abrir_endereco`, `abrir_arquivo`, `abrir_settings_claude` e `abrir_terminal`.
+//! Nenhuma ferramenta do catálogo chama `abrir`: só cliques do usuário e o fluxo de autorização.
+//! A validação mora aqui, não na interface nem no serviço: quem pede não decide o que pode ser
+//! aberto.
 //!
 //! Raízes: a pasta de dados do Moductus, o `settings.json` do Claude Code e as cópias de segurança
 //! dele (só esses arquivos, nunca o resto da pasta, que guarda o login; vale para a pasta do
@@ -27,9 +30,13 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use windows::{
-    core::{HSTRING, PCWSTR},
+    core::{HSTRING, PCWSTR, PWSTR},
     Win32::{
-        System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE},
+        Foundation::CloseHandle,
+        System::{
+            Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE},
+            Threading::{CreateProcessW, CREATE_NEW_CONSOLE, PROCESS_INFORMATION, STARTUPINFOW},
+        },
         UI::{
             Shell::{AssocIsDangerous, ShellExecuteExW, SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW},
             WindowsAndMessaging::SW_SHOWNORMAL,
@@ -368,6 +375,90 @@ pub fn abrir_caminho_validado(caminho: &str) -> Result<(), String> {
     abrir(Alvo::Caminho(validado))
 }
 
+/* ---------- Terminal de login ---------- */
+
+/// O login de cada CLI que o "Entrar" abre no terminal (ADR-0038): a chave é o tipo do provedor no
+/// contrato, o programa é o nome dele em `COMANDOS_CLI` (`pacotes/contrato/src/provedores.ts`) e
+/// os argumentos são fixos. Só o Claude Code diz se está logado (a detecção do serviço), então só
+/// ele tem "Entrar". `auth login --claudeai` entra com a assinatura, que é o que o Moductus usa, e
+/// não abre uma sessão do CLI na pasta onde o terminal está (o `/login` abriria, com a pergunta de
+/// confiar na pasta).
+pub const LOGINS_CLI: &[(&str, &str, &str)] = &[("claude-cli", "claude", "auth login --claudeai")];
+
+/// Título da janela enquanto o `cmd` não troca pelo do comando.
+const TITULO_DO_TERMINAL: &str = "Moductus · entrar no CLI";
+
+/// A linha de comando do terminal de login do CLI `cli`, só com texto deste arquivo: o `cmd.exe`
+/// (caminho completo, sem busca no PATH) com `/k`, para a janela ficar aberta e mostrar se deu
+/// certo. A chave tem de ser uma da lista, igual: nome de programa, comando ou qualquer outro
+/// texto não abre nada.
+pub fn linha_do_terminal(cli: &str, cmd: &Path) -> Result<String, String> {
+    let (_, programa, argumentos) =
+        LOGINS_CLI.iter().find(|(chave, _, _)| *chave == cli).ok_or("esse CLI não entra pelo Moductus")?;
+    Ok(format!("\"{}\" /k {programa} {argumentos}", cmd.display()))
+}
+
+/// O `cmd.exe` do Windows, pela pasta do sistema.
+fn cmd_do_windows() -> Result<PathBuf, String> {
+    let cmd = std::env::var_os("SystemRoot")
+        .map(|raiz| PathBuf::from(raiz).join("System32").join("cmd.exe"))
+        .filter(|c| c.is_file())
+        .ok_or("não achei o cmd.exe do Windows")?;
+    Ok(cmd)
+}
+
+/// Abre o terminal num console novo, que o Windows mostra no terminal padrão do usuário (o Windows
+/// Terminal, no Windows 11, a não ser que ele tenha escolhido outro). Nada é herdado da casca além
+/// do ambiente: nem as saídas (no desenvolvimento, são do `tauri dev`) nem as alças. Começa na pasta
+/// do usuário: a do Moductus pode ser a de instalação.
+fn console_novo(cmd: &Path, linha: &str, cli: &str) -> Result<(), String> {
+    let mut linha: Vec<u16> = linha.encode_utf16().chain(std::iter::once(0)).collect();
+    let titulo = HSTRING::from(TITULO_DO_TERMINAL);
+    let pasta = std::env::var_os("USERPROFILE").filter(|p| Path::new(p).is_dir()).map(HSTRING::from);
+    let inicio = STARTUPINFOW {
+        cb: size_of::<STARTUPINFOW>() as u32,
+        lpTitle: PWSTR(titulo.as_ptr() as *mut u16),
+        ..Default::default()
+    };
+    let mut processo = PROCESS_INFORMATION::default();
+    let resultado = unsafe {
+        CreateProcessW(
+            &HSTRING::from(cmd.as_os_str()),
+            Some(PWSTR(linha.as_mut_ptr())),
+            None,
+            None,
+            false,
+            CREATE_NEW_CONSOLE,
+            None,
+            pasta.as_ref().map_or(PCWSTR::null(), |p| PCWSTR(p.as_ptr())),
+            &inicio,
+            &mut processo,
+        )
+    };
+    match resultado {
+        Ok(()) => {
+            unsafe {
+                let _ = CloseHandle(processo.hThread);
+                let _ = CloseHandle(processo.hProcess);
+            }
+            crate::registro::info(&format!("abriu o terminal de login do {cli}"));
+            Ok(())
+        }
+        Err(e) => {
+            crate::registro::info(&format!("não abriu o terminal de login do {cli}: {}", e.message()));
+            Err(format!("o Windows não abriu o terminal: {}", e.message()))
+        }
+    }
+}
+
+/// O terminal de login, já validado. O recusado vai ao registro sem o texto que veio: ele não é
+/// da lista e poderia forjar uma linha.
+pub fn abrir_terminal_validado(cli: &str) -> Result<(), String> {
+    let cmd = cmd_do_windows()?;
+    let linha = linha_do_terminal(cli, &cmd).map_err(|m| recusado("o terminal de um CLI fora da lista", m))?;
+    console_novo(&cmd, &linha, cli)
+}
+
 /* ---------- Canal do serviço e comandos da interface ---------- */
 
 /// Pedido do serviço à casca, pelo canal do sidecar.
@@ -426,6 +517,13 @@ pub async fn abrir_endereco(endereco: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn abrir_arquivo(caminho: String) -> Result<(), String> {
     abrir_caminho_validado(&caminho)
+}
+
+/// O terminal com o login do CLI (`cli` é a chave do contrato, `claude-cli`). Só pela interface,
+/// num clique em "Entrar": o canal do serviço não tem terminal.
+#[tauri::command]
+pub async fn abrir_terminal(cli: String) -> Result<(), String> {
+    abrir_terminal_validado(&cli)
 }
 
 /// O `settings.json` do Claude Code, que a interface não sabe onde fica quando a ligação falhou.
@@ -888,7 +986,60 @@ mod testes {
         let p: Pedido =
             serde_json::from_str(r#"{"tipo":"abrir","id":6,"op":"projetos","pastas":["C:\\a","D:\\b"]}"#).unwrap();
         assert!(matches!(p, Pedido::Projetos { pastas } if pastas.len() == 2));
+        // O terminal só vem de um clique na interface; o serviço não tem como pedir.
         assert!(serde_json::from_str::<Pedido>(r#"{"tipo":"abrir","id":7,"op":"terminal","comando":"x"}"#).is_err());
+        assert!(serde_json::from_str::<Pedido>(r#"{"tipo":"abrir","id":8,"op":"terminal","cli":"claude-cli"}"#).is_err());
+    }
+
+    #[test]
+    fn terminal_de_login_do_claude_code() {
+        let cmd = Path::new("C:\\Windows\\System32\\cmd.exe");
+        assert_eq!(
+            linha_do_terminal("claude-cli", cmd).as_deref(),
+            Ok("\"C:\\Windows\\System32\\cmd.exe\" /k claude auth login --claudeai")
+        );
+    }
+
+    /// Só a chave da lista abre o terminal: nome de programa, comando, texto livre, chave de CLI
+    /// sem login conhecido e chave com qualquer coisa a mais são recusados.
+    #[test]
+    fn terminal_recusa_o_que_nao_e_chave_da_lista() {
+        let cmd = Path::new("C:\\Windows\\System32\\cmd.exe");
+        for cli in [
+            "codex-cli",
+            "gemini-cli",
+            "opencode-cli",
+            "anthropic",
+            "claude",
+            "claude /login",
+            "claude auth login --claudeai",
+            "claude-cli & calc",
+            "claude-cli\" & calc",
+            "claude-cli\n",
+            " claude-cli",
+            "CLAUDE-CLI",
+            "cmd.exe /c calc",
+            "powershell -c calc",
+            "",
+        ] {
+            let erro = linha_do_terminal(cli, cmd);
+            assert_eq!(erro, Err("esse CLI não entra pelo Moductus".into()), "deveria recusar {cli:?}");
+        }
+        // A recusa vem antes do Windows: nada abre aqui.
+        assert!(abrir_terminal_validado("cmd.exe /c calc").is_err());
+    }
+
+    /// O programa de cada login é o nome do CLI no contrato: se o contrato mudar o nome, este
+    /// teste avisa antes de o "Entrar" abrir um comando que não existe.
+    #[test]
+    fn programa_do_login_e_o_do_contrato() {
+        let contrato = include_str!("../../pacotes/contrato/src/provedores.ts");
+        for (chave, programa, _) in LOGINS_CLI {
+            assert!(
+                contrato.contains(&format!("\"{chave}\": \"{programa}\",")),
+                "COMANDOS_CLI do contrato deveria ter \"{chave}\": \"{programa}\""
+            );
+        }
     }
 
     /// O canal recusa antes de chegar ao Windows: nada abre neste teste.

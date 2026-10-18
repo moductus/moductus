@@ -281,6 +281,43 @@ describe("Modelos", () => {
     expect(auditar(recipiente)).toEqual([]);
   });
 
+  it("Entrar abre o terminal de login do CLI sem login, e procurar de novo acha o logado", async () => {
+    servico();
+    const base = falso.responder;
+    let logado = false;
+    falso.responder = (metodo, dados) =>
+      metodo === "provedores.detectar"
+        ? Promise.resolve([
+            {
+              tipo: "claude-cli",
+              caminho: "C:\\claude.exe",
+              versao: "2.4",
+              logado,
+              impedimento: null,
+              versaoMinima: null,
+            },
+          ])
+        : base(metodo, dados);
+    await montar();
+    await act(async () => botao("Procurar no PC").click());
+    const entrar = botao("Entrar no Claude Code pelo terminal");
+    expect(entrar.textContent).toBe("Entrar");
+    expect(todos("button").filter((b) => b.textContent === "Entrar")).toHaveLength(1);
+    await act(async () => entrar.click());
+    // Vai só a chave: o comando de login é da casca, de uma lista fixa.
+    expect(casca.invoke).toHaveBeenCalledWith("abrir_terminal", { cli: "claude-cli" });
+    casca.invoke.mockImplementationOnce(() => Promise.reject("esse CLI não entra pelo Moductus"));
+    await act(async () => botao("Entrar no Claude Code pelo terminal").click());
+    expect(por('[aria-label="CLIs no PC"] [role="alert"]')!.textContent).toBe(
+      "Não consegui abrir: esse CLI não entra pelo Moductus.",
+    );
+
+    logado = true;
+    await act(async () => botao("Procurar no PC").click());
+    expect(todos("button").filter((b) => b.textContent === "Entrar")).toEqual([]);
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
   it("CLI que não está no PC leva à página de instalação; o achado não oferece instalar", async () => {
     servico([], [agente("alba", "Alba", null, null)]);
     await montar();

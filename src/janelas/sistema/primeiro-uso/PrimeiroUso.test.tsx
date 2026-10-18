@@ -535,6 +535,32 @@ describe("primeiro uso: modelo", () => {
     expect(modelos()[0]).toMatchObject({ selo: "desatualizado", desativado: true });
   });
 
+  it("Entrar abre o terminal de login do CLI sem login, pela chave, e Procurar de novo acha o logado", async () => {
+    falso.detectados = [{ ...CLAUDE, logado: false }];
+    await noModelo();
+    const invocar = vi.mocked(invoke);
+    invocar.mockClear();
+    const entrar = todos("button").filter((b) => b.textContent === "Entrar");
+    expect(entrar.map((b) => b.getAttribute("aria-label"))).toEqual(["Entrar no Claude Code pelo terminal"]);
+    expect(entrar[0]!.closest("label")).toBeNull();
+    await clicar(entrar[0]!);
+    // Vai só a chave: o comando é da casca.
+    expect(invocar).toHaveBeenCalledWith("abrir_terminal", { cli: "claude-cli" });
+    expect(modelos()[0]).toMatchObject({ selo: "sem login", desativado: true });
+
+    invocar.mockImplementationOnce(() => Promise.reject("esse CLI não entra pelo Moductus"));
+    await clicar(entrar[0]!);
+    expect(todos('.uso-erro[role="alert"]').map((e) => e.textContent)).toEqual([
+      "Não consegui abrir: esse CLI não entra pelo Moductus.",
+    ]);
+
+    falso.detectados = [CLAUDE];
+    await clicar(botao("Procurar de novo"));
+    expect(modelos()[0]).toMatchObject({ selo: "detectado · conectado", desativado: false });
+    expect(todos("button").filter((b) => b.textContent === "Entrar")).toEqual([]);
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
   it("Como instalar abre a página do CLI que falta, pela casca, fora do rótulo da opção", async () => {
     falso.detectados = [CLAUDE, { ...CLAUDE, tipo: "gemini-cli", impedimento: "sem_adaptador" }];
     await noModelo();

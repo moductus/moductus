@@ -94,6 +94,16 @@ export function precisaInstalar(achado: ProvedorDetectado | undefined): boolean 
   return !achado || achado.impedimento === "instalado_pelo_npm";
 }
 
+/**
+ * "Entrar" aparece quando o CLI serve mas está sem login (o selo "sem login"): o terminal abre já
+ * com o comando de login, e "Procurar de novo" confere depois.
+ */
+export function precisaEntrar(achado: ProvedorDetectado | undefined): boolean {
+  return (
+    achado !== undefined && achado.logado === false && achado.impedimento === null && !achado.versaoMinima
+  );
+}
+
 const SEGUNDOS = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /** "2,1 s": o tempo da resposta inteira, como no quadro. */
