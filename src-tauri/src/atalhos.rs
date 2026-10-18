@@ -96,9 +96,10 @@ pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         .build()
 }
 
-/// Registra os atalhos ao subir. Um que o Windows recuse fica de fora e vai para o log.
+/// Registra os atalhos ao subir. Um que o Windows recuse fica de fora e vai para o log; o vazio é
+/// ação sem atalho e não registra nada.
 pub fn iniciar(app: &AppHandle, atalhos: Atalhos) {
-    for (acao, texto) in &atalhos {
+    for (acao, texto) in atalhos.iter().filter(|(_, t)| !t.is_empty()) {
         match Shortcut::from_str(texto).map_err(|e| e.to_string()).and_then(|s| app.global_shortcut().register(s).map_err(|e| e.to_string())) {
             Ok(()) => {}
             Err(e) => {
@@ -110,13 +111,29 @@ pub fn iniciar(app: &AppHandle, atalhos: Atalhos) {
     *ATUAIS.lock().unwrap() = Some(atalhos);
 }
 
+/// Os atalhos com a ação sem combinação: ela não responde a tecla nenhuma.
+fn sem_atalho(mut atalhos: Atalhos, acao: Acao) -> Atalhos {
+    atalhos.insert(acao, String::new());
+    atalhos
+}
+
 pub fn atuais() -> Atalhos {
     ATUAIS.lock().unwrap().clone().unwrap_or_else(padrao)
 }
 
-/// Troca o atalho de uma ação. Em conflito devolve o motivo e mantém o anterior.
+/// Troca o atalho de uma ação. Em conflito devolve o motivo e mantém o anterior. Vazio tira o
+/// atalho da ação (o do foco, quando o padrão colidia com um atalho salvo pelo usuário).
 pub fn definir(app: &AppHandle, acao: Acao, combinacao: &str) -> Result<Atalhos, String> {
     let atalhos = atuais();
+    if combinacao.is_empty() {
+        if let Some(anterior) = atalhos.get(&acao).and_then(|t| Shortcut::from_str(t).ok()) {
+            let _ = app.global_shortcut().unregister(anterior);
+        }
+        FALHAS.lock().unwrap().remove(&acao);
+        let atalhos = sem_atalho(atalhos, acao);
+        *ATUAIS.lock().unwrap() = Some(atalhos.clone());
+        return Ok(atalhos);
+    }
     let novo = validar(&atalhos, acao, combinacao)?;
     let anterior = atalhos.get(&acao).and_then(|t| Shortcut::from_str(t).ok());
     if anterior.map(|a| a.id()) == Some(novo.id()) {
@@ -202,5 +219,14 @@ mod testes {
         assert_eq!(erro, "ctrl+alt+p já é o atalho para iniciar ou pausar o foco");
         assert_eq!(serde_json::to_value(Acao::Foco).unwrap(), "foco");
         assert_eq!(aviso_do_foco(), serde_json::json!({ "tipo": "foco-alternar" }));
+    }
+
+    #[test]
+    fn foco_sem_atalho_libera_a_combinacao_para_os_outros() {
+        let atalhos = sem_atalho(padrao(), Acao::Foco);
+        assert_eq!(atalhos[&Acao::Foco], "");
+        assert!(validar(&atalhos, Acao::Sistema, "Ctrl+Alt+P").is_ok());
+        // O vazio não é uma combinação que outro atalho possa repetir.
+        assert!(validar(&atalhos, Acao::Dock, "").is_err());
     }
 }

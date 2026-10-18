@@ -16,8 +16,8 @@ describe("migração foco-etapas", () => {
     ).run();
     expect(migrar(db, MIGRACOES)).toEqual({ de: posicao, para: MIGRACOES.length });
     expect(versaoAtual(db)).toBe(MIGRACOES.length);
-    expect(db.prepare("SELECT termina_em, pausada_em, ciclo FROM sessoes_foco").all()).toEqual([
-      { termina_em: "2026-10-18T14:25:00.000Z", pausada_em: null, ciclo: 1 },
+    expect(db.prepare("SELECT termina_em, pausada_em, ciclo, na_ausencia FROM sessoes_foco").all()).toEqual([
+      { termina_em: "2026-10-18T14:25:00.000Z", pausada_em: null, ciclo: 1, na_ausencia: 0 },
     ]);
   });
 
@@ -51,5 +51,9 @@ describe("migração foco-etapas", () => {
       db.prepare("UPDATE sessoes_foco SET pausada_em = '2026-10-18T13:00:00.000Z' WHERE id = 'parada'").run(),
     ).toThrow(/CHECK/);
     expect(() => db.prepare("UPDATE sessoes_foco SET ciclo = -1 WHERE id = 'parada'").run()).toThrow(/CHECK/);
+    // Só a etapa interrompida pode ter fechado na ausência.
+    expect(() => db.prepare("UPDATE sessoes_foco SET na_ausencia = 1 WHERE id = 'parada'").run()).toThrow(
+      /CHECK/,
+    );
   });
 });

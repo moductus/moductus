@@ -41,7 +41,10 @@ export type EtapaFoco = z.infer<typeof EtapaFoco>;
 /**
  * O foco agora, para o painel, a área e o ícone do dock: a etapa em andamento (uma só), em que
  * foco do ciclo ela está ("Ciclo 2 de 4"), o que vem depois e o total de hoje. `etapa` vazia é
- * foco parado; `proxima`, o que "Terminar ciclo" ou o fim pelo relógio começa.
+ * foco parado. `proxima` é a etapa que vem agora: depois do foco (pelo relógio ou pelo "Terminar
+ * ciclo"), a pausa, ou a longa no último ciclo, que a Alba propõe e só começa quando o usuário
+ * pede; depois da pausa, o foco, que o relógio começa sozinho no fim dela; depois da pausa longa,
+ * da pausa encerrada antes da hora ou da etapa que venceu com o PC parado, o foco do ciclo 1.
  */
 export const EstadoFoco = z.object({
   etapa: EtapaFoco.nullable(),

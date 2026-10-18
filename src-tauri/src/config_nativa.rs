@@ -33,9 +33,10 @@ pub struct PedidoAplicar {
     pub mudou: Vec<String>,
 }
 
-/// Atalhos pedidos que diferem dos atuais, na ordem em que serão registrados.
+/// Atalhos pedidos que diferem dos atuais, na ordem em que serão registrados: primeiro os que
+/// ficam vazios, que soltam a combinação (o Ctrl+Alt+P do foco) para o atalho salvo pelo usuário.
 pub fn atalhos_mudados(atuais: &atalhos::Atalhos, pedidos: &AtalhosConfig) -> Vec<(Acao, String)> {
-    [
+    let mut mudados: Vec<(Acao, String)> = [
         (Acao::Sistema, &pedidos.sistema),
         (Acao::Dock, &pedidos.dock),
         (Acao::Captura, &pedidos.captura),
@@ -44,7 +45,9 @@ pub fn atalhos_mudados(atuais: &atalhos::Atalhos, pedidos: &AtalhosConfig) -> Ve
         .into_iter()
         .filter(|(acao, novo)| atuais.get(acao).map(|a| !a.eq_ignore_ascii_case(novo)).unwrap_or(true))
         .map(|(acao, novo)| (acao, novo.clone()))
-        .collect()
+        .collect();
+    mudados.sort_by_key(|(_, novo)| !novo.is_empty());
+    mudados
 }
 
 /// Aplica dock e autostart primeiro (não falham por conflito) e os atalhos por último:
@@ -112,5 +115,20 @@ mod testes {
         assert_eq!(atalhos_mudados(&atuais, &pedidos), vec![(Acao::Captura, "Ctrl+Alt+K".to_string())]);
         let pedidos = AtalhosConfig { foco: "Ctrl+Alt+F".into(), captura: "Ctrl+Alt+Space".into(), ..pedidos };
         assert_eq!(atalhos_mudados(&atuais, &pedidos), vec![(Acao::Foco, "Ctrl+Alt+F".to_string())]);
+    }
+
+    #[test]
+    fn o_foco_vazio_solta_o_ctrl_alt_p_antes_do_atalho_salvo_que_o_usa() {
+        let atuais = atalhos::padrao();
+        let pedidos = AtalhosConfig {
+            sistema: "Ctrl+Alt+P".into(),
+            dock: "Ctrl+Alt+D".into(),
+            captura: "Ctrl+Alt+Space".into(),
+            foco: String::new(),
+        };
+        assert_eq!(
+            atalhos_mudados(&atuais, &pedidos),
+            vec![(Acao::Foco, String::new()), (Acao::Sistema, "Ctrl+Alt+P".to_string())]
+        );
     }
 }

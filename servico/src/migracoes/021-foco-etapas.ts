@@ -10,6 +10,11 @@ import { FORMATO_DATA_GLOB } from "../banco/tabela.ts";
  * - `pausada_em`: desde quando a etapa está parada; só a que está em andamento pode estar.
  * - `ciclo`: em que foco da rodada a etapa está (o "Ciclo 2 de 4"); a pausa leva o do foco que a
  *   antecede, e 0 é a pausa livre, sem foco antes.
+ * - `na_ausencia`: a etapa venceu enquanto o relógio não olhava (serviço parado, PC suspenso) e
+ *   fechou interrompida por isso; ela encerra a rodada, ao contrário do "Terminar ciclo".
+ *
+ * Enquanto o foco corre, o relógio renova o `atualizado_em` da etapa a cada conferência: é o último
+ * momento em que se sabe que o PC estava acordado, se o serviço parar sem avisar.
  *
  * A etapa que já existia ganha o `termina_em` do início mais a duração planejada e o ciclo 1.
  */
@@ -21,6 +26,8 @@ export const m021: Migracao = {
   ALTER TABLE sessoes_foco ADD COLUMN pausada_em TEXT
     CHECK (pausada_em IS NULL OR (pausada_em GLOB '${FORMATO_DATA_GLOB}' AND fim IS NULL AND pausada_em >= inicio));
   ALTER TABLE sessoes_foco ADD COLUMN ciclo INTEGER CHECK (ciclo IS NULL OR ciclo >= 0);
+  ALTER TABLE sessoes_foco ADD COLUMN na_ausencia INTEGER NOT NULL DEFAULT 0
+    CHECK (na_ausencia IN (0, 1) AND (na_ausencia = 0 OR interrompida = 1));
   UPDATE sessoes_foco
      SET termina_em = strftime('%Y-%m-%dT%H:%M:%fZ', inicio, '+' || duracao_planejada_min || ' minutes'),
          ciclo = 1;`,

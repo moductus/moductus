@@ -31,7 +31,8 @@ import { somarDias, TempoDoDia } from "../dia/tempo.ts";
  *   não conta no histórico. Etapa pausada não silencia avisos.
  * - **Terminar:** fecha agora; antes da hora fica interrompida. Terminar a pausa encerra a rodada.
  * - **Reinício e suspensão:** a etapa que ainda está no prazo segue; a que venceu há mais de 2 min
- *   fecha interrompida, no último momento em que se sabe que o PC estava acordado.
+ *   fecha interrompida, no último momento em que se sabe que o PC estava acordado, e encerra a
+ *   rodada. A tarefa herdada que foi à lixeira deixa a etapa livre.
  *
  * Minutos de foco somam o tempo real de cada foco, interrompido ou não; ciclos contam só os focos
  * completos. Pausas não entram na conta.
@@ -81,10 +82,12 @@ export interface LinhaEtapa {
   duracao_real_min: number | null;
   interrompida: number;
   ciclo: number | null;
+  na_ausencia: number;
+  atualizado_em: string;
 }
 
 const COLUNAS =
-  "id, tipo, tarefa_id, inicio, fim, termina_em, pausada_em, duracao_planejada_min, duracao_real_min, interrompida, ciclo";
+  "id, tipo, tarefa_id, inicio, fim, termina_em, pausada_em, duracao_planejada_min, duracao_real_min, interrompida, ciclo, na_ausencia, atualizado_em";
 
 /** O fim planejado: o gravado, ou (na etapa de antes da migração 021) o início mais a duração. */
 export const terminaEmDe = (l: LinhaEtapa): number =>
@@ -113,6 +116,8 @@ export interface CamposEtapa {
   duracao_planejada_min: number;
   duracao_real_min: number | null;
   interrompida: boolean;
+  /** Fechou interrompida porque venceu enquanto o relógio não olhava: encerra a rodada. */
+  na_ausencia: boolean;
 }
 
 /** `sessoes_foco` das migrações 014 e 021. */
@@ -217,10 +222,11 @@ export class RepositorioFoco {
       c.duracao_planejada_min,
       c.duracao_real_min,
       c.interrompida ? 1 : 0,
+      c.na_ausencia ? 1 : 0,
       agora,
     ];
     const campos = `fim = ?, termina_em = ?, pausada_em = ?, duracao_planejada_min = ?, duracao_real_min = ?,
-      interrompida = ?, atualizado_em = ?`;
+      interrompida = ?, na_ausencia = ?, atualizado_em = ?`;
     if (carimbo === null) {
       this.db.prepare(`UPDATE sessoes_foco SET ${campos} WHERE id = ?`).run(...valores, id);
       return;
@@ -229,6 +235,14 @@ export class RepositorioFoco {
     this.db
       .prepare(`UPDATE sessoes_foco SET ${campos}, origem = ?, agente_id = ?, execucao_id = ? WHERE id = ?`)
       .run(...valores, origem.origem, origem.agente_id, origem.execucao_id, id);
+  }
+
+  /**
+   * O foco ainda corre: o relógio renova o `atualizado_em`, que diz até quando se sabe que o PC
+   * estava acordado se o serviço parar sem avisar.
+   */
+  tocar(id: string, agora: string): void {
+    this.db.prepare("UPDATE sessoes_foco SET atualizado_em = ? WHERE id = ? AND fim IS NULL").run(agora, id);
   }
 
   tarefaViva(id: string): boolean {
@@ -271,7 +285,11 @@ export class RepositorioFoco {
  * entra, porque empurrou o fim planejado), e antes da hora fica interrompida. Pausada, o relógio
  * dela parou em `pausada_em`.
  */
-export function fechada(l: LinhaEtapa, fim: Date, interrompida?: boolean): CamposEtapa {
+export function fechada(
+  l: LinhaEtapa,
+  fim: Date,
+  opcoes: { interrompida?: boolean; naAusencia?: boolean } = {},
+): CamposEtapa {
   const parouEm = l.pausada_em !== null ? Date.parse(l.pausada_em) : fim.getTime();
   const faltava = Math.max(0, terminaEmDe(l) - parouEm);
   const realMs = Math.max(0, l.duracao_planejada_min * MIN - faltava);
@@ -282,7 +300,8 @@ export function fechada(l: LinhaEtapa, fim: Date, interrompida?: boolean): Campo
     pausada_em: null,
     duracao_planejada_min: l.duracao_planejada_min,
     duracao_real_min: Math.round(realMs / MIN),
-    interrompida: interrompida ?? faltava > 0,
+    interrompida: (opcoes.interrompida ?? faltava > 0) || opcoes.naAusencia === true,
+    na_ausencia: opcoes.naAusencia === true,
   };
 }
 
@@ -369,8 +388,10 @@ export class ServicoFoco implements FonteDoRelogio {
     if (situacao.andamento !== null) throw new ErroDoFoco(MENSAGEM_EM_ANDAMENTO);
     const ciclos = this.fontes.lerDia().foco;
     const tipo = pedido.tipo ?? this.proxima(situacao, ciclos);
+    // Só a tarefa pedida é recusada; a herdada da rodada que foi à lixeira deixa a etapa livre.
     const tarefaId = pedido.tarefaId === undefined ? this.tarefaQueContinua(situacao, tipo) : pedido.tarefaId;
-    if (tarefaId !== null && !this.repo.tarefaViva(tarefaId)) throw new ErroDoFoco(MENSAGEM_TAREFA);
+    if (typeof pedido.tarefaId === "string" && !this.repo.tarefaViva(pedido.tarefaId))
+      throw new ErroDoFoco(MENSAGEM_TAREFA);
     const ciclo = tipo === "foco" ? this.cicloDoProximoFoco(situacao, ciclos) : this.cicloDaPausa(situacao);
     this.repo.transacao(() =>
       this.comecar({ tipo, tarefaId, ciclo, minutos: pedido.minutos, inicio: this.agora() }, carimbo),
@@ -451,6 +472,7 @@ export class ServicoFoco implements FonteDoRelogio {
         duracao_planejada_min: ultima.duracao_planejada_min + minutos,
         duracao_real_min: null,
         interrompida: false,
+        na_ausencia: false,
       },
       agora.toISOString(),
       carimbo,
@@ -480,15 +502,21 @@ export class ServicoFoco implements FonteDoRelogio {
     const ciclos = this.fontes.lerDia().foco;
     let anterior: LinhaEtapa;
     if (andamento !== null && andamento.tipo !== "foco") anterior = andamento;
-    else if (andamento === null && ultima !== null && ultima.tipo === "foco") anterior = ultima;
+    else if (andamento === null && ultima !== null && ultima.tipo === "foco" && ultima.na_ausencia === 0)
+      anterior = ultima;
     else throw new ErroDoFoco(MENSAGEM_SEM_PAUSA);
     this.repo.transacao(() => {
       if (andamento !== null)
-        this.repo.gravar(andamento.id, fechada(andamento, agora, true), agora.toISOString(), carimbo);
+        this.repo.gravar(
+          andamento.id,
+          fechada(andamento, agora, { interrompida: true }),
+          agora.toISOString(),
+          carimbo,
+        );
       this.comecar(
         {
           tipo: "foco",
-          tarefaId: anterior.tarefa_id,
+          tarefaId: this.seViva(anterior.tarefa_id),
           ciclo: anterior.tipo === "pausa_longa" ? 1 : proximoCiclo(cicloDe(anterior), ciclos),
           inicio: agora,
         },
@@ -556,8 +584,10 @@ export class ServicoFoco implements FonteDoRelogio {
   /**
    * A etapa que chegou ao fim planejado fecha. Na hora (até 2 min depois), fecha completa: depois
    * da pausa o foco seguinte começa, depois do foco e da pausa longa a Alba avisa. Mais tarde que
-   * isso (serviço parado, PC suspenso), fecha interrompida, sem aviso, no último momento em que o PC
-   * estava acordado. Numa ausência, a etapa pausada de outro dia também fecha.
+   * isso (serviço parado, PC suspenso), fecha interrompida e encerra a rodada, sem aviso, no último
+   * momento em que se sabe que o PC estava acordado: o fim da ausência conhecida ou, sem ela (o
+   * serviço parou sem avisar), a última conferência gravada na etapa. A etapa pausada de outro dia
+   * também fecha, em qualquer conferência.
    */
   async conferir({ agora, ausencia }: Conferencia): Promise<void> {
     const andamento = this.repo.emAndamento();
@@ -565,10 +595,10 @@ export class ServicoFoco implements FonteDoRelogio {
     const instante = agora.toISOString();
     if (andamento.pausada_em !== null) {
       const deOutroDia = this.tempo.diaDe(new Date(andamento.pausada_em)) < this.tempo.diaDe(agora);
-      if (ausencia === null || !deOutroDia) return;
+      if (!deOutroDia) return;
       this.repo.gravar(
         andamento.id,
-        fechada(andamento, new Date(andamento.pausada_em), true),
+        fechada(andamento, new Date(andamento.pausada_em), { naAusencia: true }),
         instante,
         null,
       );
@@ -576,13 +606,17 @@ export class ServicoFoco implements FonteDoRelogio {
       return;
     }
     const termina = terminaEmDe(andamento);
-    if (termina > agora.getTime()) return;
+    if (termina > agora.getTime()) {
+      // Ainda no prazo: fica gravado que o PC estava acordado agora.
+      this.repo.tocar(andamento.id, instante);
+      return;
+    }
 
     if (agora.getTime() - termina > TOLERANCIA_MS) {
-      const acordado = ausencia?.de?.getTime() ?? termina;
+      const acordado = ausencia?.de?.getTime() ?? Date.parse(andamento.atualizado_em);
       this.repo.gravar(
         andamento.id,
-        fechada(andamento, new Date(Math.min(acordado, termina)), true),
+        fechada(andamento, new Date(Math.min(acordado, termina)), { naAusencia: true }),
         instante,
         null,
       );
@@ -597,7 +631,7 @@ export class ServicoFoco implements FonteDoRelogio {
         this.comecar(
           {
             tipo: "foco",
-            tarefaId: andamento.tarefa_id,
+            tarefaId: this.seViva(andamento.tarefa_id),
             ciclo: proximoCiclo(cicloDe(andamento), ciclos),
             inicio: agora,
           },
@@ -607,7 +641,10 @@ export class ServicoFoco implements FonteDoRelogio {
     });
     this.mudou(null);
     if (andamento.tipo === "foco") await this.avisar(this.avisoDoCiclo(andamento.id, ciclos));
-    if (andamento.tipo === "pausa_longa") await this.avisar(this.avisoDaRodada(andamento.id));
+    // A pausa longa livre (sem foco antes, ciclo 0) não fecha rodada nenhuma.
+    if (andamento.tipo === "pausa_longa" && cicloDe(andamento) > 0) {
+      await this.avisar(this.avisoDaRodada(andamento.id));
+    }
   }
 
   // A rodada.
@@ -622,10 +659,13 @@ export class ServicoFoco implements FonteDoRelogio {
     return { andamento: null, ultima: deHoje ? ultima : null };
   }
 
-  /** A pausa interrompida sem foco depois foi "Encerrar a rodada"; a longa fecha a rodada. */
+  /**
+   * A pausa interrompida sem foco depois foi "Encerrar a rodada"; a longa fecha a rodada, e a etapa
+   * que venceu na ausência também.
+   */
   private cicloDoProximoFoco({ andamento, ultima }: Situacao, ciclos: CiclosFoco): number {
     const anterior = andamento ?? ultima;
-    if (anterior === null || anterior.tipo === "pausa_longa") return 1;
+    if (anterior === null || anterior.tipo === "pausa_longa" || anterior.na_ausencia === 1) return 1;
     if (anterior.tipo === "pausa" && anterior.interrompida === 1) return 1;
     return proximoCiclo(cicloDe(anterior), ciclos);
   }
@@ -637,14 +677,18 @@ export class ServicoFoco implements FonteDoRelogio {
 
   private cicloAtual(situacao: Situacao, ciclos: CiclosFoco): number {
     const atual = situacao.andamento ?? situacao.ultima;
-    if (atual !== null && (situacao.andamento !== null || atual.tipo === "foco")) return cicloDe(atual);
+    const focoQueParou = atual !== null && atual.tipo === "foco" && atual.na_ausencia === 0;
+    if (atual !== null && (situacao.andamento !== null || focoQueParou)) return cicloDe(atual);
     return this.cicloDoProximoFoco(situacao, ciclos);
   }
 
-  /** Depois do foco, a pausa (a longa no último ciclo da rodada); depois de qualquer pausa, o foco. */
+  /**
+   * Depois do foco, a pausa (a longa no último ciclo da rodada); depois de qualquer pausa, ou do foco
+   * que venceu na ausência, o foco.
+   */
   private proxima(situacao: Situacao, ciclos: CiclosFoco): TipoEtapa {
     const atual = situacao.andamento ?? situacao.ultima;
-    if (atual === null || atual.tipo !== "foco") return "foco";
+    if (atual === null || atual.tipo !== "foco" || atual.na_ausencia === 1) return "foco";
     return cicloDe(atual) >= ciclos.ciclosAtePausaLonga ? "pausa_longa" : "pausa";
   }
 
@@ -655,7 +699,12 @@ export class ServicoFoco implements FonteDoRelogio {
     const ciclos = this.fontes.lerDia().foco;
     const proxima = tipo ?? this.proxima(situacao, ciclos);
     if (proxima === "foco" && this.cicloDoProximoFoco(situacao, ciclos) === 1) return null;
-    return anterior.tarefa_id;
+    return this.seViva(anterior.tarefa_id);
+  }
+
+  /** A tarefa herdada só se ainda existe: a que foi à lixeira não trava o atalho nem os botões. */
+  private seViva(tarefaId: string | null): string | null {
+    return tarefaId !== null && this.repo.tarefaViva(tarefaId) ? tarefaId : null;
   }
 
   /** Grava a etapa nova; quem chama já está numa transação, se precisa. */
@@ -752,7 +801,8 @@ export class ServicoFoco implements FonteDoRelogio {
       if (ultima.tipo === "foco" && botao === "pausa") this.iniciar({});
       else if (ultima.tipo === "foco" && botao === "pular") this.pularPausa();
       else if (ultima.tipo === "foco" && botao === "mais") this.estender({ minutos: MINUTOS_DO_AVISO });
-      else if (ultima.tipo === "pausa_longa" && botao === "outra") this.iniciar({ tipo: "foco" });
+      else if (ultima.tipo === "pausa_longa" && cicloDe(ultima) > 0 && botao === "outra")
+        this.iniciar({ tipo: "foco" });
       else return Promise.resolve(false);
       return Promise.resolve(true);
     } catch (erro) {
@@ -803,6 +853,7 @@ const camposDe = (l: LinhaEtapa): CamposEtapa => ({
   duracao_planejada_min: l.duracao_planejada_min,
   duracao_real_min: l.duracao_real_min,
   interrompida: l.interrompida === 1,
+  na_ausencia: l.na_ausencia === 1,
 });
 
 /** O ciclo do foco seguinte: depois do último da rodada, volta ao 1. */

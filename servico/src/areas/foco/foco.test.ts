@@ -415,12 +415,14 @@ describe("reinício e suspensão", () => {
     expect(casca.mostrados.map((m) => m.titulo)).toEqual(["Ciclo 1 de 4 terminou"]);
   });
 
-  test("fora do prazo, fecha interrompida no fim planejado, sem aviso e sem começar a seguinte", async () => {
+  test("fora do prazo, fecha interrompida na última conferência, sem aviso e sem começar a seguinte", async () => {
     const primeiro = montar();
     await primeiro.relogio.ligar();
     primeiro.foco.iniciar({});
     await avancar(25);
     primeiro.foco.iniciar({});
+    // O serviço para sem avisar às 14:28, no meio da pausa.
+    await avancar(3);
     primeiro.relogio.parar();
 
     const { casca, relogio, foco } = montar({ agora: sp(HOJE, "16:00"), pasta: primeiro.pasta });
@@ -428,7 +430,8 @@ describe("reinício e suspensão", () => {
     expect(foco.obter()).toMatchObject({ etapa: null, proxima: "foco", cicloAtual: 1 });
     expect(foco.historico({ de: HOJE, ate: HOJE }).etapas[0]).toMatchObject({
       tipo: "pausa",
-      fim: iso(sp(HOJE, "14:30")),
+      fim: iso(sp(HOJE, "14:28")),
+      duracaoRealMin: 3,
       interrompida: true,
     });
     expect(casca.mostrados).toHaveLength(0);
@@ -539,5 +542,123 @@ describe("aviso do Windows", () => {
     await avancar(25);
     await notificacoes.aoClicar(casca.mostrados[0]?.id ?? "", "mais");
     expect(foco.obter().etapa).toMatchObject({ tipo: "foco", terminaEm: iso(sp(HOJE, "14:30")) });
+  });
+});
+
+describe("volta 1 da revisão", () => {
+  test("a tarefa herdada que foi à lixeira deixa a etapa livre: o fim da pausa e o atalho não travam", async () => {
+    const { db, relogio, foco } = montar();
+    comTarefa(db);
+    await relogio.ligar();
+    foco.iniciar({ tarefaId: "t1" });
+    await avancar(25);
+    expect(foco.iniciar({})).toMatchObject({ etapa: { tipo: "pausa", tarefaId: "t1" } });
+    db.prepare("UPDATE tarefas SET apagado_em = ? WHERE id = 't1'").run(iso(sp(HOJE, "14:27")));
+    await avancar(5);
+    expect(foco.obter()).toMatchObject({ etapa: { tipo: "foco", tarefaId: null }, cicloAtual: 2 });
+    await avancar(25);
+    // O Ctrl+Alt+P começa a pausa proposta, livre.
+    expect(foco.alternar()).toMatchObject({ etapa: { tipo: "pausa", tarefaId: null } });
+    // A tarefa pedida que não existe continua recusada.
+    foco.terminar();
+    expect(() => foco.iniciar({ tarefaId: "t1" })).toThrow(MENSAGEM_TAREFA);
+  });
+
+  test("pular a pausa com a tarefa herdada na lixeira começa o foco livre", async () => {
+    const { db, relogio, foco } = montar();
+    comTarefa(db);
+    await relogio.ligar();
+    foco.iniciar({ tarefaId: "t1" });
+    await avancar(25);
+    db.prepare("UPDATE tarefas SET apagado_em = ? WHERE id = 't1'").run(iso(sp(HOJE, "14:26")));
+    expect(foco.pularPausa()).toMatchObject({ etapa: { tipo: "foco", tarefaId: null }, cicloAtual: 2 });
+  });
+
+  test("a etapa pausada de outro dia fecha mesmo sem ausência, na conferência do relógio", async () => {
+    const { relogio, foco } = montar({ agora: sp(HOJE, "23:40") });
+    await relogio.ligar();
+    foco.iniciar({});
+    await avancar(10);
+    foco.pausar();
+    await avancar(5);
+    expect(foco.obter().etapa).toMatchObject({ pausadaEm: iso(sp(HOJE, "23:50")) });
+    // Passa da meia-noite com o PC acordado: a guarda do relógio confere e a etapa fecha.
+    await avancar(10);
+    expect(foco.obter().etapa).toBeNull();
+    expect(foco.historico({ de: HOJE, ate: HOJE }).etapas[0]).toMatchObject({
+      fim: iso(sp(HOJE, "23:50")),
+      duracaoRealMin: 10,
+      interrompida: true,
+    });
+  });
+
+  test("subida sem ausência conhecida: fecha na última conferência gravada e encerra a rodada", async () => {
+    const primeiro = montar();
+    comTarefa(primeiro.db);
+    await primeiro.relogio.ligar();
+    primeiro.foco.iniciar({ tarefaId: "t1" });
+    await avancar(25);
+    primeiro.foco.pularPausa();
+    // O PC desliga às 14:30, cinco minutos dentro do ciclo 2.
+    await avancar(5);
+    primeiro.relogio.parar();
+
+    const { relogio, foco } = montar({ agora: sp(HOJE, "16:00"), pasta: primeiro.pasta });
+    await relogio.ligar();
+    expect(foco.historico({ de: HOJE, ate: HOJE }).etapas[0]).toMatchObject({
+      tipo: "foco",
+      fim: iso(sp(HOJE, "14:30")),
+      duracaoRealMin: 5,
+      interrompida: true,
+    });
+    // O trecho desconhecido não conta, e a rodada acabou: sem proposta de pausa, ciclo 1, livre.
+    expect(foco.obter()).toMatchObject({
+      etapa: null,
+      proxima: "foco",
+      cicloAtual: 1,
+      tarefaTitulo: null,
+      focoHojeMin: 30,
+      ciclosHoje: 1,
+    });
+    expect(() => foco.pularPausa()).toThrow(MENSAGEM_SEM_PAUSA);
+    expect(foco.iniciar({})).toMatchObject({ etapa: { tipo: "foco", tarefaId: null }, cicloAtual: 1 });
+  });
+
+  test("o Pular a pausa do aviso começa o foco seguinte", async () => {
+    const { casca, notificacoes, relogio, foco } = montar();
+    await relogio.ligar();
+    foco.iniciar({});
+    await avancar(25);
+    const aviso = casca.mostrados[0];
+    await notificacoes.aoClicar(aviso?.id ?? "", "pular");
+    expect(foco.obter()).toMatchObject({
+      etapa: { tipo: "foco", inicio: iso(sp(HOJE, "14:25")) },
+      cicloAtual: 2,
+    });
+    expect(notificacoes.naoVistas().map((n) => n.id)).not.toContain(aviso?.id);
+  });
+
+  test("o Começar outra rodada do aviso abre o ciclo 1; a pausa longa livre não fecha rodada", async () => {
+    const { casca, notificacoes, relogio, foco, config } = montar();
+    config.foco = { ...config.foco, ciclosAtePausaLonga: 1 };
+    await relogio.ligar();
+    // Pausa longa sem foco antes: não há rodada para resumir.
+    expect(foco.iniciar({ tipo: "pausa_longa" })).toMatchObject({ etapa: { tipo: "pausa_longa" } });
+    await avancar(15);
+    expect(casca.mostrados).toHaveLength(0);
+
+    foco.iniciar({});
+    await avancar(25);
+    foco.iniciar({});
+    expect(foco.obter().etapa?.tipo).toBe("pausa_longa");
+    await avancar(15);
+    const rodada = casca.mostrados.at(-1);
+    expect(rodada).toMatchObject({
+      titulo: "Rodada completa",
+      corpo: "1 ciclo, 25 min de foco. Começo outra rodada?",
+    });
+    await notificacoes.aoClicar(rodada?.id ?? "", "outra");
+    expect(foco.obter()).toMatchObject({ etapa: { tipo: "foco" }, cicloAtual: 1 });
+    expect(notificacoes.naoVistas().map((n) => n.id)).not.toContain(rodada?.id);
   });
 });
