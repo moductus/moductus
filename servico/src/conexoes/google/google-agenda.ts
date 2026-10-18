@@ -211,7 +211,13 @@ export class ServicoGoogleAgenda {
         escopos: tokens.escopos,
         conta,
       };
-      await this.deps.credenciais.guardar(CREDENCIAL_GOOGLE, JSON.stringify(guardada));
+      try {
+        await this.deps.credenciais.guardar(CREDENCIAL_GOOGLE, JSON.stringify(guardada));
+      } catch (erro) {
+        // Sem onde guardar, o refresh token novo ficaria valendo no Google sem ninguém para usá-lo.
+        await this.revogarSemFalhar(tokens.tokenDeRenovacao);
+        throw erro;
+      }
       // Desconectou enquanto lia a conta ou guardava: o que acabou de ser guardado sai de novo.
       if (geracao !== this.geracao) {
         await this.revogarSemFalhar(tokens.tokenDeRenovacao);
@@ -256,8 +262,11 @@ export class ServicoGoogleAgenda {
       try {
         await revogar(this.buscar, this.enderecos, guardada.tokenDeRenovacao);
       } catch (erro) {
-        console.error(`google: revogação falhou: ${mensagem(erro)}`);
-        aviso = AVISO_REVOGACAO;
+        // `invalid_token` é o token que o Google já não reconhece: já revogado, nada a tirar à mão.
+        if (!(erro instanceof ErroOAuth && erro.codigo === "invalid_token")) {
+          console.error(`google: revogação falhou: ${mensagem(erro)}`);
+          aviso = AVISO_REVOGACAO;
+        }
       }
     }
     try {
@@ -284,7 +293,12 @@ export class ServicoGoogleAgenda {
    * com "Reconectar". Outras falhas (sem rede) só sobem: a conexão continua como estava.
    */
   tokenDeAcesso(): Promise<string> {
-    if (this.acesso && this.acesso.venceEm - MARGEM_RENOVACAO_MS > this.agora().getTime()) {
+    // O token da memória só vale com a conexão ligada: em erro ou desligada, quem decide é renovar.
+    if (
+      this.acesso &&
+      this.acesso.venceEm - MARGEM_RENOVACAO_MS > this.agora().getTime() &&
+      this.conexao().estado === "ligada"
+    ) {
       return Promise.resolve(this.acesso.token);
     }
     if (this.renovando) return this.renovando;
@@ -298,7 +312,12 @@ export class ServicoGoogleAgenda {
   private async renovarAcesso(geracao: number): Promise<string> {
     if (this.conexao().estado === "desligada") throw new Error(AVISO_DESLIGADA);
     const guardada = await this.guardada();
-    if (!guardada) throw new Error(this.conexao().ultimoErro ?? AVISO_DESLIGADA);
+    if (!guardada) {
+      if (geracao !== this.geracao) throw new Error(AVISO_DESLIGADA);
+      // Ligada sem a credencial (apagada à mão no Gerenciador): sem ela não há como renovar.
+      if (this.conexao().estado === "ligada") this.pedirReconexao();
+      throw new Error(this.conexao().ultimoErro ?? AVISO_RECONECTAR);
+    }
     const cliente = await this.cliente();
     if (!cliente) throw new Error(AVISO_SEM_CLIENTE);
     let tokens;
@@ -312,32 +331,51 @@ export class ServicoGoogleAgenda {
     } catch (erro) {
       if (erro instanceof ErroOAuth && erro.codigo === "invalid_grant" && geracao === this.geracao) {
         await this.deps.credenciais.apagar(CREDENCIAL_GOOGLE).catch(() => undefined);
-        const antes = this.conexao();
-        this.gravar(
-          antes,
-          {
-            estado: "erro",
-            ultimoErro: AVISO_RECONECTAR,
-            conectadaEm: antes.conectadaEm,
-            credencial: null,
-            conta: antes.conta,
-          },
-          "conexao",
-        );
+        // Desconectou enquanto a credencial era apagada: a conexão já está como devia.
+        if (geracao !== this.geracao) throw new Error(AVISO_DESLIGADA, { cause: erro });
+        this.pedirReconexao();
         throw new Error(AVISO_RECONECTAR, { cause: erro });
       }
       throw erro;
     }
     if (geracao !== this.geracao) throw new Error(AVISO_DESLIGADA);
     // O Google às vezes troca o refresh token: o novo substitui o guardado.
-    if (tokens.tokenDeRenovacao && tokens.tokenDeRenovacao !== guardada.tokenDeRenovacao) {
+    const trocado = tokens.tokenDeRenovacao;
+    if (trocado && trocado !== guardada.tokenDeRenovacao) {
       await this.deps.credenciais.guardar(
         CREDENCIAL_GOOGLE,
-        JSON.stringify({ ...guardada, tokenDeRenovacao: tokens.tokenDeRenovacao } satisfies Guardada),
+        JSON.stringify({ ...guardada, tokenDeRenovacao: trocado } satisfies Guardada),
       );
+      // Desconectou enquanto gravava: o que acabou de ser guardado ressuscitaria a credencial.
+      if (geracao !== this.geracao) {
+        await this.revogarSemFalhar(trocado);
+        // Só apaga se ainda é a que este pedido gravou: um conectar novo pode ter guardado a dele.
+        const agora = await this.guardada().catch(() => null);
+        if (agora?.tokenDeRenovacao === trocado) {
+          await this.deps.credenciais.apagar(CREDENCIAL_GOOGLE).catch(() => undefined);
+        }
+        throw new Error(AVISO_DESLIGADA);
+      }
     }
     this.acesso = { token: tokens.tokenDeAcesso, venceEm: tokens.venceEm };
     return tokens.tokenDeAcesso;
+  }
+
+  /** A credencial não vale mais: a conexão fica em erro com "Reconectar", e as janelas sabem. */
+  private pedirReconexao(): void {
+    this.acesso = null;
+    const antes = this.conexao();
+    this.gravar(
+      antes,
+      {
+        estado: "erro",
+        ultimoErro: AVISO_RECONECTAR,
+        conectadaEm: antes.conectadaEm,
+        credencial: null,
+        conta: antes.conta,
+      },
+      "conexao",
+    );
   }
 
   /** Se o usuário trouxe o próprio cliente OAuth. */

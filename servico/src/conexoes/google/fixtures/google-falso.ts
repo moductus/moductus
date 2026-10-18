@@ -37,6 +37,8 @@ export interface GoogleFalso {
   /** Escopos que o usuário deixa marcados; `null` concede os pedidos. */
   escoposConcedidos: string[] | null;
   falharRevogacao: boolean;
+  /** A renovação devolve um refresh token novo, como o Google às vezes faz. */
+  trocarRenovacao: boolean;
   /** Mata todos os refresh tokens, como quando o usuário tira o acesso no Google. */
   revogarTudoNoGoogle(): void;
   /** O redirecionamento feito pelo navegador falso, para esperar por ele. */
@@ -81,6 +83,13 @@ export async function abrirGoogleFalso(
       falso.pedidos.push({ rota, campos });
       if (rota === "/revoke") {
         if (falso.falharRevogacao) return responder(res, 503, { error: "backend_error" });
+        // Token que o Google não conhece mais (já revogado): 400 `invalid_token`, como o de verdade.
+        if (!renovacoes.has(campos.token ?? "") && !acessos.has(campos.token ?? "")) {
+          return responder(res, 400, {
+            error: "invalid_token",
+            error_description: "Token expired or revoked",
+          });
+        }
         renovacoes.delete(campos.token ?? "");
         acessos.delete(campos.token ?? "");
         falso.revogados.push(campos.token ?? "");
@@ -117,7 +126,13 @@ export async function abrirGoogleFalso(
       if (campos.grant_type === "refresh_token") {
         const escopos = renovacoes.get(campos.refresh_token ?? "");
         if (!escopos) return responder(res, 400, { error: "invalid_grant" });
+        let trocado: string | undefined;
+        if (falso.trocarRenovacao) {
+          trocado = `renovacao-${++serie}`;
+          renovacoes.set(trocado, escopos);
+        }
         return responder(res, 200, {
+          ...(trocado ? { refresh_token: trocado } : {}),
           access_token: novoAcesso(),
           expires_in: 3599,
           scope: escopos.join(" "),
@@ -148,6 +163,7 @@ export async function abrirGoogleFalso(
     revogados: [],
     escoposConcedidos: null,
     falharRevogacao: false,
+    trocarRenovacao: false,
     redirecionamentos: [],
     revogarTudoNoGoogle: () => renovacoes.clear(),
     abrir: {

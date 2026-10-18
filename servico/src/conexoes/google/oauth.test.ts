@@ -1,3 +1,4 @@
+import { connect } from "node:net";
 import { describe, expect, test } from "vitest";
 import { validarCliente } from "./cliente.ts";
 import { abrirReceptorOAuth, FalhaAutorizacao, gerarPkce, urlDeAutorizacao } from "./oauth.ts";
@@ -32,7 +33,41 @@ describe("PKCE e URL de autorização", () => {
   });
 });
 
+/** Pedido cru por TCP, para o request-target que o `fetch` não deixa mandar. */
+function cru(porta: number, texto: string) {
+  return new Promise<string>((pronto, falhou) => {
+    const socket = connect(porta, "127.0.0.1", () => socket.write(texto));
+    let resposta = "";
+    socket.on("data", (d) => (resposta += String(d)));
+    socket.on("error", falhou);
+    socket.on("close", () => pronto(resposta));
+  });
+}
+
 describe("receptor do redirecionamento", () => {
+  test("escuta só em 127.0.0.1, na porta do redirect_uri", async () => {
+    const receptor = await abrirReceptorOAuth("o-state");
+    expect(receptor.escuta.endereco).toBe("127.0.0.1");
+    expect(receptor.escuta.porta).toBeGreaterThan(0);
+    expect(receptor.redirecionamento).toBe(`http://127.0.0.1:${receptor.escuta.porta}/`);
+    receptor.cancelar();
+  });
+
+  test("request-target que não é URL volta 400 e o receptor segue esperando o código", async () => {
+    const receptor = await abrirReceptorOAuth("o-state");
+    for (const alvo of ["http://[", "http://[::1"]) {
+      const resposta = await cru(
+        receptor.escuta.porta,
+        `GET ${alvo} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n`,
+      );
+      expect(resposta, alvo).toMatch(/^HTTP\/1\.1 400 /);
+      // Chegou ao receptor (não foi o parser do Node que recusou): é o caminho que derrubava o serviço.
+      expect(resposta).toContain("Pedido inválido.");
+    }
+    expect((await fetch(`${receptor.redirecionamento}?state=o-state&code=c-1`)).status).toBe(200);
+    await expect(receptor.codigo).resolves.toBe("c-1");
+  });
+
   test("ignora outro caminho e pedido sem state, e entrega o código do state certo", async () => {
     const receptor = await abrirReceptorOAuth("o-state");
     const base = receptor.redirecionamento;

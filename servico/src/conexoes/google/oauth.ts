@@ -70,6 +70,8 @@ export class FalhaAutorizacao extends Error {
 export interface ReceptorOAuth {
   /** O `redirect_uri` do pedido, igual na autorização e na troca. */
   redirecionamento: string;
+  /** Onde o receptor escuta, como o sistema diz: sempre 127.0.0.1, nunca outra interface. */
+  escuta: { endereco: string; porta: number };
   /** O código, ou {@link FalhaAutorizacao}. O receptor fecha sozinho quando ela termina. */
   codigo: Promise<string>;
   /** Desiste agora (o usuário desconectou no meio): `codigo` falha com `cancelado`. */
@@ -95,6 +97,15 @@ function pagina(res: ServerResponse, status: number, texto: string): void {
   res.end(texto);
 }
 
+/** Só a interface de loopback: o redirecionamento não pode ser alcançado de outra máquina. */
+const ENDERECO_RECEPTOR = "127.0.0.1";
+
+/** O request-target como URL; o que não é URL (`GET http://[`) dá `null`, nunca uma exceção. */
+function urlDe(alvo: string | undefined): URL | null {
+  const base = `http://${ENDERECO_RECEPTOR}`;
+  return URL.canParse(alvo ?? "/", base) ? new URL(alvo ?? "/", base) : null;
+}
+
 /**
  * Abre o receptor em 127.0.0.1, porta escolhida pelo sistema, e espera um único redirecionamento
  * com o `state` deste pedido. `state` diferente é resposta que este processo não pediu: falha o
@@ -110,8 +121,19 @@ export function abrirReceptorOAuth(state: string, prazoMs = PRAZO_AUTORIZACAO_MS
   codigo.catch(() => undefined);
   let terminou = false;
 
+  // Nenhuma falha no atendimento pode virar exceção solta: o Node derrubaria o serviço inteiro.
   const http = createServer((req: IncomingMessage, res: ServerResponse) => {
-    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+    tratar(req, res).catch((erro: unknown) => {
+      console.error(`google: pedido ao receptor não atendido: ${String(erro)}`);
+      if (!res.headersSent) pagina(res, 500, PAGINA_FALHOU);
+      else res.destroy();
+    });
+  });
+
+  async function tratar(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const url = urlDe(req.url);
+    // Request-target que nem é URL não é resposta de autorização: segue esperando.
+    if (url === null) return pagina(res, 400, "Pedido inválido.");
     if (terminou || req.method !== "GET" || url.pathname !== "/") return pagina(res, 404, "Nada aqui.");
     const recebido = url.searchParams.get("state");
     // Sem `state` nem é resposta de autorização (uma aba recarregada, um curioso): segue esperando.
@@ -133,7 +155,7 @@ export function abrirReceptorOAuth(state: string, prazoMs = PRAZO_AUTORIZACAO_MS
     }
     pagina(res, 200, PAGINA_OK);
     acabar({ codigo: valor });
-  });
+  }
 
   const prazo = setTimeout(
     () => acabar({ falha: new FalhaAutorizacao("prazo", "o prazo para autorizar acabou") }),
@@ -158,11 +180,15 @@ export function abrirReceptorOAuth(state: string, prazoMs = PRAZO_AUTORIZACAO_MS
       clearTimeout(prazo);
       falhou(erro);
     });
-    http.listen(0, "127.0.0.1", () => {
+    http.listen(0, ENDERECO_RECEPTOR, () => {
       const endereco = http.address();
-      const porta = typeof endereco === "object" && endereco ? endereco.port : 0;
+      const escuta =
+        typeof endereco === "object" && endereco
+          ? { endereco: endereco.address, porta: endereco.port }
+          : { endereco: "", porta: 0 };
       pronto({
-        redirecionamento: `http://127.0.0.1:${porta}/`,
+        redirecionamento: `http://${ENDERECO_RECEPTOR}:${escuta.porta}/`,
+        escuta,
         codigo,
         cancelar: () => acabar({ falha: new FalhaAutorizacao("cancelado", "a conexão foi cancelada") }),
       });

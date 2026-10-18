@@ -1,3 +1,4 @@
+import { connect } from "node:net";
 import {
   CONFIG_PADRAO,
   METODOS,
@@ -7,7 +8,7 @@ import {
   type NomeMetodo,
 } from "@moductus/contrato";
 import { ClienteServico } from "@moductus/contrato/cliente";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./servidor.ts";
 
 const TOKEN = "a".repeat(64);
@@ -44,6 +45,7 @@ const clientes: ClienteServico[] = [];
 afterEach(async () => {
   for (const c of clientes.splice(0)) c.fechar();
   for (const s of abertos.splice(0)) await s.fechar();
+  vi.restoreAllMocks();
 });
 
 async function servidor(porta = 0) {
@@ -110,6 +112,30 @@ describe("canal WebSocket", () => {
       });
       expect(recusada, url).toBe(true);
     }
+  });
+
+  test("upgrade com request-target que não é URL volta 400 e o canal continua de pé", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const s = await servidor();
+    for (const alvo of ["http://[", "http://[::1"]) {
+      const resposta = await new Promise<string>((pronto, falhou) => {
+        const socket = connect(s.porta, "127.0.0.1", () =>
+          socket.write(
+            `GET ${alvo} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n` +
+              "Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n",
+          ),
+        );
+        let texto = "";
+        socket.on("data", (d) => (texto += String(d)));
+        socket.on("error", falhou);
+        socket.on("close", () => pronto(texto));
+      });
+      expect(resposta, alvo).toMatch(/^HTTP\/1\.1 400 /);
+    }
+    const c = cliente();
+    c.conectar({ porta: s.porta, token: TOKEN });
+    await ate(c, "conectado");
+    await expect(c.pedir("sistema.ping")).resolves.toMatchObject({ protocolo: VERSAO_PROTOCOLO });
   });
 
   test("método desconhecido e entrada inválida voltam como erro", async () => {

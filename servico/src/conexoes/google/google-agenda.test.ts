@@ -232,6 +232,14 @@ describe("conectar o Google Agenda", () => {
     expect(google.autorizacoes).toEqual([]);
   });
 
+  test("o Gerenciador que não guarda: o refresh token novo é revogado no Google", async () => {
+    const { google, credenciais, servico } = await montar();
+    credenciais.guardar = () => Promise.reject(new Error("Gerenciador de Credenciais indisponível"));
+    expect(await servico.ligar()).toMatchObject({ estado: "erro" });
+    expect(google.revogados).toEqual([expect.stringMatching(/^renovacao-/)]);
+    expect(credenciais.valores.has(CREDENCIAL_GOOGLE)).toBe(false);
+  });
+
   test("desconectar no meio da autorização cancela o fluxo", async () => {
     const { google, credenciais, servico } = await montar();
     google.navegacao = "nada";
@@ -278,6 +286,66 @@ describe("renovar o acesso", () => {
     const { servico } = await montar();
     await expect(servico.tokenDeAcesso()).rejects.toThrow("não está conectado");
   });
+
+  test("o token da memória não sai com a linha fora de ligada", async () => {
+    const { db, google, servico } = await montar();
+    await servico.ligar();
+    expect(await servico.tokenDeAcesso()).toMatch(/^acesso-/);
+    // A linha muda por fora do serviço (a importação de outro PC, por exemplo).
+    db.prepare("UPDATE conexoes SET estado = 'desligada' WHERE tipo = 'google-agenda'").run();
+    await expect(servico.tokenDeAcesso()).rejects.toThrow("não está conectado");
+    expect(google.pedidos.filter((x) => x.campos.grant_type === "refresh_token")).toEqual([]);
+  });
+
+  test("ligada sem a credencial no Gerenciador: erro com Reconectar e aviso às janelas", async () => {
+    const { credenciais, avisos, servico, linha, avancar } = await montar();
+    await servico.ligar();
+    credenciais.valores.delete(CREDENCIAL_GOOGLE);
+    avancar(3600_000);
+    await expect(servico.tokenDeAcesso()).rejects.toThrow(AVISO_RECONECTAR);
+    expect(servico.conexao()).toMatchObject({ estado: "erro", ultimoErro: AVISO_RECONECTAR });
+    expect(avisos.at(-1)).toMatchObject({ estado: "erro", ultimoErro: AVISO_RECONECTAR });
+    expect(linha()).toMatchObject({ credencial: null, origem: "conexao" });
+    await expect(servico.tokenDeAcesso()).rejects.toThrow(AVISO_RECONECTAR);
+  });
+
+  test("o refresh token trocado guarda o novo; desconectar enquanto grava não o ressuscita", async () => {
+    const { google, credenciais, servico, avancar } = await montar();
+    google.trocarRenovacao = true;
+    await servico.ligar();
+    const original = (JSON.parse(credenciais.valores.get(CREDENCIAL_GOOGLE)!) as { tokenDeRenovacao: string })
+      .tokenDeRenovacao;
+
+    // Troca sem nada no meio: o novo substitui o guardado.
+    avancar(3600_000);
+    await servico.tokenDeAcesso();
+    const trocado = (JSON.parse(credenciais.valores.get(CREDENCIAL_GOOGLE)!) as { tokenDeRenovacao: string })
+      .tokenDeRenovacao;
+    expect(trocado).not.toBe(original);
+
+    // Agora o Gerenciador demora para gravar o próximo, e o usuário desconecta nesse meio.
+    const guardar = credenciais.guardar;
+    let soltar: () => void = () => undefined;
+    let gravando = false;
+    credenciais.guardar = async (nome, valor) => {
+      gravando = true;
+      await new Promise<void>((r) => (soltar = r));
+      return guardar(nome, valor);
+    };
+    avancar(3600_000);
+    const pedido = servico.tokenDeAcesso();
+    await vi.waitFor(() => expect(gravando).toBe(true));
+    expect((await servico.desligar()).estado).toBe("desligada");
+    soltar();
+    await expect(pedido).rejects.toThrow("não está conectado");
+    expect(credenciais.valores.has(CREDENCIAL_GOOGLE)).toBe(false);
+    // O que acabou de vir do Google também foi revogado, além do que desconectar revogou.
+    expect(google.revogados).toHaveLength(2);
+    expect(google.revogados[0]).toBe(trocado);
+    expect(google.revogados[1]).toMatch(/^renovacao-/);
+    expect(google.revogados[1]).not.toBe(trocado);
+    expect(servico.conexao().estado).toBe("desligada");
+  });
 });
 
 describe("desconectar", () => {
@@ -310,6 +378,16 @@ describe("desconectar", () => {
     // Conectar de novo limpa o aviso.
     google.falharRevogacao = false;
     expect(await servico.ligar()).toMatchObject({ estado: "ligada", ultimoErro: null });
+  });
+
+  test("token que o Google já revogou (invalid_token): desliga sem mandar tirar o acesso à mão", async () => {
+    const { google, credenciais, servico } = await montar();
+    await servico.ligar();
+    google.revogarTudoNoGoogle();
+    const desligada = await servico.desligar();
+    expect(desligada).toMatchObject({ estado: "desligada", ultimoErro: null });
+    expect(google.pedidos.filter((x) => x.rota === "/revoke")).toHaveLength(1);
+    expect(credenciais.valores.has(CREDENCIAL_GOOGLE)).toBe(false);
   });
 });
 

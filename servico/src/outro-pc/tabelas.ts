@@ -68,14 +68,15 @@ export const COLUNAS_QUE_NUNCA_VAO: readonly string[] = [
 
 /**
  * Colunas que descrevem a situação neste PC, não a configuração. A conexão vai sem credencial, então
- * chega desligada no PC novo: estado, último erro, data de conexão e de leitura daqui não valem lá.
+ * chega desligada no PC novo: estado, último erro, data de conexão e de leitura daqui não valem lá,
+ * nem os escopos que o Google concedeu à autorização daqui (o PC novo pede os dele ao conectar).
  * O calendário vai sem o `nextSyncToken` e a última leitura: o PC novo começa com o cache vazio e
  * tem de ler tudo de novo, não só o que mudou desde a leitura daqui. O provedor vai sem o caminho
  * do CLI neste PC: no PC novo, a detecção acha o de lá.
  */
 const SITUACAO_DESTE_PC: Readonly<Record<string, readonly string[]>> = {
   provedores: ["caminho"],
-  conexoes: ["estado", "ultimo_erro", "conectada_em", "lida_em"],
+  conexoes: ["estado", "ultimo_erro", "conectada_em", "lida_em", "escopos"],
   calendarios: ["sincronizado_em", "token_sincronizacao"],
 };
 
