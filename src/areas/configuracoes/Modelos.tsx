@@ -20,12 +20,13 @@ import { Progresso } from "../../componentes/Progresso.tsx";
 import { fraseDaSituacao, lerSituacao, modeloDoAgente } from "../../componentes/personagem/situacao.ts";
 import { Seletor, type OpcaoSeletor } from "../../componentes/Seletor.tsx";
 import { Selo, type TomSelo } from "../../componentes/Selo.tsx";
-import { abrirEndereco, useAbrir } from "../../nativo/abrir.ts";
+import { abrirEndereco, abrirTerminalDeLogin, useAbrir } from "../../nativo/abrir.ts";
 import {
   CLIS,
   COMO_INSTALAR,
   FORMULARIO_API_VAZIO,
   novoDaApi,
+  precisaEntrar,
   precisaInstalar,
   situacaoDoCli,
   type FormularioApi,
@@ -329,6 +330,15 @@ function Detectados({
                     onClick={() => aoConectar(c.tipo, c.nome)}
                   >
                     Conectar
+                  </Botao>
+                )}
+                {detectados !== null && precisaEntrar(achado) && (
+                  <Botao
+                    tamanho="pequeno"
+                    aria-label={`Entrar no ${c.nome} pelo terminal`}
+                    onClick={() => abrir(() => abrirTerminalDeLogin(c.tipo))}
+                  >
+                    Entrar
                   </Botao>
                 )}
                 {detectados !== null && precisaInstalar(achado) && (

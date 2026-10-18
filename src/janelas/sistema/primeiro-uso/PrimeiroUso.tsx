@@ -31,7 +31,7 @@ import { Personagem } from "../../../componentes/personagem/Personagem.tsx";
 import type { Agente, EstadoPersonagem } from "../../../componentes/personagem/agentes.ts";
 import { Selo } from "../../../componentes/Selo.tsx";
 import { Seletor, type OpcaoSeletor } from "../../../componentes/Seletor.tsx";
-import { abrirEndereco, useAbrir } from "../../../nativo/abrir.ts";
+import { abrirEndereco, abrirTerminalDeLogin, useAbrir } from "../../../nativo/abrir.ts";
 import { servico } from "../../../servico/conexao.ts";
 import {
   CLIS,
@@ -40,6 +40,7 @@ import {
   formatarLatencia,
   MODELO_INICIAL,
   novoDaApi,
+  precisaEntrar,
   precisaInstalar,
   situacaoDoCli,
   substituicao,
@@ -332,7 +333,7 @@ interface PropsOpcao {
   previa?: ReactNode;
   /** Selo ao lado do título (o estado de cada modelo). */
   selo?: ReactNode;
-  /** Botão à direita, fora do rótulo ("Como instalar"). */
+  /** Botão à direita, fora do rótulo ("Como instalar", "Entrar"). */
   acao?: ReactNode;
 }
 
@@ -514,7 +515,8 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
   const [erroDeteccao, setErroDeteccao] = useState<string | null>(null);
   // Cada "Procurar de novo" é uma rodada: depois de instalar ou entrar no CLI, sem reabrir nada.
   const [rodada, setRodada] = useState(0);
-  const instalar = useAbrir();
+  // "Como instalar" e "Entrar" abrem fora do Moductus; a falha aparece abaixo da lista.
+  const fora = useAbrir();
   const { escolha, formulario, resultado } = estado;
   const testando = resultado.fase === "testando";
 
@@ -629,16 +631,23 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
               selo={<Selo tom={situacao.tom}>{situacao.estado}</Selo>}
               texto={situacao.texto}
               acao={
-                detectados !== null &&
-                precisaInstalar(achado) && (
+                detectados === null ? null : precisaInstalar(achado) ? (
                   <Botao
                     tamanho="pequeno"
                     aria-label={`Como instalar o ${c.nome}`}
-                    onClick={() => instalar.abrir(() => abrirEndereco(COMO_INSTALAR[c.tipo]))}
+                    onClick={() => fora.abrir(() => abrirEndereco(COMO_INSTALAR[c.tipo]))}
                   >
                     Como instalar
                   </Botao>
-                )
+                ) : precisaEntrar(achado) ? (
+                  <Botao
+                    tamanho="pequeno"
+                    aria-label={`Entrar no ${c.nome} pelo terminal`}
+                    onClick={() => fora.abrir(() => abrirTerminalDeLogin(c.tipo))}
+                  >
+                    Entrar
+                  </Botao>
+                ) : null
               }
             />
           );
@@ -657,9 +666,9 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
           {erroDeteccao}
         </p>
       )}
-      {instalar.erro && (
+      {fora.erro && (
         <p className="uso-erro" role="alert">
-          {instalar.erro}
+          {fora.erro}
         </p>
       )}
       {detectados !== null && (
