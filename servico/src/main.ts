@@ -12,6 +12,7 @@ import { VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
+import { RepositorioNotas, ServicoNotas } from "./areas/notas/notas.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ligarBandeja } from "./bandeja/bandeja.ts";
 import { abrirPelaCasca, projetosNaCasca } from "./casca/abrir.ts";
@@ -299,6 +300,10 @@ const conversas = new ServicoConversas(
     parcial: (parcial) => servidor?.emitir("conversas.parcial", parcial),
   },
 );
+// Notas (F3-19): salvam com a versão que a janela conhece; o bloco rápido fica fixo no topo.
+const notas = new ServicoNotas(new RepositorioNotas(banco), {
+  mudou: (mudanca) => servidor?.emitir("notas.mudou", mudanca),
+});
 // Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
 // Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
 runtime.estados.vigiar();
@@ -373,6 +378,13 @@ servidor = await abrirServidorWs(token, {
   "provedores.definir": (mudanca) => servicoProvedores.definir(mudanca),
   "provedores.remover": (pedido) => servicoProvedores.remover(pedido),
   "provedores.testar": (pedido) => servicoProvedores.testar(pedido),
+  "notas.listar": (pedido) => notas.listar(pedido),
+  "notas.obter": (pedido) => notas.obter(pedido),
+  "notas.criar": (nova) => notas.criar(nova),
+  "notas.salvar": (pedido) => notas.salvar(pedido),
+  "notas.definir": (mudanca) => notas.definir(mudanca),
+  "notas.apagar": (pedido) => notas.apagar(pedido),
+  "notas.buscar": (pedido) => notas.buscar(pedido),
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
   ...semAtendente([
@@ -417,13 +429,6 @@ servidor = await abrirServidorWs(token, {
     "foco.terminar",
     "foco.pularPausa",
     "foco.historico",
-    "notas.listar",
-    "notas.obter",
-    "notas.criar",
-    "notas.salvar",
-    "notas.definir",
-    "notas.apagar",
-    "notas.buscar",
     "rotinas.listar",
     "rotinas.definir",
     "rotinas.hoje",
