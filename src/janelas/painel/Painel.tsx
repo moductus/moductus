@@ -18,14 +18,16 @@ import "./Painel.css";
 
 /**
  * O que a parada 2 do tour aponta: o alto do cartão, do cabeçalho até o fim do primeiro bloco
- * (TutorialTour.dc.html).
+ * (TutorialTour.dc.html). No Hoje, o primeiro bloco é o primeiro filho do corpo (o lembrete ou o
+ * Foco); sem corpo (o estado vazio), é o filho do cartão logo depois do cabeçalho.
  */
 function medirTopoDoCartao() {
   const cartao = document.querySelector(".painel-cartao");
   if (!cartao) return null;
   const caixa = cartao.getBoundingClientRect();
-  const blocos = [...cartao.children].slice(0, 2);
-  const fim = Math.max(caixa.top, ...blocos.map((b) => b.getBoundingClientRect().bottom));
+  const corpo = cartao.querySelector(":scope > .painel-corpo");
+  const bloco = corpo ? corpo.firstElementChild : (cartao.children[1] ?? cartao.firstElementChild);
+  const fim = bloco ? Math.max(caixa.top, bloco.getBoundingClientRect().bottom) : caixa.bottom;
   const folga = parseFloat(getComputedStyle(cartao).paddingTop) || 0;
   return { left: caixa.left, top: caixa.top, width: caixa.width, height: fim - caixa.top + folga };
 }
