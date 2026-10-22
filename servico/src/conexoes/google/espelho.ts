@@ -14,6 +14,7 @@ import {
   lerEvento,
   mudarEvento,
   paginaDeEventos,
+  procurarCalendario,
   type CamposLidos,
   type EventoEscrito,
   type PontoDeLeitura,
@@ -50,10 +51,18 @@ import {
  *   reconhecido pelo etag e pelo que foi mandado. Se o item ainda tem envio na fila, a mudança
  *   daqui vence. Evento apagado lá desliga o espelho daquele item (a tarefa fica); o evento da
  *   agenda vai junto para a lixeira.
- * - **Calendário apagado** (404): é criado de novo uma vez, com aviso, e tudo é mandado outra vez.
+ * - **Calendário apagado** (404, ou 403 que não é de cota): é criado de novo uma vez, com aviso, e
+ *   tudo é mandado outra vez. Criar é idempotente: antes, procura o "Moductus" com a marca na
+ *   descrição, que uma tentativa de criar com a resposta perdida deixou na conta.
  */
 
 export const NOME_DO_ESPELHO = "Moductus";
+/** Vai na descrição do calendário criado: é por ela que o Moductus o reconhece na lista da conta. */
+export const MARCA_DO_ESPELHO =
+  "Criado pelo Moductus: tarefas com hora e lembretes com horário, para o celular avisar.";
+
+/** O título que vem do Google só é adotado com isso, como o contrato das tarefas e lembretes. */
+export const MAXIMO_TITULO_ADOTADO = 500;
 
 /** A tarefa sem estimativa ocupa isso no Google; o lembrete, isso. Os dois não marcam ocupado. */
 export const DURACAO_TAREFA_MIN = 30;
@@ -125,17 +134,36 @@ const impressao = (e: EventoDoItem): string =>
     livre: e.livre,
   });
 
-function lerImpressao(texto: string | null): Pick<EventoDoItem, "titulo" | "inicio" | "diaInteiro"> | null {
+function lerImpressao(texto: string | null): EventoDoItem | null {
   if (texto === null) return null;
   try {
     const v = JSON.parse(texto) as Partial<EventoDoItem>;
-    return typeof v.titulo === "string" && typeof v.inicio === "string"
-      ? { titulo: v.titulo, inicio: v.inicio, diaInteiro: v.diaInteiro === true }
-      : null;
+    if (typeof v.titulo !== "string" || typeof v.inicio !== "string" || typeof v.fim !== "string")
+      return null;
+    return {
+      titulo: v.titulo,
+      descricao: v.descricao ?? null,
+      local: v.local ?? null,
+      inicio: v.inicio,
+      fim: v.fim,
+      diaInteiro: v.diaInteiro === true,
+      recorrencia: v.recorrencia ?? null,
+      fuso: v.fuso ?? null,
+      alertas: Array.isArray(v.alertas) ? v.alertas : [],
+      livre: v.livre === true,
+    };
   } catch {
     return null;
   }
 }
+
+/** Quantos minutos antes do início o lembrete toca (negativo é depois). */
+const minutosAntes = (inicio: string, toca: string) =>
+  Math.round((Date.parse(inicio) - Date.parse(toca)) / 60_000);
+
+/** O título de lá que cabe numa tarefa ou num lembrete: nem vazio, nem maior que o contrato. */
+const tituloAdotavel = (titulo: string) =>
+  titulo.trim().length > 0 && titulo.trim().length <= MAXIMO_TITULO_ADOTADO;
 
 /** Os alertas que o Google aceita: inteiros de 0 a 4 semanas, sem repetir, até 5. */
 function alertasValidos(minutos: readonly number[]): number[] {
@@ -162,6 +190,7 @@ export interface LinhaMapa {
   etag_externo: string | null;
   enviado: string | null;
   desligado: number;
+  recusado: number;
 }
 
 export interface LinhaSaida {
@@ -203,7 +232,7 @@ interface EventoDoEspelho {
   alertas: string;
 }
 
-const COLUNAS_MAPA = "item_tipo, item_id, id_externo, etag_externo, enviado, desligado";
+const COLUNAS_MAPA = "item_tipo, item_id, id_externo, etag_externo, enviado, desligado, recusado";
 const COLUNAS_SAIDA = "id, item_tipo, item_id, operacao, tentativas, proxima_tentativa_em, atualizado_em";
 
 /** Linhas gravadas pelo espelho a partir do Google levam a origem `conexao` (DATA.md §1). */
@@ -342,28 +371,44 @@ export class RepositorioEspelhoGoogle {
   gravarEnvio(m: LinhaMapa, etag: string | null, enviado: string, agora: string): void {
     this.db
       .prepare(
-        `UPDATE agenda_espelho SET etag_externo = ?, enviado = ?, atualizado_em = ?
+        `UPDATE agenda_espelho SET etag_externo = ?, enviado = ?, recusado = 0, atualizado_em = ?
           WHERE item_tipo = ? AND item_id = ?`,
       )
       .run(etag, enviado, agora, m.item_tipo, m.item_id);
     if (m.item_tipo === "evento") this.marcarEvento(m.item_id, m.id_externo, etag);
   }
 
-  /** A mudança de lá foi adotada: o etag dela e o que o item virou passam a ser o que foi. */
-  gravarAdotado(m: LinhaMapa, etag: string | null, enviado: string | null, agora: string): void {
-    this.db
-      .prepare(
-        `UPDATE agenda_espelho SET etag_externo = ?, enviado = coalesce(?, enviado), atualizado_em = ?
-          WHERE item_tipo = ? AND item_id = ?`,
-      )
-      .run(etag, enviado, agora, m.item_tipo, m.item_id);
+  /**
+   * O que veio de lá: o etag dela e, em `enviado`, o que está lá agora (`undefined` mantém o que
+   * havia; `null` esquece, e o próximo envio manda o daqui inteiro).
+   */
+  gravarAdotado(m: LinhaMapa, etag: string | null, enviado: string | null | undefined, agora: string): void {
+    if (enviado === undefined) {
+      this.db
+        .prepare(
+          "UPDATE agenda_espelho SET etag_externo = ?, atualizado_em = ? WHERE item_tipo = ? AND item_id = ?",
+        )
+        .run(etag, agora, m.item_tipo, m.item_id);
+    } else {
+      this.db
+        .prepare(
+          `UPDATE agenda_espelho SET etag_externo = ?, enviado = ?, recusado = 0, atualizado_em = ?
+            WHERE item_tipo = ? AND item_id = ?`,
+        )
+        .run(etag, enviado, agora, m.item_tipo, m.item_id);
+    }
     if (m.item_tipo === "evento") this.marcarEvento(m.item_id, m.id_externo, etag);
   }
 
-  /** O Google recusou este conteúdo de vez: fica anotado como mandado, até o item mudar de novo. */
+  /**
+   * O Google recusou este conteúdo de vez: fica anotado (não vai de novo até o item mudar) e
+   * marcado como recusado, porque o que está lá não é ele.
+   */
   gravarRecusa(m: LinhaMapa, enviado: string, agora: string): void {
     this.db
-      .prepare("UPDATE agenda_espelho SET enviado = ?, atualizado_em = ? WHERE item_tipo = ? AND item_id = ?")
+      .prepare(
+        "UPDATE agenda_espelho SET enviado = ?, recusado = 1, atualizado_em = ? WHERE item_tipo = ? AND item_id = ?",
+      )
       .run(enviado, agora, m.item_tipo, m.item_id);
   }
 
@@ -482,13 +527,19 @@ export class RepositorioEspelhoGoogle {
     return linha ?? null;
   }
 
-  /** Os horários dos lembretes vivos de uma tarefa: viram os alertas do evento dela. */
-  quandosDosLembretes(tarefaId: string): string[] {
+  /**
+   * Quando tocam os lembretes vivos de uma tarefa (o adiado, na hora do adiamento), fora os do
+   * `dock`: viram os alertas do evento dela.
+   */
+  horasDosLembretes(tarefaId: string): string[] {
     return (
       this.db
-        .prepare("SELECT quando FROM lembretes WHERE tarefa_id = ? AND apagado_em IS NULL ORDER BY quando")
-        .all(tarefaId) as { quando: string }[]
-    ).map((l) => l.quando);
+        .prepare(
+          `SELECT coalesce(adiado_ate, quando) AS toca FROM lembretes
+            WHERE tarefa_id = ? AND apagado_em IS NULL AND canal <> 'dock' ORDER BY toca`,
+        )
+        .all(tarefaId) as { toca: string }[]
+    ).map((l) => l.toca);
   }
 
   lembrete(id: string): LembreteDoEspelho | null {
@@ -568,6 +619,8 @@ export interface AdotarDoGoogle {
 export interface AvisosEspelho {
   /** Eventos da agenda que mudaram ou saíram pelo que veio do Google. */
   eventos: (mudanca: MudancaCache) => void;
+  /** O "Moductus" entrou na lista de calendários (criado ou criado de novo). */
+  calendarios: () => void;
   /** O "Moductus" sumiu e foi criado de novo: a Alba avisa. */
   recriado: (aviso: { titulo: string; corpo: string }) => void;
 }
@@ -602,6 +655,14 @@ function ehPassageira(erro: unknown): boolean {
 }
 
 const statusDe = (erro: unknown) => (erro instanceof ErroCalendario ? erro.status : null);
+
+/**
+ * O calendário não está mais lá (404), ou este app não chega mais nele (403 de permissão). O 403
+ * de cota é falha que espera, nunca calendário sumido.
+ */
+const calendarioSumiu = (erro: unknown) =>
+  erro instanceof ErroCalendario &&
+  (erro.status === 404 || (erro.status === 403 && erro.falha === "recusado"));
 
 type Acesso = <T>(fazer: (token: string) => Promise<T>) => Promise<T>;
 
@@ -691,16 +752,31 @@ export class EspelhoGoogleAgenda {
   }
 
   /**
-   * O lembrete está no Google e não tem nada na fila: o celular vai tocar. O do canal
-   * `calendario` então não avisa também pelo Windows.
+   * O lembrete está no Google como ele é agora, com a conexão ligada: o celular vai tocar, e o do
+   * canal `calendario` não avisa também pelo Windows. O de uma tarefa espelhada é alerta do evento
+   * dela, e vale o evento dela.
    */
   chegouAoGoogle(lembreteId: string): boolean {
-    const m = this.deps.repo.mapa("lembrete", lembreteId);
+    if (this.deps.google.conexao().estado !== "ligada") return false;
+    const fuso = this.deps.lerFuso();
+    const proprio = this.desejado("lembrete", lembreteId, fuso);
+    if (proprio !== null) return this.estaNoGoogle("lembrete", lembreteId, proprio);
+    const tarefaId = this.deps.repo.lembrete(lembreteId)?.tarefa_id ?? null;
+    if (tarefaId === null) return false;
+    const daTarefa = this.desejado("tarefa", tarefaId, fuso);
+    return daTarefa !== null && this.estaNoGoogle("tarefa", tarefaId, daTarefa);
+  }
+
+  /** O que foi ao Google é o que o item é agora, chegou lá, e nada está na fila nem foi recusado. */
+  private estaNoGoogle(tipo: TipoItem, id: string, desejado: EventoDoItem): boolean {
+    const m = this.deps.repo.mapa(tipo, id);
     return (
       m !== null &&
       m.desligado === 0 &&
+      m.recusado === 0 &&
       m.etag_externo !== null &&
-      this.deps.repo.pendente("lembrete", lembreteId) === null
+      m.enviado === impressao(desejado) &&
+      this.deps.repo.pendente(tipo, id) === null
     );
   }
 
@@ -736,6 +812,8 @@ export class EspelhoGoogleAgenda {
             if (erro instanceof EspelhoSumiu || !ehPassageira(erro)) throw erro;
             console.error(`google: a leitura do "Moductus" falhou: ${mensagem(erro)}`);
           }
+          // O que veio de lá e não foi adotado (o título vazio, a tarefa que virou dia inteiro) volta.
+          this.conciliar();
         }
         return await this.enviar(espelho, acesso);
       } catch (erro) {
@@ -744,6 +822,7 @@ export class EspelhoGoogleAgenda {
             await this.recriar(acesso);
           } catch (outro) {
             console.error(`google: o calendário "Moductus" não foi criado de novo: ${mensagem(outro)}`);
+            this.adiarPassada();
             return "esperando";
           }
           recriou = true;
@@ -772,38 +851,40 @@ export class EspelhoGoogleAgenda {
       try {
         await acesso((token) => conferirCalendario(this.buscar, this.enderecos, token, guardado.id_externo));
       } catch (erro) {
-        const status = statusDe(erro);
-        // O 403 é o calendário de outra conta, ou que não foi o Moductus que criou.
-        if (status === 404 || status === 403) throw new EspelhoSumiu();
+        // O 403 de permissão é o calendário de outra conta, ou que não foi o Moductus que criou.
+        if (calendarioSumiu(erro)) throw new EspelhoSumiu();
         throw erro;
       }
       this.conferido = true;
       return guardado;
     }
-    const { idExterno } = await acesso((token) =>
-      criarCalendario(this.buscar, this.enderecos, token, {
-        nome: NOME_DO_ESPELHO,
-        fuso: this.deps.lerFuso(),
-      }),
-    );
+    const idExterno = await this.criarOuAchar(acesso);
     const agora = this.agora().toISOString();
     this.deps.repo.transacao(() => this.deps.repo.gravarEspelho(idExterno, agora));
     this.conferido = true;
+    this.deps.avisos.calendarios();
     return this.deps.repo.espelho()!;
   }
 
   private async recriar(acesso: Acesso): Promise<void> {
-    const { idExterno } = await acesso((token) =>
-      criarCalendario(this.buscar, this.enderecos, token, {
-        nome: NOME_DO_ESPELHO,
-        fuso: this.deps.lerFuso(),
-      }),
-    );
+    const idExterno = await this.criarOuAchar(acesso);
     const agora = this.agora().toISOString();
     this.deps.repo.transacao(() => this.deps.repo.trocarEspelho(idExterno, agora));
     this.conferido = true;
     console.error('google: o calendário "Moductus" sumiu e foi criado de novo');
+    this.deps.avisos.calendarios();
     this.deps.avisos.recriado({ titulo: TITULO_RECRIADO, corpo: CORPO_RECRIADO });
+  }
+
+  /** O "Moductus" com a marca que já está na conta (a criação de antes perdeu a resposta), ou um novo. */
+  private async criarOuAchar(acesso: Acesso): Promise<string> {
+    const marca = { nome: NOME_DO_ESPELHO, marca: MARCA_DO_ESPELHO };
+    const achado = await acesso((token) => procurarCalendario(this.buscar, this.enderecos, token, marca));
+    if (achado !== null && achado !== this.deps.repo.espelho()?.id_externo) return achado;
+    const { idExterno } = await acesso((token) =>
+      criarCalendario(this.buscar, this.enderecos, token, { ...marca, fuso: this.deps.lerFuso() }),
+    );
+    return idExterno;
   }
 
   // O que cada item devia ser.
@@ -825,9 +906,7 @@ export class EspelhoGoogleAgenda {
     if (t === null || t.estado !== "aberta" || t.vence_em === null || t.hora === null || !ehDia(t.vence_em))
       return null;
     const inicio = instanteNoFuso(t.vence_em, t.hora, fuso).toISOString();
-    const alertas = this.deps.repo
-      .quandosDosLembretes(id)
-      .map((quando) => Math.round((Date.parse(inicio) - Date.parse(quando)) / 60_000));
+    const alertas = this.deps.repo.horasDosLembretes(id).map((toca) => minutosAntes(inicio, toca));
     return {
       titulo: t.titulo,
       descricao: null,
@@ -842,11 +921,21 @@ export class EspelhoGoogleAgenda {
     };
   }
 
-  /** O lembrete da tarefa espelhada é o alerta do evento dela: não vai sozinho. */
+  /**
+   * O lembrete da tarefa espelhada é um alerta do evento dela e não vai sozinho; o que não cabe
+   * como alerta (toca depois do início, ou além dos 5) vai como evento próprio.
+   */
   private doLembrete(id: string, fuso: string): EventoDoItem | null {
     const l = this.deps.repo.lembrete(id);
     if (l === null || l.canal === "dock") return null;
-    if (l.tarefa_id !== null && this.daTarefa(l.tarefa_id, fuso) !== null) return null;
+    if (l.tarefa_id !== null) {
+      const daTarefa = this.daTarefa(l.tarefa_id, fuso);
+      if (
+        daTarefa !== null &&
+        daTarefa.alertas.includes(minutosAntes(daTarefa.inicio, l.adiado_ate ?? l.quando))
+      )
+        return null;
+    }
     const regra = l.recorrencia !== null && lerRecorrencia(l.recorrencia).entendida ? l.recorrencia : null;
     const inicio = regra !== null ? (l.inicio_recorrencia ?? l.quando) : (l.adiado_ate ?? l.quando);
     return {
@@ -924,8 +1013,8 @@ export class EspelhoGoogleAgenda {
         // O evento da agenda tem a fila dele (`ServicoAgenda`); aqui só sai o que ficou para trás.
         if (m.item_tipo === "evento") {
           if (repo.evento(m.item_id) !== null || repo.pendente("evento", m.item_id) !== null) continue;
-          if (m.etag_externo === null) repo.tirarMapa("evento", m.item_id);
-          else repo.enfileirar("evento", m.item_id, "apagar", instante);
+          // Com o mapa, o envio já foi tentado: o POST pode ter chegado e perdido a resposta.
+          repo.enfileirar("evento", m.item_id, "apagar", instante);
           continue;
         }
         if (this.desejado(m.item_tipo, m.item_id, fuso) !== null) continue;
@@ -946,9 +1035,11 @@ export class EspelhoGoogleAgenda {
   /** Manda o que já pode ir. A falha que espera para a passada: a rede caiu para todos. */
   private async enviar(espelho: LinhaEspelho, acesso: Acesso): Promise<ResultadoEspelho> {
     const repo = this.deps.repo;
+    let saiu = false;
     for (const linha of repo.devidos(this.agora().toISOString(), ENVIOS_POR_VEZ)) {
       try {
         await this.enviarUm(espelho, linha, acesso);
+        saiu = true;
       } catch (erro) {
         if (erro instanceof EspelhoSumiu) throw erro;
         if (ehPassageira(erro)) {
@@ -969,8 +1060,11 @@ export class EspelhoGoogleAgenda {
         });
       }
     }
-    this.falhasSeguidas = 0;
-    this.esperarAte = 0;
+    // Só um envio que deu certo diz que a rede voltou; a passada que não mandou nada não zera a espera.
+    if (saiu) {
+      this.falhasSeguidas = 0;
+      this.esperarAte = 0;
+    }
     // O que ficou na fila (esperando a vez, ou além das {@link ENVIOS_POR_VEZ}) vai na próxima.
     return repo.proximaTentativa() === null ? "enviado" : "esperando";
   }
@@ -1089,8 +1183,7 @@ export class EspelhoGoogleAgenda {
     try {
       await acesso((token) => conferirCalendario(this.buscar, this.enderecos, token, espelho.id_externo));
     } catch (erro) {
-      const status = statusDe(erro);
-      if (status === 404 || status === 403) throw new EspelhoSumiu();
+      if (calendarioSumiu(erro)) throw new EspelhoSumiu();
       throw original;
     }
   }
@@ -1129,8 +1222,31 @@ export class EspelhoGoogleAgenda {
       leitura = await this.lerEventos(espelho, ponto, acesso);
     }
     const fuso = this.deps.lerFuso();
-    for (const item of leitura.itens) await this.aplicarLido(item, fuso);
+    const vieram = new Set<string>();
+    for (const item of leitura.itens) {
+      if (ehObjeto(item) && typeof item.id === "string") vieram.add(item.id);
+      await this.aplicarLido(item, fuso);
+    }
+    if (ponto.completa) this.tirarOQueNaoVeio(vieram, limite);
     this.deps.repo.gravarToken(espelho.id, leitura.sincronizacao, this.agora().toISOString());
+  }
+
+  /**
+   * A leitura completa (a primeira, ou a de depois do 410) não traz o que foi apagado: o que já
+   * tinha chegado lá, cai na janela dela e não veio, você apagou.
+   */
+  private tirarOQueNaoVeio(vieram: ReadonlySet<string>, limite: string): void {
+    const repo = this.deps.repo;
+    const dia = limite.slice(0, 10);
+    repo.transacao(() => {
+      for (const m of repo.mapas()) {
+        if (m.desligado === 1 || m.etag_externo === null || vieram.has(m.id_externo)) continue;
+        const e = lerImpressao(m.enviado);
+        if (e === null) continue;
+        const naJanela = e.recorrencia !== null || (e.diaInteiro ? e.fim > dia : e.fim > limite);
+        if (naJanela) this.apagadoNoGoogle(m, null);
+      }
+    });
   }
 
   private async lerEventos(
@@ -1149,7 +1265,7 @@ export class EspelhoGoogleAgenda {
           paginaDeEventos(this.buscar, this.enderecos, token, espelho.id_externo, ponto, atual),
         );
       } catch (erro) {
-        if (statusDe(erro) === 404 || statusDe(erro) === 403) throw new EspelhoSumiu();
+        if (calendarioSumiu(erro)) throw new EspelhoSumiu();
         throw erro;
       }
       bytes += resposta.bytes;
@@ -1190,37 +1306,60 @@ export class EspelhoGoogleAgenda {
     const enviado = lerImpressao(m.enviado);
     const lido = lerEvento(item, fuso);
     if (enviado === null || lido === null || lido.tipo !== "guardar") {
-      repo.gravarAdotado(m, etag, null, agora);
+      repo.gravarAdotado(m, etag, undefined, agora);
+      return;
+    }
+    // O item mudou aqui depois do último envio (durante a leitura, ou fechou) ou foi recusado: o
+    // daqui vence, e o próximo envio o leva.
+    const desejado = this.desejado(m.item_tipo, m.item_id, fuso);
+    if (m.recusado === 1 || desejado === null || impressao(desejado) !== m.enviado) {
+      repo.gravarAdotado(m, etag, undefined, agora);
       return;
     }
     const c = lido.campos;
-    const novoTitulo = c.titulo !== enviado.titulo ? c.titulo : undefined;
-    const novoInicio = c.inicio !== enviado.inicio || c.diaInteiro !== enviado.diaInteiro ? c : undefined;
+    // O que está lá agora, nos campos que o espelho acompanha; o resto é o que foi mandado.
+    const la: EventoDoItem = {
+      ...enviado,
+      titulo: c.titulo,
+      inicio: c.inicio,
+      fim: c.fim,
+      diaInteiro: c.diaInteiro,
+      ...(m.item_tipo === "evento" ? { descricao: c.descricao, local: c.local } : {}),
+    };
+    if (impressao(la) === m.enviado) {
+      repo.gravarAdotado(m, etag, undefined, agora);
+      return;
+    }
     try {
-      await this.adotar(m, novoTitulo, novoInicio, fuso, agora);
+      await this.adotar(m, enviado, c, fuso, agora);
     } catch (erro) {
-      // A área recusou (a tarefa fechou no meio): o que vale é o daqui, e o próximo envio corrige lá.
+      // A área recusou: o que vale é o daqui, e o envio inteiro corrige lá.
       console.error(
         `google: a mudança do Google em ${m.item_tipo} ${m.item_id} não foi adotada: ${mensagem(erro)}`,
       );
       repo.gravarAdotado(m, etag, null, agora);
       return;
     }
-    const depoisDeAdotar = this.desejado(m.item_tipo, m.item_id, fuso);
-    repo.gravarAdotado(m, etag, depoisDeAdotar === null ? null : impressao(depoisDeAdotar), agora);
+    // O que não foi adotado (o título vazio, o dia inteiro na tarefa) difere do item: a conciliação
+    // manda o daqui de volta.
+    repo.gravarAdotado(m, etag, impressao(la), agora);
   }
 
+  /**
+   * Leva às áreas o que mudou lá: título (se cabe no contrato), início (a tarefa só com hora; o
+   * lembrete recorrente segue a regra daqui) e, no evento da agenda, também fim, descrição e local.
+   */
   private async adotar(
     m: LinhaMapa,
-    titulo: string | undefined,
-    quando: CamposLidos | undefined,
+    enviado: EventoDoItem,
+    c: CamposLidos,
     fuso: string,
     agora: string,
   ): Promise<void> {
-    if (titulo === undefined && quando === undefined) return;
+    const titulo = c.titulo !== enviado.titulo && tituloAdotavel(c.titulo) ? c.titulo.trim() : undefined;
+    const mudouInicio = c.inicio !== enviado.inicio || c.diaInteiro !== enviado.diaInteiro;
     if (m.item_tipo === "tarefa") {
-      // A tarefa só tem hora: virar dia inteiro lá não tira a hora dela aqui.
-      const hora = quando !== undefined && !quando.diaInteiro ? noFuso(new Date(quando.inicio), fuso) : null;
+      const hora = mudouInicio && !c.diaInteiro ? noFuso(new Date(c.inicio), fuso) : null;
       if (titulo === undefined && hora === null) return;
       this.deps.adotar.tarefa(m.item_id, {
         ...(titulo !== undefined ? { titulo } : {}),
@@ -1231,26 +1370,23 @@ export class EspelhoGoogleAgenda {
     if (m.item_tipo === "lembrete") {
       const l = this.deps.repo.lembrete(m.item_id);
       if (l === null) return;
-      // O recorrente segue a regra daqui; de lá, só o texto.
-      const novoQuando =
-        quando !== undefined && !quando.diaInteiro && l.recorrencia === null ? quando.inicio : undefined;
-      if (titulo === undefined && novoQuando === undefined) return;
+      const quando = mudouInicio && !c.diaInteiro && l.recorrencia === null ? c.inicio : undefined;
+      if (titulo === undefined && quando === undefined) return;
       await this.deps.adotar.lembrete(m.item_id, {
         ...(titulo !== undefined ? { texto: titulo } : {}),
-        ...(novoQuando !== undefined ? { quando: novoQuando } : {}),
+        ...(quando !== undefined ? { quando } : {}),
       });
       return;
     }
     const e = this.deps.repo.evento(m.item_id);
     if (e === null) return;
-    const lido = quando;
     const campos: CamposLidos = {
       titulo: titulo ?? e.titulo,
-      descricao: e.descricao,
-      local: e.local,
-      inicio: lido?.inicio ?? e.inicio,
-      fim: lido?.fim ?? e.fim,
-      diaInteiro: lido?.diaInteiro ?? e.dia_inteiro === 1,
+      descricao: c.descricao,
+      local: c.local,
+      inicio: c.inicio,
+      fim: c.fim,
+      diaInteiro: c.diaInteiro,
       recorrencia: e.recorrencia,
       excecoes: [],
       fuso: null,

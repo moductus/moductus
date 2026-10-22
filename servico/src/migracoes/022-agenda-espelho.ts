@@ -15,6 +15,8 @@ import { criarTabela } from "../banco/tabela.ts";
  * - `enviado` é o evento que foi ao Google (título, horário, alertas, regra), para saber se o item
  *   mudou desde então; vazio quando o evento foi achado no Google sem ter saído daqui.
  * - `desligado` é o item cujo evento você apagou no Google: o espelho dele para (a tarefa fica).
+ * - `recusado` é o `enviado` que o Google recusou de vez: não vai de novo até o item mudar, e o
+ *   que está lá não é ele (o lembrete do canal `calendario` volta a avisar no Windows).
  *
  * Sem chave estrangeira: tarefas, lembretes e eventos têm lixeira, e o que saiu daqui é justamente
  * o que precisa ser apagado lá. Situação deste PC, como a fila (outro-pc/tabelas.ts).
@@ -29,6 +31,7 @@ const agendaEspelho = criarTabela(
     "etag_externo TEXT",
     "enviado TEXT CHECK (enviado IS NULL OR (json_valid(enviado) AND json_type(enviado) = 'object'))",
     "desligado INTEGER NOT NULL DEFAULT 0 CHECK (desligado IN (0, 1))",
+    "recusado INTEGER NOT NULL DEFAULT 0 CHECK (recusado IN (0, 1))",
   ],
   { lixeira: false, restricoes: ["UNIQUE (item_tipo, item_id)"] },
 );

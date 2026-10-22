@@ -20,6 +20,7 @@ export interface CalendarioFalso {
   summary: string;
   primary?: boolean;
   backgroundColor?: string;
+  description?: string;
 }
 
 interface EventoGuardado {
@@ -87,6 +88,10 @@ export interface GoogleFalso {
   apagarCalendario(id: string): void;
   /** As escritas na Calendar API (POST, PATCH, DELETE), em ordem. */
   escritas: { metodo: string; rota: string; corpo: Record<string, unknown> | null }[];
+  /** Criar calendário responde com este status (500 é o Google fora do ar). */
+  falharCriarCalendario: number | null;
+  /** Inserir e mudar evento respondem 400, como o Google faz com um corpo que ele não aceita. */
+  recusarEventos: boolean;
   fechar(): Promise<void>;
 }
 
@@ -164,8 +169,14 @@ export async function abrirGoogleFalso(
   ) => {
     falso.escritas.push({ metodo, rota, corpo });
     if (rota === "/calendars" && metodo === "POST") {
+      if (falso.falharCriarCalendario !== null)
+        return erroGoogle(res, falso.falharCriarCalendario, "backendError");
       const id = `moductus-${++calendariosCriados}@group.calendar.google.com`;
-      falso.calendarios.push({ id, summary: String(corpo?.summary ?? "") });
+      falso.calendarios.push({
+        id,
+        summary: String(corpo?.summary ?? ""),
+        ...(typeof corpo?.description === "string" ? { description: corpo.description } : {}),
+      });
       return responder(res, 200, { kind: "calendar#calendar", id, summary: corpo?.summary, etag: '"c1"' });
     }
     const m = /^\/calendars\/([^/]+)\/events(?:\/([^/]+))?$/.exec(rota);
@@ -174,6 +185,7 @@ export async function abrirGoogleFalso(
     const doCalendario = eventos.get(calendarioId) ?? new Map<string, EventoGuardado>();
     eventos.set(calendarioId, doCalendario);
     const eventoId = m[2] === undefined ? null : decodeURIComponent(m[2]);
+    if (falso.recusarEventos && metodo !== "DELETE") return erroGoogle(res, 400, "invalid");
     if (eventoId === null && metodo === "POST") {
       const id = typeof corpo?.id === "string" ? corpo.id : `gerado${++serie}`;
       if (!/^[a-v0-9]{5,1024}$/.test(id)) return erroGoogle(res, 400, "invalid");
@@ -402,6 +414,8 @@ export async function abrirGoogleFalso(
       eventos.delete(id);
     },
     escritas: [],
+    falharCriarCalendario: null,
+    recusarEventos: false,
     abrir: {
       endereco(endereco) {
         const url = new URL(endereco);

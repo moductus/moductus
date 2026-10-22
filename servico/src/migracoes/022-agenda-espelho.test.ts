@@ -27,8 +27,11 @@ describe("migração agenda-espelho", () => {
     const db = new DatabaseSync(":memory:");
     migrar(db, MIGRACOES);
     inserir(db, "a1", { enviado: '{"titulo":"Dentista"}', etag_externo: '"e1"' });
-    expect(db.prepare("SELECT desligado, enviado FROM agenda_espelho WHERE id = 'a1'").get()).toEqual({
+    expect(
+      db.prepare("SELECT desligado, recusado, enviado FROM agenda_espelho WHERE id = 'a1'").get(),
+    ).toEqual({
       desligado: 0,
+      recusado: 0,
       enviado: '{"titulo":"Dentista"}',
     });
     expect(() => inserir(db, "a2", { item_id: "t-a1" })).toThrow(/UNIQUE/);
@@ -40,5 +43,6 @@ describe("migração agenda-espelho", () => {
     expect(() => inserir(db, "a7", { enviado: "[1]" })).toThrow(/CHECK/);
     expect(() => inserir(db, "a8", { enviado: "texto" })).toThrow(/CHECK/);
     expect(() => inserir(db, "a9", { desligado: 2 })).toThrow(/CHECK/);
+    expect(() => inserir(db, "a10", { recusado: 2 })).toThrow(/CHECK/);
   });
 });

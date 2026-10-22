@@ -541,6 +541,7 @@ espelhoGoogle = new EspelhoGoogleAgenda({
       });
       servidor?.emitir("agenda.mudou", { eventos, apagados });
     },
+    calendarios: () => servidor?.emitir("agenda.calendarios", agenda.calendarios()),
     recriado: ({ titulo, corpo }) => {
       notificacoes
         .avisar({
@@ -673,12 +674,7 @@ servidor = await abrirServidorWs(token, {
   ...atendentesDaCaptura(captura),
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
-  ...semAtendente([
-    "rotinas.listar",
-    "rotinas.definir",
-    "rotinas.hoje",
-    "rotinas.agir",
-  ]),
+  ...semAtendente(["rotinas.listar", "rotinas.definir", "rotinas.hoje", "rotinas.agir"]),
   "areas.contagens": () => contagens.obter(),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);

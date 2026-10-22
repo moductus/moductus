@@ -228,21 +228,55 @@ export async function paginaDeEventos(
   };
 }
 
-/** Cria um calendário secundário da conta (o "Moductus") e devolve o id que o Google deu. */
+/**
+ * Cria um calendário secundário da conta (o "Moductus") e devolve o id que o Google deu. A
+ * `marca` vai na descrição: é por ela que {@link procurarCalendario} o acha de novo.
+ */
 export async function criarCalendario(
   buscar: typeof fetch,
   enderecos: Pick<EnderecosGoogle, "calendario">,
   tokenDeAcesso: string,
-  campos: { nome: string; fuso: string },
+  campos: { nome: string; fuso: string; marca: string },
 ): Promise<{ idExterno: string }> {
   const url = new URL(`${enderecos.calendario}/calendars`);
   const { corpo } = await pedir(buscar, url, tokenDeAcesso, {
     metodo: "POST",
-    corpo: { summary: campos.nome, timeZone: campos.fuso },
+    corpo: { summary: campos.nome, description: campos.marca, timeZone: campos.fuso },
   });
   const id = texto(corpo.id);
   if (!id || id.length > MAXIMO_ID) throw new ErroCalendario("rede", "o calendário criado veio sem id");
   return { idExterno: id };
+}
+
+/** Páginas da lista de calendários que a procura lê: conta nenhuma tem mais que isso. */
+const MAXIMO_PAGINAS_DA_LISTA = 20;
+
+/**
+ * O calendário da conta com este nome e esta marca na descrição: o que o Moductus criou numa
+ * tentativa cuja resposta se perdeu. Um "Moductus" que você criou à mão não tem a marca.
+ */
+export async function procurarCalendario(
+  buscar: typeof fetch,
+  enderecos: Pick<EnderecosGoogle, "calendario">,
+  tokenDeAcesso: string,
+  campos: { nome: string; marca: string },
+): Promise<string | null> {
+  let pagina: string | null = null;
+  for (let n = 0; n < MAXIMO_PAGINAS_DA_LISTA; n++) {
+    const url = new URL(`${enderecos.calendario}/users/me/calendarList`);
+    url.searchParams.set("maxResults", "250");
+    if (pagina) url.searchParams.set("pageToken", pagina);
+    const { corpo } = await pedir(buscar, url, tokenDeAcesso);
+    for (const item of Array.isArray(corpo.items) ? corpo.items : []) {
+      if (!ehObjeto(item) || item.deleted === true) continue;
+      const id = texto(item.id);
+      if (id && id.length <= MAXIMO_ID && item.summary === campos.nome && item.description === campos.marca)
+        return id;
+    }
+    pagina = texto(corpo.nextPageToken) || null;
+    if (pagina === null) return null;
+  }
+  return null;
 }
 
 /** Confere que o calendário existe e é acessível: o 404 (ou o 403) diz que não. */

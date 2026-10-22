@@ -20,8 +20,10 @@ import {
   CORPO_RECRIADO,
   ESPERA_INICIAL_MS,
   EspelhoGoogleAgenda,
+  MARCA_DO_ESPELHO,
   RepositorioEspelhoGoogle,
   TITULO_RECRIADO,
+  type AdotarDoGoogle,
 } from "./espelho.ts";
 import { abrirGoogleFalso, credenciaisNaMemoria, type GoogleFalso } from "./fixtures/google-falso.ts";
 import { ServicoGoogleAgenda } from "./google-agenda.ts";
@@ -105,12 +107,19 @@ async function montar() {
     { mudou: () => undefined, calendarios: () => undefined },
     { agora },
   );
-  const rede = { fora: false, perderRespostas: 0 };
+  const rede = { fora: false, perderRespostas: 0, perderCriacao: 0 };
   const buscar: typeof fetch = async (entrada, init) => {
     if (rede.fora) throw new TypeError("fetch failed");
     const resposta = await fetch(entrada, init);
-    if (rede.perderRespostas > 0 && init?.method === "POST" && String(entrada).endsWith("/events")) {
-      rede.perderRespostas--;
+    const post = init?.method === "POST";
+    const perder =
+      post && String(entrada).endsWith("/events")
+        ? rede.perderRespostas > 0 && rede.perderRespostas-- > 0
+        : post &&
+          String(entrada).endsWith("/calendars") &&
+          rede.perderCriacao > 0 &&
+          rede.perderCriacao-- > 0;
+    if (perder) {
       await resposta.body?.cancel();
       throw new TypeError("fetch failed");
     }
@@ -119,16 +128,22 @@ async function montar() {
   const recriados: { titulo: string; corpo: string }[] = [];
   const eventos: MudancaCache[] = [];
   const armados: number[] = [];
-  const novoEspelho = () =>
+  const avisosDeCalendarios = { n: 0 };
+  const adotarDeVerdade: AdotarDoGoogle = {
+    tarefa: (id, mudanca) => void tarefas.definir({ id, ...mudanca }, CONEXAO),
+    lembrete: async (id, mudanca) => void (await lembretes.definir({ id, ...mudanca }, CONEXAO)),
+  };
+  const novoEspelho = (adotar: AdotarDoGoogle = adotarDeVerdade) =>
     new EspelhoGoogleAgenda({
       google: servico,
       repo: new RepositorioEspelhoGoogle(db),
       lerFuso: () => FUSO,
-      adotar: {
-        tarefa: (id, mudanca) => void tarefas.definir({ id, ...mudanca }, CONEXAO),
-        lembrete: async (id, mudanca) => void (await lembretes.definir({ id, ...mudanca }, CONEXAO)),
+      adotar,
+      avisos: {
+        eventos: (m) => eventos.push(m),
+        calendarios: () => avisosDeCalendarios.n++,
+        recriado: (a) => recriados.push(a),
       },
-      avisos: { eventos: (m) => eventos.push(m), recriado: (a) => recriados.push(a) },
       enderecos: google.enderecos,
       buscar,
       agora,
@@ -159,8 +174,15 @@ async function montar() {
       ultimo_erro: string | null;
     }[];
   const mapa = (id: string) =>
-    db.prepare("SELECT id_externo, etag_externo, desligado FROM agenda_espelho WHERE item_id = ?").get(id) as
-      { id_externo: string; etag_externo: string | null; desligado: number } | undefined;
+    db
+      .prepare("SELECT id_externo, etag_externo, desligado, recusado FROM agenda_espelho WHERE item_id = ?")
+      .get(id) as
+      { id_externo: string; etag_externo: string | null; desligado: number; recusado: number } | undefined;
+  /** O evento de um item como está no Google agora. */
+  const noGoogleDe = (id: string) => noGoogle().find((e) => e.id === mapa(id)?.id_externo);
+  /** Muda o evento de um item no Google, como no celular. */
+  const mudarLa = (id: string, mudanca: Record<string, unknown>) =>
+    google.mudarEvento(calendarioDoEspelho()!.id_externo, mapa(id)!.id_externo, mudanca);
   const escritas = (metodo?: string) =>
     google.escritas
       .filter((e) => metodo === undefined || e.metodo === metodo)
@@ -185,8 +207,11 @@ async function montar() {
     recriados,
     eventos,
     armados,
+    avisosDeCalendarios,
     calendarioDoEspelho,
     noGoogle,
+    noGoogleDe,
+    mudarLa,
     fila,
     mapa,
     escritas,
@@ -202,7 +227,9 @@ describe("o calendário Moductus", () => {
     const espelho = m.calendarioDoEspelho();
     expect(espelho).toMatchObject({ nome: "Moductus", ler: 1 });
     expect(m.google.calendarios.map((c) => c.summary)).toEqual([CONTA, "Moductus"]);
+    expect(m.google.calendarios[1]?.description).toBe(MARCA_DO_ESPELHO);
     expect(m.escritas()).toEqual(["POST /calendars"]);
+    expect(m.avisosDeCalendarios.n).toBe(1);
 
     // O serviço reiniciou: confere o que guardou, não cria outro.
     expect(await m.novoEspelho().sincronizar()).toBe("enviado");
@@ -530,6 +557,238 @@ describe("de volta do Google", () => {
     await m.espelho.sincronizar();
     expect(m.noGoogle().map((e) => e.id)).toEqual(["deoutropc0001"]);
     expect(m.mapa(t.id)?.id_externo).toBe("deoutropc0001");
-    expect(m.escritas("POST").filter((e) => e.endsWith("/events"))).toEqual([]);
+    // Não cria outro: atualiza aquele com o que a tarefa é aqui.
+    expect(m.escritas().filter((e) => e.includes("/events"))).toEqual([
+      expect.stringMatching(/^PATCH .*\/events\/deoutropc0001$/),
+    ]);
+  });
+});
+
+describe("volta 1 da revisão", () => {
+  test("403 de cota não é calendário sumido: espera, sem criar outro nem avisar", async () => {
+    const m = await montar();
+    const t = m.tarefas.criar({ titulo: "Dentista", venceEm: AMANHA, hora: "15:00" });
+    await m.espelho.sincronizar();
+    const antes = m.calendarioDoEspelho()!.id_externo;
+    // Na conferência do calendário (serviço reiniciado) e na leitura de volta.
+    m.google.cota = { restantes: 1, status: 403 };
+    expect(await m.novoEspelho().sincronizar()).toBe("esperando");
+    m.google.cota = { restantes: 1, status: 403 };
+    await m.espelho.sincronizar();
+    expect(m.recriados).toEqual([]);
+    expect(m.calendarioDoEspelho()!.id_externo).toBe(antes);
+    expect(m.escritas("POST").filter((e) => e === "POST /calendars")).toHaveLength(1);
+    expect(m.mapa(t.id)?.etag_externo).not.toBeNull();
+  });
+
+  test("criar o calendário de novo que falha espera, não tenta a cada segundo", async () => {
+    const m = await montar();
+    m.tarefas.criar({ titulo: "Dentista", venceEm: AMANHA, hora: "15:00" });
+    await m.espelho.sincronizar();
+    m.google.apagarCalendario(m.calendarioDoEspelho()!.id_externo);
+    m.google.falharCriarCalendario = 500;
+    m.tarefas.criar({ titulo: "Outra", venceEm: AMANHA, hora: "16:00" });
+    expect(await m.espelho.sincronizar()).toBe("esperando");
+    expect(m.armados.at(-1)).toBeGreaterThanOrEqual(ESPERA_INICIAL_MS);
+    expect(m.recriados).toEqual([]);
+  });
+
+  test("a criação do calendário que perdeu a resposta não deixa dois Moductus", async () => {
+    const m = await montar();
+    m.rede.perderCriacao = 1;
+    expect(await m.espelho.sincronizar()).toBe("esperando");
+    expect(m.calendarioDoEspelho()).toBeUndefined();
+    expect(await m.espelho.sincronizar()).toBe("enviado");
+    expect(m.google.calendarios.filter((c) => c.summary === "Moductus")).toHaveLength(1);
+    expect(m.calendarioDoEspelho()?.id_externo).toBe(m.google.calendarios[1]?.id);
+    expect(m.escritas("POST").filter((e) => e === "POST /calendars")).toHaveLength(1);
+  });
+
+  test("canal calendario: sem conexão ligada, o lembrete não conta como no Google", async () => {
+    const m = await montar();
+    const l = await m.lembretes.criar({
+      texto: "Remédio",
+      quando: utc(AMANHA, "08:00"),
+      canal: "calendario",
+    });
+    await m.espelho.sincronizar();
+    expect(m.espelho.chegouAoGoogle(l.id)).toBe(true);
+    await m.servico.desligar();
+    expect(m.espelho.chegouAoGoogle(l.id)).toBe(false);
+  });
+
+  test("canal calendario: o que o Google recusou de vez não conta como no Google, até ir de novo", async () => {
+    const m = await montar();
+    const l = await m.lembretes.criar({
+      texto: "Remédio",
+      quando: utc(AMANHA, "08:00"),
+      canal: "calendario",
+    });
+    await m.espelho.sincronizar();
+    m.google.recusarEventos = true;
+    await m.lembretes.definir({ id: l.id, texto: "Remédio da pressão" });
+    expect(await m.espelho.sincronizar()).toBe("enviado");
+    expect(m.mapa(l.id)?.recusado).toBe(1);
+    expect(m.fila()).toEqual([]);
+    expect(m.espelho.chegouAoGoogle(l.id)).toBe(false);
+    // Não insiste no mesmo conteúdo; mudou de novo, vai.
+    await m.espelho.sincronizar();
+    expect(m.escritas("PATCH")).toHaveLength(1);
+    m.google.recusarEventos = false;
+    await m.lembretes.definir({ id: l.id, texto: "Remédio da manhã" });
+    await m.espelho.sincronizar();
+    expect(m.noGoogleDe(l.id)).toMatchObject({ summary: "Remédio da manhã" });
+    expect(m.espelho.chegouAoGoogle(l.id)).toBe(true);
+  });
+
+  test("canal calendario: apagado lá antes de um 410, a leitura completa desliga o espelho", async () => {
+    const m = await montar();
+    const l = await m.lembretes.criar({
+      texto: "Remédio",
+      quando: utc(AMANHA, "08:00"),
+      canal: "calendario",
+    });
+    const fica = await m.lembretes.criar({ texto: "Água", quando: utc(AMANHA, "09:00") });
+    await m.espelho.sincronizar();
+    m.google.apagarEvento(m.calendarioDoEspelho()!.id_externo, m.mapa(l.id)!.id_externo);
+    m.google.vencerSincronizacao();
+    await m.espelho.sincronizar();
+    expect(m.mapa(l.id)?.desligado).toBe(1);
+    expect(m.espelho.chegouAoGoogle(l.id)).toBe(false);
+    expect(m.mapa(fica.id)?.desligado).toBe(0);
+    expect(m.espelho.chegouAoGoogle(fica.id)).toBe(true);
+  });
+
+  test("lembretes da tarefa: o do dock não é alerta, o adiado conta pela hora do adiamento, o que não cabe vai sozinho", async () => {
+    const m = await montar();
+    // A tarefa nasce com o lembrete dela 15 min antes.
+    const t = m.tarefas.criar({ titulo: "Dentista", venceEm: AMANHA, hora: "15:00" });
+    await m.lembretes.criar({ texto: "Quieto", quando: utc(AMANHA, "14:00"), tarefaId: t.id, canal: "dock" });
+    const depois = await m.lembretes.criar({
+      texto: "Pagar a consulta",
+      quando: utc(AMANHA, "16:00"),
+      tarefaId: t.id,
+    });
+    const adiado = await m.lembretes.criar({
+      texto: "Separar exames",
+      quando: utc(HOJE, "09:55"),
+      tarefaId: t.id,
+    });
+    await m.lembretes.adiar({ ids: [adiado.id], minutos: 10 });
+    await m.espelho.sincronizar();
+    // 15:00 de amanhã menos 10:10 de hoje (agora + 10 min) são 1730 min.
+    expect(m.noGoogleDe(t.id)).toMatchObject({
+      reminders: {
+        useDefault: false,
+        overrides: [
+          { method: "popup", minutes: 15 },
+          { method: "popup", minutes: 1730 },
+        ],
+      },
+    });
+    expect(m.noGoogleDe(depois.id)).toMatchObject({
+      summary: "Pagar a consulta",
+      start: { dateTime: utc(AMANHA, "16:00") },
+    });
+    expect(m.noGoogle()).toHaveLength(2);
+    // O lembrete que é alerta da tarefa conta pelo evento dela.
+    expect(m.espelho.chegouAoGoogle(adiado.id)).toBe(true);
+  });
+
+  test("o evento da agenda criado com a resposta perdida e apagado aqui sai do Google", async () => {
+    const m = await montar();
+    await m.espelho.sincronizar();
+    m.rede.perderRespostas = 1;
+    const e = m.agenda.criarEvento({
+      calendarioId: m.calendarioDoEspelho()!.id,
+      titulo: "Consulta",
+      inicio: utc(AMANHA, "14:00"),
+      fim: utc(AMANHA, "15:00"),
+      diaInteiro: false,
+    });
+    await m.espelho.sincronizar();
+    expect(m.noGoogle()).toHaveLength(1);
+    m.agenda.apagarEvento({ id: e.id });
+    expect(m.fila()).toEqual([]);
+    await m.espelho.sincronizar();
+    expect(m.noGoogle()).toEqual([]);
+    expect(m.mapa(e.id)).toBeUndefined();
+  });
+
+  test("título vazio lá não é adotado e volta; a hora mudada junto é adotada", async () => {
+    const m = await montar();
+    const t = m.tarefas.criar({ titulo: "Dentista", venceEm: AMANHA, hora: "15:00" });
+    await m.espelho.sincronizar();
+    m.mudarLa(t.id, { summary: "  ", start: sp(AMANHA, "16:00"), end: sp(AMANHA, "16:30") });
+    await m.espelho.sincronizar();
+    expect(m.tarefa(t.id)).toMatchObject({ titulo: "Dentista", hora: "16:00" });
+    expect(m.noGoogleDe(t.id)).toMatchObject({
+      summary: "Dentista",
+      start: { dateTime: utc(AMANHA, "16:00") },
+    });
+  });
+
+  test("a tarefa que virou dia inteiro lá volta a ter hora lá", async () => {
+    const m = await montar();
+    const t = m.tarefas.criar({ titulo: "Dentista", venceEm: AMANHA, hora: "15:00" });
+    await m.espelho.sincronizar();
+    m.mudarLa(t.id, { start: { date: AMANHA }, end: { date: "2026-10-21" } });
+    await m.espelho.sincronizar();
+    expect(m.tarefa(t.id)).toMatchObject({ venceEm: AMANHA, hora: "15:00" });
+    expect(m.noGoogleDe(t.id)).toMatchObject({ start: { dateTime: utc(AMANHA, "15:00") } });
+  });
+
+  test("a adoção que a área recusa esquece o que foi: o próximo envio leva o daqui inteiro", async () => {
+    const m = await montar();
+    const t = m.tarefas.criar({ titulo: "Dentista", venceEm: AMANHA, hora: "15:00" });
+    await m.espelho.sincronizar();
+    m.mudarLa(t.id, { start: sp(AMANHA, "16:00"), end: sp(AMANHA, "16:30") });
+    const recusa = m.novoEspelho({
+      tarefa: () => {
+        throw new Error("a tarefa não está aberta");
+      },
+      lembrete: () => Promise.resolve(),
+    });
+    await recusa.sincronizar();
+    expect(m.tarefa(t.id).hora).toBe("15:00");
+    expect(m.noGoogleDe(t.id)).toMatchObject({ start: { dateTime: utc(AMANHA, "15:00") } });
+  });
+
+  test("o evento da agenda adota de lá o fim, a descrição e o local", async () => {
+    const m = await montar();
+    await m.espelho.sincronizar();
+    const e = m.agenda.criarEvento({
+      calendarioId: m.calendarioDoEspelho()!.id,
+      titulo: "Consulta",
+      inicio: utc(AMANHA, "14:00"),
+      fim: utc(AMANHA, "15:00"),
+      diaInteiro: false,
+    });
+    await m.espelho.sincronizar();
+    const escritasAntes = m.escritas().length;
+    m.mudarLa(e.id, { end: sp(AMANHA, "15:30"), description: "levar exames", location: "Clínica" });
+    await m.espelho.sincronizar();
+    expect(m.agenda.obterEvento({ id: e.id })).toMatchObject({
+      inicio: utc(AMANHA, "14:00"),
+      fim: utc(AMANHA, "15:30"),
+      descricao: "levar exames",
+      local: "Clínica",
+    });
+    expect(m.escritas()).toHaveLength(escritasAntes);
+  });
+
+  test("o lembrete adiado movido lá de volta para a hora de antes volta a agendado nela", async () => {
+    const m = await montar();
+    const l = await m.lembretes.criar({ texto: "Pagar boleto", quando: utc(HOJE, "11:00") });
+    await m.lembretes.adiar({ ids: [l.id], minutos: 90 });
+    await m.espelho.sincronizar();
+    expect(m.noGoogleDe(l.id)).toMatchObject({ start: { dateTime: utc(HOJE, "11:30") } });
+    m.mudarLa(l.id, { start: sp(HOJE, "11:00"), end: sp(HOJE, "11:15") });
+    await m.espelho.sincronizar();
+    expect(m.lembretes.listar({}).find((x) => x.id === l.id)).toMatchObject({
+      quando: utc(HOJE, "11:00"),
+      estado: "agendado",
+      adiadoAte: null,
+    });
   });
 });
