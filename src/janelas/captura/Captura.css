@@ -151,9 +151,27 @@
   font-weight: var(--peso-normal);
 }
 
+/* Lista: a lista suspensa nativa com a cara do valor; a seta fica por cima, sem pegar clique,
+   como o "Onde" das Notificações. */
+.captura-lista {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  color: var(--texto-3);
+}
+
 select.captura-campo-valor {
+  flex: 1;
+  padding-right: calc(var(--icone-12) + var(--esp-4));
   appearance: none;
   cursor: pointer;
+}
+
+.captura-lista > .icone {
+  position: absolute;
+  right: 0;
+  pointer-events: none;
 }
 
 select.captura-campo-valor option {

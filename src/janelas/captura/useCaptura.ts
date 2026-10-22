@@ -11,6 +11,7 @@ import { servico } from "../../servico/conexao.ts";
 import {
   aplicarEdicoes,
   desfeito,
+  edicoesDoTipo,
   ehLancavel,
   type CampoEditavel,
   type Contexto,
@@ -86,13 +87,17 @@ export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCapt
   const [previa, setPrevia] = useState<PreviaCaptura | null>(null);
   const [escolhido, setEscolhido] = useState<TipoLancavel | null>(null);
   const [edicoes, setEdicoes] = useState<Edicoes>({});
-  const [erro, setErro] = useState<string | null>(null);
+  // A prévia e as ações (lançar, desfazer) erram em separado: a prévia que chega depois não apaga
+  // a recusa do lançamento.
+  const [erroPrevia, setErroPrevia] = useState<string | null>(null);
+  const [erroAcao, setErroAcao] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [lancando, setLancando] = useState(false);
   const [lancamento, setLancamento] = useState<LancamentoNaTela | null>(null);
 
   const textoAtual = useRef("");
   const lancandoAgora = useRef(false);
+  const desfazendoAgora = useRef(false);
   const relogios = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const pararRelogios = () => {
@@ -111,10 +116,10 @@ export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCapt
       );
       if (veio.texto !== textoAtual.current.trim()) return null;
       setPrevia(veio);
-      setErro(null);
+      setErroPrevia(null);
       return veio;
     } catch (e) {
-      if (alvo === textoAtual.current.trim()) setErro(mensagemDe(e));
+      if (alvo === textoAtual.current.trim()) setErroPrevia(mensagemDe(e));
       return null;
     }
   }, []);
@@ -137,7 +142,8 @@ export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCapt
       // Correção e tipo escolhido eram da frase anterior.
       setEscolhido(null);
       setEdicoes({});
-      setErro(null);
+      setErroPrevia(null);
+      setErroAcao(null);
       setAviso(null);
       if (novo.trim() === "") {
         pararRelogios();
@@ -168,29 +174,34 @@ export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCapt
   const tipo: TipoCaptura | null = previa === null ? null : (escolhido ?? previa.tipo);
 
   const { campos, erros: errosCampos } = useMemo(() => {
-    if (previa === null) return { campos: null, erros: {} };
-    return aplicarEdicoes(previa.campos, edicoes, contexto);
-  }, [previa, edicoes, contexto]);
+    if (previa === null || tipo === null) return { campos: null, erros: {} };
+    return aplicarEdicoes(previa.campos, edicoesDoTipo(tipo, previa.campos, edicoes), contexto);
+  }, [previa, tipo, edicoes, contexto]);
 
   const lancar = useCallback(async (): Promise<boolean> => {
+    // A trava vem antes de qualquer espera: dois Enter com a prévia atrasada são um lançamento só.
     if (lancandoAgora.current) return false;
     const alvo = textoAtual.current.trim();
     if (alvo === "") return false;
-    let mostrada = previa;
-    if (mostrada === null || mostrada.texto !== alvo) {
-      // A prévia na tela é de outra frase: só lança se a nova disser o mesmo.
-      pararRelogios();
-      const nova = await entender(false);
-      if (nova === null || mostrada === null || !mesmaPrevia(mostrada, nova)) return false;
-      mostrada = nova;
-    }
-    const vai = escolhido ?? mostrada.tipo;
-    if (!ehLancavel(vai)) return false;
-    const corrigidos = aplicarEdicoes(mostrada.campos, edicoes, contexto);
-    if (Object.keys(corrigidos.erros).length > 0) return false;
     lancandoAgora.current = true;
     setLancando(true);
     try {
+      let mostrada = previa;
+      if (mostrada === null || mostrada.texto !== alvo) {
+        // A prévia na tela é de outra frase: só lança se a nova disser o mesmo.
+        pararRelogios();
+        const nova = await entender(false);
+        if (nova === null || mostrada === null || !mesmaPrevia(mostrada, nova)) return false;
+        mostrada = nova;
+      }
+      const vai = escolhido ?? mostrada.tipo;
+      if (!ehLancavel(vai)) return false;
+      const corrigidos = aplicarEdicoes(
+        mostrada.campos,
+        edicoesDoTipo(vai, mostrada.campos, edicoes),
+        contexto,
+      );
+      if (Object.keys(corrigidos.erros).length > 0) return false;
       const feito = await servico.pedir("captura.lancar", {
         texto: alvo,
         tipo: vai,
@@ -203,11 +214,12 @@ export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCapt
       setPrevia(null);
       setEscolhido(null);
       setEdicoes({});
-      setErro(null);
+      setErroPrevia(null);
+      setErroAcao(null);
       setAviso(null);
       return true;
     } catch (e) {
-      setErro(mensagemDe(e, MENSAGEM_LANCAR_INCERTO));
+      setErroAcao(mensagemDe(e, MENSAGEM_LANCAR_INCERTO));
       return false;
     } finally {
       lancandoAgora.current = false;
@@ -216,17 +228,21 @@ export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCapt
   }, [previa, escolhido, edicoes, contexto, entender]);
 
   const desfazer = useCallback(async () => {
-    if (!lancamento) return;
+    // Ctrl+Z repetido ou botão e atalho juntos: um pedido só ao serviço.
+    if (!lancamento || desfazendoAgora.current) return;
     const { lancamento: feito } = lancamento;
+    desfazendoAgora.current = true;
     try {
       await servico.pedir("captura.desfazer", { id: feito.id });
       setLancamento(null);
-      setErro(null);
+      setErroAcao(null);
       setAviso(desfeito(feito.tipo));
     } catch (e) {
       // Passou do prazo ou já foi desfeito: o serviço diz por quê e o botão sai.
       if (e instanceof RecusaDoServico) setLancamento(null);
-      setErro(mensagemDe(e));
+      setErroAcao(mensagemDe(e));
+    } finally {
+      desfazendoAgora.current = false;
     }
   }, [lancamento]);
 
@@ -241,7 +257,8 @@ export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCapt
     setPrevia(null);
     setEscolhido(null);
     setEdicoes({});
-    setErro(null);
+    setErroPrevia(null);
+    setErroAcao(null);
     setAviso(null);
   }, []);
 
@@ -256,7 +273,7 @@ export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCapt
     editar,
     campos,
     errosCampos,
-    erro,
+    erro: erroAcao ?? erroPrevia,
     aviso,
     lancando,
     lancamento,

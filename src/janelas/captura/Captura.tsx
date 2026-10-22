@@ -136,6 +136,13 @@ export function Captura() {
 
   // O aviso do tipo (gasto, memória, lembrete que vira tarefa) vale para o tipo que o serviço deu.
   const aviso = c.previa && c.tipo === c.previa.tipo ? c.previa.aviso : null;
+  // O que o leitor de tela ouve quando muda: a região fica sempre montada, para o anúncio sair.
+  const anuncio =
+    c.previa && c.tipo
+      ? `${quemEntendeu(c.previa, c.tipo)} ${NOME_DO_TIPO[c.tipo]}.${aviso ? ` ${aviso}` : ""}`
+      : c.lancamento
+        ? `${lancado(c.lancamento.lancamento.tipo)}: ${c.lancamento.titulo}. Dá para desfazer com Ctrl+Z.`
+        : (c.aviso ?? "");
 
   return (
     <main ref={cartao} className="captura" aria-label="Captura">
@@ -158,7 +165,7 @@ export function Captura() {
 
         {c.previa && c.tipo && c.campos && (
           <div className="captura-corpo">
-            <p className="captura-entendeu" aria-live="polite">
+            <p className="captura-entendeu">
               <span>{quemEntendeu(c.previa, c.tipo)}</span>
               <span className="captura-tipo">{NOME_DO_TIPO[c.tipo]}</span>
             </p>
@@ -168,11 +175,7 @@ export function Captura() {
                 {c.erro}
               </p>
             ) : (
-              aviso && (
-                <p className="captura-linha" role="status">
-                  {aviso}
-                </p>
-              )
+              aviso && <p className="captura-linha">{aviso}</p>
             )}
             {errosCampos.length > 0 && (
               <p className="captura-linha captura-linha--erro" role="alert">
@@ -185,7 +188,7 @@ export function Captura() {
         {!c.previa && (c.erro || c.aviso || c.lancamento) && (
           <div className="captura-corpo captura-corpo--estado">
             {c.lancamento && (
-              <p className="captura-lancado" role="status">
+              <p className="captura-lancado">
                 <span className="captura-lancado-texto">
                   {lancado(c.lancamento.lancamento.tipo)}: {c.lancamento.titulo}
                 </span>
@@ -197,11 +200,7 @@ export function Captura() {
                 </Botao>
               </p>
             )}
-            {c.aviso && (
-              <p className="captura-linha" role="status">
-                {c.aviso}
-              </p>
-            )}
+            {c.aviso && <p className="captura-linha">{c.aviso}</p>}
             {c.erro && (
               <p className="captura-linha captura-linha--erro" role="alert">
                 {c.erro}
@@ -250,6 +249,10 @@ export function Captura() {
           </div>
         )}
 
+        <p className="so-leitor" aria-live="polite">
+          {anuncio}
+        </p>
+
         <p className="captura-dicas" id={idDicas}>
           <span>Esc fecha</span>
           <span aria-hidden="true">·</span>
@@ -265,8 +268,9 @@ export function Captura() {
 /** Os campos da prévia: Tab entra em cada um, e o que se digita corrige o que vai no Enter. */
 function Campos({ estado: c, contexto }: { estado: EstadoCaptura; contexto: Contexto }) {
   const id = useId();
-  if (!c.tipo || !c.campos) return null;
-  const mostrados = camposDoTipo(c.tipo, c.campos);
+  if (!c.tipo || !c.previa) return null;
+  // Pela prévia, não pelo corrigido: apagar o lembrete no campo não some com o campo.
+  const mostrados = camposDoTipo(c.tipo, c.previa.campos);
   // Com poucos campos, o título ocupa o que sobra da linha de quatro.
   const larguraTitulo = mostrados.length < 4 ? 5 - mostrados.length : 1;
   return (
@@ -324,22 +328,25 @@ function Campo({
         <label className="captura-campo-rotulo" htmlFor={id}>
           {rotulo}
         </label>
-        <select
-          id={id}
-          className={classeValor}
-          value={valor}
-          onChange={(e) => c.editar("listaId", e.target.value)}
-        >
-          <option value="">Entrada</option>
-          {contexto.listas.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.nome}
-            </option>
-          ))}
-          {valor !== "" && !contexto.listas.some((l) => l.id === valor) && (
-            <option value={valor}>Outra lista</option>
-          )}
-        </select>
+        <span className="captura-lista">
+          <select
+            id={id}
+            className={classeValor}
+            value={valor}
+            onChange={(e) => c.editar("listaId", e.target.value)}
+          >
+            <option value="">Entrada</option>
+            {contexto.listas.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.nome}
+              </option>
+            ))}
+            {valor !== "" && !contexto.listas.some((l) => l.id === valor) && (
+              <option value={valor}>Outra lista</option>
+            )}
+          </select>
+          <Icone nome="abrirLista" tamanho={12} />
+        </span>
       </div>
     );
   }

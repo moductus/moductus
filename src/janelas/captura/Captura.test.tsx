@@ -73,7 +73,8 @@ function entendedor(dados: unknown): PreviaCaptura {
     tipo: "tarefa",
     campos: {
       ...VAZIOS,
-      titulo: comData ? texto.replace(" amanhã 15h", "") : texto,
+      // O ponto final não muda o que se entende: "ligar" e "ligar." dão a mesma prévia.
+      titulo: comData ? texto.replace(" amanhã 15h", "") : texto.replace(/\.$/, ""),
       dia: comData ? "2026-10-19" : null,
       hora: comData ? "15:00" : null,
     },
@@ -124,6 +125,7 @@ async function montar() {
 
 const frase = () => recipiente.querySelector<HTMLInputElement>('input[aria-label="Captura rápida"]')!;
 const texto = (seletor: string) => recipiente.querySelector(seletor)?.textContent ?? null;
+const anuncio = () => texto('[aria-live="polite"]');
 const pedidosDe = (metodo: string) => pedidos.filter((p) => p.metodo === metodo).map((p) => p.dados);
 const definirValor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
 
@@ -259,12 +261,69 @@ describe("Enter lança e o lançado dá para desfazer", () => {
 
   it("Enter com a prévia atrasada lança direto se a nova diz o mesmo que a tela", async () => {
     await montar();
+    await digitar(frase(), "ligar");
+    await passar(100);
+    await digitar(frase(), "ligar.");
+    await enter();
+    expect(pedidosDe("captura.entender")).toEqual([{ texto: "ligar" }, { texto: "ligar." }]);
+    expect(pedidosDe("captura.lancar")).toEqual([
+      { texto: "ligar.", tipo: "tarefa", campos: { ...VAZIOS, titulo: "ligar" } },
+    ]);
+  });
+
+  it("dois Enter com a prévia atrasada lançam uma vez só", async () => {
+    await montar();
+    await digitar(frase(), "ligar");
+    await passar(100);
+    let soltar: () => void = () => undefined;
+    atender.set(
+      "captura.entender",
+      (dados) => new Promise((pronto) => (soltar = () => pronto(entendedor(dados)))),
+    );
+    await digitar(frase(), "ligar.");
+    await act(async () => {
+      recipiente.querySelector("form")!.requestSubmit();
+      recipiente.querySelector("form")!.requestSubmit();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      soltar();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(pedidosDe("captura.lancar")).toHaveLength(1);
+  });
+
+  it("a recusa do lançamento continua na tela quando a prévia do modelo chega depois", async () => {
+    atender.set("captura.lancar", () => {
+      throw new RecusaDoServico("O lembrete precisa de dia e hora: preencha com Tab.");
+    });
+    await montar();
     await digitar(frase(), "ligar pro banco amanhã 15h");
     await passar(100);
-    // Um espaço no fim não muda a frase.
-    await digitar(frase(), "ligar pro banco amanhã 15h ");
     await enter();
-    expect(pedidosDe("captura.lancar")).toHaveLength(1);
+    expect(texto('[role="alert"]')).toBe("O lembrete precisa de dia e hora: preencha com Tab.");
+    await passar(1500);
+    expect(pedidosDe("captura.entender")).toContainEqual({
+      texto: "ligar pro banco amanhã 15h",
+      comModelo: true,
+    });
+    expect(texto('[role="alert"]')).toBe("O lembrete precisa de dia e hora: preencha com Tab.");
+  });
+
+  it("Ctrl+Z repetido desfaz uma vez só", async () => {
+    let soltar: () => void = () => undefined;
+    atender.set(
+      "captura.desfazer",
+      (dados) => new Promise((pronto) => (soltar = () => pronto({ ...(dados as object), tipo: "tarefa" }))),
+    );
+    await montar();
+    await digitar(frase(), "ligar pro banco amanhã 15h");
+    await passar(100);
+    await enter();
+    await tecla("z", { ctrlKey: true });
+    await tecla("z", { ctrlKey: true });
+    await act(async () => soltar());
+    expect(pedidosDe("captura.desfazer")).toHaveLength(1);
   });
 
   it("Desfazer pelo botão e por Ctrl+Z, dentro dos 10 s", async () => {
@@ -275,7 +334,7 @@ describe("Enter lança e o lançado dá para desfazer", () => {
     await enter();
     await tecla("z", { ctrlKey: true });
     expect(pedidosDe("captura.desfazer")).toEqual([{ id: "01LANCAMENTO" }]);
-    expect(texto('[role="status"]')).toBe("Desfeito: a tarefa saiu.");
+    expect(anuncio()).toBe("Desfeito: a tarefa saiu.");
     expect(recipiente.querySelector(".captura-lancado")).toBeNull();
   });
 
@@ -340,6 +399,40 @@ describe("Tab corrige um campo e o Na verdade é troca o tipo", () => {
     expect(pedidosDe("captura.lancar")).toEqual([]);
   });
 
+  it("a correção de um campo que o tipo novo esconde não vale nem bloqueia", async () => {
+    await montar();
+    await digitar(frase(), "ligar pro banco amanhã 15h");
+    await passar(100);
+    await digitar(campo("Hora") as HTMLInputElement, "25h");
+    await tecla("3", { altKey: true });
+    expect(texto(".captura-entendeu")).toBe("Vai comoNota");
+    expect(recipiente.querySelector('[role="alert"]')).toBeNull();
+    expect(recipiente.querySelector(".captura-lancar")!.getAttribute("aria-disabled")).toBe("false");
+    await enter();
+    const [lancado] = pedidosDe("captura.lancar") as { tipo: string; campos: CamposCaptura }[];
+    expect(lancado!.tipo).toBe("nota");
+    expect(lancado!.campos.hora).toBe("15:00");
+  });
+
+  it("apagar o lembrete no campo não some com o campo", async () => {
+    atender.set("captura.entender", (dados) => {
+      const p = entendedor(dados);
+      return { ...p, campos: { ...p.campos, lembreteMinutosAntes: 15 } };
+    });
+    await montar();
+    await digitar(frase(), "ligar pro banco amanhã 15h");
+    await passar(100);
+    await digitar(campo("Lembrete") as HTMLInputElement, "");
+    expect((campo("Lembrete") as HTMLInputElement).value).toBe("");
+  });
+
+  it("a lista suspensa tem a seta por cima", async () => {
+    await montar();
+    await digitar(frase(), "ligar pro banco amanhã 15h");
+    await passar(100);
+    expect(campo("Lista").parentElement!.querySelector(".icone")).not.toBeNull();
+  });
+
   it("Alt+2 troca para evento, que mostra a duração, e o Enter lança como evento", async () => {
     await montar();
     await digitar(frase(), "ligar pro banco amanhã 15h");
@@ -356,7 +449,10 @@ describe("Tab corrige um campo e o Na verdade é troca o tipo", () => {
     await digitar(frase(), "45 de mercado no débito");
     await passar(100);
     expect(texto(".captura-entendeu")).toBe("Finanças entendeu comoGasto");
-    expect(texto('[role="status"]')).toContain("Gastos chegam com a Tula");
+    expect(texto(".captura-linha")).toContain("Gastos chegam com a Tula");
+    expect(anuncio()).toBe(
+      "Finanças entendeu como Gasto. Gastos chegam com a Tula. Por enquanto, dá para lançar como tarefa ou nota.",
+    );
     expect(recipiente.querySelector(".captura-lancar")!.getAttribute("aria-disabled")).toBe("true");
     await enter();
     expect(pedidosDe("captura.lancar")).toEqual([]);

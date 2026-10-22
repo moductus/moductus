@@ -447,6 +447,21 @@ export function aplicarEdicoes(
   }
 }
 
+/**
+ * Só as correções dos campos que o tipo mostra: trocar de tarefa para nota esconde a hora, e a
+ * hora corrigida (ou o erro dela) não pode valer nem bloquear o que não está na tela.
+ */
+export function edicoesDoTipo(tipo: TipoCaptura, campos: CamposCaptura, edicoes: Edicoes): Edicoes {
+  const visiveis = new Set(
+    camposDoTipo(tipo, campos)
+      .filter((c) => c.editavel)
+      .map((c) => c.campo),
+  );
+  return Object.fromEntries(
+    Object.entries(edicoes).filter(([campo]) => visiveis.has(campo as CampoCaptura)),
+  ) as Edicoes;
+}
+
 /** "Tarefa criada", "Lembrete criado": o que a janela diz depois do Enter. */
 export function lancado(tipo: TipoLancavel): string {
   return tipo === "tarefa" || tipo === "nota"
