@@ -49,6 +49,12 @@ export function CampoFrase({ listas, hoje, contexto }: PropsCampoFrase) {
   // A resposta que chega depois de outra frase já não vale: só a do último pedido entra.
   const ultimo = useRef(0);
   const lancando = useRef(false);
+  // O texto do campo agora, para o fim do lançamento não apagar o que a pessoa digitou enquanto ele ia.
+  const noCampo = useRef("");
+  const mudarTexto = (novo: string) => {
+    noCampo.current = novo;
+    setTexto(novo);
+  };
 
   const frase = texto.trim();
   // O "Entendi:" só aparece para a frase que está no campo: o que o Enter lança é o que está na tela.
@@ -103,9 +109,11 @@ export function CampoFrase({ listas, hoje, contexto }: PropsCampoFrase) {
       if (mostrada === null) return;
       const { tipo, campos } = lancamentoDaPrevia(mostrada, contexto);
       const lancamento = await servico.pedir("captura.lancar", { texto: frase, tipo, campos });
-      ultimo.current++;
-      setTexto("");
-      setPrevia(null);
+      if (noCampo.current.trim() === frase) {
+        ultimo.current++;
+        mudarTexto("");
+        setPrevia(null);
+      }
       setCriado({ lancamento, texto: textoDoCriado(tipo, campos.titulo) });
     } catch (e) {
       setErro(mensagemDaRecusa(e));
@@ -130,7 +138,7 @@ export function CampoFrase({ listas, hoje, contexto }: PropsCampoFrase) {
       void lancar();
     } else if (e.key === "Escape" && texto !== "") {
       e.preventDefault();
-      setTexto("");
+      mudarTexto("");
       setPrevia(null);
       setErro(null);
     }
@@ -154,7 +162,7 @@ export function CampoFrase({ listas, hoje, contexto }: PropsCampoFrase) {
           spellCheck={false}
           aria-describedby={lancamento ? idEntendi : undefined}
           onChange={(e) => {
-            setTexto(e.target.value);
+            mudarTexto(e.target.value);
             setErro(null);
             // A frase apagada leva a prévia junto: a próxima não começa com a velha na tela.
             if (e.target.value.trim() === "") setPrevia(null);

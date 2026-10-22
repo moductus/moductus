@@ -203,9 +203,20 @@ export function gruposDoHoje(
 export function gruposDosProximos(proximas: readonly Tarefa[], hoje: string): GrupoTarefas[] {
   const de = somarDias(hoje, 1);
   const ate = somarDias(hoje, DIAS_PROXIMOS);
-  // As subtarefas vêm com a mãe em qualquer dia: primeiro cada uma acha a mãe, depois o corte.
-  const { linhas, filhas } = principais(proximas);
-  const naSemana = linhas.filter((t) => t.venceEm !== null && t.venceEm >= de && t.venceEm <= ate);
+  const naJanela = (t: Tarefa) => t.venceEm !== null && t.venceEm >= de && t.venceEm <= ate;
+  const unicas = [...new Map(proximas.map((t) => [t.id, t])).values()];
+  // Linha é a mãe que vence na janela; a filha só vira linha (aberta e na janela) quando a mãe não
+  // está nela. As filhas da mãe da janela, com ou sem dia, entram no "1 de 2" dela.
+  const maes = new Set(unicas.filter((t) => t.tarefaPaiId === null && naJanela(t)).map((t) => t.id));
+  const filhas = new Map<string, Tarefa[]>();
+  const naSemana: Tarefa[] = [];
+  for (const t of unicas) {
+    if (t.tarefaPaiId !== null && maes.has(t.tarefaPaiId)) {
+      filhas.set(t.tarefaPaiId, [...(filhas.get(t.tarefaPaiId) ?? []), t]);
+    } else if (naJanela(t) && (t.tarefaPaiId === null || t.estado === "aberta")) {
+      naSemana.push(t);
+    }
+  }
   const grupos = new Map<string, LinhaTarefa[]>();
   for (const t of porDiaEHora(naSemana)) {
     const dia = t.venceEm!;
@@ -486,25 +497,29 @@ export interface DadosTarefas {
   dia: string;
 }
 
-type Recortes = Pick<DadosTarefas, "listas" | "hoje" | "atrasadas" | "abertas" | "proximas">;
+/** Os recortes e o dia para o qual o serviço os montou. */
+type Recortes = Pick<DadosTarefas, "listas" | "hoje" | "atrasadas" | "abertas" | "proximas" | "dia">;
 
 /**
  * Tudo o que a área mostra, pelo canal: ao conectar e de novo a cada `tarefas.mudou` e
  * `listas.mudou`, de qualquer caminho (esta tela, a captura, a Alba), e quando o dia de hoje muda
  * (a meia-noite ou outro fuso em Configurações › Dia). Recarregar os recortes inteiros, em vez de
  * remendar, deixa o serviço decidir de novo onde cada tarefa cai; avisos do mesmo instante viram
- * uma recarga só, e `lembretes.mudou` recarrega só os lembretes. Uma recarga que falha com dados na
- * tela mantém o que já estava.
+ * uma recarga só, e `lembretes.mudou` recarrega só os lembretes. `dia` é o dos recortes na tela: na
+ * virada, ele só muda quando os recortes do dia novo chegam. Cada leitura falha por si; uma recarga
+ * que falha com dados na tela mantém o que já estava.
  */
 export function useDadosTarefas(canal: EstadoConexao, agora: Date): Leitura<DadosTarefas> {
   const [recortes, setRecortes] = useState<Recortes | null>(null);
   const [lembretes, setLembretes] = useState<Lembrete[] | null>(null);
   const [fuso, setFuso] = useState<string | null>(null);
-  const [falhou, setFalhou] = useState(false);
+  const [falhouRecortes, setFalhouRecortes] = useState(false);
+  const [falhouLembretes, setFalhouLembretes] = useState(false);
   const [versao, setVersao] = useState(0);
   const [versaoLembretes, setVersaoLembretes] = useState(0);
   const tentarDeNovo = useCallback(() => {
-    setFalhou(false);
+    setFalhouRecortes(false);
+    setFalhouLembretes(false);
     setVersao((v) => v + 1);
     setVersaoLembretes((v) => v + 1);
   }, []);
@@ -566,11 +581,11 @@ export function useDadosTarefas(canal: EstadoConexao, agora: Date): Leitura<Dado
     ])
       .then(([listas, hoje, atrasadas, abertas, proximas]) => {
         if (!vivo) return;
-        setFalhou(false);
-        setRecortes({ listas, hoje, atrasadas, abertas, proximas });
+        setFalhouRecortes(false);
+        setRecortes({ listas, hoje, atrasadas, abertas, proximas, dia });
       })
       .catch(() => {
-        if (vivo) setFalhou(true);
+        if (vivo) setFalhouRecortes(true);
       });
     return () => {
       vivo = false;
@@ -584,10 +599,12 @@ export function useDadosTarefas(canal: EstadoConexao, agora: Date): Leitura<Dado
     servico
       .pedir("lembretes.listar", {})
       .then((lidos) => {
-        if (vivo) setLembretes(lidos);
+        if (!vivo) return;
+        setFalhouLembretes(false);
+        setLembretes(lidos);
       })
       .catch(() => {
-        if (vivo) setFalhou(true);
+        if (vivo) setFalhouLembretes(true);
       });
     return () => {
       vivo = false;
@@ -596,7 +613,9 @@ export function useDadosTarefas(canal: EstadoConexao, agora: Date): Leitura<Dado
 
   if (canal !== "conectado") return { estado: "esperando" };
   if (recortes && lembretes) {
-    return { estado: "pronta", dados: { ...recortes, lembretes, fuso: fusoDoDia, dia } };
+    return { estado: "pronta", dados: { ...recortes, lembretes, fuso: fusoDoDia } };
   }
+  // A leitura que já chegou não esconde a que falhou: sem uma das duas, a tela diz que não leu.
+  const falhou = (falhouRecortes && !recortes) || (falhouLembretes && !lembretes);
   return falhou ? { estado: "falhou", tentarDeNovo } : { estado: "esperando" };
 }

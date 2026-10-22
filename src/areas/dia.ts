@@ -47,16 +47,30 @@ export const hojeNoFuso = (agora: Date, fuso: string | null): string => relogioN
 const DIA_MS = 86_400_000;
 const SEMANA_CURTA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"] as const;
 const SEMANA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"] as const;
-const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"] as const;
+export const MESES = [
+  "jan",
+  "fev",
+  "mar",
+  "abr",
+  "mai",
+  "jun",
+  "jul",
+  "ago",
+  "set",
+  "out",
+  "nov",
+  "dez",
+] as const;
 
-function partes(dia: string): { ano: number; mes: number; dia: number } {
+/** Ano, mês e dia de um `AAAA-MM-DD`. */
+export function partesDoDia(dia: string): { ano: number; mes: number; dia: number } {
   const [a, m, d] = dia.split("-").map(Number);
   return { ano: a ?? 1, mes: m ?? 1, dia: d ?? 1 };
 }
 
 /** O dia do calendário em UTC; `setUTCFullYear` não leva o ano 0050 para 1950. */
 function data(dia: string): Date {
-  const p = partes(dia);
+  const p = partesDoDia(dia);
   const d = new Date(0);
   d.setUTCFullYear(p.ano, p.mes - 1, p.dia);
   return d;
@@ -65,6 +79,21 @@ function data(dia: string): Date {
 function iso(d: Date): string {
   const ano = String(d.getUTCFullYear()).padStart(4, "0");
   return `${ano}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+/** Se ano, mês e dia formam um dia que existe no calendário 0001–9999. */
+export function ehDiaDoCalendario(ano: number, mes: number, dia: number): boolean {
+  if (ano < 1 || ano > 9999 || mes < 1 || mes > 12 || dia < 1) return false;
+  const d = new Date(0);
+  d.setUTCFullYear(ano, mes - 1, dia);
+  return d.getUTCFullYear() === ano && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
+}
+
+/** O `AAAA-MM-DD` de ano, mês e dia. */
+export function diaDoCalendario(ano: number, mes: number, dia: number): string {
+  const d = new Date(0);
+  d.setUTCFullYear(ano, mes - 1, dia);
+  return iso(d);
 }
 
 export function somarDias(dia: string, dias: number): string {
@@ -80,7 +109,7 @@ export function diasEntre(de: string, ate: string): number {
 
 /** O dia no relógio local, ao meio-dia, para o cabeçalho das páginas ("Quinta, 8 de outubro"). */
 export function dataDoDia(dia: string): Date {
-  const p = partes(dia);
+  const p = partesDoDia(dia);
   const d = new Date(2000, p.mes - 1, p.dia, 12);
   d.setFullYear(p.ano);
   return d;
@@ -90,7 +119,7 @@ export function dataDoDia(dia: string): Date {
 function diaEMes(dia: string, hoje: string): string {
   const d = data(dia);
   const texto = `${d.getUTCDate()} ${MESES[d.getUTCMonth()]}`;
-  return d.getUTCFullYear() === partes(hoje).ano ? texto : `${texto} ${d.getUTCFullYear()}`;
+  return d.getUTCFullYear() === partesDoDia(hoje).ano ? texto : `${texto} ${d.getUTCFullYear()}`;
 }
 
 /** "Hoje", "Amanhã" ou "sex, 9 out" (com o ano quando não é o de hoje), como no PainelTarefas. */

@@ -7,10 +7,14 @@ import type {
   TipoLancavel,
 } from "@moductus/contrato";
 import {
+  diaDoCalendario,
+  ehDiaDoCalendario,
   formatarAntes,
   formatarDia,
   formatarMinutos,
   formatarRepeticao,
+  MESES,
+  partesDoDia,
   somarDias,
 } from "../../areas/dia.ts";
 
@@ -146,19 +150,6 @@ export interface Contexto {
   listas: readonly Pick<Lista, "id" | "nome">[];
 }
 
-/** Os meses do texto que a pessoa digita ("9 out"), os mesmos do `formatarDia`. */
-const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-
-function partes(dia: string): { ano: number; mes: number; dia: number } {
-  const [a, m, d] = dia.split("-").map(Number);
-  return { ano: a!, mes: m!, dia: d! };
-}
-
-function iso(d: Date): string {
-  const ano = String(d.getUTCFullYear()).padStart(4, "0");
-  return `${ano}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-}
-
 const REAIS = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 /** O texto do campo na tela; vazio quando a frase não disse (o espaço mostra o "sem dia"). */
@@ -207,13 +198,6 @@ export type Leitura<T> = { ok: true; valor: T } | { ok: false; erro: string };
 const sem = (texto: string) =>
   texto.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ");
 
-function ehDiaValido(ano: number, mes: number, dia: number): boolean {
-  if (ano < 1 || ano > 9999 || mes < 1 || mes > 12 || dia < 1) return false;
-  const d = new Date(0);
-  d.setUTCFullYear(ano, mes - 1, dia);
-  return d.getUTCFullYear() === ano && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
-}
-
 export const ERRO_DIA = "Dia: use dd/mm, hoje ou amanhã.";
 export const ERRO_HORA = "Hora: use HH:MM, como 15:00.";
 export const ERRO_DURACAO = "Duração: use minutos ou horas, como 30 min ou 1 h.";
@@ -239,7 +223,7 @@ export function lerDia(texto: string, hoje: string): Leitura<string | null> {
     mes = Number(numerico[2]);
     if (numerico[3]) ano = numerico[3].length === 2 ? 2000 + Number(numerico[3]) : Number(numerico[3]);
   } else if (porNome) {
-    const indice = MESES.indexOf(porNome[2]!);
+    const indice = (MESES as readonly string[]).indexOf(porNome[2]!);
     if (indice < 0) return { ok: false, erro: ERRO_DIA };
     dia = Number(porNome[1]);
     mes = indice + 1;
@@ -247,20 +231,14 @@ export function lerDia(texto: string, hoje: string): Leitura<string | null> {
   } else {
     return { ok: false, erro: ERRO_DIA };
   }
-  const deHoje = partes(hoje);
+  const deHoje = partesDoDia(hoje);
   if (ano === null) {
     ano = deHoje.ano;
     // "05/01" em outubro é o de janeiro que vem, não o que já passou.
-    if (ehDiaValido(ano, mes, dia) && iso(dataDe(ano, mes, dia)) < hoje) ano += 1;
+    if (ehDiaDoCalendario(ano, mes, dia) && diaDoCalendario(ano, mes, dia) < hoje) ano += 1;
   }
-  if (!ehDiaValido(ano, mes, dia)) return { ok: false, erro: ERRO_DIA };
-  return { ok: true, valor: iso(dataDe(ano, mes, dia)) };
-}
-
-function dataDe(ano: number, mes: number, dia: number): Date {
-  const d = new Date(0);
-  d.setUTCFullYear(ano, mes - 1, dia);
-  return d;
+  if (!ehDiaDoCalendario(ano, mes, dia)) return { ok: false, erro: ERRO_DIA };
+  return { ok: true, valor: diaDoCalendario(ano, mes, dia) };
 }
 
 /** A hora digitada: vazio, "15", "15h", "15:00", "15h30", "9:05". */

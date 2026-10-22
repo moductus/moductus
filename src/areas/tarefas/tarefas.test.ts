@@ -139,6 +139,30 @@ describe("Próximos 7 dias e Todas", () => {
     expect(grupos[0]!.linhas[0]!.nota).toBe("subtarefas 1 de 2");
   });
 
+  it("a filha que vence na janela vira linha quando a mãe vence longe; feita não vira", () => {
+    const longe = tarefa({ titulo: "Mãe longe", venceEm: "2026-10-30" });
+    const grupos = gruposDosProximos(
+      [
+        longe,
+        tarefa({ titulo: "Filha amanhã", tarefaPaiId: longe.id, venceEm: "2026-10-09" }),
+        tarefa({
+          titulo: "Filha feita",
+          tarefaPaiId: longe.id,
+          venceEm: "2026-10-10",
+          estado: "feita",
+          concluidaEm: "2026-10-08T12:00:00.000Z",
+        }),
+        // A filha cuja mãe não veio no recorte (a mãe é de hoje) também é linha.
+        tarefa({ titulo: "Filha sozinha", tarefaPaiId: "mae-de-hoje", venceEm: "2026-10-11" }),
+      ],
+      HOJE,
+    );
+    expect(nomes(grupos)).toEqual([
+      ["Amanhã", ["Filha amanhã"]],
+      ["Domingo, 11 de outubro", ["Filha sozinha"]],
+    ]);
+  });
+
   it("Todas separa atrasadas, hoje, próximas e sem data, com o dia curto", () => {
     const grupos = gruposDasAbertas(
       [

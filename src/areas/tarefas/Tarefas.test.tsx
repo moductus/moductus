@@ -338,15 +338,48 @@ describe("Tarefas · Hoje", () => {
     responder({ hoje: [contador] });
     await montar();
     const antes = pedidosDe("tarefas.listar").length;
+    // Os recortes do dia novo demoram: até chegarem, a tela fica no dia dos que estão nela.
+    let soltar: () => void = () => undefined;
+    const segura = new Promise<void>((r) => (soltar = r));
+    const listar = falso.servidor["tarefas.listar"] as (p: unknown) => unknown;
+    falso.servidor["tarefas.listar"] = (p: unknown) => segura.then(() => listar(p));
     await act(async () => vi.advanceTimersByTime(60_000));
     expect(pedidosDe("tarefas.listar").length - antes).toBe(4);
+    expect(por(".pagina-data")?.textContent).toBe("Quinta, 8 de outubro");
+    await act(async () => soltar());
     expect(por(".pagina-data")?.textContent).toBe("Sexta, 9 de outubro");
+    falso.servidor["tarefas.listar"] = listar;
     // O mesmo fuso não recarrega; um fuso em que ainda é quinta, sim.
     await avisar("config.mudou", { config: { dia: { fuso: "America/Sao_Paulo" } } });
     expect(pedidosDe("tarefas.listar").length - antes).toBe(4);
     await avisar("config.mudou", { config: { dia: { fuso: "America/Los_Angeles" } } });
     expect(pedidosDe("tarefas.listar").length - antes).toBe(8);
     expect(por(".pagina-data")?.textContent).toBe("Quinta, 8 de outubro");
+  });
+
+  it("a subtarefa de amanhã com a mãe longe aparece em Próximos e conta na lateral", async () => {
+    const longe = tarefa({ id: "m1", titulo: "Mudança", venceEm: "2026-10-30" });
+    const filha = tarefa({ id: "f1", titulo: "Separar caixas", tarefaPaiId: "m1", venceEm: "2026-10-09" });
+    responder({ proximas: [longe, filha] });
+    await montar();
+    expect(item("Próximos 7 dias")?.getAttribute("aria-label")).toBe("Próximos 7 dias, 1 tarefa aberta");
+    await act(async () => item("Próximos 7 dias")!.click());
+    expect(grupos()).toEqual([["Amanhã", ["Separar caixas"]]]);
+  });
+
+  it("lembretes que falham antes dos recortes chegarem não deixam a tela presa esperando", async () => {
+    responder({ hoje: [contador] });
+    let soltar: () => void = () => undefined;
+    const segura = new Promise<void>((r) => (soltar = r));
+    const listar = falso.servidor["tarefas.listar"] as (p: unknown) => unknown;
+    falso.servidor["tarefas.listar"] = (p: unknown) => segura.then(() => listar(p));
+    delete falso.servidor["lembretes.listar"];
+    await montar();
+    await act(async () => soltar());
+    expect(por(".estado-vazio-titulo")?.textContent).toBe("O serviço não respondeu");
+    falso.servidor["lembretes.listar"] = [];
+    await act(async () => botao("Tentar de novo")!.click());
+    expect(grupos()).toEqual([["Tarde", ["Ligar para o contador"]]]);
   });
 
   it("o que muda em qualquer lugar chega pelo tarefas.mudou e a vista recarrega", async () => {
@@ -484,6 +517,23 @@ describe("Tarefas · o campo em linguagem natural", () => {
     expect(por(".tarefas-entendi")?.textContent).toContain("16:00");
     await tecla(campo, "Enter");
     expect(pedidosDe("captura.lancar")[0]).toMatchObject({ campos: { hora: "16:00" } });
+  });
+
+  it("o que a pessoa digita enquanto o lançamento vai não é apagado quando ele volta", async () => {
+    responder({});
+    falso.servidor["captura.entender"] = previa();
+    let soltar: () => void = () => undefined;
+    const segura = new Promise<void>((r) => (soltar = r));
+    falso.servidor["captura.lancar"] = () =>
+      segura.then(() => ({ id: "c6", tipo: "tarefa", itemId: "t14", desfazerAte: AGORA.toISOString() }));
+    await montar();
+    const campo = await digitar("ligar pro banco amanhã 15h");
+    await act(async () => vi.advanceTimersByTime(ESPERA_PREVIA_MS));
+    await tecla(campo, "Enter");
+    await digitar("comprar pão");
+    await act(async () => soltar());
+    expect(campo.value).toBe("comprar pão");
+    expect(por('[role="status"]')?.textContent).toContain("Tarefa criada: ligar pro banco.");
   });
 
   it("trocar de vista não apaga a frase nem o Desfazer; o status fica montado", async () => {
