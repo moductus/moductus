@@ -8,6 +8,7 @@ import { DADOS_AREAS, eAreaPainel, type AreaPainel } from "../areas.ts";
 import { CabecalhoPainel } from "./Cabecalho.tsx";
 import { PainelAgentes } from "./PainelAgentes.tsx";
 import { PainelDev } from "./PainelDev.tsx";
+import { PainelFoco } from "./PainelFoco.tsx";
 import "./Painel.css";
 
 /** O estado vazio das áreas que ainda não leem o serviço. */
@@ -25,8 +26,9 @@ function Vazio({ area }: { area: AreaPainel }) {
 }
 
 /**
- * Painel lateral: a casca diz qual área abrir. Agentes e Dev mostram os dados do serviço
- * (Agentes.dc.html, PainelDev.dc.html); as outras áreas mostram o próprio estado vazio.
+ * Painel lateral: a casca diz qual área abrir. Agentes, Dev e Foco mostram os dados do serviço
+ * (Agentes.dc.html, PainelDev.dc.html, PainelFoco.dc.html); as outras áreas mostram o próprio
+ * estado vazio.
  */
 export function Painel() {
   // O contador muda a cada abertura, mesmo quando a área é a mesma.
@@ -66,6 +68,8 @@ export function Painel() {
           <PainelAgentes canal={canal} abertura={abertura?.n ?? 0} />
         ) : area === "dev" ? (
           <PainelDev canal={canal} />
+        ) : area === "foco" ? (
+          <PainelFoco canal={canal} abertura={abertura?.n ?? 0} />
         ) : (
           <>
             <CabecalhoPainel titulo={dados?.nome ?? ""} icone={dados?.icone} />

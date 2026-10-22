@@ -243,6 +243,13 @@
   --largura-barra-trabalho: 40%;
   --dur-correr: 1.4s;
   --altura-trilho-sessao: 3px;
+  /* Painel Foco (PainelFoco.dc.html): o relógio grande em mono, os ciclos da rodada em trilhos
+     de 6 px e as linhas do "Depois deste" */
+  --tipo-relogio-foco: 48px;
+  --tracado-relogio-foco: -0.03em;
+  --altura-trilho-ciclo: 6px;
+  --raio-trilho-ciclo: 3px;
+  --altura-linha-foco: 36px;
   /* Selo dos PRs do painel Dev numa coluna só, para os títulos alinharem */
   --largura-selo-pr: 66px;
   /* Agentes (Conversas.dc.html e AreaAgente.dc.html): lista de conversas, cabeçalho da conversa,
