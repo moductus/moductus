@@ -53,6 +53,11 @@ export const EstadoFoco = z.object({
   cicloAtual: z.number().int().min(1),
   ciclosAtePausaLonga: z.number().int().min(1),
   proxima: TipoEtapa,
+  /**
+   * Se o "+5 min" vale agora: com uma etapa em andamento ou com o foco que o relógio fechou
+   * completo; o encerrado antes da hora ("Terminar ciclo") não volta a correr.
+   */
+  podeEstender: z.boolean(),
   focoHojeMin: z.number().int().nonnegative(),
   ciclosHoje: z.number().int().nonnegative(),
 });

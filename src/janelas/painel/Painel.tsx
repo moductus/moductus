@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icone } from "../../componentes/Icone.tsx";
 import { useConfiguracaoDock, useServico } from "../../nativo/eventos.ts";
 import { useCanal } from "../../servico/conexao.ts";
@@ -8,7 +8,7 @@ import { DADOS_AREAS, eAreaPainel, type AreaPainel } from "../areas.ts";
 import { CabecalhoPainel } from "./Cabecalho.tsx";
 import { PainelAgentes } from "./PainelAgentes.tsx";
 import { PainelDev } from "./PainelDev.tsx";
-import { PainelFoco } from "./PainelFoco.tsx";
+import { PainelFoco, type Recusas } from "./PainelFoco.tsx";
 import "./Painel.css";
 
 /** O estado vazio das áreas que ainda não leem o serviço. */
@@ -36,6 +36,10 @@ export function Painel() {
   const { lado } = useConfiguracaoDock();
   const canal = useCanal(useServico({ silencioso: true }));
   const area = abertura && eAreaPainel(abertura.area) ? abertura.area : null;
+  // O "Não" às sugestões do Foco vale enquanto a janela vive, mesmo trocando de área.
+  const [recusados, setRecusados] = useState<ReadonlySet<string>>(() => new Set());
+  const recusar = useCallback((chave: string) => setRecusados((atual) => new Set(atual).add(chave)), []);
+  const recusas = useMemo<Recusas>(() => ({ recusados, recusar }), [recusados, recusar]);
 
   useEffect(() => {
     let n = 0;
@@ -69,7 +73,7 @@ export function Painel() {
         ) : area === "dev" ? (
           <PainelDev canal={canal} />
         ) : area === "foco" ? (
-          <PainelFoco canal={canal} abertura={abertura?.n ?? 0} />
+          <PainelFoco canal={canal} abertura={abertura?.n ?? 0} recusas={recusas} />
         ) : (
           <>
             <CabecalhoPainel titulo={dados?.nome ?? ""} icone={dados?.icone} />

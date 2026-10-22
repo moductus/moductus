@@ -4,12 +4,6 @@
  * que vai a zero com movimento reduzido (src/tokens/temas.css).
  */
 
-/* O atalho da área no alto, à direita do título. */
-.painel-atalho {
-  display: inline-flex;
-  flex: none;
-}
-
 .foco-cartao {
   display: flex;
   flex-direction: column;

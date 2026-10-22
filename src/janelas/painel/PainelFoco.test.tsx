@@ -57,6 +57,7 @@ function focoEm(campos: Partial<EstadoFoco> = {}): EstadoFoco {
     cicloAtual: 2,
     ciclosAtePausaLonga: 4,
     proxima: "pausa",
+    podeEstender: true,
     focoHojeMin: 75,
     ciclosHoje: 3,
     ...campos,
@@ -175,6 +176,11 @@ async function montar(comDock = false) {
     ),
   );
   await act(async () => eventosCasca.get("painel:area")?.forEach((fn) => fn({ payload: "foco" })));
+}
+
+/** A casca abre outra área no mesmo painel, como o clique no dock. */
+async function abrir(area: string) {
+  await act(async () => eventosCasca.get("painel:area")?.forEach((fn) => fn({ payload: area })));
 }
 
 async function emitir(nome: string, dados: unknown) {
@@ -323,6 +329,67 @@ describe("painel Foco", () => {
     await clicar("Começar foco");
     expect(pedidos("foco.iniciar")).toEqual([{ tipo: "pausa" }, {}]);
     expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("o ciclo encerrado antes da hora não oferece o +5 min, que o serviço recusaria", async () => {
+    servidor.foco = focoEm({ etapa: null, proxima: "pausa", podeEstender: false });
+    await montar();
+    expect(painel().textContent).toContain("Ciclo 2 de 4 terminou.");
+    const botoes = [...painel().querySelectorAll("button")].map((b) => b.textContent);
+    expect(botoes).toContain("Começar a pausa");
+    expect(botoes).toContain("Pular a pausa");
+    expect(botoes).not.toContain("+5 min de foco");
+
+    // Fechado pelo relógio, completo, o +5 volta.
+    await emitir("foco.mudou", focoEm({ etapa: null, proxima: "pausa", podeEstender: true }));
+    await clicar("+5 min de foco");
+    expect(pedidos("foco.estender")).toEqual([{ minutos: 5 }]);
+  });
+
+  it("o bloco guardado vale só nesta abertura e até o fim do desfazer", async () => {
+    servidor.tarefas = [tarefa("t1", "Separar comprovantes do mês")];
+    servidor.dia = {
+      dia: "2026-10-18",
+      livres: [{ inicio: local(16), fim: local(17, 30), minutos: 90 }],
+      livreMin: 90,
+      planejadoMin: 25,
+      cheio: false,
+      sugestoes: [{ tarefaId: "t1", inicio: local(16), fim: local(16, 25) }],
+    };
+    await montar();
+    await clicar("Guardar bloco");
+    expect(painel().textContent).toContain("Guardei das 16h às 16h25");
+    // Reaberto o painel, o recado sai e a sugestão que o serviço ainda tiver volta.
+    await abrir("foco");
+    expect(painel().textContent).not.toContain("Guardei");
+    expect(painel().textContent).toContain("Seu próximo bloco livre");
+
+    await clicar("Guardar bloco");
+    expect(painel().textContent).toContain("Desfazer");
+    // Passado o desfazerAte (23:00), o Desfazer some com o recado.
+    await act(async () => vi.advanceTimersByTime(9 * 60 * MIN));
+    await act(async () => vi.advanceTimersByTime(MIN));
+    expect(painel().textContent).not.toContain("Desfazer");
+    expect(painel().textContent).not.toContain("Guardei");
+  });
+
+  it("o Não vale enquanto a janela vive, mesmo depois de abrir outra área", async () => {
+    servidor.tarefas = [tarefa("t1", "Separar comprovantes do mês")];
+    servidor.dia = {
+      dia: "2026-10-18",
+      livres: [{ inicio: local(16), fim: local(17, 30), minutos: 90 }],
+      livreMin: 90,
+      planejadoMin: 25,
+      cheio: false,
+      sugestoes: [{ tarefaId: "t1", inicio: local(16), fim: local(16, 25) }],
+    };
+    await montar();
+    await clicar("Não");
+    await abrir("hoje");
+    expect(painel().querySelector(".foco-cartao")).toBeNull();
+    await abrir("foco");
+    expect(painel().querySelector(".foco-cartao")).not.toBeNull();
+    expect(painel().querySelector(".foco-sugestao")).toBeNull();
   });
 
   it("a Alba sugere o próximo bloco livre; Guardar aplica a sugestão como veio, e dá para desfazer", async () => {

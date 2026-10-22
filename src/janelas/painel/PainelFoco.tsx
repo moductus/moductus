@@ -1,4 +1,11 @@
-import type { CiclosFoco, EstadoFoco, EtapaFoco, NomeMetodo, Tarefa } from "@moductus/contrato";
+import type {
+  CiclosFoco,
+  EstadoFoco,
+  EtapaFoco,
+  NomeMetodo,
+  SugestaoAplicada,
+  Tarefa,
+} from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
 import { useId, useState, type ReactNode } from "react";
 import { haQuanto, useAgora } from "../../areas/tempo.ts";
@@ -132,7 +139,7 @@ function CartaoEtapa({ foco, etapa, segundos, agora, etiqueta, pedir }: PropsCar
             <Botao onClick={() => void pedir("foco.terminar")}>
               {ehFoco ? "Terminar ciclo" : "Encerrar a rodada"}
             </Botao>
-            {ehFoco && (
+            {ehFoco && foco.podeEstender && (
               <Botao
                 variante="fantasma"
                 onClick={() => void pedir("foco.estender", { minutos: MINUTOS_A_MAIS })}
@@ -173,9 +180,15 @@ function CartaoParado({
             Começar a pausa
           </Botao>
           <Botao onClick={() => void pedir("foco.pularPausa")}>Pular a pausa</Botao>
-          <Botao variante="fantasma" onClick={() => void pedir("foco.estender", { minutos: MINUTOS_A_MAIS })}>
-            {`+${MINUTOS_A_MAIS} min de foco`}
-          </Botao>
+          {/* O foco encerrado antes da hora não volta a correr: o serviço diz quando o +5 vale. */}
+          {foco.podeEstender && (
+            <Botao
+              variante="fantasma"
+              onClick={() => void pedir("foco.estender", { minutos: MINUTOS_A_MAIS })}
+            >
+              {`+${MINUTOS_A_MAIS} min de foco`}
+            </Botao>
+          )}
         </div>
       </section>
     );
@@ -306,10 +319,21 @@ function DepoisDeste({ tarefas, pedir }: { tarefas: readonly Tarefa[]; pedir: Pe
   );
 }
 
-/** O que o "Guardar bloco" criou, com o desfazer de 24 h da ação `interno`. */
+/**
+ * O que o "Guardar bloco" criou, com o desfazer de 24 h da ação `interno`. Vale só na abertura do
+ * painel em que foi feito e até `desfazerAte`: depois disso, volta a sugestão que houver.
+ */
 interface Guardado {
   texto: string;
   chamadaId: string;
+  desfazerAte: string;
+  abertura: number;
+}
+
+/** As sugestões recusadas no "Não", guardadas pelo painel enquanto a janela vive. */
+export interface Recusas {
+  recusados: ReadonlySet<string>;
+  recusar: (chave: string) => void;
 }
 
 function SugestaoDaAlba({ children, acoes }: { children: ReactNode; acoes: ReactNode }) {
@@ -330,7 +354,15 @@ function SugestaoDaAlba({ children, acoes }: { children: ReactNode; acoes: React
  * próximas tarefas e a sugestão da Alba para o próximo bloco livre. O Ctrl+Alt+P (Configurações ›
  * Atalhos) vale de qualquer lugar e chega aqui pelo `foco.mudou`.
  */
-export function PainelFoco({ canal, abertura }: { canal: EstadoConexao; abertura: number }) {
+export function PainelFoco({
+  canal,
+  abertura,
+  recusas,
+}: {
+  canal: EstadoConexao;
+  abertura: number;
+  recusas: Recusas;
+}) {
   const foco = useEstadoFoco(canal, abertura);
   const estadoConfig = useConfigDoFoco(canal);
   const config = estadoConfig?.config ?? null;
@@ -340,7 +372,6 @@ export function PainelFoco({ canal, abertura }: { canal: EstadoConexao; abertura
   const dia = useDiaDaAgenda(canal, hoje, abertura);
   const etapa = foco?.etapa ?? null;
   const segundos = useSegundosRestantes(etapa, 1, abertura);
-  const [recusados, setRecusados] = useState<ReadonlySet<string>>(() => new Set());
   const [guardado, setGuardado] = useState<Guardado | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -360,23 +391,29 @@ export function PainelFoco({ canal, abertura }: { canal: EstadoConexao; abertura
   const atualId = etapa?.tarefaId ?? null;
   const lista = tarefas ?? [];
   const etiqueta = lista.find((t) => t.id === atualId)?.etiquetas[0]?.nome ?? null;
-  const encaixe = proximoEncaixe(dia, lista, atualId, recusados);
+  const encaixe = proximoEncaixe(dia, lista, atualId, recusas.recusados);
+  const guardadoAgora =
+    guardado && guardado.abertura === abertura && Date.parse(guardado.desfazerAte) > agora.getTime()
+      ? guardado
+      : null;
 
   const guardar = (e: Encaixe) =>
     void pedir("agenda.aplicarSugestao", e.sugestao).then((aplicada) => {
       if (!aplicada) return;
-      const { chamadaId } = aplicada as { chamadaId: string };
+      const { chamadaId, desfazerAte } = aplicada as SugestaoAplicada;
       const { inicio, fim } = e.sugestao;
       setGuardado({
         texto: `Guardei das ${horaFalada(inicio)} às ${horaFalada(fim)} para “${e.titulo}”.`,
         chamadaId,
+        desfazerAte,
+        abertura,
       });
     });
   const desfazer = (g: Guardado) =>
     void pedir("execucoes.desfazer", { chamadaId: g.chamadaId }).then((feito) => {
       if (feito) setGuardado(null);
     });
-  const recusar = (e: Encaixe) => setRecusados((atual) => new Set(atual).add(chaveDoEncaixe(e.sugestao)));
+  const recusar = (e: Encaixe) => recusas.recusar(chaveDoEncaixe(e.sugestao));
 
   return (
     <>
@@ -413,15 +450,15 @@ export function PainelFoco({ canal, abertura }: { canal: EstadoConexao; abertura
             {etapa && <LinhaSilencio etapa={etapa} silenciaNoFoco={config?.silencio.foco ?? true} />}
             <Hoje foco={foco} />
             {tarefas && <DepoisDeste tarefas={depoisDeste(lista, atualId)} pedir={pedir} />}
-            {guardado ? (
+            {guardadoAgora ? (
               <SugestaoDaAlba
                 acoes={
-                  <Botao variante="fantasma" tamanho="pequeno" onClick={() => desfazer(guardado)}>
+                  <Botao variante="fantasma" tamanho="pequeno" onClick={() => desfazer(guardadoAgora)}>
                     Desfazer
                   </Botao>
                 }
               >
-                {guardado.texto}
+                {guardadoAgora.texto}
               </SugestaoDaAlba>
             ) : (
               encaixe && (
