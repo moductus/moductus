@@ -65,11 +65,42 @@ export type MudancaLembrete = z.infer<typeof MudancaLembrete>;
 export const PedidoLembretes = z.object({ ids: z.array(Id).min(1) });
 export type PedidoLembretes = z.infer<typeof PedidoLembretes>;
 
+/**
+ * O "Adiar 10 min" do lembrete tocando, igual no aviso do Windows e no painel Hoje, e o "Adiar os 2
+ * em 30 min" dos atrasados: um número só para os dois caminhos valerem o mesmo.
+ */
+export const ADIAR_LEMBRETE_MIN = 10;
+export const ADIAR_ATRASADOS_MIN = 30;
+
+/**
+ * A ocorrência que a tela mostrou tocando (o `quando` do lembrete). Com ela, o pedido só vale se o
+ * lembrete ainda toca nessa ocorrência, a mesma trava do botão do aviso do Windows: o Feito de um
+ * cartão velho não decide pela próxima. Vale para um lembrete só; sem ela, o pedido vale como
+ * sempre.
+ */
+const ocorrencia = { quando: InstanteEntrada.optional() };
+const umSoComOcorrencia = (p: { ids: string[]; quando?: string }) =>
+  p.quando === undefined || p.ids.length === 1;
+const MENSAGEM_OCORRENCIA = { path: ["quando"], message: "a ocorrência vale para um lembrete só" };
+
+/** O "Feito" do lembrete: vários de uma vez, ou um só na ocorrência que estava tocando. */
+export const PedidoConcluirLembretes = PedidoLembretes.extend(ocorrencia).refine(
+  umSoComOcorrencia,
+  MENSAGEM_OCORRENCIA,
+);
+export type PedidoConcluirLembretes = z.infer<typeof PedidoConcluirLembretes>;
+
+/** O que o serviço diz quando a ocorrência do pedido já não está tocando. */
+export const MENSAGEM_LEMBRETE_NAO_TOCA = "este lembrete já não está tocando";
+
 /** "Adiar 10 min" do aviso e do painel, "Adiar os 2 em 30 min" dos atrasados: a partir de agora. */
-export const PedidoAdiarLembretes = z.object({
-  ids: z.array(Id).min(1),
-  minutos: z.number().int().min(1).max(1440),
-});
+export const PedidoAdiarLembretes = z
+  .object({
+    ids: z.array(Id).min(1),
+    minutos: z.number().int().min(1).max(1440),
+    ...ocorrencia,
+  })
+  .refine(umSoComOcorrencia, MENSAGEM_OCORRENCIA);
 export type PedidoAdiarLembretes = z.infer<typeof PedidoAdiarLembretes>;
 
 /** Os de um intervalo de `quando` (ou de `adiadoAte`), ou só os de um estado. */

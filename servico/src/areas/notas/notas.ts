@@ -19,6 +19,7 @@ import {
 import { nomeChave } from "../../banco/nome-chave.ts";
 import { colunasDeOrigem, DO_USUARIO, type Carimbo } from "../../banco/tabela.ts";
 import { novoId } from "../../banco/ulid.ts";
+import { RecusaDesfazer, type ContextoDesfazer } from "../../ferramentas/ferramenta.ts";
 import { comecoDoTexto, consultaFts, encurtarPedacos, lerSnippet, trechoCorrido } from "./trecho.ts";
 
 /**
@@ -34,6 +35,8 @@ import { comecoDoTexto, consultaFts, encurtarPedacos, lerSnippet, trechoCorrido 
 export const MENSAGEM_NAO_ENCONTRADA = "nota não encontrada";
 export const MENSAGEM_BLOCO_FIXO = "o bloco rápido fica sempre fixo no topo";
 export const MENSAGEM_NOTA_DA_TAREFA = "a nota desta tarefa não existe mais";
+export const MENSAGEM_DESFAZER_SAIU = "a nota já saiu";
+export const MENSAGEM_DESFAZER_MUDOU = "a nota foi mudada depois";
 
 /** Quantos resultados a busca traz quando o pedido não diz. */
 const LIMITE_BUSCA = 20;
@@ -350,6 +353,45 @@ export class ServicoNotas {
     if (notaId === null || notaId === undefined) return null;
     if (!this.repo.nota(notaId)) throw new Error(MENSAGEM_NOTA_DA_TAREFA);
     return notaId;
+  }
+
+  /**
+   * A inversa de criar pelas ferramentas da Alba (ADR-0029): a nota vai à lixeira, se o texto
+   * continua na versão em que a chamada a deixou e ninguém a fixou ou mudou de pasta depois (que
+   * não muda a versão, mas troca quem mexeu por último).
+   */
+  desfazerCriacao(alvo: { id: string; versao: string }, ctx: ContextoDesfazer): void {
+    const atual = this.repo.nota(alvo.id);
+    if (!atual) throw new RecusaDesfazer(MENSAGEM_DESFAZER_SAIU);
+    const mesmoAutor = atual.agenteId === ctx.agenteId && atual.execucaoId === ctx.execucaoId;
+    if (atual.atualizadoEm !== alvo.versao || !mesmoAutor) throw new RecusaDesfazer(MENSAGEM_DESFAZER_MUDOU);
+    this.repo.apagar(atual.id, this.agora().toISOString(), ctx.carimbo);
+    this.depoisDoDesfazer(atual.id);
+  }
+
+  /**
+   * A inversa de salvar o texto: o título e o conteúdo de antes voltam, com versão nova, só se a nota
+   * continua na versão em que a chamada a deixou. A conferência e a gravação são um comando só.
+   */
+  desfazerTexto(
+    alvo: { id: string; versao: string; antes: { titulo: string; conteudo: string } },
+    ctx: ContextoDesfazer,
+  ): void {
+    const atual = this.repo.nota(alvo.id);
+    if (!atual) throw new RecusaDesfazer(MENSAGEM_DESFAZER_SAIU);
+    const versao = this.versaoDepoisDe(alvo.versao);
+    if (!this.repo.salvarTexto(atual.id, alvo.versao, alvo.antes, versao, ctx.carimbo)) {
+      throw new RecusaDesfazer(MENSAGEM_DESFAZER_MUDOU);
+    }
+    this.depoisDoDesfazer(atual.id);
+  }
+
+  /** O aviso do desfazer sai depois da transação dele, com o que ficou gravado. */
+  private depoisDoDesfazer(id: string): void {
+    queueMicrotask(() => {
+      const nota = this.repo.nota(id);
+      this.avisos.mudou(nota ? { notas: [nota], apagadas: [] } : { notas: [], apagadas: [id] });
+    });
   }
 
   private exigir(id: string): Nota {

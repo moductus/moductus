@@ -2,7 +2,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { CONFIG_PADRAO, METODOS, type LembretesDeHoje, type MudancaLembretes } from "@moductus/contrato";
+import {
+  ADIAR_LEMBRETE_MIN,
+  CONFIG_PADRAO,
+  MENSAGEM_LEMBRETE_NAO_TOCA,
+  METODOS,
+  type LembretesDeHoje,
+  type MudancaLembretes,
+} from "@moductus/contrato";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { RepositorioAgentes } from "../../agentes/agentes.ts";
 import { abrirBanco } from "../../banco/conexao.ts";
@@ -45,7 +52,7 @@ const HOJE = "2026-10-08";
  * Banco migrado de verdade, as notificações de verdade com uma casca de mentira que só anota, e o
  * relógio do dia de verdade sobre o relógio falso do vitest. Nenhum provedor, nenhuma rede.
  */
-function montar(opcoes: { agora?: Date; ligar?: boolean } = {}) {
+function montar(opcoes: { agora?: Date; ligar?: boolean; noGoogle?: (lembreteId: string) => boolean } = {}) {
   vi.setSystemTime(opcoes.agora ?? sp(HOJE, "14:30"));
   const pasta = mkdtempSync(join(tmpdir(), "moductus-lembretes-"));
   pastas.push(pasta);
@@ -77,7 +84,7 @@ function montar(opcoes: { agora?: Date; ligar?: boolean } = {}) {
   const eventos = { mudou: [] as MudancaLembretes[], hoje: [] as LembretesDeHoje[] };
   const lembretes = new ServicoLembretes(
     new RepositorioLembretes(db),
-    { lerFuso: () => config.fuso, notificacoes, relogio },
+    { lerFuso: () => config.fuso, notificacoes, relogio, noGoogle: opcoes.noGoogle },
     { mudou: (m) => eventos.mudou.push(m), hoje: (h) => eventos.hoje.push(h) },
   );
   relogio.registrar(lembretes);
@@ -289,6 +296,37 @@ describe("aviso do Windows", () => {
     expect(lembretes.listar({})).toEqual([]);
     expect(casca.retirados).toContain(segundo.id);
     await expect(lembretes.adiar({ ids: [criado.id], minutos: 10 })).rejects.toThrow(MENSAGEM_NAO_ENCONTRADO);
+  });
+
+  test("com a ocorrência, Adiar e Feito do painel só valem enquanto ela toca, como o botão do aviso", async () => {
+    const { casca, relogio, lembretes } = montar();
+    await relogio.ligar();
+    const criado = await lembretes.criar({ texto: "Ligar para o contador", quando: iso(sp(HOJE, "14:45")) });
+    await vi.advanceTimersByTimeAsync(15 * MIN);
+    const tocando = unico(lembretes.hoje().tocando);
+    const outra = iso(sp(HOJE, "14:44"));
+
+    await expect(
+      lembretes.adiar({ ids: [criado.id], minutos: ADIAR_LEMBRETE_MIN, quando: outra }),
+    ).rejects.toThrow(MENSAGEM_LEMBRETE_NAO_TOCA);
+    await expect(lembretes.concluir({ ids: [criado.id], quando: outra })).rejects.toThrow(
+      MENSAGEM_LEMBRETE_NAO_TOCA,
+    );
+    expect(unico(lembretes.listar({}))).toMatchObject({ estado: "disparado" });
+
+    await lembretes.adiar({ ids: [criado.id], minutos: ADIAR_LEMBRETE_MIN, quando: tocando.quando });
+    expect(unico(lembretes.listar({}))).toMatchObject({
+      estado: "adiado",
+      adiadoAte: iso(sp(HOJE, "14:55")),
+    });
+    expect(casca.retirados).toHaveLength(1);
+
+    // Adiado, o cartão velho do painel não conclui; o pedido sem ocorrência vale como sempre.
+    await expect(lembretes.concluir({ ids: [criado.id], quando: tocando.quando })).rejects.toThrow(
+      MENSAGEM_LEMBRETE_NAO_TOCA,
+    );
+    await lembretes.concluir({ ids: [criado.id] });
+    expect(lembretes.listar({})).toEqual([]);
   });
 
   test("cancelar manda à lixeira e tira o aviso de quem estava tocando", async () => {
@@ -561,6 +599,28 @@ describe("volta 1", () => {
     await relogio.retomar();
     expect(casca.mostrados).toEqual([]);
     expect(unico(lembretes.hoje().atrasados).texto).toBe("Postura");
+  });
+
+  test("canal calendario: no Google, toca pelo celular; com o envio na fila ou sem Google, pelo Windows", async () => {
+    const chegaram = new Set<string>();
+    const { casca, relogio, lembretes } = montar({
+      agora: sp(HOJE, "14:20"),
+      noGoogle: (id) => chegaram.has(id),
+    });
+    await relogio.ligar();
+    const noCelular = await lembretes.criar({
+      texto: "Remédio",
+      quando: iso(sp(HOJE, "14:30")),
+      canal: "calendario",
+    });
+    chegaram.add(noCelular.id);
+    await lembretes.criar({ texto: "Ainda na fila", quando: iso(sp(HOJE, "14:40")), canal: "calendario" });
+    // O do canal Windows que também foi ao Google avisa nos dois: o canal é dele.
+    const windows = await lembretes.criar({ texto: "Reunião", quando: iso(sp(HOJE, "14:50")) });
+    chegaram.add(windows.id);
+    await vi.advanceTimersByTimeAsync(31 * MIN);
+    expect(casca.mostrados.map((a) => a.titulo)).toEqual(["Ainda na fila", "Reunião"]);
+    expect(lembretes.hoje().tocando.map((l) => l.texto)).toEqual(["Remédio", "Ainda na fila", "Reunião"]);
   });
 
   test("cada atrasado com a ausência em que venceu: o cartão só mostra a que vale para todos", async () => {

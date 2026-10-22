@@ -1,8 +1,11 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
+  ADIAR_LEMBRETE_MIN,
+  MENSAGEM_LEMBRETE_NAO_TOCA,
   MudancaLembrete,
   NovoLembrete,
   PedidoAdiarLembretes,
+  PedidoConcluirLembretes,
   PedidoLembretes,
   PedidoListarLembretes,
   type Apagados,
@@ -16,6 +19,7 @@ import {
 } from "@moductus/contrato";
 import { colunasDeOrigem, DO_USUARIO, type Carimbo } from "../../banco/tabela.ts";
 import { novoId } from "../../banco/ulid.ts";
+import { RecusaDesfazer, type ContextoDesfazer } from "../../ferramentas/ferramenta.ts";
 import type { BotaoAviso, NovoAviso, ServicoNotificacoes } from "../../notificacoes/notificacoes.ts";
 import { lerRecorrencia, proximoInstante } from "../dia/recorrencia.ts";
 import type { Ausencia, Conferencia, FonteDoRelogio } from "../dia/relogio.ts";
@@ -44,17 +48,17 @@ import { TempoDoDia } from "../dia/tempo.ts";
 export const MENSAGEM_NAO_ENCONTRADO = "lembrete não encontrado";
 export const MENSAGEM_TAREFA = "a tarefa deste lembrete não existe mais";
 export const MENSAGEM_EVENTO = "o evento deste lembrete não existe mais";
+export const MENSAGEM_DESFAZER_SAIU = "o lembrete já saiu";
+export const MENSAGEM_DESFAZER_MUDOU = "o lembrete tocou ou foi mudado depois";
+export const MENSAGEM_DESFAZER_DE_OUTRO = "o lembrete foi mudado depois por você ou em outra conversa";
 
 /** Até quanto depois da hora o lembrete ainda toca; mais que isso, vira atrasado. */
 export const TOLERANCIA_MS = 2 * 60_000;
 /** O próximo lembrete aparece no topo do Hoje, sem som, a partir de 30 min antes. */
 export const ANTECEDENCIA_MS = 30 * 60_000;
-/** O "Adiar 10 min" do aviso do Windows. */
-export const ADIAR_DO_AVISO_MIN = 10;
-
 /** Os botões do aviso, os mesmos do lembrete tocando no painel Hoje (LembreteHoje.dc.html). */
 export const BOTOES_DO_LEMBRETE: readonly BotaoAviso[] = [
-  { id: "adiar", rotulo: `Adiar ${ADIAR_DO_AVISO_MIN} min` },
+  { id: "adiar", rotulo: `Adiar ${ADIAR_LEMBRETE_MIN} min` },
   { id: "feito", rotulo: "Feito" },
 ];
 
@@ -132,6 +136,16 @@ export interface CamposLembrete {
   estado: EstadoLembrete;
   disparado_em: string | null;
   adiado_ate: string | null;
+}
+
+/**
+ * Como um lembrete estava, vivo ou na lixeira: os campos e a versão (`atualizado_em`). A ferramenta
+ * guarda o de antes de mexer e a versão em que deixou, e o desfazer põe os campos de volta.
+ */
+export interface RetratoLembrete {
+  id: string;
+  campos: CamposLembrete;
+  versao: string;
 }
 
 const camposDe = (l: LinhaLembrete): CamposLembrete => ({
@@ -296,6 +310,40 @@ export class RepositorioLembretes {
     for (const id of ids) apagar.run(agora, agora, origem.origem, origem.agente_id, origem.execucao_id, id);
   }
 
+  /** O lembrete vivo ou na lixeira: o desfazer confere a versão dos dois. */
+  qualquer(id: string): LinhaLembrete | null {
+    const linha = this.db.prepare(`SELECT ${COLUNAS} FROM lembretes WHERE id = ?`).get(id) as unknown as
+      LinhaLembrete | undefined;
+    return linha ?? null;
+  }
+
+  /** Põe os campos de volta e tira da lixeira, se estava lá: a inversa das ferramentas da Alba. */
+  restaurar(id: string, c: CamposLembrete, agora: string, carimbo: Carimbo): void {
+    const origem = colunasDeOrigem(carimbo);
+    this.db
+      .prepare(
+        `UPDATE lembretes SET texto = ?, quando = ?, recorrencia = ?, inicio_recorrencia = ?, canal = ?, estado = ?,
+           disparado_em = ?, adiado_ate = ?, apagado_em = NULL, atualizado_em = ?, origem = ?, agente_id = ?,
+           execucao_id = ?
+          WHERE id = ?`,
+      )
+      .run(
+        c.texto,
+        c.quando,
+        c.recorrencia,
+        c.inicio_recorrencia,
+        c.canal,
+        c.estado,
+        c.disparado_em,
+        c.adiado_ate,
+        agora,
+        origem.origem,
+        origem.agente_id,
+        origem.execucao_id,
+        id,
+      );
+  }
+
   /** O `quando` de um lembrete, vivo ou na lixeira: o aviso da ocorrência sai com ele. */
   quandoDe(id: string): string | null {
     const linha = this.db.prepare("SELECT quando FROM lembretes WHERE id = ?").get(id) as
@@ -395,6 +443,11 @@ export interface FontesLembretes {
   notificacoes: NotificacoesDoLembrete;
   /** O relógio do dia, para se rearmar a cada mudança. */
   relogio?: { mudou(): void };
+  /**
+   * Se o lembrete já está no calendário "Moductus" do Google, sem nada na fila (F3-24): o do canal
+   * `calendario` então toca no celular, e o Windows não avisa de novo.
+   */
+  noGoogle?: (lembreteId: string) => boolean;
 }
 
 export interface AvisosLembretes {
@@ -515,11 +568,15 @@ export class ServicoLembretes implements FonteDoRelogio {
 
   /**
    * Texto, horário, repetição e canal. Mudar o `quando` volta o lembrete a agendado; mudar o
-   * horário ou a regra faz a regra contar de novo a partir do `quando`.
+   * horário ou a regra faz a regra contar de novo a partir do `quando`. O adiado que recebe o
+   * próprio `quando` de volta (o evento movido no Google para a hora de antes do adiamento, F3-24)
+   * também volta a agendado nele, sem mexer na regra.
    */
   async definir(entrada: MudancaLembrete, carimbo: Carimbo = DO_USUARIO): Promise<Lembrete> {
     const mudanca = MudancaLembrete.parse(entrada);
     const atual = this.exigir(mudanca.id);
+    const desadiou =
+      mudanca.quando !== undefined && mudanca.quando === atual.quando && atual.estado === "adiado";
     const reagendou = mudanca.quando !== undefined && mudanca.quando !== atual.quando;
     const quando = mudanca.quando ?? atual.quando;
     const recorrencia = mudanca.recorrencia === undefined ? atual.recorrencia : mudanca.recorrencia;
@@ -530,14 +587,14 @@ export class ServicoLembretes implements FonteDoRelogio {
       recorrencia,
       inicio_recorrencia: recorrencia === null ? null : regraNova ? quando : atual.inicio_recorrencia,
       canal: mudanca.canal ?? atual.canal,
-      ...(reagendou ? { quando, estado: "agendado" as const, adiado_ate: null } : {}),
+      ...(reagendou || desadiou ? { quando, estado: "agendado" as const, adiado_ate: null } : {}),
     };
-    if (campos.texto === atual.texto && !regraNova && campos.canal === atual.canal)
+    if (campos.texto === atual.texto && !regraNova && !desadiou && campos.canal === atual.canal)
       return paraLembrete(atual);
     this.repo.gravar(atual.id, campos, this.instante(), carimbo);
     const lembrete = paraLembrete(this.exigir(atual.id));
     this.mudou({ lembretes: [lembrete], removidos: [] });
-    if (reagendou) await this.resolver([atual]);
+    if (reagendou || desadiou) await this.resolver([atual]);
     return lembrete;
   }
 
@@ -545,6 +602,7 @@ export class ServicoLembretes implements FonteDoRelogio {
   async adiar(entrada: PedidoAdiarLembretes, carimbo: Carimbo = DO_USUARIO): Promise<Lembrete[]> {
     const pedido = PedidoAdiarLembretes.parse(entrada);
     const linhas = [...new Set(pedido.ids)].map((id) => this.exigir(id));
+    exigirTocando(linhas, pedido.quando);
     const agora = this.agora();
     const ate = new Date(agora.getTime() + pedido.minutos * 60_000).toISOString();
     this.repo.transacao(() => {
@@ -567,9 +625,10 @@ export class ServicoLembretes implements FonteDoRelogio {
    * "Feito": o de uma vez vai para a lixeira; o recorrente volta a agendado na primeira ocorrência
    * depois de agora (ou depois da que estava marcada, se ainda não chegou), e sai se a regra acabou.
    */
-  async concluir(entrada: PedidoLembretes, carimbo: Carimbo = DO_USUARIO): Promise<MudancaLembretes> {
-    const pedido = PedidoLembretes.parse(entrada);
+  async concluir(entrada: PedidoConcluirLembretes, carimbo: Carimbo = DO_USUARIO): Promise<MudancaLembretes> {
+    const pedido = PedidoConcluirLembretes.parse(entrada);
     const linhas = [...new Set(pedido.ids)].map((id) => this.exigir(id));
+    exigirTocando(linhas, pedido.quando);
     const agora = this.agora();
     const fuso = this.fontes.lerFuso();
     const continuam: string[] = [];
@@ -625,6 +684,72 @@ export class ServicoLembretes implements FonteDoRelogio {
     this.resolver([...removidos, ...(mudanca.anteriores ?? [])]).catch((erro: unknown) =>
       console.error(`lembretes: aviso do que mudou não retirado: ${String(erro)}`),
     );
+  }
+
+  // O desfazer das ferramentas da Alba (AGENTS.md §4, ADR-0029). As inversas são síncronas e rodam
+  // dentro da transação do desfazer, já aberta: não abrem outra, e os avisos saem depois dela.
+
+  /** Como cada lembrete está agora, vivo ou na lixeira; o que não existe fica de fora. */
+  retratos(ids: readonly string[]): RetratoLembrete[] {
+    return ids.flatMap((id) => {
+      const linha = this.repo.qualquer(id);
+      return linha === null ? [] : [{ id, campos: camposDe(linha), versao: linha.atualizado_em }];
+    });
+  }
+
+  /**
+   * A inversa de criar: o lembrete vai à lixeira. Ter tocado não impede (o relógio muda o estado
+   * sem trocar quem escreveu); ter sido mudado por você, ou por outra conversa, sim.
+   */
+  desfazerCriacao(alvo: { id: string }, ctx: ContextoDesfazer): void {
+    const linha = this.repo.lembrete(alvo.id);
+    if (linha === null) throw new RecusaDesfazer(MENSAGEM_DESFAZER_SAIU);
+    const mesmoAutor =
+      linha.origem === "agente" && linha.agente_id === ctx.agenteId && linha.execucao_id === ctx.execucaoId;
+    if (!mesmoAutor) throw new RecusaDesfazer(MENSAGEM_DESFAZER_DE_OUTRO);
+    this.repo.apagar([linha.id], this.instante(), ctx.carimbo);
+    this.depoisDoDesfazer([linha.id]);
+  }
+
+  /**
+   * A inversa de mudar, adiar, concluir e cancelar: cada lembrete volta aos campos de antes, e sai
+   * da lixeira se foi para lá. Só se continua na versão em que a chamada o deixou: o que tocou
+   * depois (o relógio também conta) ou que você mexeu fica como está.
+   */
+  desfazerMudancas(
+    itens: readonly { id: string; antes: CamposLembrete; versao: string }[],
+    carimbo: Carimbo,
+  ): void {
+    for (const { id, versao } of itens) {
+      const linha = this.repo.qualquer(id);
+      if (linha === null) throw new RecusaDesfazer(MENSAGEM_DESFAZER_SAIU);
+      if (linha.atualizado_em !== versao) throw new RecusaDesfazer(MENSAGEM_DESFAZER_MUDOU);
+    }
+    const agora = this.instante();
+    for (const { id, antes } of itens) this.repo.restaurar(id, antes, agora, carimbo);
+    this.depoisDoDesfazer(itens.map((i) => i.id));
+  }
+
+  /**
+   * Os avisos do desfazer saem depois da transação dele, com o que ficou gravado: se ela voltar, as
+   * janelas recebem o de antes. O que saiu leva o aviso do Windows junto.
+   */
+  private depoisDoDesfazer(ids: readonly string[]): void {
+    queueMicrotask(() => {
+      const vivos = ids.flatMap((id) => {
+        const linha = this.repo.lembrete(id);
+        return linha === null ? [] : [linha];
+      });
+      const removidos = ids.filter((id) => !vivos.some((l) => l.id === id));
+      this.mudou({ lembretes: vivos.map(paraLembrete), removidos });
+      const saidos = removidos.flatMap((id) => {
+        const quando = this.repo.quandoDe(id);
+        return quando === null ? [] : [{ id, quando }];
+      });
+      this.resolver(saidos).catch((erro: unknown) =>
+        console.error(`lembretes: aviso do desfeito não retirado: ${String(erro)}`),
+      );
+    });
   }
 
   // O relógio do dia.
@@ -694,10 +819,12 @@ export class ServicoLembretes implements FonteDoRelogio {
       [...tocaram, ...perdidos].filter((m) => m.antes.estado === "disparado").map((m) => m.antes),
       { atrasados: false },
     );
-    // O canal `dock` só aparece no painel Hoje. O `calendario` avisa no Windows até o envio ao
-    // Google chegar (F3-24).
+    // O canal `dock` só aparece no painel Hoje. O `calendario` toca pelo celular quando o evento dele
+    // já chegou ao "Moductus" (F3-24); sem Google, ou com o envio na fila, avisa no Windows.
     for (const { depois } of tocaram) {
-      if (depois.canal !== "dock") await this.avisar(this.avisoDoLembrete(depois));
+      if (depois.canal === "dock") continue;
+      if (depois.canal === "calendario" && this.fontes.noGoogle?.(depois.id) === true) continue;
+      await this.avisar(this.avisoDoLembrete(depois));
     }
     if (perdidos.length > 0) {
       const doCartao =
@@ -771,7 +898,7 @@ export class ServicoLembretes implements FonteDoRelogio {
     const linha = this.repo.lembrete(alvo.slice(0, arroba));
     if (!linha || linha.estado !== "disparado" || linha.quando !== alvo.slice(arroba + 1)) return false;
     if (botao === "adiar") {
-      await this.adiar({ ids: [linha.id], minutos: ADIAR_DO_AVISO_MIN });
+      await this.adiar({ ids: [linha.id], minutos: ADIAR_LEMBRETE_MIN });
       return true;
     }
     if (botao === "feito") {
@@ -884,6 +1011,17 @@ export class ServicoLembretes implements FonteDoRelogio {
  * O aviso agrupado dos que venceram numa ausência (ADR-0032): um só, com quantos e onde o PC
  * estava, e os textos no corpo. Nada toca um por um.
  */
+/**
+ * A trava do botão do aviso do Windows para quem pede com a ocorrência (o painel Hoje): só vale
+ * para o lembrete que ainda toca nela. Sem ocorrência, o pedido vale como sempre.
+ */
+function exigirTocando(linhas: readonly LinhaLembrete[], quando: string | undefined): void {
+  if (quando === undefined) return;
+  if (linhas.some((l) => l.estado !== "disparado" || l.quando !== quando)) {
+    throw new Error(MENSAGEM_LEMBRETE_NAO_TOCA);
+  }
+}
+
 export function avisoDosAtrasados(perdidos: readonly LinhaLembrete[], ausencia: Ausencia): NovoAviso {
   const n = perdidos.length;
   const onde = ausencia.de === null ? "o Moductus estava fechado" : "o PC dormia";

@@ -40,7 +40,8 @@ const TIME_ESPERADO = {
     nome: "Alba",
     funcao: "Cuida do seu dia",
     personagem: { silhueta: "ovo", traco: "raios", tom: "ambar" },
-    ferramentas: ["agenda.*", "tarefas.*", "lembretes.*", "foco.*", "notas.*", "memoria.*"],
+    // `listas.listar` chegou com a migração alba-listas (F3-26).
+    ferramentas: ["agenda.*", "tarefas.*", "listas.listar", "lembretes.*", "foco.*", "notas.*", "memoria.*"],
     escopos_memoria: ["dia", "geral"],
   },
   faina: {

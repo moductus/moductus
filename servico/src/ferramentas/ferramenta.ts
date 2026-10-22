@@ -23,6 +23,11 @@ export interface ContextoFerramenta {
   sinal: AbortSignal;
 }
 
+/** O carimbo do que a área gravar a pedido da ferramenta: o agente e a execução que chamaram. */
+export function carimboDe(ctx: Pick<ContextoFerramenta, "agenteId" | "execucaoId">): Carimbo {
+  return { origem: "agente", agenteId: ctx.agenteId, execucaoId: ctx.execucaoId };
+}
+
 /** De quem foi a ação que o usuário está desfazendo, e o carimbo do que a área gravar ao desfazer. */
 export interface ContextoDesfazer {
   chamadaId: string;

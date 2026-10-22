@@ -57,6 +57,8 @@ export const MENSAGEM_TAREFA_COM_HORA = "a tarefa já tem hora marcada";
 export const MENSAGEM_TAREFA_NA_AGENDA = "a tarefa já está na agenda";
 export const MENSAGEM_ENCAIXE_SAIU = "o evento do encaixe já saiu da agenda";
 export const MENSAGEM_ENCAIXE_MUDOU = "o evento do encaixe foi mudado depois";
+export const MENSAGEM_DESFAZER_SAIU = "o evento já saiu da agenda";
+export const MENSAGEM_DESFAZER_MUDOU = "o evento foi mudado depois";
 
 /** O nome da chamada que o desfazer do histórico procura no catálogo (`ferramentas/agenda`). */
 export const FERRAMENTA_APLICAR_SUGESTAO = "agenda.aplicar_sugestao";
@@ -575,6 +577,38 @@ export class ServicoAgenda {
     // A inversa roda dentro da transação do desfazer: o aviso sai depois dela, se o evento saiu mesmo.
     queueMicrotask(() => {
       if (!this.deps.repo.evento(eventoId)) this.avisos.mudou({ eventos: [], apagados: [eventoId] });
+    });
+  }
+
+  /**
+   * A inversa de criar e de mudar um evento pelas ferramentas da Alba, na transação do desfazer:
+   * sem `antes`, o evento criado vai à lixeira; com ele, os campos voltam. Só se o evento continua
+   * na versão em que a chamada o deixou (a leitura do Google também conta como mudança). O do
+   * "Moductus" leva a volta ao Google pela fila, como qualquer escrita.
+   */
+  desfazerEvento(
+    alvo: { eventoId: string; versao: string; antes: CamposEvento | null },
+    ctx: ContextoDesfazer,
+  ): void {
+    const evento = this.deps.repo.evento(alvo.eventoId);
+    if (!evento) throw new RecusaDesfazer(MENSAGEM_DESFAZER_SAIU);
+    if (evento.atualizado_em !== alvo.versao) throw new RecusaDesfazer(MENSAGEM_DESFAZER_MUDOU);
+    const agora = this.agora().toISOString();
+    if (alvo.antes === null) {
+      this.deps.repo.apagarEvento(evento.id, agora, ctx.carimbo);
+      if (evento.espelho === 1)
+        this.deps.repo.enfileirarSaida(evento.id, "apagar", evento.id_externo !== null, agora);
+    } else {
+      this.deps.repo.mudarEvento(evento.id, alvo.antes, agora, ctx.carimbo);
+      if (evento.espelho === 1)
+        this.deps.repo.enfileirarSaida(evento.id, "mudar", evento.id_externo !== null, agora);
+    }
+    // O aviso sai depois da transação, com o que ficou gravado.
+    queueMicrotask(() => {
+      const depois = this.deps.repo.evento(evento.id);
+      this.avisos.mudou(
+        depois ? { eventos: [paraEvento(depois)], apagados: [] } : { eventos: [], apagados: [evento.id] },
+      );
     });
   }
 

@@ -23,6 +23,7 @@ import {
 import { nomeChave } from "../../banco/nome-chave.ts";
 import { DO_USUARIO, type Carimbo } from "../../banco/tabela.ts";
 import { novoId } from "../../banco/ulid.ts";
+import { RecusaDesfazer } from "../../ferramentas/ferramenta.ts";
 import { diasNoIntervalo, escreverRecorrencia, lerRecorrencia, proximoDia } from "../dia/recorrencia.ts";
 import { MENSAGEM_NOTA_DA_TAREFA } from "../notas/notas.ts";
 import { diasEntre, ehDia, instanteNoFuso, noFuso, somarDias, TempoDoDia } from "../dia/tempo.ts";
@@ -82,6 +83,54 @@ const TAMANHO_ETIQUETA = 60;
 export const MENSAGEM_ETIQUETA_NOME = `a etiqueta tem de 1 a ${TAMANHO_ETIQUETA} caracteres`;
 export const MENSAGEM_IDS_REPETIDOS = "o mesmo id veio mais de uma vez";
 export const MENSAGEM_IDS_DEMAIS = `um pedido leva no máximo ${LIMITE_IDS} ids`;
+export const MENSAGEM_DESFAZER_SAIU = "a tarefa já saiu da lista";
+export const MENSAGEM_DESFAZER_MUDOU = "a tarefa foi mudada depois";
+export const MENSAGEM_DESFAZER_SUBTAREFAS = "a tarefa ganhou subtarefas depois";
+
+/** O que uma ferramenta guarda para o desfazer: a tarefa e a versão (`atualizadoEm`) em que a deixou. */
+export interface AlvoDesfazer {
+  id: string;
+  versao: string;
+}
+
+/**
+ * Tudo o que `definir` põe de volta numa tarefa, como ela está: o retrato que a ferramenta guarda
+ * antes de mudar. Lista e mãe ficam de fora (mudam por `mover`), e o estado também (fechar e reabrir
+ * têm a inversa própria).
+ */
+export function mudancaDe(t: Tarefa): MudancaTarefa {
+  return {
+    id: t.id,
+    titulo: t.titulo,
+    notas: t.notas,
+    notaId: t.notaId,
+    prioridade: t.prioridade,
+    venceEm: t.venceEm,
+    hora: t.hora,
+    duracaoEstimadaMin: t.duracaoEstimadaMin,
+    recorrencia: t.recorrencia,
+    etiquetas: t.etiquetas.map((e) => e.nome),
+    lembreteMinutosAntes: t.lembreteMinutosAntes,
+  };
+}
+
+/**
+ * O retrato só do que uma mudança mexe: as chaves que vieram, a hora quando o dia saiu (ela sai
+ * junto) e o lembrete quando o dia ou a hora mudaram (ele acompanha). O desfazer não regrava o que a
+ * chamada não tocou: a etiqueta que você apagou depois, ou o lembrete que já foi concluído, não voltam.
+ */
+export function retratoDoQueMuda(antes: Tarefa, mudanca: Omit<MudancaTarefa, "id">): MudancaTarefa {
+  const completo = mudancaDe(antes);
+  const retrato: Record<string, unknown> = { id: antes.id };
+  for (const chave of Object.keys(mudanca) as (keyof typeof mudanca)[]) {
+    if (mudanca[chave] !== undefined && chave in completo) retrato[chave] = completo[chave];
+  }
+  if (mudanca.venceEm === null) retrato.hora = completo.hora;
+  if (mudanca.venceEm !== undefined || mudanca.hora !== undefined) {
+    retrato.lembreteMinutosAntes = completo.lembreteMinutosAntes;
+  }
+  return retrato as MudancaTarefa;
+}
 
 export interface AvisosTarefas {
   /** As tarefas que mudaram e as que foram para a lixeira (`tarefas.mudou`). */
@@ -585,6 +634,62 @@ export class ServicoTarefas {
     });
   }
 
+  // O desfazer das ferramentas da Alba (AGENTS.md §4, ADR-0029)
+  //
+  // Rodam dentro da transação do desfazer, que já está aberta (por isso o SAVEPOINT do repositório),
+  // e só desfazem o que continua como a chamada deixou: a versão é o `atualizadoEm` da tarefa no fim
+  // dela, e cada escrita grava um instante novo. Mudou depois, por você ou por outra chamada, recusa.
+
+  /** A inversa de criar: a tarefa vai à lixeira com o lembrete dela. */
+  desfazerCriacao(alvo: AlvoDesfazer, carimbo: Carimbo): void {
+    const atual = this.conferirVersao(alvo);
+    // Subtarefa criada depois iria junto para a lixeira sem ninguém ter pedido.
+    if (this.repo.temFilhas(atual.id)) throw new RecusaDesfazer(MENSAGEM_DESFAZER_SUBTAREFAS);
+    this.operar((r, agora) => this.mandarParaLixeira([atual.id], r, agora, carimbo));
+  }
+
+  /**
+   * A inversa de concluir e de descartar: volta a aberta, com as subtarefas que fecharam junto (as
+   * que têm a mesma marca de fechamento) e os lembretes; a próxima da recorrente que ninguém tocou
+   * vai embora, como no reabrir.
+   */
+  desfazerFechamento(alvo: AlvoDesfazer, carimbo: Carimbo): void {
+    const atual = this.conferirVersao(alvo);
+    if (atual.estado === "aberta" || atual.fechada_em === null) return;
+    const marca = atual.fechada_em;
+    const filhas = this.repo
+      .subtarefas([atual.id])
+      .filter((f) => f.estado !== "aberta" && f.fechada_em === marca);
+    this.operar((r, agora) => {
+      this.abrir(atual, r, agora, carimbo);
+      for (const filha of filhas) this.abrir(filha, r, agora, carimbo);
+    });
+  }
+
+  /**
+   * A inversa de mudar e de adiar: cada tarefa volta ao retrato de antes (`mudancaDe`). Confere
+   * todas antes de gravar a primeira, e a regra que recusar (a nota de origem foi para a lixeira)
+   * chega ao usuário como o motivo.
+   */
+  desfazerMudancas(retratos: readonly { antes: MudancaTarefa; versao: string }[], carimbo: Carimbo): void {
+    for (const { antes, versao } of retratos) this.conferirVersao({ id: antes.id, versao });
+    for (const { antes } of retratos) {
+      try {
+        this.definir(antes, carimbo);
+      } catch (erro) {
+        if (erro instanceof ErroDasTarefas) throw new RecusaDesfazer(erro.message, { cause: erro });
+        throw erro;
+      }
+    }
+  }
+
+  private conferirVersao(alvo: AlvoDesfazer): LinhaTarefa {
+    const atual = this.repo.tarefa(alvo.id);
+    if (atual === null) throw new RecusaDesfazer(MENSAGEM_DESFAZER_SAIU);
+    if (atual.atualizado_em !== alvo.versao) throw new RecusaDesfazer(MENSAGEM_DESFAZER_MUDOU);
+    return atual;
+  }
+
   // Por dentro
 
   /** Roda numa transação e, depois de gravar, avisa as janelas do que mudou. */
@@ -603,13 +708,42 @@ export class ServicoTarefas {
     this.ultimoInstante = ms;
     const agora = new Date(ms).toISOString();
     this.daVez = { fuso: this.deps.lerFuso(), instantes: new Map() };
+    const deFora = this.repo.emTransacao();
     try {
       const resultado = this.repo.transacao(() => fazer(r, agora));
-      this.avisar(r);
+      if (deFora) {
+        // Dentro do desfazer: o aviso sai depois da transação dele, com o que ficou gravado.
+        queueMicrotask(() => {
+          try {
+            this.avisar(this.conferido(r));
+          } catch (erro) {
+            console.error(`tarefas: aviso do desfeito não saiu: ${String(erro)}`);
+          }
+        });
+      } else this.avisar(r);
       return resultado;
     } finally {
       this.daVez = null;
     }
+  }
+
+  /**
+   * O registro como ficou gravado depois da transação de fora: se ela voltou, o que ia para a
+   * lixeira continua vivo e sai como mudado, e o que nasceu e voltou não sai.
+   */
+  private conferido(r: Registro): Registro {
+    const tarefas = [...r.tarefas, ...r.apagadas];
+    const lembretes = [...r.lembretes, ...r.lembretesRemovidos];
+    const vivas = new Set(this.repo.tarefasDosIds(tarefas).map((t) => t.id));
+    const vivos = new Set(this.repo.lembretesDosIds(lembretes).map((l) => l.id));
+    return {
+      tarefas: new Set(tarefas.filter((id) => vivas.has(id))),
+      apagadas: new Set([...r.apagadas].filter((id) => !vivas.has(id))),
+      lembretes: new Set(lembretes.filter((id) => vivos.has(id))),
+      lembretesRemovidos: new Set([...r.lembretesRemovidos].filter((id) => !vivos.has(id))),
+      lembretesAnteriores: r.lembretesAnteriores,
+      listas: r.listas,
+    };
   }
 
   private avisar(r: Registro): void {

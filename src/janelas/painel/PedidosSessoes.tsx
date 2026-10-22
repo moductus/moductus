@@ -52,7 +52,7 @@ function CabecaSessao({ tom, projeto, ferramenta, direita }: PropsCabeca) {
  * a do serviço ("Quer rodar o comando abaixo.") e o comando, o arquivo ou o endereço vem inteiro
  * logo abaixo, de qualquer ferramenta que o traga.
  */
-function PedidoDaSessao({ item }: { item: Extract<ItemSessao, { tipo: "pedido" }> }) {
+export function PedidoDaSessao({ item }: { item: Extract<ItemSessao, { tipo: "pedido" }> }) {
   const { aprovacao } = item;
   const detalhe = detalheDoPedido(aprovacao.acao);
   const pendente = aprovacao.estado === "pendente";

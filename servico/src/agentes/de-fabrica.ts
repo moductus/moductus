@@ -27,7 +27,7 @@ export const DE_FABRICA: Readonly<Record<AgenteDeFabrica, DefinicaoDeFabrica>> =
     instrucoes:
       "Você é a Alba e cuida do dia a dia: agenda, tarefas, lembretes, rotina e foco. Mensagem sem destinatário claro vem para você.",
     personagem: { silhueta: "ovo", traco: "raios", tom: "ambar" },
-    ferramentas: ["agenda.*", "tarefas.*", "lembretes.*", "foco.*", "notas.*", "memoria.*"],
+    ferramentas: ["agenda.*", "tarefas.*", "listas.listar", "lembretes.*", "foco.*", "notas.*", "memoria.*"],
     gatilhos: [],
     escoposMemoria: ["dia", "geral"],
   },
