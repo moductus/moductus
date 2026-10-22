@@ -35,17 +35,21 @@ describe("foco", () => {
     expect(EtapaFoco.safeParse({ ...terminou, pausadaEm: "2026-10-08T18:00:00.000Z" }).success).toBe(false);
   });
 
-  test("o estado diz o ciclo, o que vem depois e o total de hoje", () => {
+  test("o estado diz o ciclo, o que vem depois, se o +5 min vale e o total de hoje", () => {
     const estado = {
       etapa,
       tarefaTitulo: "Revisar PR do relatório mensal",
       cicloAtual: 2,
       ciclosAtePausaLonga: 4,
       proxima: "pausa",
+      podeEstender: true,
       focoHojeMin: 75,
       ciclosHoje: 3,
     };
     expect(EstadoFoco.parse(estado)).toEqual(estado);
+    // O "+5 min" vem dito pelo serviço: sem o campo, o estado não vale.
+    const { podeEstender: _, ...semPodeEstender } = estado;
+    expect(EstadoFoco.safeParse(semPodeEstender).success).toBe(false);
     expect(EstadoFoco.safeParse({ ...estado, etapa: null, tarefaTitulo: null }).success).toBe(true);
     expect(EstadoFoco.safeParse({ ...estado, cicloAtual: 0 }).success).toBe(false);
     expect(METODOS["foco.alternar"].saida.safeParse(estado).success).toBe(true);
