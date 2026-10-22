@@ -1,27 +1,271 @@
-/* Captura rápida: a janela de 640 × 72 é só o campo, com respiro para o anel de foco caber. */
+/*
+ * Captura rápida (Captura.dc.html): o cartão é a janela inteira (640 de largura, a altura do
+ * conteúdo, que a casca acompanha). Cabeçalho com a frase, o "entendeu como" com os campos, o "Na
+ * verdade é" com o Lançar e as dicas de teclado. Sem o véu da tela do quadro: a janela tem só o
+ * tamanho do cartão, então as dicas ficam dentro dele.
+ */
+:root[data-janela="captura"] body {
+  background: transparent;
+}
+
 .captura {
   display: flex;
-  align-items: center;
-  height: 100vh;
-  padding: 0 var(--esp-16);
-}
-
-.captura-campo {
-  flex: 1;
-  min-width: 0;
-  height: var(--altura-campo);
-  padding: 0 var(--esp-10);
+  flex-direction: column;
+  overflow: hidden;
   border: var(--espessura-borda) solid var(--borda-forte);
-  border-radius: var(--raio-controle);
-  background: var(--fundo-campo);
-  color: var(--texto);
-  font-size: var(--tipo-13);
+  border-radius: var(--raio-painel);
+  background: var(--fundo-janela);
+  backdrop-filter: var(--desfoque);
 }
 
-.captura-campo::placeholder {
+.captura-formulario {
+  display: flex;
+  flex-direction: column;
+}
+
+.captura-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-12);
+  padding: var(--esp-18) var(--esp-20);
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.captura-icone {
+  flex: none;
   color: var(--texto-3);
 }
 
-.captura-campo:focus-visible {
-  border-color: var(--cor-foco);
+/* A frase é o único texto da janela e já nasce focada: o cursor mostra onde está o teclado. */
+.captura-frase {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--texto);
+  font-size: var(--tipo-frase-captura);
+  caret-color: var(--destaque);
+}
+
+.captura-frase:focus-visible {
+  outline: none;
+}
+
+.captura-frase::placeholder {
+  color: var(--texto-3);
+}
+
+.captura-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-12);
+  padding: var(--esp-16) var(--esp-20);
+}
+
+.captura-entendeu {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  margin: 0;
+  color: var(--texto-3);
+  font-size: var(--tipo-12);
+}
+
+.captura-tipo {
+  padding: var(--esp-1) var(--esp-8);
+  border-radius: var(--raio-selo);
+  background: var(--fundo-chip);
+  color: var(--texto);
+  font-size: var(--tipo-11);
+  font-weight: var(--peso-forte);
+}
+
+.captura-campos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--esp-10);
+}
+
+.captura-campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  min-width: 0;
+  padding: var(--esp-10) var(--esp-12);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-elevado);
+}
+
+.captura-campo--2 {
+  grid-column: span 2;
+}
+
+.captura-campo--3 {
+  grid-column: span 3;
+}
+
+.captura-campo--4 {
+  grid-column: span 4;
+}
+
+.captura-campo:focus-within {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco);
+}
+
+.captura-campo[data-erro] {
+  border-color: var(--perigo);
+}
+
+.captura-campo-rotulo {
+  color: var(--texto-3);
+  font-size: var(--tipo-11);
+}
+
+.captura-campo-valor {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--texto);
+  font-size: var(--tipo-valor-captura);
+  font-weight: var(--peso-forte);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.captura-campo-valor--mono {
+  font-family: var(--fonte-mono);
+}
+
+/* O anel fica no campo inteiro (`:focus-within`), como a caixa do quadro. */
+.captura-campo-valor:focus-visible {
+  outline: none;
+}
+
+.captura-campo-valor::placeholder {
+  color: var(--texto-apagado);
+  font-weight: var(--peso-normal);
+}
+
+/* Lista: a lista suspensa nativa com a cara do valor; a seta fica por cima, sem pegar clique,
+   como o "Onde" das Notificações. */
+.captura-lista {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  color: var(--texto-3);
+}
+
+select.captura-campo-valor {
+  flex: 1;
+  padding-right: calc(var(--icone-12) + var(--esp-4));
+  appearance: none;
+  cursor: pointer;
+}
+
+.captura-lista > .icone {
+  position: absolute;
+  right: 0;
+  pointer-events: none;
+}
+
+select.captura-campo-valor option {
+  background: var(--fundo-lista-nativa);
+  color: var(--texto-lista-nativa);
+  font-weight: var(--peso-normal);
+}
+
+.captura-linha {
+  margin: 0;
+  color: var(--texto-3);
+  font-size: var(--tipo-12);
+}
+
+.captura-linha--erro {
+  color: var(--perigo);
+}
+
+.captura-corpo--estado {
+  gap: var(--esp-8);
+}
+
+.captura-lancado {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-12);
+  margin: 0;
+  color: var(--texto-2);
+  font-size: var(--tipo-12);
+}
+
+.captura-lancado-texto {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.captura-rodape {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  padding: var(--esp-12) var(--esp-20);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.captura-na-verdade {
+  margin-right: var(--esp-4);
+  color: var(--texto-3);
+  font-size: var(--tipo-12);
+}
+
+.captura-alternativas {
+  display: flex;
+  gap: var(--esp-8);
+}
+
+.captura-alternativas .botao {
+  height: var(--altura-alternativa-captura);
+  padding: 0 var(--esp-10);
+  border-color: var(--borda);
+  color: var(--texto-2);
+}
+
+.captura-espaco {
+  flex: 1;
+}
+
+.captura-lancar {
+  height: var(--altura-lancar-captura);
+  padding: 0 var(--esp-16);
+  gap: var(--esp-8);
+}
+
+.captura-lancar[aria-disabled="true"] {
+  opacity: var(--opacidade-desativado);
+  cursor: default;
+}
+
+.captura-lancar-tecla {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  font-weight: var(--peso-normal);
+  opacity: var(--opacidade-tecla-captura);
+}
+
+.captura-dicas {
+  display: flex;
+  justify-content: center;
+  gap: var(--esp-18);
+  margin: 0;
+  padding: var(--esp-10) var(--esp-20);
+  border-top: var(--espessura-borda) solid var(--borda);
+  color: var(--texto-3);
+  font-size: var(--tipo-12);
 }

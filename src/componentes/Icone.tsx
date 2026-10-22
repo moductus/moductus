@@ -55,6 +55,8 @@ const DESENHOS = {
   // Dois quadros sobrepostos, como o Windows mostra com a janela maximizada.
   restaurar: <path d="M8 8h11v11H8zM5 16V5h11" />,
   fechar: <path d="M6 6l12 12M18 6L6 18" />,
+  // Mais: a captura rápida (Captura.dc.html).
+  mais: <path d="M12 5v14M5 12h14" />,
   // Seta da lista suspensa (o "Onde" de AreaNotificacoes.dc.html).
   abrirLista: <path d="M6 9l6 6 6-6" />,
   // Escudo do aviso "Tudo fica neste PC" (Uso1Boas.dc.html).
