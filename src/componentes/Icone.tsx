@@ -55,6 +55,8 @@ const DESENHOS = {
   // Dois quadros sobrepostos, como o Windows mostra com a janela maximizada.
   restaurar: <path d="M8 8h11v11H8zM5 16V5h11" />,
   fechar: <path d="M6 6l12 12M18 6L6 18" />,
+  // Mais: a captura rápida (Captura.dc.html).
+  mais: <path d="M12 5v14M5 12h14" />,
   // Seta da lista suspensa (o "Onde" de AreaNotificacoes.dc.html).
   abrirLista: <path d="M6 9l6 6 6-6" />,
   // Escudo do aviso "Tudo fica neste PC" (Uso1Boas.dc.html).
@@ -63,9 +65,8 @@ const DESENHOS = {
   alerta: (
     <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
   ),
-  // Sino do lembrete (LembreteHoje.dc.html) e o "+" do "Adicionar por frase" (PainelTarefas.dc.html).
+  // Sino do lembrete (LembreteHoje.dc.html).
   sino: <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />,
-  mais: <path d="M12 5v14M5 12h14" />,
 } satisfies Record<string, ReactElement>;
 
 export type NomeIcone = keyof typeof DESENHOS;

@@ -9,6 +9,7 @@ import { CabecalhoPainel } from "./Cabecalho.tsx";
 import { PainelAgentes } from "./PainelAgentes.tsx";
 import { PainelDev } from "./PainelDev.tsx";
 import { PainelHoje } from "./PainelHoje.tsx";
+import { PainelNotas } from "./PainelNotas.tsx";
 import { PainelTarefas } from "./PainelTarefas.tsx";
 import "./Painel.css";
 
@@ -27,9 +28,9 @@ function Vazio({ area }: { area: AreaPainel }) {
 }
 
 /**
- * Painel lateral: a casca diz qual área abrir. Agentes, Dev, Hoje e Tarefas mostram os dados do
- * serviço (Agentes.dc.html, PainelDev.dc.html, Main.dc.html, PainelTarefas.dc.html); as outras
- * áreas mostram o próprio estado vazio.
+ * Painel lateral: a casca diz qual área abrir. Agentes, Dev, Hoje, Tarefas e Notas mostram os
+ * dados do serviço (Agentes.dc.html, PainelDev.dc.html, Main.dc.html, PainelTarefas.dc.html,
+ * PainelNotas.dc.html); as outras áreas mostram o próprio estado vazio.
  */
 export function Painel() {
   // O contador muda a cada abertura, mesmo quando a área é a mesma.
@@ -73,6 +74,8 @@ export function Painel() {
           <PainelHoje canal={canal} abertura={abertura?.n ?? 0} />
         ) : area === "tarefas" ? (
           <PainelTarefas canal={canal} abertura={abertura?.n ?? 0} />
+        ) : area === "notas" ? (
+          <PainelNotas canal={canal} />
         ) : (
           <>
             <CabecalhoPainel titulo={dados?.nome ?? ""} icone={dados?.icone} />

@@ -131,6 +131,11 @@ describe("Sistema", () => {
         expect(por('main [role="status"]').textContent).toBe("Esperando o serviço responder.");
         continue;
       }
+      // Notas também: a lista diz que está lendo.
+      if (area.id === "notas") {
+        expect(por('main [role="status"]').textContent).toBe("Lendo as notas.");
+        continue;
+      }
       const vazio = por("main .estado-vazio");
       expect(vazio.querySelector(".estado-vazio-titulo")!.textContent!.length).toBeGreaterThan(3);
       expect(vazio.querySelector(".estado-vazio-texto")!.textContent!.length).toBeGreaterThan(30);
