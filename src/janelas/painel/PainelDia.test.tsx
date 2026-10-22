@@ -250,7 +250,7 @@ const secao = (rotulo: string) =>
   [...recipiente.querySelectorAll<HTMLElement>("section:not(.painel-cartao)")].find(
     (s) => s.querySelector("h2")?.textContent?.startsWith(rotulo) ?? false,
   )!;
-const titulos = () => [...recipiente.querySelectorAll(".tarefa-titulo")].map((t) => t.textContent);
+const titulos = () => [...recipiente.querySelectorAll(".painel-tarefa-titulo")].map((t) => t.textContent);
 const chamou = (metodo: string) => pedir.mock.calls.filter(([m]) => m === metodo).map(([, d]) => d);
 
 async function digitar(campo: HTMLInputElement, texto: string) {
@@ -482,7 +482,7 @@ describe("painel Hoje: foco, tarefas, finanças e sessões", () => {
       "Ligar para o contador",
       "Comprar ração",
     ]);
-    const quando = [...tarefas.querySelectorAll<HTMLElement>(".tarefa-quando")];
+    const quando = [...tarefas.querySelectorAll<HTMLElement>(".painel-tarefa-quando")];
     expect(quando.map((q) => [q.firstChild?.textContent ?? "", q.dataset.aviso ?? null])).toEqual([
       ["ter", "true"],
       ["14:00", "true"],
@@ -602,17 +602,17 @@ describe("painel Tarefas", () => {
 
     const atrasadas = secao("Atrasadas");
     expect(atrasadas.querySelector("h2")?.textContent).toBe("Atrasadas · 2");
-    expect([...atrasadas.querySelectorAll(".tarefa-quando")].map((q) => q.firstChild?.textContent)).toEqual([
+    expect([...atrasadas.querySelectorAll(".painel-tarefa-quando")].map((q) => q.firstChild?.textContent)).toEqual([
       "ter",
       "ontem",
     ]);
-    expect(atrasadas.querySelector(".tarefa-nota")?.textContent).toBe("Casa");
+    expect(atrasadas.querySelector(".painel-tarefa-nota")?.textContent).toBe("Casa");
     await act(async () => botaoCom(atrasadas, "Trazer as 2 para hoje").click());
     expect(chamou("tarefas.adiar")).toEqual([{ ids: ["a1", "a2"], para: "hoje" }]);
 
     const hoje = secao("Hoje");
     expect(hoje.querySelector(".painel-secao-cabecalho span")?.textContent).toBe("1 de 2 feitas");
-    expect(hoje.querySelector(".tarefa-nota")?.textContent).toBe("Pessoal · lembrete 14:45");
+    expect(hoje.querySelector(".painel-tarefa-nota")?.textContent).toBe("Pessoal · lembrete 14:45");
     expect(hoje.querySelector('[aria-label="com lembrete"]')).not.toBeNull();
 
     // As próximas contam só até 7 dias; os lembretes, os do dia no fuso.

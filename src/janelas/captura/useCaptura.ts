@@ -7,6 +7,7 @@ import type {
 } from "@moductus/contrato";
 import { RecusaDoServico, ServicoIndisponivel, type EstadoConexao } from "@moductus/contrato/cliente";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { previaDoEnter } from "../../areas/dia.ts";
 import { servico } from "../../servico/conexao.ts";
 import {
   aplicarEdicoes,
@@ -75,11 +76,6 @@ function mensagemDe(erro: unknown, incerto = MENSAGEM_SEM_RESPOSTA): string {
   if (erro instanceof RecusaDoServico) return erro.message;
   if (erro instanceof ServicoIndisponivel) return MENSAGEM_SEM_SERVICO;
   return incerto;
-}
-
-/** O que a pessoa viu: o tipo e os campos. Duas prévias iguais nisso lançam o mesmo. */
-function mesmaPrevia(a: PreviaCaptura, b: PreviaCaptura): boolean {
-  return a.tipo === b.tipo && JSON.stringify(a.campos) === JSON.stringify(b.campos);
 }
 
 export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCaptura {
@@ -186,14 +182,12 @@ export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCapt
     lancandoAgora.current = true;
     setLancando(true);
     try {
-      let mostrada = previa;
-      if (mostrada === null || mostrada.texto !== alvo) {
-        // A prévia na tela é de outra frase: só lança se a nova disser o mesmo.
+      // A prévia na tela de outra frase só lança se a nova disser o mesmo (a regra comum do Enter).
+      const mostrada = await previaDoEnter(alvo, previa, () => {
         pararRelogios();
-        const nova = await entender(false);
-        if (nova === null || mostrada === null || !mesmaPrevia(mostrada, nova)) return false;
-        mostrada = nova;
-      }
+        return entender(false);
+      });
+      if (mostrada === null) return false;
       const vai = escolhido ?? mostrada.tipo;
       if (!ehLancavel(vai)) return false;
       const corrigidos = aplicarEdicoes(
