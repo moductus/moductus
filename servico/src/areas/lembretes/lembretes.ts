@@ -395,6 +395,11 @@ export interface FontesLembretes {
   notificacoes: NotificacoesDoLembrete;
   /** O relógio do dia, para se rearmar a cada mudança. */
   relogio?: { mudou(): void };
+  /**
+   * Se o lembrete já está no calendário "Moductus" do Google, sem nada na fila (F3-24): o do canal
+   * `calendario` então toca no celular, e o Windows não avisa de novo.
+   */
+  noGoogle?: (lembreteId: string) => boolean;
 }
 
 export interface AvisosLembretes {
@@ -515,11 +520,15 @@ export class ServicoLembretes implements FonteDoRelogio {
 
   /**
    * Texto, horário, repetição e canal. Mudar o `quando` volta o lembrete a agendado; mudar o
-   * horário ou a regra faz a regra contar de novo a partir do `quando`.
+   * horário ou a regra faz a regra contar de novo a partir do `quando`. O adiado que recebe o
+   * próprio `quando` de volta (o evento movido no Google para a hora de antes do adiamento, F3-24)
+   * também volta a agendado nele, sem mexer na regra.
    */
   async definir(entrada: MudancaLembrete, carimbo: Carimbo = DO_USUARIO): Promise<Lembrete> {
     const mudanca = MudancaLembrete.parse(entrada);
     const atual = this.exigir(mudanca.id);
+    const desadiou =
+      mudanca.quando !== undefined && mudanca.quando === atual.quando && atual.estado === "adiado";
     const reagendou = mudanca.quando !== undefined && mudanca.quando !== atual.quando;
     const quando = mudanca.quando ?? atual.quando;
     const recorrencia = mudanca.recorrencia === undefined ? atual.recorrencia : mudanca.recorrencia;
@@ -530,14 +539,14 @@ export class ServicoLembretes implements FonteDoRelogio {
       recorrencia,
       inicio_recorrencia: recorrencia === null ? null : regraNova ? quando : atual.inicio_recorrencia,
       canal: mudanca.canal ?? atual.canal,
-      ...(reagendou ? { quando, estado: "agendado" as const, adiado_ate: null } : {}),
+      ...(reagendou || desadiou ? { quando, estado: "agendado" as const, adiado_ate: null } : {}),
     };
-    if (campos.texto === atual.texto && !regraNova && campos.canal === atual.canal)
+    if (campos.texto === atual.texto && !regraNova && !desadiou && campos.canal === atual.canal)
       return paraLembrete(atual);
     this.repo.gravar(atual.id, campos, this.instante(), carimbo);
     const lembrete = paraLembrete(this.exigir(atual.id));
     this.mudou({ lembretes: [lembrete], removidos: [] });
-    if (reagendou) await this.resolver([atual]);
+    if (reagendou || desadiou) await this.resolver([atual]);
     return lembrete;
   }
 
@@ -696,10 +705,12 @@ export class ServicoLembretes implements FonteDoRelogio {
       [...tocaram, ...perdidos].filter((m) => m.antes.estado === "disparado").map((m) => m.antes),
       { atrasados: false },
     );
-    // O canal `dock` só aparece no painel Hoje. O `calendario` avisa no Windows até o envio ao
-    // Google chegar (F3-24).
+    // O canal `dock` só aparece no painel Hoje. O `calendario` toca pelo celular quando o evento dele
+    // já chegou ao "Moductus" (F3-24); sem Google, ou com o envio na fila, avisa no Windows.
     for (const { depois } of tocaram) {
-      if (depois.canal !== "dock") await this.avisar(this.avisoDoLembrete(depois));
+      if (depois.canal === "dock") continue;
+      if (depois.canal === "calendario" && this.fontes.noGoogle?.(depois.id) === true) continue;
+      await this.avisar(this.avisoDoLembrete(depois));
     }
     if (perdidos.length > 0) {
       const doCartao =
