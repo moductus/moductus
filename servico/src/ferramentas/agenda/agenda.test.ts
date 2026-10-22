@@ -21,7 +21,12 @@ import { abrirBanco } from "../../banco/conexao.ts";
 import { ProvedorFalso, roteiros, type PassoRoteiro } from "../../provedores/falso.ts";
 import { RegistroProvedores } from "../../provedores/registro.ts";
 import { Catalogo } from "../catalogo.ts";
-import { DURACAO_PADRAO_MIN, MENSAGEM_SO_LOCAL_E_MODUCTUS, ferramentasAgenda } from "./agenda.ts";
+import {
+  DURACAO_PADRAO_MIN,
+  MENSAGEM_DIA_INTEIRO_COM_HORA,
+  MENSAGEM_SO_LOCAL_E_MODUCTUS,
+  ferramentasAgenda,
+} from "./agenda.ts";
 
 const pastas: string[] = [];
 const bancos: DatabaseSync[] = [];
@@ -198,6 +203,46 @@ describe("agenda.mudar_evento", () => {
     expect(() => m.historico.desfazer({ chamadaId: deNovo!.id })).toThrow(recusa(MENSAGEM_DESFAZER_MUDOU));
     m.agenda.apagarEvento({ id: original.id });
     expect(() => m.historico.desfazer({ chamadaId: deNovo!.id })).toThrow(recusa(MENSAGEM_DESFAZER_SAIU));
+  });
+});
+
+describe("agenda.mudar_evento com o quando pela metade", () => {
+  test("só o dia mantém a hora e a duração; dia inteiro só com diaInteiro: true", async () => {
+    const m = montar();
+    const reuniao = m.agenda.criarEvento({
+      titulo: "Reunião",
+      inicio: sp(HOJE, "15:00"),
+      fim: sp(HOJE, "15:45"),
+      diaInteiro: false,
+    });
+    m.relogio.ms += 1000;
+    const [soODia, soAHora, diaInteiro, comHora] = await m.alba(
+      chamar("agenda__mudar_evento", { id: reuniao.id, quando: { dia: "amanha" } }),
+      chamar("agenda__mudar_evento", { id: reuniao.id, quando: { dia: "amanha", hora: "16:00" } }),
+      chamar("agenda__mudar_evento", { id: reuniao.id, quando: { dia: "amanha", diaInteiro: true } }),
+      chamar("agenda__mudar_evento", {
+        id: reuniao.id,
+        quando: { dia: "amanha", hora: "09:00", diaInteiro: true },
+      }),
+    );
+    const evento = z.object({ evento: EventoAgenda });
+    expect(valor(soODia, evento).evento).toMatchObject({
+      inicio: sp("2026-10-20", "15:00"),
+      fim: sp("2026-10-20", "15:45"),
+      diaInteiro: false,
+    });
+    expect(valor(soAHora, evento).evento).toMatchObject({
+      inicio: sp("2026-10-20", "16:00"),
+      fim: sp("2026-10-20", "16:45"),
+    });
+    expect(valor(diaInteiro, evento).evento).toMatchObject({
+      inicio: "2026-10-20",
+      fim: "2026-10-21",
+      diaInteiro: true,
+    });
+    expect((comHora!.resultado as { erro: string }).erro).toBe(
+      `agenda.mudar_evento falhou: ${MENSAGEM_DIA_INTEIRO_COM_HORA}`,
+    );
   });
 });
 

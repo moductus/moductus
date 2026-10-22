@@ -1,4 +1,12 @@
-import { Alertas, HoraDoDia, Id, PedidoAgenda, PedidoAplicarSugestao, Recorrencia } from "@moductus/contrato";
+import {
+  Alertas,
+  HoraDoDia,
+  Id,
+  PedidoAgenda,
+  PedidoAplicarSugestao,
+  Recorrencia,
+  type EventoAgenda,
+} from "@moductus/contrato";
 import { z } from "zod";
 import {
   FERRAMENTA_APLICAR_SUGESTAO,
@@ -18,21 +26,34 @@ export const MENSAGEM_SO_LOCAL_E_MODUCTUS =
 /** Uma hora de evento quando o modelo não diz quanto dura. */
 export const DURACAO_PADRAO_MIN = 60;
 
+export const MENSAGEM_DIA_INTEIRO_COM_HORA = "evento de dia inteiro não leva hora";
+
 /**
  * Quando um evento acontece, como o modelo manda: o dia e, no evento com hora, a hora e quanto dura,
- * no fuso do usuário. Sem hora, é de dia inteiro. A conta do instante é do serviço (ADR-0008).
+ * no fuso do usuário. A conta do instante é do serviço (ADR-0008). Ao mudar, o que não vem fica como
+ * o evento já era: trocar só o dia mantém a hora e a duração, e o evento com hora só vira de dia
+ * inteiro com `diaInteiro: true`.
  */
 const Quando = z.object({
   dia: DiaDaFerramenta,
-  hora: HoraDoDia.optional().describe("A hora de começo, HH:MM; sem ela, o evento é de dia inteiro"),
+  hora: HoraDoDia.optional().describe(
+    "A hora de começo, HH:MM. Ao criar, sem ela o evento é de dia inteiro; ao mudar, sem ela fica a hora que era",
+  ),
   duracaoMin: z
     .number()
     .int()
     .min(1)
     .max(1440)
     .optional()
-    .describe(`Quanto dura, em minutos; padrão ${DURACAO_PADRAO_MIN}`),
+    .describe(`Quanto dura, em minutos; ao criar, padrão ${DURACAO_PADRAO_MIN}; ao mudar, fica a que era`),
+  diaInteiro: z.boolean().optional().describe("true para o evento ocupar o dia inteiro, sem hora"),
 });
+
+/** A hora e a duração do evento com hora, para o `quando` que muda só o dia. */
+interface HorarioAtual {
+  hora: string;
+  duracaoMin: number;
+}
 
 const campos = {
   titulo: z.string().trim().min(1).max(500).describe("O nome do compromisso"),
@@ -63,13 +84,25 @@ const CamposGravados = z.object({
  */
 export function ferramentasAgenda(agenda: ServicoAgenda, tempo: TempoDoDia): Ferramenta[] {
   /** Início e fim do evento: instantes no evento com hora, dias no de dia inteiro. */
-  const pontas = (q: z.infer<typeof Quando>) => {
+  const pontas = (q: z.infer<typeof Quando>, atual: HorarioAtual | null = null) => {
     const dia = resolverDia(tempo, q.dia);
-    if (q.hora === undefined) return { inicio: dia, fim: somarDias(dia, 1), diaInteiro: true };
-    const inicio = tempo.instante(dia, q.hora);
-    const fim = new Date(inicio.getTime() + (q.duracaoMin ?? DURACAO_PADRAO_MIN) * 60_000);
+    if (q.diaInteiro === true && q.hora !== undefined) throw new Error(MENSAGEM_DIA_INTEIRO_COM_HORA);
+    const hora = q.diaInteiro === true ? undefined : (q.hora ?? atual?.hora);
+    if (hora === undefined) return { inicio: dia, fim: somarDias(dia, 1), diaInteiro: true };
+    const inicio = tempo.instante(dia, hora);
+    const minutos = q.duracaoMin ?? atual?.duracaoMin ?? DURACAO_PADRAO_MIN;
+    const fim = new Date(inicio.getTime() + minutos * 60_000);
     return { inicio: inicio.toISOString(), fim: fim.toISOString(), diaInteiro: false };
   };
+
+  /** A hora e a duração de agora, no fuso do usuário; o de dia inteiro não tem. */
+  const horarioDe = (e: EventoAgenda): HorarioAtual | null =>
+    e.diaInteiro
+      ? null
+      : {
+          hora: tempo.horaDe(new Date(e.inicio)),
+          duracaoMin: Math.round((Date.parse(e.fim) - Date.parse(e.inicio)) / 60_000),
+        };
 
   const exigirEditavel = (calendarioId: string) => {
     const calendario = agenda.calendarios().find((c) => c.id === calendarioId);
@@ -146,7 +179,7 @@ export function ferramentasAgenda(agenda: ServicoAgenda, tempo: TempoDoDia): Fer
     ferramenta({
       nome: "agenda.mudar_evento",
       descricao:
-        'Muda um compromisso do calendário local ou do "Moductus": só o que vier muda; para mudar o horário, mande o quando inteiro. Devolve o evento e como ele estava.',
+        'Muda um compromisso do calendário local ou do "Moductus": só o que vier muda. No quando, o dia é obrigatório e o resto fica como era: trocar só o dia mantém a hora e a duração, e o evento com hora só vira de dia inteiro com diaInteiro: true. Devolve o evento e como ele estava.',
       entrada: z.object({
         id: Id.describe("O evento"),
         titulo: campos.titulo.optional(),
@@ -161,7 +194,7 @@ export function ferramentasAgenda(agenda: ServicoAgenda, tempo: TempoDoDia): Fer
         const antes = agenda.obterEvento({ id });
         exigirEditavel(antes.calendarioId);
         const evento = agenda.definirEvento(
-          { id, ...resto, ...(quando === undefined ? {} : pontas(quando)) },
+          { id, ...resto, ...(quando === undefined ? {} : pontas(quando, horarioDe(antes))) },
           carimboDe(ctx),
         );
         const anterior: CamposEvento = {

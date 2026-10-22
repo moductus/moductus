@@ -114,6 +114,24 @@ export function mudancaDe(t: Tarefa): MudancaTarefa {
   };
 }
 
+/**
+ * O retrato só do que uma mudança mexe: as chaves que vieram, a hora quando o dia saiu (ela sai
+ * junto) e o lembrete quando o dia ou a hora mudaram (ele acompanha). O desfazer não regrava o que a
+ * chamada não tocou: a etiqueta que você apagou depois, ou o lembrete que já foi concluído, não voltam.
+ */
+export function retratoDoQueMuda(antes: Tarefa, mudanca: Omit<MudancaTarefa, "id">): MudancaTarefa {
+  const completo = mudancaDe(antes);
+  const retrato: Record<string, unknown> = { id: antes.id };
+  for (const chave of Object.keys(mudanca) as (keyof typeof mudanca)[]) {
+    if (mudanca[chave] !== undefined && chave in completo) retrato[chave] = completo[chave];
+  }
+  if (mudanca.venceEm === null) retrato.hora = completo.hora;
+  if (mudanca.venceEm !== undefined || mudanca.hora !== undefined) {
+    retrato.lembreteMinutosAntes = completo.lembreteMinutosAntes;
+  }
+  return retrato as MudancaTarefa;
+}
+
 export interface AvisosTarefas {
   /** As tarefas que mudaram e as que foram para a lixeira (`tarefas.mudou`). */
   tarefas: (mudanca: MudancaTarefas) => void;
@@ -690,13 +708,42 @@ export class ServicoTarefas {
     this.ultimoInstante = ms;
     const agora = new Date(ms).toISOString();
     this.daVez = { fuso: this.deps.lerFuso(), instantes: new Map() };
+    const deFora = this.repo.emTransacao();
     try {
       const resultado = this.repo.transacao(() => fazer(r, agora));
-      this.avisar(r);
+      if (deFora) {
+        // Dentro do desfazer: o aviso sai depois da transação dele, com o que ficou gravado.
+        queueMicrotask(() => {
+          try {
+            this.avisar(this.conferido(r));
+          } catch (erro) {
+            console.error(`tarefas: aviso do desfeito não saiu: ${String(erro)}`);
+          }
+        });
+      } else this.avisar(r);
       return resultado;
     } finally {
       this.daVez = null;
     }
+  }
+
+  /**
+   * O registro como ficou gravado depois da transação de fora: se ela voltou, o que ia para a
+   * lixeira continua vivo e sai como mudado, e o que nasceu e voltou não sai.
+   */
+  private conferido(r: Registro): Registro {
+    const tarefas = [...r.tarefas, ...r.apagadas];
+    const lembretes = [...r.lembretes, ...r.lembretesRemovidos];
+    const vivas = new Set(this.repo.tarefasDosIds(tarefas).map((t) => t.id));
+    const vivos = new Set(this.repo.lembretesDosIds(lembretes).map((l) => l.id));
+    return {
+      tarefas: new Set(tarefas.filter((id) => vivas.has(id))),
+      apagadas: new Set([...r.apagadas].filter((id) => !vivas.has(id))),
+      lembretes: new Set(lembretes.filter((id) => vivos.has(id))),
+      lembretesRemovidos: new Set([...r.lembretesRemovidos].filter((id) => !vivos.has(id))),
+      lembretesAnteriores: r.lembretesAnteriores,
+      listas: r.listas,
+    };
   }
 
   private avisar(r: Registro): void {

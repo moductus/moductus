@@ -2,7 +2,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { ConclusaoTarefa, Lista, Tarefa, type ChamadaFerramenta } from "@moductus/contrato";
+import {
+  ConclusaoTarefa,
+  Lista,
+  Tarefa,
+  type ChamadaFerramenta,
+  type MudancaTarefas,
+} from "@moductus/contrato";
 import { afterEach, describe, expect, test } from "vitest";
 import { z } from "zod";
 import { RepositorioAgentes } from "../../agentes/agentes.ts";
@@ -51,11 +57,12 @@ function montar() {
   `);
   const relogio = { ms: Date.parse(`${HOJE}T10:00:00.000-03:00`) };
   const agora = () => new Date(relogio.ms);
+  const avisos: MudancaTarefas[] = [];
   const notas = new ServicoNotas(new RepositorioNotas(db), { mudou: () => {} }, { agora });
   const tarefas = new ServicoTarefas(
     new RepositorioTarefas(db),
     { lerFuso: () => FUSO, notas },
-    { tarefas: () => {}, listas: () => {}, lembretes: () => {} },
+    { tarefas: (mudanca) => avisos.push(mudanca), listas: () => {}, lembretes: () => {} },
     { agora },
   );
   const catalogo = new Catalogo(ferramentasTarefas(tarefas, new TempoDoDia(() => FUSO, agora)));
@@ -92,7 +99,7 @@ function montar() {
   const alba = (...passos: PassoRoteiro[]) => rodar("alba", ...passos);
   const lembretesDa = (tarefaId: string) =>
     db.prepare("SELECT id FROM lembretes WHERE tarefa_id = ? AND apagado_em IS NULL").all(tarefaId);
-  return { db, relogio, tarefas, catalogo, historico, rodar, alba, lembretesDa };
+  return { db, relogio, tarefas, catalogo, historico, rodar, alba, lembretesDa, avisos };
 }
 
 const chamar = (nome: string, entrada: unknown): PassoRoteiro => ({ tipo: "ferramenta", nome, entrada });
@@ -186,6 +193,70 @@ describe("tarefas.definir e tarefas.adiar", () => {
       origem: "usuario",
     });
     expect(m.lembretesDa(base.id)).toHaveLength(1);
+  });
+
+  test("desfazer só volta o que a chamada mexeu: a etiqueta apagada e o lembrete concluído depois não voltam", async () => {
+    const m = montar();
+    const base = m.tarefas.criar({
+      titulo: "Relatório",
+      venceEm: HOJE,
+      hora: "16:00",
+      etiquetas: ["trabalho"],
+    });
+    const [renomear] = await m.alba(chamar("tarefas__definir", { id: base.id, titulo: "Relatório mensal" }));
+    expect(valor(renomear, z.object({ anterior: z.unknown() })).anterior).toEqual({
+      id: base.id,
+      titulo: "Relatório",
+    });
+    // Depois da Alba, você apaga a etiqueta e dá Feito no lembrete (o de uma vez vai para a lixeira).
+    const [etiqueta] = m.tarefas.obter({ id: base.id }).etiquetas;
+    m.tarefas.apagarEtiqueta({ id: etiqueta!.id });
+    m.db
+      .prepare("UPDATE lembretes SET apagado_em = ?, atualizado_em = ? WHERE tarefa_id = ?")
+      .run(new Date(m.relogio.ms).toISOString(), new Date(m.relogio.ms).toISOString(), base.id);
+
+    m.historico.desfazer({ chamadaId: renomear!.id });
+    expect(m.tarefas.obter({ id: base.id })).toMatchObject({
+      titulo: "Relatório",
+      etiquetas: [],
+      lembreteMinutosAntes: null,
+    });
+    expect(m.tarefas.etiquetas()).toEqual([]);
+    expect(m.lembretesDa(base.id)).toHaveLength(0);
+  });
+
+  test("tirar o dia guarda a hora e o lembrete que saíram junto, e o desfazer os traz", async () => {
+    const m = montar();
+    const base = m.tarefas.criar({
+      titulo: "Dentista",
+      venceEm: HOJE,
+      hora: "16:00",
+      lembreteMinutosAntes: 30,
+    });
+    const [semDia] = await m.alba(chamar("tarefas__definir", { id: base.id, venceEm: null }));
+    expect(valor(semDia, z.object({ anterior: z.unknown() })).anterior).toEqual({
+      id: base.id,
+      venceEm: HOJE,
+      hora: "16:00",
+      lembreteMinutosAntes: 30,
+    });
+    m.historico.desfazer({ chamadaId: semDia!.id });
+    expect(m.tarefas.obter({ id: base.id })).toMatchObject({
+      venceEm: HOJE,
+      hora: "16:00",
+      lembreteMinutosAntes: 30,
+    });
+  });
+
+  test("o aviso do desfazer sai depois da transação dele", async () => {
+    const m = montar();
+    const [criar] = await m.alba(chamar("tarefas__criar", { titulo: "Pão" }));
+    const id = valor(criar, Tarefa).id;
+    const antes = m.avisos.length;
+    m.historico.desfazer({ chamadaId: criar!.id });
+    expect(m.avisos).toHaveLength(antes);
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(m.avisos.slice(antes)).toEqual([{ tarefas: [], apagadas: [id] }]);
   });
 
   test("adiar várias para amanhã volta todas; se uma mudou depois, nenhuma volta", async () => {

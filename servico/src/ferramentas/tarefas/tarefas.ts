@@ -10,7 +10,7 @@ import {
 } from "@moductus/contrato";
 import { z } from "zod";
 import type { TempoDoDia } from "../../areas/dia/tempo.ts";
-import { mudancaDe, type ServicoTarefas } from "../../areas/tarefas/tarefas.ts";
+import { retratoDoQueMuda, type ServicoTarefas } from "../../areas/tarefas/tarefas.ts";
 import { DiaDaFerramenta, resolverDia } from "../dia.ts";
 import { carimboDe, ferramenta, type Ferramenta } from "../ferramenta.ts";
 
@@ -131,8 +131,9 @@ export function ferramentasTarefas(tarefas: ServicoTarefas, tempo: TempoDoDia): 
       efeito: "interno",
       executar: (mudanca, ctx) => {
         const antes = tarefas.obter({ id: mudanca.id });
-        const tarefa = tarefas.definir({ ...mudanca, venceEm: dia(mudanca.venceEm) }, carimboDe(ctx));
-        return { tarefa, anterior: mudancaDe(antes) };
+        const pedido = { ...mudanca, venceEm: dia(mudanca.venceEm) };
+        const tarefa = tarefas.definir(pedido, carimboDe(ctx));
+        return { tarefa, anterior: retratoDoQueMuda(antes, pedido) };
       },
       desfazer: (resultado, ctx) => {
         const { tarefa, anterior } = z

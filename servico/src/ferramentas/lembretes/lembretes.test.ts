@@ -97,10 +97,17 @@ function montar() {
     { estado: () => {}, nova: () => {}, naoVistas: () => {} },
   );
   const resolvidos: string[] = [];
+  /** Roda uma vez no meio da espera de tirar um aviso: o que acontece enquanto a área espera. */
+  const noMeio: { acao: (() => Promise<void>) | null } = { acao: null };
   const notificacoes: NotificacoesDoLembrete = {
     avisar: (aviso) => reais.avisar(aviso),
-    resolvido: (referencia) => {
+    resolvido: async (referencia) => {
       resolvidos.push(referencia);
+      const acao = noMeio.acao;
+      noMeio.acao = null;
+      // Como o timer do relógio: num tique próprio, depois de quem esperava já ter seguido.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      await acao?.();
       return reais.resolvido(referencia);
     },
     registrarAcao: (prefixo, acao) => reais.registrarAcao(prefixo, acao),
@@ -197,6 +204,7 @@ function montar() {
     catalogo,
     avisos,
     resolvidos,
+    noMeio,
     rodar,
     vivo,
   };
@@ -385,6 +393,26 @@ describe("mudar, adiar, concluir e cancelar se desfazem", () => {
       MENSAGENS_DESFAZER.areaRecusou(MENSAGEM_DESFAZER_MUDOU),
     );
     expect(m.lembretes.listar({})[0]).toMatchObject({ estado: "disparado" });
+  });
+
+  test("o que toca enquanto a área tira o aviso conta como depois da chamada", async () => {
+    const m = montar();
+    const [criar] = await m.rodar(chamar("lembretes__criar", { texto: "Água", dia: "hoje", hora: "16:00" }));
+    const id = valor(criar, Lembrete).id;
+    // Mudar para agora grava e, esperando o aviso velho sair, o relógio passa e toca.
+    m.noMeio.acao = () => {
+      m.relogio.ms += 1000;
+      return m.lembretes.conferir({ agora: new Date(m.relogio.ms), ausencia: null });
+    };
+    const [definir] = await m.rodar(chamar("lembretes__definir", { id, dia: "hoje", hora: "14:00" }));
+    expect(m.noMeio.acao).toBeNull();
+    expect(m.lembretes.listar({})[0]).toMatchObject({ estado: "disparado" });
+
+    // O retrato do depois é o da gravação da Alba, não o do toque: desfazer não passa por cima dele.
+    expect(() => m.historico.desfazer({ chamadaId: definir!.id })).toThrow(
+      MENSAGENS_DESFAZER.areaRecusou(MENSAGEM_DESFAZER_MUDOU),
+    );
+    expect(m.lembretes.listar({})[0]).toMatchObject({ estado: "disparado", texto: "Água" });
   });
 
   test("dia sem hora volta ao modelo como erro", async () => {

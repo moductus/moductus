@@ -54,8 +54,11 @@ export function ferramentasLembretes(lembretes: ServicoLembretes, tempo: TempoDo
   const comRetratos = async <T>(ids: readonly string[], fazer: () => Promise<T>) => {
     const unicos = [...new Set(ids)];
     const antes = lembretes.retratos(unicos);
-    const resultado = await fazer();
-    return { resultado, antes, depois: lembretes.retratos(unicos) };
+    // Definir, adiar, concluir e cancelar gravam antes do primeiro `await` (o resto é tirar avisos):
+    // o retrato do depois sai aqui, antes que o relógio ou você mexam no meio da espera.
+    const pendente = fazer();
+    const depois = lembretes.retratos(unicos);
+    return { resultado: await pendente, antes, depois };
   };
 
   const desfazerMudanca = (resultado: unknown, ctx: ContextoDesfazer): void => {
