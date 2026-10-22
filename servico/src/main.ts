@@ -50,8 +50,12 @@ import { ServicoGoogleAgenda } from "./conexoes/google/google-agenda.ts";
 import { LeituraGoogleAgenda, RepositorioLeituraGoogle } from "./conexoes/google/leitura.ts";
 import { ferramentasAgenda } from "./ferramentas/agenda/agenda.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
+import { ferramentasFoco } from "./ferramentas/foco/foco.ts";
 import { ferramentasGithub } from "./ferramentas/github/github.ts";
+import { ferramentasLembretes } from "./ferramentas/lembretes/lembretes.ts";
+import { ferramentasNotas } from "./ferramentas/notas/notas.ts";
 import { ferramentasSessoes } from "./ferramentas/sessoes/sessoes.ts";
+import { ferramentasTarefas } from "./ferramentas/tarefas/tarefas.ts";
 import { ferramentasUso } from "./ferramentas/uso/uso.ts";
 import { abrirServidorMcp } from "./mcp/servidor.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
@@ -322,12 +326,15 @@ leituraGoogle = new LeituraGoogleAgenda({
     },
   },
 });
-// As ferramentas de cada área (F2-26: as do Nuno); cada agente só vê as da lista dele.
+// O dia das ferramentas da Alba: "hoje" e "amanhã" no fuso de config, lido a cada pergunta.
+const tempoDoDia = new TempoDoDia(() => repositorioConfig.ler().dia.fuso);
+// As ferramentas de cada área (F2-26: as do Nuno; F3-26: as da Alba); cada agente só vê as da lista
+// dele. As das áreas que nascem mais adiante entram quando elas nascem, antes do servidor abrir.
 const catalogo = new Catalogo([
   ...ferramentasSessoes(sessoes),
   ...ferramentasUso(sessoes),
   ...ferramentasGithub(github),
-  ...ferramentasAgenda(agenda),
+  ...ferramentasAgenda(agenda, tempoDoDia),
 ]);
 const repositorioAgentes = new RepositorioAgentes(banco);
 // Quem rodava essas execuções era o serviço que parou: fecham como erro e os cartões delas expiram.
@@ -471,6 +478,13 @@ const tarefas = new ServicoTarefas(
       recontarAreas();
     },
   },
+);
+// As ferramentas da Alba sobre as áreas do dia (F3-26); o `tarefas.criar` vale também para o Nuno.
+catalogo.registrar(
+  ...ferramentasTarefas(tarefas, tempoDoDia),
+  ...ferramentasLembretes(lembretes, tempoDoDia),
+  ...ferramentasFoco(servicoFoco, tempoDoDia),
+  ...ferramentasNotas(notas),
 );
 // Captura rápida (F3-32, ADR-0034): o entendedor de frases e, quando ele não reconhece nada além do
 // título, o modelo da Alba com prazo de 8 s. Lança pela área de cada tipo; o desfazer vale por 10 s.
@@ -616,12 +630,7 @@ servidor = await abrirServidorWs(token, {
   ...atendentesDaCaptura(captura),
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
-  ...semAtendente([
-    "rotinas.listar",
-    "rotinas.definir",
-    "rotinas.hoje",
-    "rotinas.agir",
-  ]),
+  ...semAtendente(["rotinas.listar", "rotinas.definir", "rotinas.hoje", "rotinas.agir"]),
   "areas.contagens": () => contagens.obter(),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);

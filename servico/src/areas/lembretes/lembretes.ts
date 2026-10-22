@@ -16,6 +16,7 @@ import {
 } from "@moductus/contrato";
 import { colunasDeOrigem, DO_USUARIO, type Carimbo } from "../../banco/tabela.ts";
 import { novoId } from "../../banco/ulid.ts";
+import { RecusaDesfazer, type ContextoDesfazer } from "../../ferramentas/ferramenta.ts";
 import type { BotaoAviso, NovoAviso, ServicoNotificacoes } from "../../notificacoes/notificacoes.ts";
 import { lerRecorrencia, proximoInstante } from "../dia/recorrencia.ts";
 import type { Ausencia, Conferencia, FonteDoRelogio } from "../dia/relogio.ts";
@@ -44,6 +45,9 @@ import { TempoDoDia } from "../dia/tempo.ts";
 export const MENSAGEM_NAO_ENCONTRADO = "lembrete não encontrado";
 export const MENSAGEM_TAREFA = "a tarefa deste lembrete não existe mais";
 export const MENSAGEM_EVENTO = "o evento deste lembrete não existe mais";
+export const MENSAGEM_DESFAZER_SAIU = "o lembrete já saiu";
+export const MENSAGEM_DESFAZER_MUDOU = "o lembrete tocou ou foi mudado depois";
+export const MENSAGEM_DESFAZER_DE_OUTRO = "o lembrete foi mudado depois por você ou em outra conversa";
 
 /** Até quanto depois da hora o lembrete ainda toca; mais que isso, vira atrasado. */
 export const TOLERANCIA_MS = 2 * 60_000;
@@ -132,6 +136,16 @@ export interface CamposLembrete {
   estado: EstadoLembrete;
   disparado_em: string | null;
   adiado_ate: string | null;
+}
+
+/**
+ * Como um lembrete estava, vivo ou na lixeira: os campos e a versão (`atualizado_em`). A ferramenta
+ * guarda o de antes de mexer e a versão em que deixou, e o desfazer põe os campos de volta.
+ */
+export interface RetratoLembrete {
+  id: string;
+  campos: CamposLembrete;
+  versao: string;
 }
 
 const camposDe = (l: LinhaLembrete): CamposLembrete => ({
@@ -294,6 +308,40 @@ export class RepositorioLembretes {
         WHERE id = ? AND apagado_em IS NULL`,
     );
     for (const id of ids) apagar.run(agora, agora, origem.origem, origem.agente_id, origem.execucao_id, id);
+  }
+
+  /** O lembrete vivo ou na lixeira: o desfazer confere a versão dos dois. */
+  qualquer(id: string): LinhaLembrete | null {
+    const linha = this.db.prepare(`SELECT ${COLUNAS} FROM lembretes WHERE id = ?`).get(id) as unknown as
+      LinhaLembrete | undefined;
+    return linha ?? null;
+  }
+
+  /** Põe os campos de volta e tira da lixeira, se estava lá: a inversa das ferramentas da Alba. */
+  restaurar(id: string, c: CamposLembrete, agora: string, carimbo: Carimbo): void {
+    const origem = colunasDeOrigem(carimbo);
+    this.db
+      .prepare(
+        `UPDATE lembretes SET texto = ?, quando = ?, recorrencia = ?, inicio_recorrencia = ?, canal = ?, estado = ?,
+           disparado_em = ?, adiado_ate = ?, apagado_em = NULL, atualizado_em = ?, origem = ?, agente_id = ?,
+           execucao_id = ?
+          WHERE id = ?`,
+      )
+      .run(
+        c.texto,
+        c.quando,
+        c.recorrencia,
+        c.inicio_recorrencia,
+        c.canal,
+        c.estado,
+        c.disparado_em,
+        c.adiado_ate,
+        agora,
+        origem.origem,
+        origem.agente_id,
+        origem.execucao_id,
+        id,
+      );
   }
 
   /** O `quando` de um lembrete, vivo ou na lixeira: o aviso da ocorrência sai com ele. */
@@ -625,6 +673,72 @@ export class ServicoLembretes implements FonteDoRelogio {
     this.resolver([...removidos, ...(mudanca.anteriores ?? [])]).catch((erro: unknown) =>
       console.error(`lembretes: aviso do que mudou não retirado: ${String(erro)}`),
     );
+  }
+
+  // O desfazer das ferramentas da Alba (AGENTS.md §4, ADR-0029). As inversas são síncronas e rodam
+  // dentro da transação do desfazer, já aberta: não abrem outra, e os avisos saem depois dela.
+
+  /** Como cada lembrete está agora, vivo ou na lixeira; o que não existe fica de fora. */
+  retratos(ids: readonly string[]): RetratoLembrete[] {
+    return ids.flatMap((id) => {
+      const linha = this.repo.qualquer(id);
+      return linha === null ? [] : [{ id, campos: camposDe(linha), versao: linha.atualizado_em }];
+    });
+  }
+
+  /**
+   * A inversa de criar: o lembrete vai à lixeira. Ter tocado não impede (o relógio muda o estado
+   * sem trocar quem escreveu); ter sido mudado por você, ou por outra conversa, sim.
+   */
+  desfazerCriacao(alvo: { id: string }, ctx: ContextoDesfazer): void {
+    const linha = this.repo.lembrete(alvo.id);
+    if (linha === null) throw new RecusaDesfazer(MENSAGEM_DESFAZER_SAIU);
+    const mesmoAutor =
+      linha.origem === "agente" && linha.agente_id === ctx.agenteId && linha.execucao_id === ctx.execucaoId;
+    if (!mesmoAutor) throw new RecusaDesfazer(MENSAGEM_DESFAZER_DE_OUTRO);
+    this.repo.apagar([linha.id], this.instante(), ctx.carimbo);
+    this.depoisDoDesfazer([linha.id]);
+  }
+
+  /**
+   * A inversa de mudar, adiar, concluir e cancelar: cada lembrete volta aos campos de antes, e sai
+   * da lixeira se foi para lá. Só se continua na versão em que a chamada o deixou: o que tocou
+   * depois (o relógio também conta) ou que você mexeu fica como está.
+   */
+  desfazerMudancas(
+    itens: readonly { id: string; antes: CamposLembrete; versao: string }[],
+    carimbo: Carimbo,
+  ): void {
+    for (const { id, versao } of itens) {
+      const linha = this.repo.qualquer(id);
+      if (linha === null) throw new RecusaDesfazer(MENSAGEM_DESFAZER_SAIU);
+      if (linha.atualizado_em !== versao) throw new RecusaDesfazer(MENSAGEM_DESFAZER_MUDOU);
+    }
+    const agora = this.instante();
+    for (const { id, antes } of itens) this.repo.restaurar(id, antes, agora, carimbo);
+    this.depoisDoDesfazer(itens.map((i) => i.id));
+  }
+
+  /**
+   * Os avisos do desfazer saem depois da transação dele, com o que ficou gravado: se ela voltar, as
+   * janelas recebem o de antes. O que saiu leva o aviso do Windows junto.
+   */
+  private depoisDoDesfazer(ids: readonly string[]): void {
+    queueMicrotask(() => {
+      const vivos = ids.flatMap((id) => {
+        const linha = this.repo.lembrete(id);
+        return linha === null ? [] : [linha];
+      });
+      const removidos = ids.filter((id) => !vivos.some((l) => l.id === id));
+      this.mudou({ lembretes: vivos.map(paraLembrete), removidos });
+      const saidos = removidos.flatMap((id) => {
+        const quando = this.repo.quandoDe(id);
+        return quando === null ? [] : [{ id, quando }];
+      });
+      this.resolver(saidos).catch((erro: unknown) =>
+        console.error(`lembretes: aviso do desfeito não retirado: ${String(erro)}`),
+      );
+    });
   }
 
   // O relógio do dia.
