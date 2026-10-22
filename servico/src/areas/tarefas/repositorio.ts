@@ -146,6 +146,11 @@ export class RepositorioTarefas {
    * Por `SAVEPOINT`, não `BEGIN`: o desfazer de uma ferramenta (`interno`) já roda numa transação, e
    * a área chamada de dentro dele não pode abrir outra.
    */
+  /** Se já há uma transação aberta por fora (a do desfazer): o aviso espera ela terminar. */
+  emTransacao(): boolean {
+    return this.db.isTransaction;
+  }
+
   transacao<T>(fazer: () => T): T {
     this.db.exec("SAVEPOINT tarefas");
     try {

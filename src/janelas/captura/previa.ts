@@ -6,6 +6,28 @@ import type {
   TipoCaptura,
   TipoLancavel,
 } from "@moductus/contrato";
+import {
+  diaDoCalendario,
+  ehDiaDoCalendario,
+  formatarAntes,
+  formatarDia,
+  formatarMinutos,
+  formatarRepeticao,
+  MESES,
+  partesDoDia,
+  somarDias,
+} from "../../areas/dia.ts";
+
+// O texto do dia, dos minutos, da repetição e do "criada" é comum às telas (`src/areas/dia.ts`).
+export {
+  desfeito,
+  formatarDia,
+  formatarMinutos,
+  formatarRepeticao,
+  hojeNoFuso,
+  lancado,
+  NOME_DO_TIPO,
+} from "../../areas/dia.ts";
 
 /**
  * A prévia da captura como a janela mostra (Captura.dc.html): o nome do tipo, quem entendeu, os
@@ -13,15 +35,6 @@ import type {
  * lançar é o serviço (`captura.entender`, `captura.lancar`); aqui só o que vai na tela e a leitura
  * do que a pessoa digitou num campo depois do Tab, nos formatos que a própria tela mostra.
  */
-
-export const NOME_DO_TIPO: Readonly<Record<TipoCaptura, string>> = {
-  tarefa: "Tarefa",
-  lembrete: "Lembrete",
-  evento: "Evento",
-  nota: "Nota",
-  gasto: "Gasto",
-  memoria: "Memória",
-};
 
 /** A área que recebe cada tipo, o sujeito do "entendeu como" ("Finanças entendeu como Gasto"). */
 export const AREA_DO_TIPO: Readonly<Record<TipoCaptura, string>> = {
@@ -137,120 +150,6 @@ export interface Contexto {
   listas: readonly Pick<Lista, "id" | "nome">[];
 }
 
-/** Hoje no fuso da configuração (o mesmo do serviço); sem fuso conhecido, o do Windows. */
-export function hojeNoFuso(agora: Date, fuso: string | null): string {
-  try {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: fuso ?? undefined,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(agora);
-  } catch {
-    return new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit" }).format(
-      agora,
-    );
-  }
-}
-
-const DIA_DA_SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
-const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-
-function partes(dia: string): { ano: number; mes: number; dia: number } {
-  const [a, m, d] = dia.split("-").map(Number);
-  return { ano: a!, mes: m!, dia: d! };
-}
-
-/** O dia do calendário em UTC, para somar e comparar sem o fuso de quem roda. */
-function data(dia: string): Date {
-  const p = partes(dia);
-  const d = new Date(0);
-  d.setUTCFullYear(p.ano, p.mes - 1, p.dia);
-  return d;
-}
-
-function iso(d: Date): string {
-  const ano = String(d.getUTCFullYear()).padStart(4, "0");
-  return `${ano}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-}
-
-function somarDias(dia: string, n: number): string {
-  const d = data(dia);
-  d.setUTCDate(d.getUTCDate() + n);
-  return iso(d);
-}
-
-/** "Hoje", "Amanhã" ou "sex, 9 out" (com o ano quando não é o de hoje), como no PainelTarefas. */
-export function formatarDia(dia: string, hoje: string): string {
-  if (dia === hoje) return "Hoje";
-  if (dia === somarDias(hoje, 1)) return "Amanhã";
-  const d = data(dia);
-  const texto = `${DIA_DA_SEMANA[d.getUTCDay()]}, ${d.getUTCDate()} ${MESES[d.getUTCMonth()]}`;
-  return d.getUTCFullYear() === partes(hoje).ano ? texto : `${texto} ${d.getUTCFullYear()}`;
-}
-
-/** "15 min", "1 h", "1 h 30", "2 dias". */
-export function formatarMinutos(minutos: number): string {
-  if (minutos >= 1440 && minutos % 1440 === 0) {
-    const dias = minutos / 1440;
-    return dias === 1 ? "1 dia" : `${dias} dias`;
-  }
-  if (minutos < 60) return `${minutos} min`;
-  const h = Math.floor(minutos / 60);
-  const m = minutos % 60;
-  return m === 0 ? `${h} h` : `${h} h ${String(m).padStart(2, "0")}`;
-}
-
-function formatarAntes(minutos: number): string {
-  return minutos === 0 ? "na hora" : `${formatarMinutos(minutos)} antes`;
-}
-
-const DIAS_RRULE: Readonly<Record<string, string>> = {
-  SU: "dom",
-  MO: "seg",
-  TU: "ter",
-  WE: "qua",
-  TH: "qui",
-  FR: "sex",
-  SA: "sáb",
-};
-
-/**
- * A repetição em poucas palavras ("toda seg, qua", "todo dia", "a cada 2 semanas"). Regra que foge
- * disso fica "repete": quem entende a regra inteira é o serviço.
- */
-export function formatarRepeticao(regra: string): string {
-  const pares = new Map(
-    regra
-      .replace(/^RRULE:/i, "")
-      .split(";")
-      .map((p) => p.split("=") as [string, string | undefined])
-      .map(([k, v]) => [k.trim().toUpperCase(), (v ?? "").trim().toUpperCase()]),
-  );
-  const intervalo = Number(pares.get("INTERVAL") ?? "1") || 1;
-  const cada = (um: string, varios: string) => (intervalo === 1 ? um : `a cada ${intervalo} ${varios}`);
-  const dias = (pares.get("BYDAY") ?? "")
-    .split(",")
-    .map((d) => DIAS_RRULE[d.replace(/^[+-]?\d+/, "")])
-    .filter(Boolean);
-  switch (pares.get("FREQ")) {
-    case "DAILY":
-      return cada("todo dia", "dias");
-    case "WEEKLY":
-      if (dias.length > 0 && intervalo === 1) return `toda ${dias.join(", ")}`;
-      return cada("toda semana", "semanas");
-    case "MONTHLY": {
-      const noDia = pares.get("BYMONTHDAY");
-      if (noDia && /^\d+$/.test(noDia) && intervalo === 1) return `todo dia ${noDia}`;
-      return cada("todo mês", "meses");
-    }
-    case "YEARLY":
-      return cada("todo ano", "anos");
-    default:
-      return "repete";
-  }
-}
-
 const REAIS = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 /** O texto do campo na tela; vazio quando a frase não disse (o espaço mostra o "sem dia"). */
@@ -299,13 +198,6 @@ export type Leitura<T> = { ok: true; valor: T } | { ok: false; erro: string };
 const sem = (texto: string) =>
   texto.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ");
 
-function ehDiaValido(ano: number, mes: number, dia: number): boolean {
-  if (ano < 1 || ano > 9999 || mes < 1 || mes > 12 || dia < 1) return false;
-  const d = new Date(0);
-  d.setUTCFullYear(ano, mes - 1, dia);
-  return d.getUTCFullYear() === ano && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
-}
-
 export const ERRO_DIA = "Dia: use dd/mm, hoje ou amanhã.";
 export const ERRO_HORA = "Hora: use HH:MM, como 15:00.";
 export const ERRO_DURACAO = "Duração: use minutos ou horas, como 30 min ou 1 h.";
@@ -331,7 +223,7 @@ export function lerDia(texto: string, hoje: string): Leitura<string | null> {
     mes = Number(numerico[2]);
     if (numerico[3]) ano = numerico[3].length === 2 ? 2000 + Number(numerico[3]) : Number(numerico[3]);
   } else if (porNome) {
-    const indice = MESES.indexOf(porNome[2]!);
+    const indice = (MESES as readonly string[]).indexOf(porNome[2]!);
     if (indice < 0) return { ok: false, erro: ERRO_DIA };
     dia = Number(porNome[1]);
     mes = indice + 1;
@@ -339,20 +231,14 @@ export function lerDia(texto: string, hoje: string): Leitura<string | null> {
   } else {
     return { ok: false, erro: ERRO_DIA };
   }
-  const deHoje = partes(hoje);
+  const deHoje = partesDoDia(hoje);
   if (ano === null) {
     ano = deHoje.ano;
     // "05/01" em outubro é o de janeiro que vem, não o que já passou.
-    if (ehDiaValido(ano, mes, dia) && iso(dataDe(ano, mes, dia)) < hoje) ano += 1;
+    if (ehDiaDoCalendario(ano, mes, dia) && diaDoCalendario(ano, mes, dia) < hoje) ano += 1;
   }
-  if (!ehDiaValido(ano, mes, dia)) return { ok: false, erro: ERRO_DIA };
-  return { ok: true, valor: iso(dataDe(ano, mes, dia)) };
-}
-
-function dataDe(ano: number, mes: number, dia: number): Date {
-  const d = new Date(0);
-  d.setUTCFullYear(ano, mes - 1, dia);
-  return d;
+  if (!ehDiaDoCalendario(ano, mes, dia)) return { ok: false, erro: ERRO_DIA };
+  return { ok: true, valor: diaDoCalendario(ano, mes, dia) };
 }
 
 /** A hora digitada: vazio, "15", "15h", "15:00", "15h30", "9:05". */
@@ -460,17 +346,4 @@ export function edicoesDoTipo(tipo: TipoCaptura, campos: CamposCaptura, edicoes:
   return Object.fromEntries(
     Object.entries(edicoes).filter(([campo]) => visiveis.has(campo as CampoCaptura)),
   ) as Edicoes;
-}
-
-/** "Tarefa criada", "Lembrete criado": o que a janela diz depois do Enter. */
-export function lancado(tipo: TipoLancavel): string {
-  return tipo === "tarefa" || tipo === "nota"
-    ? `${NOME_DO_TIPO[tipo]} criada`
-    : `${NOME_DO_TIPO[tipo]} criado`;
-}
-
-/** "a tarefa saiu", "o evento saiu": o fim do desfazer. */
-export function desfeito(tipo: TipoLancavel): string {
-  const artigo = tipo === "tarefa" || tipo === "nota" ? "a" : "o";
-  return `Desfeito: ${artigo} ${NOME_DO_TIPO[tipo].toLowerCase()} saiu.`;
 }

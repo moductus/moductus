@@ -54,7 +54,7 @@ Na fase 2 só o Nuno tem ferramentas e vigias. Alba, Tula e Faina existem, conve
 - **Cuida de:** agenda, tarefas, lembretes, rotina e foco.
 - **Faz:** transforma frase solta em tarefa ou compromisso com data, hora e prioridade ("ligar pro banco amanhã 15h"); dispara **lembretes** no horário, inclusive recorrentes; monta o **briefing da manhã** (compromissos, o que vence, o que ficou de ontem, e o resumo que os outros agentes mandarem); faz o **fechamento do dia** (o que foi feito, quanto foco, o que passa para amanhã); encaixa tarefas nos horários livres da agenda e sugere o próximo foco.
 - **Gatilhos:** horário do briefing e do fechamento, lembrete vencendo, compromisso chegando.
-- **Ferramentas:** `agenda.*`, `tarefas.*`, `lembretes.*`, `foco.*`, `notas.*`, `memoria.*`.
+- **Ferramentas:** `agenda.*`, `tarefas.*`, `listas.listar`, `lembretes.*`, `foco.*`, `notas.*`, `memoria.*`.
 - **Agenda e controle fora do PC:** os agentes só trabalham com o PC ligado. Para o que precisa te alcançar longe dele, a Alba escreve na sua agenda: ao conectar o Google Agenda (Outlook depois), o Moductus cria um calendário próprio, **"Moductus"**, e todo compromisso e lembrete com horário vira um evento com alerta ali. O celular avisa mesmo com o PC desligado.
   - **Escrever no calendário "Moductus":** autorizado uma vez, na conexão; não pede aprovação a cada evento.
   - **Ler os outros calendários:** sim, para montar o dia e achar horário livre.

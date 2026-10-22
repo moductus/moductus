@@ -1,6 +1,7 @@
 import { Botao } from "../componentes/Botao.tsx";
 import { Cartao } from "../componentes/Cartao.tsx";
 import { Personagem } from "../componentes/personagem/Personagem.tsx";
+import type { Agente } from "../componentes/personagem/agentes.ts";
 import { useAcoesSistema } from "../janelas/sistema/primeiro-uso/estado.ts";
 import { EstadoVazio } from "./Pagina.tsx";
 
@@ -42,7 +43,16 @@ export function FaixaNuno({ texto, erro }: { texto: string; erro: boolean }) {
  * Enquanto a leitura não chega, uma linha; se o serviço recusou o pedido, a área diz que não
  * conseguiu ler e oferece tentar de novo, em vez de esperar para sempre.
  */
-export function LeituraPendente({ oQue, tentarDeNovo }: { oQue: string; tentarDeNovo?: () => void }) {
+export function LeituraPendente({
+  oQue,
+  tentarDeNovo,
+  agente = "nuno",
+}: {
+  oQue: string;
+  tentarDeNovo?: () => void;
+  /** Quem cuida da área que não leu (a Alba, nas Tarefas). */
+  agente?: Agente;
+}) {
   if (!tentarDeNovo) {
     return (
       <p className="area-carregando" role="status">
@@ -52,7 +62,7 @@ export function LeituraPendente({ oQue, tentarDeNovo }: { oQue: string; tentarDe
   }
   return (
     <EstadoVazio
-      agentes={["nuno"]}
+      agentes={[agente]}
       titulo="O serviço não respondeu"
       texto={`Não consegui ler ${oQue} agora. Nada foi perdido: tente de novo.`}
       acoes={

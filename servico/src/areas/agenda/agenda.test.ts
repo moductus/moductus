@@ -21,6 +21,7 @@ import {
   RepositorioAgenda,
   ServicoAgenda,
 } from "./agenda.ts";
+import { TempoDoDia } from "../dia/tempo.ts";
 import { MAX_OCORRENCIAS_POR_EVENTO } from "./livre.ts";
 import { RepositorioTarefasDoDia } from "./tarefas-do-dia.ts";
 
@@ -66,7 +67,15 @@ function montar(
     { mudou: (m) => avisos.push(m), calendarios: (c) => listas.push(c) },
     { agora: () => relogio.agora },
   );
-  const catalogo = new Catalogo(ferramentasAgenda(agenda));
+  const catalogo = new Catalogo(
+    ferramentasAgenda(
+      agenda,
+      new TempoDoDia(
+        () => fuso,
+        () => relogio.agora,
+      ),
+    ),
+  );
   const historico = new ServicoExecucoes(execucoes, catalogo, { agora: () => relogio.agora });
   return { db, agenda, avisos, listas, relogio, catalogo, historico };
 }
@@ -550,7 +559,10 @@ describe("encaixe aplicado e desfeito", () => {
   test("nenhum agente vê a ferramenta do encaixe; o catálogo a guarda para o desfazer", () => {
     const { catalogo } = montar();
     expect(catalogo.obter(FERRAMENTA_APLICAR_SUGESTAO)?.desfazivel).toBe(true);
-    expect(catalogo.doAgente(["agenda.*"]).ferramentas).toEqual([]);
+    // A Alba tem `agenda.*`: vê as outras da agenda, nunca esta.
+    const daAgenda = catalogo.doAgente(["agenda.*"]).ferramentas.map((f) => f.nome);
+    expect(daAgenda.length).toBeGreaterThan(0);
+    expect(daAgenda).not.toContain(FERRAMENTA_APLICAR_SUGESTAO);
     expect(catalogo.doAgente([FERRAMENTA_APLICAR_SUGESTAO]).ferramentas).toEqual([]);
   });
 });

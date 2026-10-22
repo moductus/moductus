@@ -269,6 +269,13 @@
   --largura-prioridade: 3px;
   --altura-prioridade: 18px;
   --altura-campo-frase: 38px;
+  /* Tarefas (AreaTarefas.dc.html): sub-navegação de 210, campo da frase de 40, linha de 40, o traço
+     da prioridade e a coluna do quando */
+  --largura-subnav-tarefas: 210px;
+  --altura-campo-frase-area: 40px;
+  --altura-linha-tarefa-area: 40px;
+  --raio-prioridade: 2px;
+  --largura-quando-tarefa: 44px;
   /* Notas (AreaNotas.dc.html, PainelNotas.dc.html): a lista à esquerda, a coluna do que está
      ligado à nota à direita, a margem do texto, a linha de leitura e o entrelinha de quem escreve */
   --largura-lista-notas: 290px;

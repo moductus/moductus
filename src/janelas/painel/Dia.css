@@ -285,18 +285,18 @@
   border-bottom: var(--espessura-borda) solid var(--borda);
 }
 
-.tarefa-prioridade {
+.painel-tarefa-prioridade {
   flex: none;
   width: var(--largura-prioridade);
   height: var(--altura-prioridade);
   border-radius: var(--raio-progresso);
 }
 
-.tarefa-prioridade[data-tom="perigo"] {
+.painel-tarefa-prioridade[data-tom="perigo"] {
   background: var(--perigo);
 }
 
-.tarefa-prioridade[data-tom="aviso"] {
+.painel-tarefa-prioridade[data-tom="aviso"] {
   background: var(--aviso);
 }
 
@@ -307,19 +307,19 @@
   min-width: 0;
 }
 
-.tarefa-titulo {
+.painel-tarefa-titulo {
   overflow: hidden;
   color: var(--texto);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tarefa-linha[data-feita] .tarefa-titulo {
+.tarefa-linha[data-feita] .painel-tarefa-titulo {
   color: var(--texto-apagado);
   text-decoration: line-through;
 }
 
-.tarefa-nota {
+.painel-tarefa-nota {
   overflow: hidden;
   font-size: var(--tipo-12);
   color: var(--texto-3);
@@ -333,7 +333,7 @@
   color: var(--texto-3);
 }
 
-.tarefa-quando {
+.painel-tarefa-quando {
   flex: none;
   width: var(--largura-hora);
   font-family: var(--fonte-mono);
@@ -342,7 +342,7 @@
   text-align: right;
 }
 
-.tarefa-quando[data-aviso] {
+.painel-tarefa-quando[data-aviso] {
   color: var(--aviso);
 }
 

@@ -94,20 +94,20 @@ export function LinhaTarefa({ tarefa, listas, hoje, minutoAgora, aoMarcar }: Pro
   return (
     <li className="tarefa-linha" data-feita={feita || undefined}>
       <Caixa marcado={feita} aoMudar={(marcada) => aoMarcar(tarefa, marcada)} aria-label={tarefa.titulo} />
-      <span className="tarefa-prioridade" data-tom={prioridade?.tom} aria-hidden="true" />
+      <span className="painel-tarefa-prioridade" data-tom={prioridade?.tom} aria-hidden="true" />
       <span className="tarefa-corpo">
-        <span className="tarefa-titulo" title={tarefa.titulo}>
+        <span className="painel-tarefa-titulo" title={tarefa.titulo}>
           {tarefa.titulo}
         </span>
         {prioridade && <span className="so-leitor">{`, ${prioridade.texto}`}</span>}
-        {nota && <span className="tarefa-nota">{nota}</span>}
+        {nota && <span className="painel-tarefa-nota">{nota}</span>}
       </span>
       {tarefa.lembreteMinutosAntes !== null && tarefa.hora !== null && (
         <span className="tarefa-sino">
           <Icone nome="sino" tamanho={12} rotulo="com lembrete" />
         </span>
       )}
-      <span className="tarefa-quando" data-aviso={quando.aviso || undefined}>
+      <span className="painel-tarefa-quando" data-aviso={quando.aviso || undefined}>
         {quando.texto}
         {quando.aviso && <span className="so-leitor"> (passou da hora)</span>}
       </span>
