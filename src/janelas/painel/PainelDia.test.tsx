@@ -602,10 +602,9 @@ describe("painel Tarefas", () => {
 
     const atrasadas = secao("Atrasadas");
     expect(atrasadas.querySelector("h2")?.textContent).toBe("Atrasadas · 2");
-    expect([...atrasadas.querySelectorAll(".painel-tarefa-quando")].map((q) => q.firstChild?.textContent)).toEqual([
-      "ter",
-      "ontem",
-    ]);
+    expect(
+      [...atrasadas.querySelectorAll(".painel-tarefa-quando")].map((q) => q.firstChild?.textContent),
+    ).toEqual(["ter", "ontem"]);
     expect(atrasadas.querySelector(".painel-tarefa-nota")?.textContent).toBe("Casa");
     await act(async () => botaoCom(atrasadas, "Trazer as 2 para hoje").click());
     expect(chamou("tarefas.adiar")).toEqual([{ ids: ["a1", "a2"], para: "hoje" }]);
