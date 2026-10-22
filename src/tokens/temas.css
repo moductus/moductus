@@ -272,6 +272,13 @@
   --largura-texto-nota: 620px;
   --altura-min-texto-nota: 160px;
   --altura-linha-escrita: 1.6;
+  /* Captura rápida (Captura.dc.html): a frase em 18, o valor de cada campo em 14, os botões do
+     "Na verdade é" a 30, o Lançar a 34 e a tecla dentro dele mais apagada */
+  --tipo-frase-captura: 18px;
+  --tipo-valor-captura: 14px;
+  --altura-alternativa-captura: 30px;
+  --altura-lancar-captura: 34px;
+  --opacidade-tecla-captura: 0.75;
 }
 
 /* Menos animação no Windows: pela mídia do WebView ou pelo "Efeitos de animação" que a casca
