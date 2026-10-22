@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import {
   ADIAR_LEMBRETE_MIN,
+  MENSAGEM_LEMBRETE_NAO_TOCA,
   type Aprovacao,
   type EstadoFoco,
   type Lembrete,
@@ -9,6 +10,7 @@ import {
   type PreviaCaptura,
   type Tarefa,
 } from "@moductus/contrato";
+import { RecusaDoServico } from "@moductus/contrato/cliente";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -103,7 +105,7 @@ const servidor: {
   hoje: Tarefa[] | (() => Promise<Tarefa[]>);
   atrasadas: Tarefa[];
   proximas: Tarefa[];
-  lembretesHoje: LembretesDeHoje;
+  lembretesHoje: LembretesDeHoje | (() => Promise<LembretesDeHoje>);
   lembretesDoDia: Lembrete[];
   foco: EstadoFoco;
   pendentes: Aprovacao[];
@@ -137,7 +139,7 @@ const pedir = vi.fn(async (metodo: string, dados?: unknown): Promise<unknown> =>
       throw new Error(`vista ${vista}`);
     }
     case "lembretes.hoje":
-      return servidor.lembretesHoje;
+      return typeof servidor.lembretesHoje === "function" ? servidor.lembretesHoje() : servidor.lembretesHoje;
     case "lembretes.listar":
       return servidor.lembretesDoDia;
     case "foco.obter":
@@ -292,10 +294,12 @@ describe("painel Hoje: o lembrete", () => {
     expect(tocando.querySelector(".lembrete-rotulo")?.textContent).toBe("Tarefa de hoje às 15:00 · você");
 
     await act(async () => botaoCom(tocando, "Adiar 10 min").click());
-    expect(chamou("lembretes.adiar")).toEqual([{ ids: ["l1"], minutos: ADIAR_LEMBRETE_MIN }]);
+    // A ocorrência que estava tocando vai junto: a mesma trava do botão do aviso.
+    const quando = "2026-10-08T17:45:00.000Z";
+    expect(chamou("lembretes.adiar")).toEqual([{ ids: ["l1"], minutos: ADIAR_LEMBRETE_MIN, quando }]);
     expect(ADIAR_LEMBRETE_MIN).toBe(10);
     await act(async () => botaoCom(tocando, "Feito").click());
-    expect(chamou("lembretes.concluir")).toEqual([{ ids: ["l1"] }]);
+    expect(chamou("lembretes.concluir")).toEqual([{ ids: ["l1"], quando }]);
     expect(auditar(recipiente)).toEqual([]);
   });
 
@@ -377,6 +381,43 @@ describe("painel Hoje: o lembrete", () => {
     expect(recipiente.querySelector(".lembrete [role=alert]")?.textContent).toBe(
       "Não consegui concluir agora. Tente de novo.",
     );
+  });
+});
+
+describe("painel Hoje: o lembrete que já não toca e a leitura que falha", () => {
+  it("Feito de um cartão cuja ocorrência já não toca diz isso, sem a falha genérica", async () => {
+    servidor.lembretesHoje = {
+      ...SEM_LEMBRETE,
+      tocando: [lembrete("l1", { estado: "disparado", disparadoEm: AGORA.toISOString() })],
+    };
+    await abrir("hoje");
+    pedir.mockImplementationOnce(async () => {
+      throw new RecusaDoServico(MENSAGEM_LEMBRETE_NAO_TOCA);
+    });
+    await act(async () => botaoCom(recipiente, "Feito").click());
+    expect(recipiente.querySelector(".lembrete [role=alert]")?.textContent).toBe(
+      "Este lembrete já não está tocando.",
+    );
+  });
+
+  it("os lembretes que não deu para ler dizem isso e tentam de novo", async () => {
+    let falhar = true;
+    servidor.lembretesHoje = async () => {
+      if (falhar) throw new Error("caiu");
+      return {
+        ...SEM_LEMBRETE,
+        tocando: [
+          lembrete("l1", { texto: "Beber água", estado: "disparado", disparadoEm: AGORA.toISOString() }),
+        ],
+      };
+    };
+    await abrir("hoje");
+    const vazio = recipiente.querySelector<HTMLElement>(".painel-corpo > .painel-secao-vazia")!;
+    expect(vazio.querySelector("p")?.textContent).toBe("Não consegui ler os lembretes agora.");
+    falhar = false;
+    await act(async () => botaoCom(vazio, "Tentar de novo").click());
+    expect(recipiente.querySelector(".lembrete--tocando h2")?.textContent).toBe("Beber água");
+    expect(recipiente.querySelector(".painel-corpo > .painel-secao-vazia")).toBeNull();
   });
 });
 
@@ -590,6 +631,31 @@ describe("painel Tarefas", () => {
     await abrir("tarefas");
     expect(secao("Hoje").querySelector(".dia-vazio")?.textContent).toContain("Nada para hoje. Escreva acima");
     expect(secao("Atrasadas")).toBeUndefined();
+  });
+
+  it("depois de lançar, a mesma frase escrita de novo espera a prévia nova antes do Enter", async () => {
+    const pendentes: ((p: PreviaCaptura) => void)[] = [];
+    let primeira = true;
+    servidor.entender = ({ texto }) => {
+      if (primeira) {
+        primeira = false;
+        return Promise.resolve(previaDe(texto));
+      }
+      return new Promise((resolver) => pendentes.push(resolver));
+    };
+    await abrir("tarefas");
+    const campo = recipiente.querySelector<HTMLInputElement>(".frase input")!;
+    await digitar(campo, "comprar pão");
+    await enter(campo);
+    expect(chamou("captura.lancar")).toHaveLength(1);
+    expect(recipiente.querySelector(".frase-previa")).toBeNull();
+
+    await digitar(campo, "comprar pão");
+    await enter(campo);
+    expect(chamou("captura.lancar")).toHaveLength(1);
+    await act(async () => pendentes[0]!(previaDe("comprar pão")));
+    await enter(campo);
+    expect(chamou("captura.lancar")).toHaveLength(2);
   });
 
   it("adicionar por frase: o 'Entendi:' antes do Enter, e o Enter lança o que a prévia mostrou", async () => {

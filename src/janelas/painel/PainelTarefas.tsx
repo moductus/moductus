@@ -109,7 +109,11 @@ export function PainelTarefas({ canal, abertura }: { canal: EstadoConexao; abert
           aoLancar={setAviso}
         />
 
-        <LeituraVazia leitura={tarefas} lendo="Lendo as tarefas." />
+        <LeituraVazia
+          leitura={tarefas}
+          lendo="Lendo as tarefas."
+          falhou="Não consegui ler as tarefas agora."
+        />
 
         {atrasadas.length > 0 && (
           <section className="painel-secao dia-tarefas" aria-labelledby={idAtrasadas}>

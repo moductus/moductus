@@ -1,10 +1,12 @@
 import {
   ADIAR_ATRASADOS_MIN,
   ADIAR_LEMBRETE_MIN,
+  MENSAGEM_LEMBRETE_NAO_TOCA,
   type Lembrete,
   type LembretesDeHoje,
   type Tarefa,
 } from "@moductus/contrato";
+import { RecusaDoServico } from "@moductus/contrato/cliente";
 import { useId, useState } from "react";
 import { haQuanto } from "../../areas/tempo.ts";
 import { Botao } from "../../componentes/Botao.tsx";
@@ -34,16 +36,28 @@ function useAcao() {
     setOcupado(true);
     setErro(null);
     pedido()
-      .catch(() => setErro(falha))
+      // A ocorrência que já não toca (o aviso do Windows decidiu antes) diz isso; o resto, só a falha.
+      .catch((e: unknown) =>
+        setErro(
+          e instanceof RecusaDoServico && e.message === MENSAGEM_LEMBRETE_NAO_TOCA
+            ? "Este lembrete já não está tocando."
+            : falha,
+        ),
+      )
       .finally(() => setOcupado(false));
   };
   return { ocupado, erro, agir };
 }
 
-/** "Adiar 10 min" e "Feito", os mesmos pedidos do aviso do Windows (lembretes.ts no serviço). */
-export const adiarLembrete = (ids: string[], minutos = ADIAR_LEMBRETE_MIN) =>
-  servico.pedir("lembretes.adiar", { ids, minutos });
-export const concluirLembrete = (ids: string[]) => servico.pedir("lembretes.concluir", { ids });
+/**
+ * "Adiar 10 min" e "Feito", os mesmos pedidos do aviso do Windows (lembretes.ts no serviço). O
+ * lembrete tocando leva a ocorrência (`quando`): se ela já não toca, o serviço recusa, como recusa o
+ * botão de um aviso velho. Os atrasados vão em grupo, sem ocorrência.
+ */
+export const adiarLembrete = (ids: string[], minutos: number, quando?: string) =>
+  servico.pedir("lembretes.adiar", quando === undefined ? { ids, minutos } : { ids, minutos, quando });
+export const concluirLembrete = (ids: string[], quando?: string) =>
+  servico.pedir("lembretes.concluir", quando === undefined ? { ids } : { ids, quando });
 
 interface PropsTocando {
   lembrete: Lembrete;
@@ -81,7 +95,12 @@ function Tocando({ lembrete, tarefa, hoje, fuso, agora }: PropsTocando) {
       <div className="lembrete-acoes">
         <Botao
           disabled={ocupado}
-          onClick={() => agir(() => adiarLembrete([lembrete.id]), "Não consegui adiar agora. Tente de novo.")}
+          onClick={() =>
+            agir(
+              () => adiarLembrete([lembrete.id], ADIAR_LEMBRETE_MIN, lembrete.quando),
+              "Não consegui adiar agora. Tente de novo.",
+            )
+          }
         >
           {`Adiar ${ADIAR_LEMBRETE_MIN} min`}
         </Botao>
@@ -89,7 +108,10 @@ function Tocando({ lembrete, tarefa, hoje, fuso, agora }: PropsTocando) {
           variante="primario"
           disabled={ocupado}
           onClick={() =>
-            agir(() => concluirLembrete([lembrete.id]), "Não consegui concluir agora. Tente de novo.")
+            agir(
+              () => concluirLembrete([lembrete.id], lembrete.quando),
+              "Não consegui concluir agora. Tente de novo.",
+            )
           }
         >
           Feito

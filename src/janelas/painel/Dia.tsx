@@ -219,7 +219,9 @@ export function CampoFrase({
     servico
       .pedir("captura.lancar", { texto: frase, tipo, campos: previa.campos })
       .then((lancamento) => {
+        // A prévia do que foi lançado sai junto: a mesma frase escrita de novo espera a prévia nova.
         setTexto("");
+        setEntendida(null);
         aoLancar({
           texto: `${previa.campos.titulo}: ${CRIADO[tipo]}.`,
           desfazer: () => servico.pedir("captura.desfazer", { id: lancamento.id }),

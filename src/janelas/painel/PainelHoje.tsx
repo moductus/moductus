@@ -148,12 +148,19 @@ function BlocoFoco({ foco }: { foco: EstadoFoco }) {
   );
 }
 
+interface PropsLeituraVazia {
+  leitura: Leitura<unknown>;
+  /** Sem ele, enquanto lê nada aparece (o lembrete não pisca no alto do Hoje). */
+  lendo?: string;
+  falhou: string;
+}
+
 /** O vazio de uma leitura do dia: lendo, ou não leu (com tentar de novo). */
-export function LeituraVazia({ leitura, lendo }: { leitura: Leitura<unknown>; lendo: string }) {
-  if (leitura.estado === "pronta") return null;
+export function LeituraVazia({ leitura, lendo, falhou }: PropsLeituraVazia) {
+  if (leitura.estado === "pronta" || (leitura.estado === "esperando" && !lendo)) return null;
   return (
     <div className="painel-secao-vazia" role={leitura.estado === "esperando" ? "status" : undefined}>
-      <p>{leitura.estado === "esperando" ? lendo : "Não consegui ler as tarefas agora."}</p>
+      <p>{leitura.estado === "esperando" ? lendo : falhou}</p>
       {leitura.estado === "falhou" && (
         <Botao tamanho="pequeno" onClick={leitura.tentarDeNovo}>
           Tentar de novo
@@ -224,8 +231,15 @@ export function PainelHoje({ canal, abertura }: { canal: EstadoConexao; abertura
         atalho={atalho ?? undefined}
       />
       <div className="painel-corpo">
-        {lembretes && (
-          <LembretesDoHoje lembretes={lembretes} tarefas={conhecidas} hoje={hoje} fuso={fuso} agora={agora} />
+        <LeituraVazia leitura={lembretes} falhou="Não consegui ler os lembretes agora." />
+        {lembretes.estado === "pronta" && (
+          <LembretesDoHoje
+            lembretes={lembretes.dados}
+            tarefas={conhecidas}
+            hoje={hoje}
+            fuso={fuso}
+            agora={agora}
+          />
         )}
         {foco && <BlocoFoco foco={foco} />}
 
@@ -236,7 +250,11 @@ export function PainelHoje({ canal, abertura }: { canal: EstadoConexao; abertura
             </h2>
             {doDia && contagem.total > 0 && <span>{`${contagem.feitas} de ${contagem.total}`}</span>}
           </header>
-          <LeituraVazia leitura={tarefas} lendo="Lendo as tarefas." />
+          <LeituraVazia
+            leitura={tarefas}
+            lendo="Lendo as tarefas."
+            falhou="Não consegui ler as tarefas agora."
+          />
           {doDia && linhas.length === 0 && (
             <p className="dia-vazio">Nada para hoje. Escreva abaixo o que precisa fazer.</p>
           )}

@@ -189,12 +189,58 @@ const ouvirFuso: Ouvinte<string> = (aplicar) =>
 export const useFuso = (canal: EstadoConexao) => useCarga(canal, pedirFuso, ouvirFuso);
 
 const pedirLembretesDeHoje = () => servico.pedir("lembretes.hoje");
-const ouvirLembretesDeHoje: Ouvinte<LembretesDeHoje> = (aplicar) =>
-  servico.ouvir("lembretes.hoje", (hoje) => aplicar(() => hoje));
+const ouvirLembretesDeHoje = (receber: (hoje: LembretesDeHoje) => void) =>
+  servico.ouvir("lembretes.hoje", receber);
+
+/**
+ * Uma leitura que o aviso troca inteira (`lembretes.hoje` traz o recorte todo): a carga ao conectar
+ * e a cada `recarregar`, e cada aviso depois. Aviso que chega com a carga a caminho é mais novo que
+ * ela: a resposta não o desfaz. Falhou, diz isso e oferece tentar de novo. `pedir` e `ouvir`
+ * precisam ser estáveis.
+ */
+export function useLidaComAviso<T>(
+  canal: EstadoConexao,
+  pedir: () => Promise<T>,
+  ouvir: (receber: (dados: T) => void) => () => void,
+  recarregar?: unknown,
+): Leitura<T> {
+  const [lido, setLido] = useState<{ ok: true; dados: T } | { ok: false } | null>(null);
+  const [vez, setVez] = useState(0);
+  const avisos = useRef(0);
+  const tentarDeNovo = useCallback(() => setVez((v) => v + 1), []);
+
+  useEffect(
+    () =>
+      ouvir((dados) => {
+        avisos.current++;
+        setLido({ ok: true, dados });
+      }),
+    [ouvir],
+  );
+
+  useEffect(() => {
+    if (canal !== "conectado") return;
+    let vivo = true;
+    const antes = avisos.current;
+    pedir()
+      .then((dados) => {
+        if (vivo && avisos.current === antes) setLido({ ok: true, dados });
+      })
+      .catch(() => {
+        if (vivo && avisos.current === antes) setLido({ ok: false });
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [canal, pedir, recarregar, vez]);
+
+  if (canal !== "conectado" || lido === null) return { estado: "esperando" };
+  return lido.ok ? { estado: "pronta", dados: lido.dados } : { estado: "falhou", tentarDeNovo };
+}
 
 /** O lembrete do Hoje: o que está chegando, os que tocam e os atrasados, como o relógio decidiu. */
 export const useLembretesDeHoje = (canal: EstadoConexao, recarregar?: unknown) =>
-  useCarga(canal, pedirLembretesDeHoje, ouvirLembretesDeHoje, recarregar);
+  useLidaComAviso(canal, pedirLembretesDeHoje, ouvirLembretesDeHoje, recarregar);
 
 const pedirFoco = () => servico.pedir("foco.obter");
 const ouvirFoco: Ouvinte<EstadoFoco> = (aplicar) =>

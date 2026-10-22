@@ -2,7 +2,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { CONFIG_PADRAO, METODOS, type LembretesDeHoje, type MudancaLembretes } from "@moductus/contrato";
+import {
+  ADIAR_LEMBRETE_MIN,
+  CONFIG_PADRAO,
+  MENSAGEM_LEMBRETE_NAO_TOCA,
+  METODOS,
+  type LembretesDeHoje,
+  type MudancaLembretes,
+} from "@moductus/contrato";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { RepositorioAgentes } from "../../agentes/agentes.ts";
 import { abrirBanco } from "../../banco/conexao.ts";
@@ -289,6 +296,37 @@ describe("aviso do Windows", () => {
     expect(lembretes.listar({})).toEqual([]);
     expect(casca.retirados).toContain(segundo.id);
     await expect(lembretes.adiar({ ids: [criado.id], minutos: 10 })).rejects.toThrow(MENSAGEM_NAO_ENCONTRADO);
+  });
+
+  test("com a ocorrência, Adiar e Feito do painel só valem enquanto ela toca, como o botão do aviso", async () => {
+    const { casca, relogio, lembretes } = montar();
+    await relogio.ligar();
+    const criado = await lembretes.criar({ texto: "Ligar para o contador", quando: iso(sp(HOJE, "14:45")) });
+    await vi.advanceTimersByTimeAsync(15 * MIN);
+    const tocando = unico(lembretes.hoje().tocando);
+    const outra = iso(sp(HOJE, "14:44"));
+
+    await expect(
+      lembretes.adiar({ ids: [criado.id], minutos: ADIAR_LEMBRETE_MIN, quando: outra }),
+    ).rejects.toThrow(MENSAGEM_LEMBRETE_NAO_TOCA);
+    await expect(lembretes.concluir({ ids: [criado.id], quando: outra })).rejects.toThrow(
+      MENSAGEM_LEMBRETE_NAO_TOCA,
+    );
+    expect(unico(lembretes.listar({}))).toMatchObject({ estado: "disparado" });
+
+    await lembretes.adiar({ ids: [criado.id], minutos: ADIAR_LEMBRETE_MIN, quando: tocando.quando });
+    expect(unico(lembretes.listar({}))).toMatchObject({
+      estado: "adiado",
+      adiadoAte: iso(sp(HOJE, "14:55")),
+    });
+    expect(casca.retirados).toHaveLength(1);
+
+    // Adiado, o cartão velho do painel não conclui; o pedido sem ocorrência vale como sempre.
+    await expect(lembretes.concluir({ ids: [criado.id], quando: tocando.quando })).rejects.toThrow(
+      MENSAGEM_LEMBRETE_NAO_TOCA,
+    );
+    await lembretes.concluir({ ids: [criado.id] });
+    expect(lembretes.listar({})).toEqual([]);
   });
 
   test("cancelar manda à lixeira e tira o aviso de quem estava tocando", async () => {
