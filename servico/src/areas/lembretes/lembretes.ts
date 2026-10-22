@@ -1,8 +1,11 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
+  ADIAR_LEMBRETE_MIN,
+  MENSAGEM_LEMBRETE_NAO_TOCA,
   MudancaLembrete,
   NovoLembrete,
   PedidoAdiarLembretes,
+  PedidoConcluirLembretes,
   PedidoLembretes,
   PedidoListarLembretes,
   type Apagados,
@@ -53,12 +56,9 @@ export const MENSAGEM_DESFAZER_DE_OUTRO = "o lembrete foi mudado depois por voc�
 export const TOLERANCIA_MS = 2 * 60_000;
 /** O próximo lembrete aparece no topo do Hoje, sem som, a partir de 30 min antes. */
 export const ANTECEDENCIA_MS = 30 * 60_000;
-/** O "Adiar 10 min" do aviso do Windows. */
-export const ADIAR_DO_AVISO_MIN = 10;
-
 /** Os botões do aviso, os mesmos do lembrete tocando no painel Hoje (LembreteHoje.dc.html). */
 export const BOTOES_DO_LEMBRETE: readonly BotaoAviso[] = [
-  { id: "adiar", rotulo: `Adiar ${ADIAR_DO_AVISO_MIN} min` },
+  { id: "adiar", rotulo: `Adiar ${ADIAR_LEMBRETE_MIN} min` },
   { id: "feito", rotulo: "Feito" },
 ];
 
@@ -443,6 +443,11 @@ export interface FontesLembretes {
   notificacoes: NotificacoesDoLembrete;
   /** O relógio do dia, para se rearmar a cada mudança. */
   relogio?: { mudou(): void };
+  /**
+   * Se o lembrete já está no calendário "Moductus" do Google, sem nada na fila (F3-24): o do canal
+   * `calendario` então toca no celular, e o Windows não avisa de novo.
+   */
+  noGoogle?: (lembreteId: string) => boolean;
 }
 
 export interface AvisosLembretes {
@@ -563,11 +568,15 @@ export class ServicoLembretes implements FonteDoRelogio {
 
   /**
    * Texto, horário, repetição e canal. Mudar o `quando` volta o lembrete a agendado; mudar o
-   * horário ou a regra faz a regra contar de novo a partir do `quando`.
+   * horário ou a regra faz a regra contar de novo a partir do `quando`. O adiado que recebe o
+   * próprio `quando` de volta (o evento movido no Google para a hora de antes do adiamento, F3-24)
+   * também volta a agendado nele, sem mexer na regra.
    */
   async definir(entrada: MudancaLembrete, carimbo: Carimbo = DO_USUARIO): Promise<Lembrete> {
     const mudanca = MudancaLembrete.parse(entrada);
     const atual = this.exigir(mudanca.id);
+    const desadiou =
+      mudanca.quando !== undefined && mudanca.quando === atual.quando && atual.estado === "adiado";
     const reagendou = mudanca.quando !== undefined && mudanca.quando !== atual.quando;
     const quando = mudanca.quando ?? atual.quando;
     const recorrencia = mudanca.recorrencia === undefined ? atual.recorrencia : mudanca.recorrencia;
@@ -578,14 +587,14 @@ export class ServicoLembretes implements FonteDoRelogio {
       recorrencia,
       inicio_recorrencia: recorrencia === null ? null : regraNova ? quando : atual.inicio_recorrencia,
       canal: mudanca.canal ?? atual.canal,
-      ...(reagendou ? { quando, estado: "agendado" as const, adiado_ate: null } : {}),
+      ...(reagendou || desadiou ? { quando, estado: "agendado" as const, adiado_ate: null } : {}),
     };
-    if (campos.texto === atual.texto && !regraNova && campos.canal === atual.canal)
+    if (campos.texto === atual.texto && !regraNova && !desadiou && campos.canal === atual.canal)
       return paraLembrete(atual);
     this.repo.gravar(atual.id, campos, this.instante(), carimbo);
     const lembrete = paraLembrete(this.exigir(atual.id));
     this.mudou({ lembretes: [lembrete], removidos: [] });
-    if (reagendou) await this.resolver([atual]);
+    if (reagendou || desadiou) await this.resolver([atual]);
     return lembrete;
   }
 
@@ -593,6 +602,7 @@ export class ServicoLembretes implements FonteDoRelogio {
   async adiar(entrada: PedidoAdiarLembretes, carimbo: Carimbo = DO_USUARIO): Promise<Lembrete[]> {
     const pedido = PedidoAdiarLembretes.parse(entrada);
     const linhas = [...new Set(pedido.ids)].map((id) => this.exigir(id));
+    exigirTocando(linhas, pedido.quando);
     const agora = this.agora();
     const ate = new Date(agora.getTime() + pedido.minutos * 60_000).toISOString();
     this.repo.transacao(() => {
@@ -615,9 +625,10 @@ export class ServicoLembretes implements FonteDoRelogio {
    * "Feito": o de uma vez vai para a lixeira; o recorrente volta a agendado na primeira ocorrência
    * depois de agora (ou depois da que estava marcada, se ainda não chegou), e sai se a regra acabou.
    */
-  async concluir(entrada: PedidoLembretes, carimbo: Carimbo = DO_USUARIO): Promise<MudancaLembretes> {
-    const pedido = PedidoLembretes.parse(entrada);
+  async concluir(entrada: PedidoConcluirLembretes, carimbo: Carimbo = DO_USUARIO): Promise<MudancaLembretes> {
+    const pedido = PedidoConcluirLembretes.parse(entrada);
     const linhas = [...new Set(pedido.ids)].map((id) => this.exigir(id));
+    exigirTocando(linhas, pedido.quando);
     const agora = this.agora();
     const fuso = this.fontes.lerFuso();
     const continuam: string[] = [];
@@ -808,10 +819,12 @@ export class ServicoLembretes implements FonteDoRelogio {
       [...tocaram, ...perdidos].filter((m) => m.antes.estado === "disparado").map((m) => m.antes),
       { atrasados: false },
     );
-    // O canal `dock` só aparece no painel Hoje. O `calendario` avisa no Windows até o envio ao
-    // Google chegar (F3-24).
+    // O canal `dock` só aparece no painel Hoje. O `calendario` toca pelo celular quando o evento dele
+    // já chegou ao "Moductus" (F3-24); sem Google, ou com o envio na fila, avisa no Windows.
     for (const { depois } of tocaram) {
-      if (depois.canal !== "dock") await this.avisar(this.avisoDoLembrete(depois));
+      if (depois.canal === "dock") continue;
+      if (depois.canal === "calendario" && this.fontes.noGoogle?.(depois.id) === true) continue;
+      await this.avisar(this.avisoDoLembrete(depois));
     }
     if (perdidos.length > 0) {
       const doCartao =
@@ -885,7 +898,7 @@ export class ServicoLembretes implements FonteDoRelogio {
     const linha = this.repo.lembrete(alvo.slice(0, arroba));
     if (!linha || linha.estado !== "disparado" || linha.quando !== alvo.slice(arroba + 1)) return false;
     if (botao === "adiar") {
-      await this.adiar({ ids: [linha.id], minutos: ADIAR_DO_AVISO_MIN });
+      await this.adiar({ ids: [linha.id], minutos: ADIAR_LEMBRETE_MIN });
       return true;
     }
     if (botao === "feito") {
@@ -998,6 +1011,17 @@ export class ServicoLembretes implements FonteDoRelogio {
  * O aviso agrupado dos que venceram numa ausência (ADR-0032): um só, com quantos e onde o PC
  * estava, e os textos no corpo. Nada toca um por um.
  */
+/**
+ * A trava do botão do aviso do Windows para quem pede com a ocorrência (o painel Hoje): só vale
+ * para o lembrete que ainda toca nela. Sem ocorrência, o pedido vale como sempre.
+ */
+function exigirTocando(linhas: readonly LinhaLembrete[], quando: string | undefined): void {
+  if (quando === undefined) return;
+  if (linhas.some((l) => l.estado !== "disparado" || l.quando !== quando)) {
+    throw new Error(MENSAGEM_LEMBRETE_NAO_TOCA);
+  }
+}
+
 export function avisoDosAtrasados(perdidos: readonly LinhaLembrete[], ausencia: Ausencia): NovoAviso {
   const n = perdidos.length;
   const onde = ausencia.de === null ? "o Moductus estava fechado" : "o PC dormia";

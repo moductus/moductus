@@ -6,8 +6,8 @@ import type { Migracao } from "../banco/migracoes.ts";
  * lista certa. Só muda quem ainda tem a lista de ferramentas como veio de fábrica (a da 003); a
  * Alba que você personalizou fica como está, e "restaurar padrão" a leva à de agora.
  */
-export const m022: Migracao = {
-  versao: 22,
+export const m023: Migracao = {
+  versao: 23,
   nome: "alba-listas",
   sql: sqlDeFabrica("alba", {
     ferramentas: ["agenda.*", "tarefas.*", "lembretes.*", "foco.*", "notas.*", "memoria.*"],

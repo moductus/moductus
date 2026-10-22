@@ -1,0 +1,437 @@
+/*
+ * Painéis Hoje e Tarefas (Main.dc.html, LembreteHoje.dc.html, PainelTarefas.dc.html): o lembrete
+ * no alto, o bloco do foco, as linhas de tarefa, a frase com o "Entendi:" e o "Desfazer".
+ */
+
+/* ---------- textos soltos ---------- */
+.dia-erro {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--perigo);
+}
+
+.dia-vazio {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+  text-wrap: pretty;
+}
+
+/* Link de texto miúdo, como o "Abrir no sistema" e o "Desfazer" dos quadros. */
+.dia-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--texto-2);
+  font: inherit;
+  font-size: var(--tipo-12);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.dia-link:hover {
+  color: var(--texto);
+}
+
+.dia-link:disabled {
+  opacity: var(--opacidade-desativado);
+  cursor: default;
+}
+
+/* ---------- lembrete (DESIGN.md §5 "Lembrete") ---------- */
+.lembrete {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-10);
+  padding: var(--esp-14);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-elevado);
+}
+
+.lembrete--atrasados {
+  gap: var(--esp-12);
+}
+
+/* Chegando: sem som e sem elevar, numa linha só. */
+.lembrete--chegando {
+  flex-direction: row;
+  align-items: center;
+  padding: var(--esp-10) var(--esp-12);
+  border-color: var(--borda);
+  background: var(--fundo-cartao);
+}
+
+.lembrete-topo {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.lembrete-sino {
+  display: flex;
+  flex: none;
+  color: var(--texto);
+}
+
+.lembrete--chegando .lembrete-sino {
+  color: var(--texto-2);
+}
+
+.lembrete-meta {
+  margin-left: auto;
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
+.lembrete-corpo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-2);
+  min-width: 0;
+}
+
+.lembrete-titulo {
+  margin: 0;
+  font-size: var(--tipo-15);
+  font-weight: var(--peso-forte);
+  color: var(--texto);
+}
+
+.lembrete-titulo-linha {
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--tipo-13);
+  font-weight: var(--peso-forte);
+  color: var(--texto);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lembrete-rotulo {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.lembrete-numero {
+  flex: none;
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+  white-space: nowrap;
+}
+
+.lembrete-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--esp-8);
+}
+
+.lembrete-atrasados-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+}
+
+.lembrete-atrasados-titulo,
+.dia-atrasadas-titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-6);
+  margin: 0;
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-forte);
+  color: var(--aviso);
+}
+
+.lembrete-ponto {
+  flex: none;
+  width: var(--tamanho-ponto-status);
+  height: var(--tamanho-ponto-status);
+  border-radius: 50%;
+  background: var(--aviso);
+}
+
+.lembrete-perdidos {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lembrete-perdido {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  min-height: var(--altura-linha-tarefa);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.lembrete-perdido-hora {
+  flex: none;
+  width: var(--largura-hora);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--aviso);
+}
+
+.lembrete-perdido-texto {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- foco (Main.dc.html) ---------- */
+.dia-bloco {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-10);
+  padding: var(--esp-14);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-elevado);
+}
+
+.dia-bloco-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.dia-bloco-titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  margin: 0;
+  font: inherit;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.dia-cronometro {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-36);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracado-titulo);
+  line-height: 1;
+  color: var(--texto);
+}
+
+.dia-bloco-tarefa {
+  overflow: hidden;
+  color: var(--texto-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dia-bloco-linha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-10);
+}
+
+.dia-bloco-texto {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.dia-bloco-acoes {
+  display: flex;
+  gap: var(--esp-8);
+}
+
+/* ---------- tarefas (PainelTarefas.dc.html) ---------- */
+.dia-tarefas {
+  gap: var(--esp-2);
+}
+
+.dia-tarefas > .painel-secao-cabecalho {
+  align-items: center;
+  padding-bottom: var(--esp-4);
+}
+
+.dia-tarefas > .botao--fantasma {
+  align-self: flex-start;
+  margin-top: var(--esp-4);
+}
+
+.tarefas-lista {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tarefa-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  min-height: var(--altura-linha-tarefa);
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.tarefa-prioridade {
+  flex: none;
+  width: var(--largura-prioridade);
+  height: var(--altura-prioridade);
+  border-radius: var(--raio-progresso);
+}
+
+.tarefa-prioridade[data-tom="perigo"] {
+  background: var(--perigo);
+}
+
+.tarefa-prioridade[data-tom="aviso"] {
+  background: var(--aviso);
+}
+
+.tarefa-corpo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tarefa-titulo {
+  overflow: hidden;
+  color: var(--texto);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tarefa-linha[data-feita] .tarefa-titulo {
+  color: var(--texto-apagado);
+  text-decoration: line-through;
+}
+
+.tarefa-nota {
+  overflow: hidden;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tarefa-sino {
+  display: flex;
+  flex: none;
+  color: var(--texto-3);
+}
+
+.tarefa-quando {
+  flex: none;
+  width: var(--largura-hora);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+  text-align: right;
+}
+
+.tarefa-quando[data-aviso] {
+  color: var(--aviso);
+}
+
+.dia-atrasadas-cabecalho {
+  align-items: center;
+}
+
+/* ---------- frase ("Adicionar por frase", captura no Hoje) ---------- */
+.frase {
+  margin-top: var(--esp-6);
+}
+
+.frase-rotulo {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.frase-caixa {
+  height: var(--altura-campo-frase);
+}
+
+.frase-previa {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-6);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.frase-aviso {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.frase-aviso p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* ---------- desfazer e pé ---------- */
+.dia-desfazer {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  padding: var(--esp-8) var(--esp-12);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-elevado);
+}
+
+.dia-desfazer-texto {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.dia-pe {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--esp-8);
+}
+
+.dia-pe .dia-link {
+  color: var(--texto-3);
+  text-decoration: none;
+}
+
+.dia-pe .dia-link:hover {
+  color: var(--texto);
+}
+
+/* ---------- ainda não vale (DESIGN.md §5): finanças até a Tula ---------- */
+.dia-ainda-nao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+  padding: var(--esp-12) var(--esp-14);
+  border: var(--espessura-borda) dashed var(--borda-forte);
+  border-radius: var(--raio-cartao);
+  color: var(--texto-apagado);
+}
+
+.dia-ainda-nao p {
+  margin: 0;
+  font-size: var(--tipo-12);
+}
