@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
+  ADIAR_LEMBRETE_MIN,
   MudancaLembrete,
   NovoLembrete,
   PedidoAdiarLembretes,
@@ -49,8 +50,8 @@ export const MENSAGEM_EVENTO = "o evento deste lembrete não existe mais";
 export const TOLERANCIA_MS = 2 * 60_000;
 /** O próximo lembrete aparece no topo do Hoje, sem som, a partir de 30 min antes. */
 export const ANTECEDENCIA_MS = 30 * 60_000;
-/** O "Adiar 10 min" do aviso do Windows. */
-export const ADIAR_DO_AVISO_MIN = 10;
+/** O "Adiar 10 min" do aviso do Windows, o mesmo do lembrete tocando no painel Hoje. */
+export const ADIAR_DO_AVISO_MIN = ADIAR_LEMBRETE_MIN;
 
 /** Os botões do aviso, os mesmos do lembrete tocando no painel Hoje (LembreteHoje.dc.html). */
 export const BOTOES_DO_LEMBRETE: readonly BotaoAviso[] = [

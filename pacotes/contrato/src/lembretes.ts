@@ -65,6 +65,13 @@ export type MudancaLembrete = z.infer<typeof MudancaLembrete>;
 export const PedidoLembretes = z.object({ ids: z.array(Id).min(1) });
 export type PedidoLembretes = z.infer<typeof PedidoLembretes>;
 
+/**
+ * O "Adiar 10 min" do lembrete tocando, igual no aviso do Windows e no painel Hoje, e o "Adiar os 2
+ * em 30 min" dos atrasados: um número só para os dois caminhos valerem o mesmo.
+ */
+export const ADIAR_LEMBRETE_MIN = 10;
+export const ADIAR_ATRASADOS_MIN = 30;
+
 /** "Adiar 10 min" do aviso e do painel, "Adiar os 2 em 30 min" dos atrasados: a partir de agora. */
 export const PedidoAdiarLembretes = z.object({
   ids: z.array(Id).min(1),
