@@ -84,6 +84,7 @@ const O_QUE_PEDIU: Partial<Record<NomeMetodo, string>> = {
   "foco.estender": "estender",
   "foco.pularPausa": "pular a pausa",
   "tarefas.concluir": "concluir a tarefa",
+  "tarefas.reabrir": "reabrir a tarefa",
   "agenda.aplicarSugestao": "guardar o bloco",
   "execucoes.desfazer": "desfazer",
 };
@@ -311,7 +312,7 @@ function LigadoA({
           <Caixa
             marcado={tarefa?.estado === "feita"}
             aria-label={`Concluir ${titulo}`}
-            aoMudar={() => void pedir("tarefas.concluir", { id: tarefaId })}
+            aoMudar={(feita) => void pedir(feita ? "tarefas.concluir" : "tarefas.reabrir", { id: tarefaId })}
           />
           <span className="area-foco-ligado-titulo" title={titulo}>
             {titulo}
@@ -499,21 +500,24 @@ function CartaoTerminado({
   titulos,
   tarefas,
   pedir,
-}: PropsCiclo & { terminado: EtapaFoco }) {
-  const titulo = terminado.tarefaId ? (titulos.get(terminado.tarefaId) ?? null) : null;
-  const tarefa = tarefas?.find((t) => t.id === terminado.tarefaId);
+}: PropsCiclo & { terminado: EtapaFoco | null }) {
+  // Sem o foco no histórico (meia-noite, histórico que falhou), o título vem do estado e a
+  // tarefa não tem como ser marcada daqui.
+  const tarefaId = terminado?.tarefaId ?? null;
+  const titulo = tarefaId ? (titulos.get(tarefaId) ?? null) : terminado ? null : foco.tarefaTitulo;
+  const tarefa = tarefas?.find((t) => t.id === tarefaId);
   const [feita, setFeita] = useState(false);
-  const aberta = titulo !== null && !feita && tarefa?.estado !== "feita";
+  const aberta = tarefaId !== null && titulo !== null && !feita && tarefa?.estado !== "feita";
   const nomePausa = foco.proxima === "pausa_longa" ? "pausa longa" : "pausa";
   const minutos = ciclos ? (foco.proxima === "pausa_longa" ? ciclos.pausaLongaMin : ciclos.pausaMin) : null;
   const concluir = () =>
-    void pedir("tarefas.concluir", { id: terminado.tarefaId }).then((r) => {
+    void pedir("tarefas.concluir", { id: tarefaId }).then((r) => {
       if (r) setFeita(true);
     });
   return (
     <Cartao como="section" variante="elevado" className="area-foco-cartao" aria-label="Ciclo terminado">
       <Rotulo
-        esquerda={`Ciclo ${foco.cicloAtual} de ${foco.ciclosAtePausaLonga} terminou · ${hora(terminado.fim!)}`}
+        esquerda={`Ciclo ${foco.cicloAtual} de ${foco.ciclosAtePausaLonga} terminou${terminado ? ` · ${hora(terminado.fim!)}` : ""}`}
         direita={`próxima: ${nomePausa}${minutos ? ` de ${minutos} min` : ""}`}
       />
       <FalaAgente agente="alba" tamanho="ciclo">
@@ -565,7 +569,7 @@ function CartaoRodadaCompleta({
       </FalaAgente>
       <Botoes>
         <Botao onClick={aoFechar}>Fechar por aqui</Botao>
-        <Botao variante="primario" onClick={() => void pedir("foco.iniciar", {})}>
+        <Botao variante="primario" onClick={() => void pedir("foco.iniciar", { tipo: "foco" })}>
           Começar outra rodada
         </Botao>
       </Botoes>
@@ -638,7 +642,10 @@ function CartaoComecar({ foco, ciclos, agora, tarefas, dia, pedir }: PropsCiclo)
             Sem tarefa
           </Botao>
         )}
-        <Botao variante="primario" onClick={() => void pedir("foco.iniciar", { tarefaId: escolhida })}>
+        <Botao
+          variante="primario"
+          onClick={() => void pedir("foco.iniciar", { tipo: "foco", tarefaId: escolhida })}
+        >
           {minutos !== null ? `Começar ${minutos} min de foco` : "Começar foco"}
         </Botao>
       </div>
@@ -788,9 +795,9 @@ function Hoje({
           Hoje
         </h2>
         <span>
-          {foco.ciclosHoje > 0
-            ? `${duracaoDoFoco(foco.focoHojeMin)} em ${ciclosEmTexto(foco.ciclosHoje)}`
-            : "o primeiro está correndo"}
+          {lista.length === 1 && lista[0]!.atual
+            ? "o primeiro está correndo"
+            : `${duracaoDoFoco(foco.focoHojeMin)} em ${ciclosEmTexto(foco.ciclosHoje)}`}
         </span>
       </div>
       <ul className="area-foco-lista-dia">
@@ -884,8 +891,9 @@ function PorTarefa({ porTarefa }: { porTarefa: readonly FocoPorTarefa[] | null }
                 {l.titulo}
               </span>
               <span className="area-foco-numero">{duracaoDoFoco(l.minutos)}</span>
-              <span className="area-foco-meta area-foco-tarefa-ciclos" aria-label={ciclosEmTexto(l.ciclos)}>
-                {l.ciclos}
+              <span className="area-foco-meta area-foco-tarefa-ciclos">
+                <span aria-hidden="true">{l.ciclos}</span>
+                <span className="so-leitor">{ciclosEmTexto(l.ciclos)}</span>
               </span>
             </span>
             <span className="area-foco-tarefa-trilho" aria-hidden="true">

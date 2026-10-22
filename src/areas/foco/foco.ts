@@ -12,7 +12,7 @@ import type {
 import type { EstadoConexao } from "@moductus/contrato/cliente";
 import { useCallback } from "react";
 import { formatarHora } from "../../componentes/personagem/quando.ts";
-import { useRelida } from "../../janelas/painel/foco.ts";
+import { diaNoFuso, useRelida } from "../../janelas/painel/foco.ts";
 import { servico } from "../../servico/conexao.ts";
 import { duracaoCurta } from "../../servico/foco.ts";
 
@@ -66,23 +66,6 @@ export interface EtapaDaRodada {
   situacao: SituacaoEtapa;
 }
 
-/** O dia `AAAA-MM-DD` de um instante no fuso dado; sem fuso, o do PC. */
-export function diaDoInstante(instante: string, fuso: string | null): string {
-  const data = new Date(instante);
-  try {
-    const partes = new Intl.DateTimeFormat("en-CA", {
-      ...(fuso ? { timeZone: fuso } : {}),
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(data);
-    const parte = (tipo: string) => partes.find((p) => p.type === tipo)?.value ?? "";
-    return `${parte("year")}-${parte("month")}-${parte("day")}`;
-  } catch {
-    return diaDoInstante(instante, null);
-  }
-}
-
 /**
  * As etapas de hoje, da mais antiga para a mais nova, com a que está em andamento como o
  * `EstadoFoco` a conhece (o histórico pode ter chegado antes do último `foco.mudou`).
@@ -95,7 +78,7 @@ export function etapasDeHoje(
 ): EtapaFoco[] {
   const atual = estado.etapa;
   const doDia = (historico?.etapas ?? []).filter(
-    (e) => diaDoInstante(e.inicio, fuso) === hoje && e.id !== atual?.id && e.fim !== null,
+    (e) => diaNoFuso(new Date(e.inicio), fuso) === hoje && e.id !== atual?.id && e.fim !== null,
   );
   const lista = [...doDia].sort((a, b) => Date.parse(a.inicio) - Date.parse(b.inicio));
   return atual ? [...lista, atual] : lista;
@@ -171,8 +154,9 @@ export function etapasDaRodada(
 
   const ultima = passadas.at(-1);
   let tipo: TipoEtapa | null = ultima ? seguinte(ultima.tipo, numero, total) : "foco";
-  // A pausa que o usuário pulou não volta: depois de um foco que já terminou, a proposta é a do serviço.
-  if (ultima && ultima.fim !== null && estado.etapa === null) tipo = estado.proxima;
+  // Sem nada correndo, o que vem é o que o serviço propõe, mesmo sem o foco no histórico de hoje
+  // (terminou depois da meia-noite, ou o histórico não chegou).
+  if (estado.etapa === null) tipo = estado.proxima;
   let cursor = agora;
   const atual = estado.etapa;
   if (atual && atual.pausadaEm === null) cursor = Date.parse(atual.terminaEm);
@@ -263,31 +247,36 @@ export function falaDaRodada(rodada: RodadaCompleta, titulos: ReadonlyMap<string
   return `${conta}${detalhe}. Começo outra rodada ou fecho por aqui?`;
 }
 
-/** O foco que acabou de terminar, quando a Alba propõe a pausa ("Ciclo terminado"). */
-export function focoTerminado(estado: EstadoFoco, hoje: readonly EtapaFoco[]): EtapaFoco | null {
-  if (estado.etapa !== null || estado.proxima === "foco") return null;
+/** O foco que acabou de terminar, se está no histórico de hoje: é a última etapa dele. */
+function focoTerminado(hoje: readonly EtapaFoco[]): EtapaFoco | null {
   const ultima = hoje.at(-1);
   return ultima?.tipo === "foco" && ultima.fim !== null ? ultima : null;
 }
 
-/** "25 min de foco em “Revisar PR”. Começo a pausa de 5 min?" */
+/**
+ * "25 min de foco em “Revisar PR”. Começo a pausa de 5 min?" Sem o foco no histórico, a fala
+ * não diz quanto durou.
+ */
 export function falaDoCicloTerminado(
-  foco: EtapaFoco,
+  foco: EtapaFoco | null,
   titulo: string | null,
   proxima: TipoEtapa,
   ciclos: CiclosFoco | null,
 ): string {
-  const minutos = foco.duracaoRealMin ?? foco.duracaoPlanejadaMin;
   const onde = titulo ? ` em “${titulo}”` : " livre";
   const pausa = proxima === "pausa_longa" ? "pausa longa" : "pausa";
   const quanto = ciclos ? ` de ${minutosDoTipo(proxima, ciclos)} min` : "";
-  return `${duracaoDoFoco(minutos)} de foco${onde}. Começo a ${pausa}${quanto}?`;
+  const feito = foco
+    ? `${duracaoDoFoco(foco.duracaoRealMin ?? foco.duracaoPlanejadaMin)} de foco${onde}.`
+    : `Ciclo de foco${onde} terminado.`;
+  return `${feito} Começo a ${pausa}${quanto}?`;
 }
 
 /** O que o cartão do ciclo mostra (AreaFoco.dc.html e AreaFocoEstados.dc.html). */
 export type SituacaoDoCiclo =
   | { tipo: "etapa"; etapa: EtapaFoco }
-  | { tipo: "terminado"; foco: EtapaFoco }
+  /** `foco` vazio: o serviço propõe a pausa, mas o foco não está no histórico de hoje. */
+  | { tipo: "terminado"; foco: EtapaFoco | null }
   | { tipo: "completa"; rodada: RodadaCompleta }
   | { tipo: "comecar" };
 
@@ -301,8 +290,8 @@ export function situacaoDoCiclo(
   fechada: string | null,
 ): SituacaoDoCiclo {
   if (estado.etapa) return { tipo: "etapa", etapa: estado.etapa };
-  const terminado = focoTerminado(estado, hoje);
-  if (terminado) return { tipo: "terminado", foco: terminado };
+  // Quem diz que o ciclo terminou é o serviço: o cartão de começar nunca começa uma pausa.
+  if (estado.proxima !== "foco") return { tipo: "terminado", foco: focoTerminado(hoje) };
   const rodada = rodadaCompleta(estado, hoje);
   if (rodada && rodada.chave !== fechada) return { tipo: "completa", rodada };
   return { tipo: "comecar" };

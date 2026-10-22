@@ -178,6 +178,23 @@ describe("situação do ciclo", () => {
     expect(situacaoDoCiclo(estado(), encerrada, null).tipo).toBe("comecar");
   });
 
+  it("depois da meia-noite, sem o foco no histórico de hoje, o ciclo segue terminado com a pausa proposta", () => {
+    // O foco começou às 23:40 de ontem e terminou às 00:05: o histórico de hoje não o traz.
+    const ontem = etapa("foco", local(23, 40, 20), 25);
+    const historico: HistoricoFoco = { etapas: [ontem], porTarefa: [], porDia: [] };
+    const e = estado({ cicloAtual: 1, proxima: "pausa", tarefaTitulo: "Revisar PR" });
+    const hoje = etapasDeHoje(historico, e, "2026-10-21", null);
+    expect(hoje).toEqual([]);
+    expect(situacaoDoCiclo(e, hoje, null)).toEqual({ tipo: "terminado", foco: null });
+    expect(linhas(etapasDaRodada(e, hoje, CICLOS, local(0, 6))).slice(0, 2)).toEqual([
+      "Pausa 0:06 falta",
+      "Foco 2 0:11 falta",
+    ]);
+    expect(falaDoCicloTerminado(null, "Revisar PR", "pausa", CICLOS)).toBe(
+      "Ciclo de foco em “Revisar PR” terminado. Começo a pausa de 5 min?",
+    );
+  });
+
   it("a fala da rodada diz quanto foi para cada tarefa quando são até duas", () => {
     const completa = situacaoDoCiclo(estado(), rodadaInteira(), null);
     if (completa.tipo !== "completa") throw new Error("esperava a rodada completa");

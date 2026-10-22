@@ -195,14 +195,14 @@ describe("Foco: vazio", () => {
     expect(auditar(recipiente)).toEqual([]);
 
     await clicar("Começar 25 min de foco");
-    expect(pediu("foco.iniciar")).toEqual([{ tarefaId: "t1" }]);
+    expect(pediu("foco.iniciar")).toEqual([{ tipo: "foco", tarefaId: "t1" }]);
   });
 
   it("“Sem tarefa” começa o foco livre", async () => {
     await montar();
     await clicar("Sem tarefa");
     await clicar("Começar 25 min de foco");
-    expect(pediu("foco.iniciar")).toEqual([{ tarefaId: null }]);
+    expect(pediu("foco.iniciar")).toEqual([{ tipo: "foco", tarefaId: null }]);
   });
 });
 
@@ -245,6 +245,47 @@ describe("Foco: ciclo rodando", () => {
         .filter((m) => m.startsWith("foco.") && m !== "foco.obter" && m !== "foco.historico"),
     ).toEqual(["foco.pausar", "foco.estender", "foco.terminar"]);
     expect(pediu("foco.estender")).toEqual([{ minutos: 5 }]);
+  });
+
+  it("a caixa da tarefa ligada conclui a aberta e reabre a feita", async () => {
+    await montar();
+    const caixa = () => por('.area-foco-ligado [role="checkbox"]')!;
+    await act(async () => caixa().click());
+    expect(pediu("tarefas.concluir")).toEqual([{ id: "t1" }]);
+
+    act(() => raiz?.unmount());
+    recipiente.remove();
+    falso.tarefas = [
+      tarefa("t1", "Revisar PR do relatório mensal", {
+        estado: "feita",
+        concluidaEm: "2026-10-21T17:00:00.000Z",
+      }),
+    ];
+    await montar();
+    expect(caixa().getAttribute("aria-checked")).toBe("true");
+    await act(async () => caixa().click());
+    expect(pediu("tarefas.reabrir")).toEqual([{ id: "t1" }]);
+  });
+
+  it("o Hoje só diz que o primeiro está correndo quando não há outro foco no dia", async () => {
+    await montar();
+    expect(texto(".area-foco-cartao-baixo .area-foco-rotulo")).toBe("Hoje25 min em 1 ciclo");
+
+    act(() => raiz?.unmount());
+    recipiente.remove();
+    const f2 = etapa("F2", "foco", local(14, 42), 25, { fim: null, duracaoRealMin: null });
+    const parado = etapa("F1", "foco", local(14, 12), 25, { interrompida: true, duracaoRealMin: 9 });
+    falso.estado = estado({ etapa: f2, cicloAtual: 2, proxima: "pausa", focoHojeMin: 9, ciclosHoje: 0 });
+    falso.historico = historico([parado, f2]);
+    await montar();
+    expect(texto(".area-foco-cartao-baixo .area-foco-rotulo")).toBe("Hoje9 min em 0 ciclos");
+
+    act(() => raiz?.unmount());
+    recipiente.remove();
+    falso.estado = estado({ etapa: f2, cicloAtual: 1, proxima: "pausa" });
+    falso.historico = historico([f2]);
+    await montar();
+    expect(texto(".area-foco-cartao-baixo .area-foco-rotulo")).toBe("Hojeo primeiro está correndo");
   });
 
   it("o relógio anda sozinho, sem pedir nada ao serviço", async () => {
@@ -293,6 +334,26 @@ describe("Foco: ciclo terminado e rodada completa", () => {
     expect(pediu("foco.pularPausa")).toHaveLength(1);
   });
 
+  it("sem o histórico (falhou, ou o foco terminou antes da meia-noite), a pausa proposta segue no cartão", async () => {
+    falso.falhar.add("foco.historico");
+    falso.estado = estado({
+      cicloAtual: 2,
+      proxima: "pausa",
+      tarefaTitulo: "Revisar PR do relatório mensal",
+      ciclosHoje: 2,
+      focoHojeMin: 50,
+    });
+    await montar();
+    expect(por('[aria-label="Começar um foco"]')).toBeNull();
+    expect(texto(".area-foco-cartao .area-foco-rotulo")).toBe("Ciclo 2 de 4 terminoupróxima: pausa de 5 min");
+    expect(texto(".fala-texto")).toBe(
+      "Ciclo de foco em “Revisar PR do relatório mensal” terminado. Começo a pausa de 5 min?",
+    );
+    expect(botao("Marcar como feita")).toBeUndefined();
+    await clicar("Começar a pausa");
+    expect(pediu("foco.iniciar")).toEqual([{ tipo: "pausa" }]);
+  });
+
   it("o foco encerrado antes da hora não oferece o +5 min", async () => {
     const f1 = etapa("F1", "foco", local(14, 12), 25, { interrompida: true, duracaoRealMin: 10 });
     falso.estado = estado({ cicloAtual: 1, proxima: "pausa", podeEstender: false });
@@ -318,6 +379,8 @@ describe("Foco: ciclo terminado e rodada completa", () => {
     expect(texto(".fala-texto")).toBe(
       "4 ciclos, 1h40 de foco em “Revisar PR do relatório mensal”. Começo outra rodada ou fecho por aqui?",
     );
+    await clicar("Começar outra rodada");
+    expect(pediu("foco.iniciar")).toEqual([{ tipo: "foco" }]);
     await clicar("Fechar por aqui");
     expect(por('[aria-label="Começar um foco"]')).not.toBeNull();
     expect(texto(".area-foco-cartao .area-foco-rotulo")).toBe("4 ciclos hoje · 1h40");
