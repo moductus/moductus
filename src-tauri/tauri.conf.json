@@ -58,11 +58,12 @@
         "create": false,
         "title": "Moductus captura",
         "width": 640,
-        "height": 72,
+        "height": 102,
         "decorations": false,
         "resizable": false,
         "skipTaskbar": true,
         "alwaysOnTop": true,
+        "shadow": false,
         "center": true,
         "transparent": true,
         "visible": false

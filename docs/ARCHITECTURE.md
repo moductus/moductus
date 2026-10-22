@@ -126,7 +126,7 @@ As quatro são declaradas no `tauri.conf.json`, todas sem borda do sistema e tra
 | Dock | `dock`, 64 px de largura (80 na forma flutuante) | Sempre no topo, fora da barra de tarefas, não ativa ao clicar; fechar o dock encerra o app |
 | Painel | `painel`, 412 px (cartão de 400 mais 12 de afastamento do dock) | Sempre no topo, encostado no dock, mostrado com `SW_SHOWNOACTIVATE`; ganha foco só quando um campo pede o teclado. Sem a sombra do Windows (`shadow: false`), como o dock: com ela, a moldura invisível tira 8 px de cada lado da área do WebView; a sombra do cartão vem do CSS |
 | Sistema | `sistema`, 1200×780 (mínimo 800×520) | Janela normal com barra de título própria; fechar só esconde; lembra posição |
-| Captura | `captura`, 640×72 | Centralizada, ganha foco; some ao perder o foco ou com `Esc` |
+| Captura | `captura`, 640 de largura e a altura do cartão | Centralizada, ganha foco; some ao perder o foco ou com `Esc`. A interface mede o cartão e pede a altura (`captura_altura`, de 48 a 560): a janela cresce para baixo quando a prévia chega, com o topo no mesmo lugar. Sem a sombra do Windows (`shadow: false`), como o painel |
 
 Medição do custo disso (memória e tempo até o dock) na [seção 7](#medições-da-fase-1).
 

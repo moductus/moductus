@@ -56,6 +56,7 @@ pub fn run() {
             dock::dock_soltar_foco,
             janelas::captura_alternar,
             janelas::captura_fechar,
+            janelas::captura_altura,
             atalhos::atalhos_obter,
             atalhos::atalhos_definir,
             atalhos::atalhos_falhas,

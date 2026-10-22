@@ -78,6 +78,12 @@
   color: var(--texto);
 }
 
+/* O atalho global da área no alto, à direita do título ("Ctrl Alt P" do PainelFoco.dc.html). */
+.painel-atalho {
+  display: inline-flex;
+  flex: none;
+}
+
 /* O conteúdo rola dentro do cartão; o cabeçalho fica parado. */
 .painel-corpo {
   display: flex;
@@ -460,4 +466,127 @@
 .painel-vazio-texto {
   margin: 0 0 var(--esp-4);
   color: var(--texto-2);
+}
+
+/* ---------- notas (PainelNotas.dc.html) ---------- */
+.painel-nota-fixa {
+  gap: var(--esp-8);
+}
+
+.painel-nota-fixa-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+}
+
+.painel-nota-fixa-rotulo {
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-forte);
+}
+
+.painel-nota-fixa-campo {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--texto);
+  font: inherit;
+  line-height: var(--altura-linha-escrita);
+  resize: none;
+}
+
+.painel-nota-fixa-dica {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.painel-nota-fixa-falhou {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.painel-nota-fixa-falhou p {
+  margin: 0;
+}
+
+.painel-notas {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.painel-nota {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  width: 100%;
+  padding: var(--esp-8) 0;
+  border: 0;
+  border-bottom: var(--espessura-borda) solid var(--borda);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.painel-nota:hover .painel-nota-titulo {
+  text-decoration: underline;
+}
+
+.painel-nota-linha {
+  display: flex;
+  align-items: baseline;
+  gap: var(--esp-8);
+}
+
+.painel-nota-titulo,
+.painel-nota-trecho {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.painel-nota-titulo {
+  flex: 1;
+  font-weight: var(--peso-forte);
+}
+
+.painel-nota-quando {
+  flex: none;
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.painel-nota-trecho {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+/* Quem escreveu a nota, na cor da Alba (DESIGN.md §5 "Origem"). */
+.painel-nota-origem {
+  font-size: var(--tipo-11);
+  color: var(--agente-alba);
+}
+
+.painel-notas-vazio {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.painel-notas-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--esp-8);
 }

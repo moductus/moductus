@@ -20,7 +20,7 @@
 
   .campo-caixa:focus-within,
   .busca-caixa:focus-within,
-  .captura-campo:focus-visible {
+  .captura-campo:focus-within {
     border-color: Highlight;
     outline-color: Highlight;
   }
