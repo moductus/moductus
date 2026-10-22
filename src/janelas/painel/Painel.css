@@ -78,6 +78,12 @@
   color: var(--texto);
 }
 
+/* O atalho global da área no alto, à direita do título ("Ctrl Alt P" do PainelFoco.dc.html). */
+.painel-atalho {
+  display: inline-flex;
+  flex: none;
+}
+
 /* O conteúdo rola dentro do cartão; o cabeçalho fica parado. */
 .painel-corpo {
   display: flex;
