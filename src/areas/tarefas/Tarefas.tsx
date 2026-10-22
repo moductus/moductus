@@ -20,9 +20,10 @@ import { ListaNavegacao, type ItemNavegacao } from "../ListaNavegacao.tsx";
 import { dataCurta, EstadoVazio, Pagina } from "../Pagina.tsx";
 import { useAgora } from "../tempo.ts";
 import { CampoFrase } from "./CampoFrase.tsx";
-import { dataDoDia, diaNoFuso } from "./dias.ts";
+import { dataDoDia } from "../dia.ts";
 import {
   contarLinhas,
+  emLotes,
   gruposDasAbertas,
   gruposDoHoje,
   gruposDosLembretes,
@@ -54,7 +55,7 @@ const ABERTAS = { um: "tarefa aberta", varios: "tarefas abertas" };
 export function Tarefas() {
   const canal = useCanal(useServico({ silencioso: true }));
   const agora = useAgora();
-  const leitura = useDadosTarefas(canal);
+  const leitura = useDadosTarefas(canal, agora);
   const contagens = useContagens(canal);
   const [vista, setVista] = useState<IdVista>("hoje");
 
@@ -75,7 +76,8 @@ export function Tarefas() {
   const listaAberta = idDaLista(vista);
   // A lista que saiu (apagada ou arquivada em outro lugar) devolve a vista ao Hoje.
   const ativa: IdVista = listaAberta && !listas.some((l) => l.id === listaAberta) ? "hoje" : vista;
-  const hoje = diaNoFuso(agora, dados.fuso);
+  const hoje = dados.dia;
+  const conteudo = montarVista(ativa, dados, listas, agora);
 
   return (
     <div className="tarefas">
@@ -88,10 +90,63 @@ export function Tarefas() {
         aoEscolher={setVista}
       />
       <div className="tarefas-conteudo">
-        <Vista key={ativa} vista={ativa} dados={dados} listas={listas} hoje={hoje} agora={agora} />
+        <Pagina
+          titulo={conteudo.titulo}
+          rotulo={dataCurta(dataDoDia(hoje))}
+          acao={<span className="tarefas-rotulo">{conteudo.acao}</span>}
+        >
+          {/* Fora da vista com chave: trocar de vista não apaga a frase nem o Desfazer. */}
+          <CampoFrase
+            listas={listas}
+            hoje={hoje}
+            contexto={{ listaId: conteudo.listaId, dia: ativa === "hoje" ? hoje : null }}
+          />
+          <Vista key={ativa} vista={ativa} conteudo={conteudo} dados={dados} listas={listas} />
+        </Pagina>
       </div>
     </div>
   );
+}
+
+/** O que uma vista mostra: o título, o número do alto e os grupos. */
+interface ConteudoDaVista {
+  titulo: string;
+  acao: string;
+  listaId: string | null;
+  lista: Lista | null;
+  grupos: GrupoTarefas[];
+  lembretes: GrupoLembretes[];
+}
+
+function montarVista(
+  vista: IdVista,
+  dados: DadosTarefas,
+  listas: readonly Lista[],
+  agora: Date,
+): ConteudoDaVista {
+  const hoje = dados.dia;
+  const listaId = idDaLista(vista);
+  const lista = listas.find((l) => l.id === listaId) ?? null;
+  const titulo = lista?.nome ?? VISTAS_FIXAS.find((v) => v.id === vista)?.nome ?? "Hoje";
+  const grupos: GrupoTarefas[] =
+    vista === "hoje"
+      ? gruposDoHoje(dados.hoje, dados.atrasadas, hoje)
+      : vista === "proximos"
+        ? gruposDosProximos(dados.proximas, hoje)
+        : vista === "lembretes"
+          ? []
+          : gruposDasAbertas(
+              listaId ? dados.abertas.filter((t) => t.listaId === listaId) : dados.abertas,
+              hoje,
+            );
+  const lembretes = vista === "lembretes" ? gruposDosLembretes(dados.lembretes, dados.fuso, agora) : [];
+  const acao =
+    vista === "hoje"
+      ? progressoDoHoje(grupos)
+      : vista === "lembretes"
+        ? `${dados.lembretes.length} ${dados.lembretes.length === 1 ? "lembrete" : "lembretes"}`
+        : totalDasAbertas(grupos);
+  return { titulo, acao, listaId, lista, grupos, lembretes };
 }
 
 interface PropsLateral {
@@ -193,17 +248,14 @@ function NovaLista({ aoTerminar }: { aoTerminar: (lista: Lista | null) => void }
 
 interface PropsVista {
   vista: IdVista;
+  conteudo: ConteudoDaVista;
   dados: DadosTarefas;
   listas: readonly Lista[];
-  hoje: string;
-  agora: Date;
 }
 
-function Vista({ vista, dados, listas, hoje, agora }: PropsVista) {
+function Vista({ vista, conteudo, dados, listas }: PropsVista) {
   const [erro, setErro] = useState<string | null>(null);
-  const listaId = idDaLista(vista);
-  const lista = listas.find((l) => l.id === listaId) ?? null;
-  const titulo = lista?.nome ?? VISTAS_FIXAS.find((v) => v.id === vista)?.nome ?? "Hoje";
+  const { listaId, lista, grupos, lembretes } = conteudo;
 
   /** Um pedido da tela: a recusa aparece no alto da lista até o próximo. */
   const fazer = (pedido: () => Promise<unknown>) => {
@@ -211,34 +263,10 @@ function Vista({ vista, dados, listas, hoje, agora }: PropsVista) {
     pedido().catch((e: unknown) => setErro(mensagemDaRecusa(e)));
   };
 
-  const grupos: GrupoTarefas[] =
-    vista === "hoje"
-      ? gruposDoHoje(dados.hoje, dados.atrasadas, hoje)
-      : vista === "proximos"
-        ? gruposDosProximos(dados.proximas, hoje)
-        : vista === "lembretes"
-          ? []
-          : gruposDasAbertas(
-              listaId ? dados.abertas.filter((t) => t.listaId === listaId) : dados.abertas,
-              hoje,
-            );
-  const lembretes = vista === "lembretes" ? gruposDosLembretes(dados.lembretes, dados.fuso, agora) : [];
   const nadaAinda = dados.abertas.length === 0 && dados.hoje.length === 0 && dados.lembretes.length === 0;
 
-  const acao =
-    vista === "hoje"
-      ? progressoDoHoje(grupos)
-      : vista === "lembretes"
-        ? `${dados.lembretes.length} ${dados.lembretes.length === 1 ? "lembrete" : "lembretes"}`
-        : totalDasAbertas(grupos);
-
   return (
-    <Pagina
-      titulo={titulo}
-      rotulo={dataCurta(dataDoDia(hoje))}
-      acao={<span className="tarefas-rotulo">{acao}</span>}
-    >
-      <CampoFrase listas={listas} contexto={{ listaId, dia: vista === "hoje" ? hoje : null }} />
+    <>
       {erro && (
         <p className="tarefas-erro" role="alert">
           {erro}
@@ -257,7 +285,7 @@ function Vista({ vista, dados, listas, hoje, agora }: PropsVista) {
       ) : (
         <ListaDeTarefas grupos={grupos} listas={listas} mostrarLista={listaId === null} fazer={fazer} />
       )}
-    </Pagina>
+    </>
   );
 }
 
@@ -312,27 +340,32 @@ interface PropsListaDeTarefas {
 function ListaDeTarefas({ grupos, listas, mostrarLista, fazer }: PropsListaDeTarefas) {
   const idDica = useId();
   const arrastando = useRef<{ id: string; grupo: string } | null>(null);
-  // Depois de mudar a ordem, o foco volta à caixa da tarefa movida quando a lista nova chega.
-  const focar = useRef<string | null>(null);
+  // Depois de mudar a ordem, o foco volta à caixa da tarefa movida uma vez, quando a ordem nova
+  // chega: `antes` é a ordem do grupo na hora do pedido.
+  const focar = useRef<{ id: string; antes: string } | null>(null);
   const raiz = useRef<HTMLDivElement>(null);
 
-  // Mover o nó na lista pode tirar o foco dele: só se o foco caiu no vazio ele volta; se a pessoa
-  // já foi para outro lugar, fica onde ela está.
+  // Mover o nó na lista pode tirar o foco dele. Ele volta se caiu no vazio ou ficou na linha; se a
+  // pessoa já foi para outro lugar, fica onde ela está. Depois disso, nada mais puxa o foco.
   useEffect(() => {
-    const id = focar.current;
-    if (!id) return;
+    const pedido = focar.current;
+    if (!pedido || ordemDoGrupo(grupos, pedido.id) === pedido.antes) return;
+    focar.current = null;
+    const seletor = `[data-tarefa="${CSS.escape(pedido.id)}"]`;
     const ativo = document.activeElement;
-    if (ativo && ativo !== document.body) {
-      if (!ativo.closest(`[data-tarefa="${CSS.escape(id)}"]`)) focar.current = null;
-      return;
-    }
-    raiz.current?.querySelector<HTMLElement>(`[data-tarefa="${CSS.escape(id)}"] [role="checkbox"]`)?.focus();
+    if (ativo && ativo !== document.body && !ativo.closest(seletor)) return;
+    raiz.current?.querySelector<HTMLElement>(`${seletor} [role="checkbox"]`)?.focus();
   });
 
   const ordenar = (ids: string[] | null, id: string) => {
     if (!ids) return;
-    focar.current = id;
-    fazer(() => servico.pedir("tarefas.ordenar", { ids }));
+    focar.current = { id, antes: ordemDoGrupo(grupos, id) };
+    fazer(() =>
+      servico.pedir("tarefas.ordenar", { ids }).catch((e: unknown) => {
+        focar.current = null;
+        throw e;
+      }),
+    );
   };
 
   const nomeDaLista = (t: Tarefa) => listas.find((l) => l.id === t.listaId)?.nome ?? "";
@@ -347,9 +380,11 @@ function ListaDeTarefas({ grupos, listas, mostrarLista, fazer }: PropsListaDeTar
           key={g.id}
           grupo={g}
           aoTrazer={() =>
-            fazer(() =>
-              servico.pedir("tarefas.adiar", { ids: g.linhas.map((l) => l.tarefa.id), para: "hoje" }),
-            )
+            fazer(async () => {
+              for (const ids of emLotes(g.linhas.map((l) => l.tarefa.id))) {
+                await servico.pedir("tarefas.adiar", { ids, para: "hoje" });
+              }
+            })
           }
         >
           {g.linhas.map((l) => (
@@ -395,6 +430,13 @@ function ListaDeTarefas({ grupos, listas, mostrarLista, fazer }: PropsListaDeTar
     </div>
   );
 }
+
+/** A ordem atual do grupo da tarefa, para saber quando a ordem nova chegou. */
+const ordemDoGrupo = (grupos: readonly GrupoTarefas[], id: string) =>
+  grupos
+    .find((g) => g.linhas.some((l) => l.tarefa.id === id))
+    ?.linhas.map((l) => l.tarefa.id)
+    .join(" ") ?? "";
 
 function Grupo({
   grupo,

@@ -1,20 +1,12 @@
 import type { Lista, PreviaCaptura, Tarefa } from "@moductus/contrato";
 import { describe, expect, it } from "vitest";
 import {
-  descreverAntecedencia,
-  descreverDuracao,
-  descreverRecorrencia,
-  diaCurto,
-  diaNoFuso,
-  diaPorExtenso,
-  veioDe,
-} from "./dias.ts";
-import {
   gruposDasAbertas,
   gruposDoHoje,
   gruposDosLembretes,
   gruposDosProximos,
   lancamentoDaPrevia,
+  emLotes,
   moverNoGrupo,
   pedacosDoEntendi,
   progressoDoHoje,
@@ -29,38 +21,6 @@ const LISTAS: Lista[] = [
 
 const nomes = (grupos: { nome: string; linhas: { tarefa: Tarefa }[] }[]) =>
   grupos.map((g) => [g.nome, g.linhas.map((l) => l.tarefa.titulo)]);
-
-describe("dias no fuso", () => {
-  it("o dia de hoje é o do fuso, não o UTC", () => {
-    // 01:30 UTC do dia 9 ainda é dia 8 em São Paulo.
-    expect(diaNoFuso(new Date("2026-10-09T01:30:00.000Z"), "America/Sao_Paulo")).toBe(HOJE);
-    expect(diaNoFuso(new Date("2026-10-09T01:30:00.000Z"), "UTC")).toBe("2026-10-09");
-  });
-
-  it("escreve o dia como as linhas e o Entendi", () => {
-    expect(diaPorExtenso("2026-10-09")).toBe("sexta, 9 out");
-    expect(diaCurto("2026-10-06", HOJE)).toBe("ter");
-    expect(diaCurto("2026-10-20", HOJE)).toBe("20 out");
-    expect(veioDe("2026-10-07", HOJE)).toBe("veio de ontem");
-    expect(veioDe("2026-10-06", HOJE)).toBe("veio de terça");
-    expect(veioDe("2026-09-30", HOJE)).toBe("veio de 30 set");
-  });
-
-  it("repetição, duração e antecedência em texto curto", () => {
-    expect(descreverRecorrencia("FREQ=MONTHLY")).toBe("repete todo mês");
-    expect(descreverRecorrencia("RRULE:FREQ=WEEKLY;BYDAY=MO")).toBe("repete toda segunda");
-    expect(descreverRecorrencia("FREQ=WEEKLY;BYDAY=SA")).toBe("repete todo sábado");
-    expect(descreverRecorrencia("FREQ=WEEKLY;BYDAY=MO,WE,FR")).toBe("repete seg, qua e sex");
-    expect(descreverRecorrencia("FREQ=WEEKLY;INTERVAL=2")).toBe("repete a cada 2 semanas");
-    expect(descreverRecorrencia("FREQ=MONTHLY;BYDAY=2TU")).toBe("repete todo mês");
-    expect(descreverRecorrencia("FREQ=SECONDLY")).toBe("repete");
-    expect(descreverDuracao(30)).toBe("30 min");
-    expect(descreverDuracao(90)).toBe("1 h 30");
-    expect(descreverAntecedencia(15)).toBe("15 min antes");
-    expect(descreverAntecedencia(0)).toBe("na hora");
-    expect(descreverAntecedencia(1440)).toBe("1 dia antes");
-  });
-});
 
 describe("Hoje", () => {
   it("atrasadas no alto com o dia em que venciam, depois manhã, tarde, noite e sem hora", () => {
@@ -106,6 +66,32 @@ describe("Hoje", () => {
     expect(grupos[0]!.linhas[0]!.nota).toBe("subtarefas 1 de 3 · repete todo mês");
   });
 
+  it("a subtarefa que vem nos dois recortes conta uma vez", () => {
+    const mae = tarefa({ titulo: "Mãe atrasada", venceEm: "2026-10-07" });
+    const filha = tarefa({ tarefaPaiId: mae.id });
+    const grupos = gruposDoHoje([filha], [mae, filha], HOJE);
+    expect(nomes(grupos)).toEqual([["Atrasada", ["Mãe atrasada"]]]);
+    expect(grupos[0]!.linhas[0]!.nota).toBe("veio de ontem · subtarefas 0 de 1");
+  });
+
+  it("nos períodos só a hora ordena: a atrasada feita hoje às 11:30 vem depois da das 09:00", () => {
+    const grupos = gruposDoHoje(
+      [
+        tarefa({
+          titulo: "De ontem",
+          venceEm: "2026-10-07",
+          hora: "11:30",
+          estado: "feita",
+          concluidaEm: "2026-10-08T14:00:00.000Z",
+        }),
+        tarefa({ titulo: "De hoje", hora: "09:00" }),
+      ],
+      [],
+      HOJE,
+    );
+    expect(nomes(grupos)).toEqual([["Manhã", ["De hoje", "De ontem"]]]);
+  });
+
   it("a subtarefa que veio sozinha, pelo próprio dia, vira linha", () => {
     const grupos = gruposDoHoje([tarefa({ titulo: "Filha", tarefaPaiId: "outra" })], [], HOJE);
     expect(nomes(grupos)).toEqual([["Sem hora", ["Filha"]]]);
@@ -129,6 +115,28 @@ describe("Próximos 7 dias e Todas", () => {
       ["Quinta, 15 de outubro", ["No limite"]],
     ]);
     expect(grupos[0]!.linhas[0]!.quando).toBe("18:00");
+  });
+
+  it("as subtarefas acham a mãe antes do corte: sem data contam, e a da mãe longe não vira linha", () => {
+    const perto = tarefa({ titulo: "Perto", venceEm: "2026-10-09" });
+    const longe = tarefa({ titulo: "Longe", venceEm: "2026-10-18" });
+    const grupos = gruposDosProximos(
+      [
+        perto,
+        longe,
+        tarefa({ tarefaPaiId: perto.id, venceEm: null }),
+        tarefa({
+          tarefaPaiId: perto.id,
+          venceEm: null,
+          estado: "feita",
+          concluidaEm: "2026-10-08T12:00:00.000Z",
+        }),
+        tarefa({ titulo: "Filha da longe", tarefaPaiId: longe.id, venceEm: HOJE }),
+      ],
+      HOJE,
+    );
+    expect(nomes(grupos)).toEqual([["Amanhã", ["Perto"]]]);
+    expect(grupos[0]!.linhas[0]!.nota).toBe("subtarefas 1 de 2");
   });
 
   it("Todas separa atrasadas, hoje, próximas e sem data, com o dia curto", () => {
@@ -162,8 +170,18 @@ describe("ordenar", () => {
 
   it("troca com a vizinha do mesmo dia e hora", () => {
     expect(linhas.map((l) => l.tarefa.titulo)).toEqual(["C", "A", "B"]);
-    expect(moverNoGrupo(linhas, b!.id, -1)).toEqual([c!.id, b!.id, a!.id]);
-    expect(soltarNoGrupo(linhas, b!.id, a!.id)).toEqual([c!.id, b!.id, a!.id]);
+    expect(moverNoGrupo(linhas, b!.id, -1)).toEqual([b!.id, a!.id]);
+    expect(soltarNoGrupo(linhas, b!.id, a!.id)).toEqual([b!.id, a!.id]);
+  });
+
+  it("só a sequência seguida da mesma chave vai ao serviço, e o adiar vai em lotes de 1000", () => {
+    const [d, e] = [tarefa({ titulo: "D" }), tarefa({ titulo: "E" })];
+    const comHora = gruposDasAbertas([c!, a!, b!, d!, e!], HOJE)[0]!.linhas;
+    expect(comHora.map((l) => l.tarefa.titulo)).toEqual(["C", "A", "B", "D", "E"]);
+    expect(moverNoGrupo(comHora, d!.id, 1)).toEqual([a!.id, b!.id, e!.id, d!.id]);
+    expect(soltarNoGrupo(comHora, e!.id, a!.id)).toEqual([e!.id, a!.id, b!.id, d!.id]);
+    const ids = Array.from({ length: 2001 }, (_, i) => `t${i}`);
+    expect(emLotes(ids).map((l) => l.length)).toEqual([1000, 1000, 1]);
   });
 
   it("não passa por cima do relógio nem da ponta", () => {
@@ -199,7 +217,7 @@ describe("Entendi", () => {
 
   it("mostra o que o quadro mostra, com o lembrete padrão da tarefa com hora", () => {
     const lancamento = lancamentoDaPrevia(previa(), { listaId: null, dia: null });
-    expect(pedacosDoEntendi(lancamento, LISTAS)).toEqual([
+    expect(pedacosDoEntendi(lancamento, LISTAS, HOJE)).toEqual([
       "tarefa",
       "sexta, 9 out",
       "15:00",
@@ -216,11 +234,10 @@ describe("Entendi", () => {
     });
     const naLista = lancamentoDaPrevia(semNada, { listaId: "pessoal", dia: null });
     expect(naLista.campos).toMatchObject({ dia: null, listaId: "pessoal" });
-    expect(pedacosDoEntendi(naLista, LISTAS)).toEqual(["tarefa", "Pessoal"]);
-    expect(pedacosDoEntendi(lancamentoDaPrevia(semNada, { listaId: null, dia: null }), LISTAS)).toEqual([
-      "tarefa",
-      "Entrada",
-    ]);
+    expect(pedacosDoEntendi(naLista, LISTAS, HOJE)).toEqual(["tarefa", "Pessoal"]);
+    expect(pedacosDoEntendi(lancamentoDaPrevia(semNada, { listaId: null, dia: null }), LISTAS, HOJE)).toEqual(
+      ["tarefa", "Entrada"],
+    );
   });
 
   it("o que a frase disse vale mais que a vista; nota e lembrete não ganham lista", () => {
@@ -231,17 +248,28 @@ describe("Entendi", () => {
       dia: HOJE,
     });
     expect(nota.campos.dia).toBeNull();
-    expect(pedacosDoEntendi(nota, LISTAS)).toEqual(["nota"]);
+    expect(pedacosDoEntendi(nota, LISTAS, HOJE)).toEqual(["nota"]);
     const lembrete = lancamentoDaPrevia(previa({ tipo: "lembrete" }, { listaId: null }), {
       listaId: "pessoal",
       dia: null,
     });
-    expect(pedacosDoEntendi(lembrete, LISTAS)).toEqual(["lembrete", "sexta, 9 out", "15:00"]);
+    expect(pedacosDoEntendi(lembrete, LISTAS, HOJE)).toEqual(["lembrete", "sexta, 9 out", "15:00"]);
   });
 
-  it("gasto e memória ainda não chegaram: viram tarefa", () => {
-    const gasto = lancamentoDaPrevia(previa({ tipo: "gasto" }), { listaId: null, dia: null });
+  it("gasto e memória ainda não chegaram: vão como a primeira alternativa da prévia", () => {
+    const gasto = lancamentoDaPrevia(previa({ tipo: "gasto", alternativas: ["tarefa", "nota"] }), {
+      listaId: null,
+      dia: null,
+    });
     expect(gasto.tipo).toBe("tarefa");
+    const memoria = lancamentoDaPrevia(previa({ tipo: "memoria", alternativas: ["nota", "tarefa"] }), {
+      listaId: "pessoal",
+      dia: HOJE,
+    });
+    expect(memoria).toMatchObject({ tipo: "nota", campos: { listaId: "pessoal", dia: "2026-10-09" } });
+    expect(
+      lancamentoDaPrevia(previa({ tipo: "memoria", alternativas: [] }), { listaId: null, dia: null }).tipo,
+    ).toBe("tarefa");
   });
 });
 

@@ -5,6 +5,7 @@ import { Botao } from "../../componentes/Botao.tsx";
 import { Icone } from "../../componentes/Icone.tsx";
 import { Selo } from "../../componentes/Selo.tsx";
 import { servico } from "../../servico/conexao.ts";
+import { previaDoEnter } from "../dia.ts";
 import {
   lancamentoDaPrevia,
   mensagemDaRecusa,
@@ -28,6 +29,8 @@ interface Criado {
 
 interface PropsCampoFrase {
   listas: readonly Lista[];
+  /** Hoje no fuso, para o "Entendi:" escrever o dia (com o ano, se for outro). */
+  hoje: string;
   contexto: ContextoDaFrase;
 }
 
@@ -37,7 +40,7 @@ interface PropsCampoFrase {
  * cria é a captura do serviço (`captura.entender`, `captura.lancar`), a mesma da janela flutuante.
  * Esc limpa a frase.
  */
-export function CampoFrase({ listas, contexto }: PropsCampoFrase) {
+export function CampoFrase({ listas, hoje, contexto }: PropsCampoFrase) {
   const id = useId();
   const [texto, setTexto] = useState("");
   const [previa, setPrevia] = useState<PreviaCaptura | null>(null);
@@ -48,7 +51,8 @@ export function CampoFrase({ listas, contexto }: PropsCampoFrase) {
   const lancando = useRef(false);
 
   const frase = texto.trim();
-  const atual = previa && frase !== "" ? previa : null;
+  // O "Entendi:" só aparece para a frase que está no campo: o que o Enter lança é o que está na tela.
+  const atual = previa && frase !== "" && previa.texto === frase ? previa : null;
 
   useEffect(() => {
     const pedido = ++ultimo.current;
@@ -88,9 +92,16 @@ export function CampoFrase({ listas, contexto }: PropsCampoFrase) {
     lancando.current = true;
     setErro(null);
     try {
-      // Enter antes da prévia chegar: entende agora e lança o que entendeu.
-      const base = atual?.texto === frase ? atual : await servico.pedir("captura.entender", { texto: frase });
-      const { tipo, campos } = lancamentoDaPrevia(base, contexto);
+      // A regra do Enter da captura: só o "Entendi:" na tela lança. Sem ele, entende agora e
+      // mostra; quem lança é o próximo Enter.
+      const mostrada = await previaDoEnter(frase, atual, async () => {
+        const pedido = ++ultimo.current;
+        const nova = await servico.pedir("captura.entender", { texto: frase });
+        if (pedido === ultimo.current) setPrevia(nova);
+        return nova;
+      });
+      if (mostrada === null) return;
+      const { tipo, campos } = lancamentoDaPrevia(mostrada, contexto);
       const lancamento = await servico.pedir("captura.lancar", { texto: frase, tipo, campos });
       ultimo.current++;
       setTexto("");
@@ -155,7 +166,7 @@ export function CampoFrase({ listas, contexto }: PropsCampoFrase) {
       {lancamento && (
         <div id={idEntendi} className="tarefas-entendi">
           <span>Entendi:</span>
-          {pedacosDoEntendi(lancamento, listas).map((pedaco, i) => (
+          {pedacosDoEntendi(lancamento, listas, hoje).map((pedaco, i) => (
             <Selo key={i}>{pedaco}</Selo>
           ))}
           {atual?.aviso && <span className="tarefas-entendi-aviso">{atual.aviso}</span>}
@@ -166,14 +177,17 @@ export function CampoFrase({ listas, contexto }: PropsCampoFrase) {
           {erro}
         </p>
       )}
-      {criado && (
-        <p className="tarefas-frase-criado" role="status">
-          <span>{criado.texto}</span>
-          <Botao variante="fantasma" tamanho="pequeno" onClick={() => void desfazer(criado.lancamento)}>
-            Desfazer
-          </Botao>
-        </p>
-      )}
+      {/* A região de status fica montada, para o leitor de tela ouvir o "criada" quando ele chega. */}
+      <div role="status">
+        {criado && (
+          <p className="tarefas-frase-criado">
+            <span>{criado.texto}</span>
+            <Botao variante="fantasma" tamanho="pequeno" onClick={() => void desfazer(criado.lancamento)}>
+              Desfazer
+            </Botao>
+          </p>
+        )}
+      </div>
     </div>
   );
 }

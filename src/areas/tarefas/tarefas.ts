@@ -15,15 +15,17 @@ import { servico } from "../../servico/conexao.ts";
 import type { Leitura } from "../leitura.ts";
 import {
   dataDoDia,
-  descreverAntecedencia,
-  descreverDuracao,
-  descreverRecorrencia,
   diaCurto,
   diaPorExtenso,
+  formatarAntes,
+  formatarMinutos,
+  hojeNoFuso,
+  lancado,
   relogioNoFuso,
+  repeticaoNaLinha,
   somarDias,
   veioDe,
-} from "./dias.ts";
+} from "../dia.ts";
 import { dataCurta } from "../Pagina.tsx";
 
 /**
@@ -83,10 +85,12 @@ const feita = (t: Tarefa) => t.estado === "feita";
  * da mãe); a que veio sozinha, pelo próprio dia, vira.
  */
 function principais(tarefas: readonly Tarefa[]): { linhas: Tarefa[]; filhas: Map<string, Tarefa[]> } {
-  const ids = new Set(tarefas.map((t) => t.id));
+  // Dois recortes juntos (atrasadas e hoje) podem trazer a mesma subtarefa: ela conta uma vez.
+  const unicas = [...new Map(tarefas.map((t) => [t.id, t])).values()];
+  const ids = new Set(unicas.map((t) => t.id));
   const filhas = new Map<string, Tarefa[]>();
   const linhas: Tarefa[] = [];
-  for (const t of tarefas) {
+  for (const t of unicas) {
     if (t.tarefaPaiId !== null && ids.has(t.tarefaPaiId)) {
       filhas.set(t.tarefaPaiId, [...(filhas.get(t.tarefaPaiId) ?? []), t]);
     } else {
@@ -101,23 +105,33 @@ function notaDa(tarefa: Tarefa, filhas: readonly Tarefa[], hoje: string, atrasad
   if (atrasada && tarefa.venceEm) partes.push(veioDe(tarefa.venceEm, hoje));
   const contadas = filhas.filter((f) => f.estado !== "cancelada");
   if (contadas.length > 0) partes.push(`subtarefas ${contadas.filter(feita).length} de ${contadas.length}`);
-  if (tarefa.recorrencia) partes.push(descreverRecorrencia(tarefa.recorrencia));
+  if (tarefa.recorrencia) partes.push(repeticaoNaLinha(tarefa.recorrencia));
   return partes.join(" · ");
 }
 
-/** Mesma ordem do serviço (dia, posição), com a hora antes da posição dentro do dia. */
-function porDiaEHora(tarefas: readonly Tarefa[]): Tarefa[] {
-  const chave = (t: Tarefa) => `${t.venceEm ?? "9999-99-99"} ${t.hora ?? "99:99"}`;
+/** A chave de quem vem antes: dia e hora em geral; só a hora nos períodos do Hoje. */
+type Chave = (t: Tarefa) => string;
+
+const porDiaEHoraChave: Chave = (t) => `${t.venceEm ?? "9999-99-99"} ${t.hora ?? "99:99"}`;
+/** No Hoje tudo é de hoje, inclusive a atrasada feita hoje: só a hora ordena. */
+const soHora: Chave = (t) => t.hora ?? "99:99";
+
+/** Mesma ordem do serviço (dia, posição), com a hora antes da posição; a ordenação é estável. */
+function ordenarPor(tarefas: readonly Tarefa[], chave: Chave): Tarefa[] {
   return [...tarefas].sort((a, b) => (chave(a) < chave(b) ? -1 : chave(a) > chave(b) ? 1 : 0));
 }
 
-const chaveOrdem = (t: Tarefa) => `${t.venceEm ?? ""} ${t.hora ?? ""}`;
+const porDiaEHora = (tarefas: readonly Tarefa[]) => ordenarPor(tarefas, porDiaEHoraChave);
 
 function linha(
   tarefa: Tarefa,
   filhas: Map<string, Tarefa[]>,
   hoje: string,
-  { atrasada, quando }: { atrasada: boolean; quando: "hora" | "dia" },
+  {
+    atrasada,
+    quando,
+    chave = porDiaEHoraChave,
+  }: { atrasada: boolean; quando: "hora" | "dia"; chave?: Chave },
 ): LinhaTarefa {
   const dia =
     quando === "hora" || !tarefa.venceEm
@@ -129,7 +143,7 @@ function linha(
     tarefa,
     nota: notaDa(tarefa, filhas.get(tarefa.id) ?? [], hoje, atrasada),
     quando: dia,
-    chaveOrdem: chaveOrdem(tarefa),
+    chaveOrdem: chave(tarefa),
   };
 }
 
@@ -161,11 +175,14 @@ export function gruposDoHoje(
   const { linhas, filhas } = principais([...atrasadas, ...deHoje]);
   const idsAtrasadas = new Set(atrasadas.map((t) => t.id));
   const ehAtrasada = (t: Tarefa) => idsAtrasadas.has(t.id) && t.estado === "aberta";
-  const doDia = porDiaEHora(linhas.filter((t) => !ehAtrasada(t)));
+  const doDia = ordenarPor(
+    linhas.filter((t) => !ehAtrasada(t)),
+    soHora,
+  );
   const doPeriodo = (p: ReturnType<typeof periodo>) =>
     doDia
       .filter((t) => periodo(t.hora) === p)
-      .map((t) => linha(t, filhas, hoje, { atrasada: false, quando: "hora" }));
+      .map((t) => linha(t, filhas, hoje, { atrasada: false, quando: "hora", chave: soHora }));
   return naoVazios([
     grupo(
       "atrasadas",
@@ -184,10 +201,13 @@ export function gruposDoHoje(
 
 /** "Amanhã" e depois o dia por extenso ("Sábado, 10 de outubro"), um grupo por dia. */
 export function gruposDosProximos(proximas: readonly Tarefa[], hoje: string): GrupoTarefas[] {
+  const de = somarDias(hoje, 1);
   const ate = somarDias(hoje, DIAS_PROXIMOS);
-  const { linhas, filhas } = principais(proximas.filter((t) => t.venceEm !== null && t.venceEm <= ate));
+  // As subtarefas vêm com a mãe em qualquer dia: primeiro cada uma acha a mãe, depois o corte.
+  const { linhas, filhas } = principais(proximas);
+  const naSemana = linhas.filter((t) => t.venceEm !== null && t.venceEm >= de && t.venceEm <= ate);
   const grupos = new Map<string, LinhaTarefa[]>();
-  for (const t of porDiaEHora(linhas)) {
+  for (const t of porDiaEHora(naSemana)) {
     const dia = t.venceEm!;
     grupos.set(dia, [
       ...(grupos.get(dia) ?? []),
@@ -265,23 +285,47 @@ export function textoDaPrioridade(prioridade: number): string | null {
  * na tela. Sem troca possível, `null`.
  */
 export function moverNoGrupo(linhas: readonly LinhaTarefa[], id: string, passo: -1 | 1): string[] | null {
+  const trecho = trechoDaChave(linhas, id);
+  const i = trecho.findIndex((l) => l === id);
+  if (i < 0 || i + passo < 0 || i + passo >= trecho.length) return null;
+  [trecho[i], trecho[i + passo]] = [trecho[i + passo]!, trecho[i]!];
+  return trecho;
+}
+
+/**
+ * Os ids da sequência seguida de linhas com a mesma chave da tarefa: é só ela que muda de posição,
+ * e só ela vai ao `tarefas.ordenar` (o resto do grupo segue o relógio).
+ */
+function trechoDaChave(linhas: readonly LinhaTarefa[], id: string): string[] {
   const i = linhas.findIndex((l) => l.tarefa.id === id);
-  const vizinha = linhas[i + passo];
-  if (i < 0 || !vizinha || vizinha.chaveOrdem !== linhas[i]!.chaveOrdem) return null;
-  const ids = linhas.map((l) => l.tarefa.id);
-  [ids[i], ids[i + passo]] = [ids[i + passo]!, ids[i]!];
-  return ids;
+  if (i < 0) return [];
+  const chave = linhas[i]!.chaveOrdem;
+  let inicio = i;
+  let fim = i;
+  while (inicio > 0 && linhas[inicio - 1]!.chaveOrdem === chave) inicio--;
+  while (fim < linhas.length - 1 && linhas[fim + 1]!.chaveOrdem === chave) fim++;
+  return linhas.slice(inicio, fim + 1).map((l) => l.tarefa.id);
 }
 
 /** Arrastar uma tarefa para o lugar de outra do mesmo grupo, com as mesmas regras de troca. */
 export function soltarNoGrupo(linhas: readonly LinhaTarefa[], id: string, alvoId: string): string[] | null {
-  const de = linhas.findIndex((l) => l.tarefa.id === id);
-  const para = linhas.findIndex((l) => l.tarefa.id === alvoId);
-  if (de < 0 || para < 0 || de === para || linhas[de]!.chaveOrdem !== linhas[para]!.chaveOrdem) return null;
-  const ids = linhas.map((l) => l.tarefa.id);
-  const [movida] = ids.splice(de, 1);
-  ids.splice(para, 0, movida!);
-  return ids;
+  const trecho = trechoDaChave(linhas, id);
+  const de = trecho.indexOf(id);
+  const para = trecho.indexOf(alvoId);
+  if (de < 0 || para < 0 || de === para) return null;
+  const [movida] = trecho.splice(de, 1);
+  trecho.splice(para, 0, movida!);
+  return trecho;
+}
+
+/** Quantos ids cabem num pedido de adiar ou ordenar (`LIMITE_IDS` do serviço). */
+export const LIMITE_IDS = 1000;
+
+/** Os ids em lotes que o serviço aceita. */
+export function emLotes(ids: readonly string[], tamanho = LIMITE_IDS): string[][] {
+  const lotes: string[][] = [];
+  for (let i = 0; i < ids.length; i += tamanho) lotes.push(ids.slice(i, i + tamanho));
+  return lotes;
 }
 
 // ---------- Lembretes ----------
@@ -359,13 +403,14 @@ export interface Lancamento {
 }
 
 /**
- * O que o Enter lança a partir da prévia. Gasto e memória ainda não chegaram: aqui viram tarefa,
- * com o aviso da prévia na tela. Na tarefa, o que a frase não disse vem da vista aberta: escrever
+ * O que o Enter lança a partir da prévia. Gasto e memória ainda não chegaram: vão como a primeira
+ * alternativa da prévia, com o aviso dela na tela. Na tarefa, o que a frase não disse vem da vista aberta: escrever
  * "comprar pão" no Hoje é para hoje, numa lista é para ela.
  */
 export function lancamentoDaPrevia(previa: PreviaCaptura, contexto: ContextoDaFrase): Lancamento {
   const lancavel = TipoLancavel.safeParse(previa.tipo);
-  const tipo: TipoLancavel = lancavel.success ? lancavel.data : "tarefa";
+  // O que ainda não chegou vai como a primeira alternativa que a captura oferece (memória é nota).
+  const tipo: TipoLancavel = lancavel.success ? lancavel.data : (previa.alternativas[0] ?? "tarefa");
   if (tipo !== "tarefa") return { tipo, campos: previa.campos };
   const { campos } = previa;
   return {
@@ -390,17 +435,21 @@ const NOME_TIPO: Record<TipoLancavel, string> = {
  * lembrete e a lista, na ordem do quadro ("tarefa · sexta, 9 out · 15:00 · lembrete 15 min antes ·
  * Pessoal"). O lembrete padrão da tarefa com hora aparece, porque ele vai ser criado.
  */
-export function pedacosDoEntendi({ tipo, campos }: Lancamento, listas: readonly Lista[]): string[] {
+export function pedacosDoEntendi(
+  { tipo, campos }: Lancamento,
+  listas: readonly Lista[],
+  hoje: string,
+): string[] {
   const pedacos = [NOME_TIPO[tipo]];
   if (tipo === "nota") return pedacos;
-  if (campos.dia) pedacos.push(diaPorExtenso(campos.dia));
+  if (campos.dia) pedacos.push(diaPorExtenso(campos.dia, hoje));
   if (campos.hora) pedacos.push(campos.hora);
-  if (campos.duracaoMin !== null) pedacos.push(descreverDuracao(campos.duracaoMin));
-  if (campos.recorrencia) pedacos.push(descreverRecorrencia(campos.recorrencia));
+  if (campos.duracaoMin !== null) pedacos.push(formatarMinutos(campos.duracaoMin));
+  if (campos.recorrencia) pedacos.push(repeticaoNaLinha(campos.recorrencia));
   const antes =
     campos.lembreteMinutosAntes ?? (tipo === "tarefa" && campos.hora !== null ? LEMBRETE_PADRAO_MIN : null);
   if (antes !== null && (tipo !== "lembrete" || antes > 0)) {
-    pedacos.push(`${tipo === "evento" ? "alerta" : "lembrete"} ${descreverAntecedencia(antes)}`);
+    pedacos.push(`${tipo === "evento" ? "alerta" : "lembrete"} ${formatarAntes(antes)}`);
   }
   if (tipo === "tarefa") {
     const id = campos.listaId ?? LISTA_ENTRADA;
@@ -409,15 +458,7 @@ export function pedacosDoEntendi({ tipo, campos }: Lancamento, listas: readonly 
   return pedacos;
 }
 
-const CRIADO: Record<TipoLancavel, string> = {
-  tarefa: "Tarefa criada",
-  lembrete: "Lembrete criado",
-  evento: "Evento criado",
-  nota: "Nota criada",
-};
-
-/** "Tarefa criada: Ligar pro banco." */
-export const textoDoCriado = (tipo: TipoLancavel, titulo: string) => `${CRIADO[tipo]}: ${titulo}.`;
+export const textoDoCriado = (tipo: TipoLancavel, titulo: string) => `${lancado(tipo)}: ${titulo}.`;
 
 /**
  * O que a tela diz quando um pedido não deu: a recusa do serviço como veio (é a regra, que a pessoa
@@ -441,33 +482,62 @@ export interface DadosTarefas {
   proximas: Tarefa[];
   lembretes: Lembrete[];
   fuso: string;
+  /** O dia de hoje no fuso, o mesmo para o qual os recortes foram pedidos. */
+  dia: string;
 }
 
+type Recortes = Pick<DadosTarefas, "listas" | "hoje" | "atrasadas" | "abertas" | "proximas">;
+
 /**
- * Tudo o que a área mostra, pelo canal: ao conectar e de novo a cada `tarefas.mudou`,
- * `listas.mudou` e `lembretes.mudou`, de qualquer caminho (esta tela, a captura, a Alba, a virada
- * do dia). Recarregar os recortes inteiros, em vez de remendar, deixa o serviço decidir de novo
- * onde cada tarefa cai. Uma recarga que falha com dados na tela mantém o que já estava.
+ * Tudo o que a área mostra, pelo canal: ao conectar e de novo a cada `tarefas.mudou` e
+ * `listas.mudou`, de qualquer caminho (esta tela, a captura, a Alba), e quando o dia de hoje muda
+ * (a meia-noite ou outro fuso em Configurações › Dia). Recarregar os recortes inteiros, em vez de
+ * remendar, deixa o serviço decidir de novo onde cada tarefa cai; avisos do mesmo instante viram
+ * uma recarga só, e `lembretes.mudou` recarrega só os lembretes. Uma recarga que falha com dados na
+ * tela mantém o que já estava.
  */
-export function useDadosTarefas(canal: EstadoConexao): Leitura<DadosTarefas> {
-  const [dados, setDados] = useState<Omit<DadosTarefas, "fuso"> | null>(null);
+export function useDadosTarefas(canal: EstadoConexao, agora: Date): Leitura<DadosTarefas> {
+  const [recortes, setRecortes] = useState<Recortes | null>(null);
+  const [lembretes, setLembretes] = useState<Lembrete[] | null>(null);
   const [fuso, setFuso] = useState<string | null>(null);
   const [falhou, setFalhou] = useState(false);
   const [versao, setVersao] = useState(0);
+  const [versaoLembretes, setVersaoLembretes] = useState(0);
   const tentarDeNovo = useCallback(() => {
     setFalhou(false);
     setVersao((v) => v + 1);
+    setVersaoLembretes((v) => v + 1);
   }, []);
+  // Até a configuração chegar, o fuso do Windows, que é o padrão dela.
+  const fusoDoDia = fuso ?? fusoDoSistema();
+  const dia = hojeNoFuso(agora, fusoDoDia);
 
   useEffect(() => {
-    const recarregar = () => setVersao((v) => v + 1);
+    const pendentes = new Map<string, ReturnType<typeof setTimeout>>();
+    const juntar = (chave: string, fazer: () => void) => () => {
+      if (pendentes.has(chave)) return;
+      pendentes.set(
+        chave,
+        setTimeout(() => {
+          pendentes.delete(chave);
+          fazer();
+        }, 0),
+      );
+    };
+    const recarregar = juntar("recortes", () => setVersao((v) => v + 1));
     const paradas = [
       servico.ouvir("tarefas.mudou", recarregar),
       servico.ouvir("listas.mudou", recarregar),
-      servico.ouvir("lembretes.mudou", recarregar),
+      servico.ouvir(
+        "lembretes.mudou",
+        juntar("lembretes", () => setVersaoLembretes((v) => v + 1)),
+      ),
       servico.ouvir("config.mudou", (estado) => setFuso(estado.config.dia.fuso)),
     ];
-    return () => paradas.forEach((parar) => parar());
+    return () => {
+      paradas.forEach((parar) => parar());
+      pendentes.forEach((relogio) => clearTimeout(relogio));
+    };
   }, []);
 
   useEffect(() => {
@@ -493,12 +563,11 @@ export function useDadosTarefas(canal: EstadoConexao): Leitura<DadosTarefas> {
       servico.pedir("tarefas.listar", { vista: "atrasadas" }),
       servico.pedir("tarefas.listar", {}),
       servico.pedir("tarefas.listar", { vista: "proximas" }),
-      servico.pedir("lembretes.listar", {}),
     ])
-      .then(([listas, hoje, atrasadas, abertas, proximas, lembretes]) => {
+      .then(([listas, hoje, atrasadas, abertas, proximas]) => {
         if (!vivo) return;
         setFalhou(false);
-        setDados({ listas, hoje, atrasadas, abertas, proximas, lembretes });
+        setRecortes({ listas, hoje, atrasadas, abertas, proximas });
       })
       .catch(() => {
         if (vivo) setFalhou(true);
@@ -506,10 +575,28 @@ export function useDadosTarefas(canal: EstadoConexao): Leitura<DadosTarefas> {
     return () => {
       vivo = false;
     };
-  }, [canal, versao]);
+    // O dia entra para os recortes de hoje, atrasadas e próximas virarem com ele.
+  }, [canal, versao, dia]);
+
+  useEffect(() => {
+    if (canal !== "conectado") return;
+    let vivo = true;
+    servico
+      .pedir("lembretes.listar", {})
+      .then((lidos) => {
+        if (vivo) setLembretes(lidos);
+      })
+      .catch(() => {
+        if (vivo) setFalhou(true);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [canal, versaoLembretes]);
 
   if (canal !== "conectado") return { estado: "esperando" };
-  // Até a configuração chegar, o fuso do Windows, que é o padrão dela.
-  if (dados) return { estado: "pronta", dados: { ...dados, fuso: fuso ?? fusoDoSistema() } };
+  if (recortes && lembretes) {
+    return { estado: "pronta", dados: { ...recortes, lembretes, fuso: fusoDoDia, dia } };
+  }
   return falhou ? { estado: "falhou", tentarDeNovo } : { estado: "esperando" };
 }

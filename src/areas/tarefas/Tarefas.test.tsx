@@ -134,8 +134,12 @@ const grupos = () =>
     g.querySelector("h2")?.textContent,
     [...g.querySelectorAll(".tarefa-titulo")].map((t) => t.textContent),
   ]);
+// Os avisos do mesmo instante viram uma recarga só, no próximo giro do relógio.
 const avisar = (evento: string, dados: unknown) =>
-  act(async () => falso.ouvintes.get(evento)?.forEach((fn) => fn(dados)));
+  act(async () => {
+    falso.ouvintes.get(evento)?.forEach((fn) => fn(dados));
+    vi.advanceTimersByTime(0);
+  });
 
 async function digitar(texto: string) {
   const campo = por(".tarefas-frase-entrada") as HTMLInputElement;
@@ -294,6 +298,57 @@ describe("Tarefas · Hoje", () => {
     expect(pedidosDe("tarefas.adiar")).toEqual([{ ids: ["a2", "a1"], para: "hoje" }]);
   });
 
+  it("Alt+seta devolve o foco à tarefa movida uma vez só, quando a ordem nova chega", async () => {
+    responder({ hoje: [plantas, comprovantes] });
+    await montar();
+    const caixa = () => por('[data-tarefa="h3"] [role="checkbox"]')!;
+    caixa().focus();
+    await tecla(caixa(), "ArrowDown", { altKey: true });
+    caixa().blur();
+    responder({ hoje: [comprovantes, plantas] });
+    await avisar("tarefas.mudou", { tarefas: [], apagadas: [] });
+    expect(todos(".tarefa").map((l) => l.dataset.tarefa)).toEqual(["h4", "h3"]);
+    expect(document.activeElement).toBe(caixa());
+    // Depois disso, a pessoa vai para outro lugar e nada puxa o foco de volta.
+    caixa().blur();
+    responder({ hoje: [plantas, comprovantes] });
+    await avisar("tarefas.mudou", { tarefas: [], apagadas: [] });
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("avisos do mesmo instante viram uma recarga; lembretes.mudou recarrega só os lembretes", async () => {
+    responder({ hoje: [contador] });
+    await montar();
+    const antes = pedidosDe("tarefas.listar").length;
+    await act(async () => {
+      falso.ouvintes.get("tarefas.mudou")?.forEach((fn) => fn({ tarefas: [], apagadas: [] }));
+      falso.ouvintes.get("listas.mudou")?.forEach((fn) => fn(LISTAS));
+      vi.advanceTimersByTime(0);
+    });
+    expect(pedidosDe("tarefas.listar").length - antes).toBe(4);
+    const lembretes = pedidosDe("lembretes.listar").length;
+    await avisar("lembretes.mudou", { lembretes: [], removidos: [] });
+    expect(pedidosDe("tarefas.listar").length - antes).toBe(4);
+    expect(pedidosDe("lembretes.listar").length).toBe(lembretes + 1);
+  });
+
+  it("à meia-noite e com outro fuso que muda o dia, os recortes são pedidos de novo", async () => {
+    // 23:59:30 de quinta em São Paulo.
+    vi.setSystemTime(new Date("2026-10-09T02:59:30.000Z"));
+    responder({ hoje: [contador] });
+    await montar();
+    const antes = pedidosDe("tarefas.listar").length;
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(pedidosDe("tarefas.listar").length - antes).toBe(4);
+    expect(por(".pagina-data")?.textContent).toBe("Sexta, 9 de outubro");
+    // O mesmo fuso não recarrega; um fuso em que ainda é quinta, sim.
+    await avisar("config.mudou", { config: { dia: { fuso: "America/Sao_Paulo" } } });
+    expect(pedidosDe("tarefas.listar").length - antes).toBe(4);
+    await avisar("config.mudou", { config: { dia: { fuso: "America/Los_Angeles" } } });
+    expect(pedidosDe("tarefas.listar").length - antes).toBe(8);
+    expect(por(".pagina-data")?.textContent).toBe("Quinta, 8 de outubro");
+  });
+
   it("o que muda em qualquer lugar chega pelo tarefas.mudou e a vista recarrega", async () => {
     responder({ hoje: [contador] });
     await montar();
@@ -391,17 +446,66 @@ describe("Tarefas · o campo em linguagem natural", () => {
       throw new RecusaDoServico("O lembrete precisa de dia e hora: preencha com Tab.");
     };
     await montar();
-    const campo = await digitar("me lembra");
-    // Enter antes da prévia: entende na hora e lança o que entendeu.
+    const campo = await digitar("ligar pro banco amanhã 15h");
+    // Enter antes da prévia: entende na hora e mostra; quem lança é o segundo Enter.
+    await tecla(campo, "Enter");
+    expect(pedidosDe("captura.lancar")).toEqual([]);
+    expect(por(".tarefas-entendi")?.textContent).toBe("Entendi:lembretesexta, 9 out15:00");
     await tecla(campo, "Enter");
     expect(pedidosDe("captura.lancar")[0]).toMatchObject({ tipo: "lembrete" });
     expect(por(".tarefas-frase-erro")?.textContent).toBe(
       "O lembrete precisa de dia e hora: preencha com Tab.",
     );
-    expect(campo.value).toBe("me lembra");
+    expect(campo.value).toBe("ligar pro banco amanhã 15h");
     await tecla(campo, "Escape");
     expect(campo.value).toBe("");
     expect(por(".tarefas-frase-erro")).toBeNull();
+  });
+
+  it("o Entendi some quando a frase muda, e o Enter com ele velho só mostra o novo", async () => {
+    responder({});
+    falso.servidor["captura.entender"] = (p: { texto: string }) =>
+      p.texto === "ligar pro banco amanhã 15h" ? previa() : previa({ hora: "16:00" }, { texto: p.texto });
+    falso.servidor["captura.lancar"] = {
+      id: "c4",
+      tipo: "tarefa",
+      itemId: "t12",
+      desfazerAte: AGORA.toISOString(),
+    };
+    await montar();
+    await digitar("ligar pro banco amanhã 15h");
+    await act(async () => vi.advanceTimersByTime(ESPERA_PREVIA_MS));
+    expect(por(".tarefas-entendi")?.textContent).toContain("15:00");
+    const campo = await digitar("ligar pro banco amanhã 16h");
+    // A prévia da frase velha não fica na tela.
+    expect(por(".tarefas-entendi")).toBeNull();
+    await tecla(campo, "Enter");
+    expect(pedidosDe("captura.lancar")).toEqual([]);
+    expect(por(".tarefas-entendi")?.textContent).toContain("16:00");
+    await tecla(campo, "Enter");
+    expect(pedidosDe("captura.lancar")[0]).toMatchObject({ campos: { hora: "16:00" } });
+  });
+
+  it("trocar de vista não apaga a frase nem o Desfazer; o status fica montado", async () => {
+    responder({});
+    falso.servidor["captura.entender"] = previa();
+    falso.servidor["captura.lancar"] = {
+      id: "c5",
+      tipo: "tarefa",
+      itemId: "t13",
+      desfazerAte: new Date(AGORA.getTime() + 10_000).toISOString(),
+    };
+    await montar();
+    expect(por('.tarefas-frase [role="status"]')).not.toBeNull();
+    const campo = await digitar("ligar pro banco amanhã 15h");
+    await act(async () => vi.advanceTimersByTime(ESPERA_PREVIA_MS));
+    await tecla(campo, "Enter");
+    await act(async () => item("Próximos 7 dias")!.click());
+    expect(por(".pagina-titulo")?.textContent).toBe("Próximos 7 dias");
+    expect(botao("Desfazer")).not.toBeUndefined();
+    await digitar("comprar pão");
+    await act(async () => item("Todas")!.click());
+    expect((por(".tarefas-frase-entrada") as HTMLInputElement).value).toBe("comprar pão");
   });
 });
 
@@ -410,7 +514,10 @@ describe("Tarefas · outras vistas", () => {
     const trabalho = tarefa({ id: "w1", titulo: "Planejamento", listaId: "trabalho", venceEm: null });
     const pessoal = tarefa({ id: "p1", titulo: "Academia", listaId: "pessoal", venceEm: null });
     responder({ abertas: [trabalho, pessoal] });
-    falso.servidor["captura.entender"] = previa({ listaId: null, dia: null, hora: null });
+    falso.servidor["captura.entender"] = previa(
+      { listaId: null, dia: null, hora: null },
+      { texto: "ligar pro banco" },
+    );
     falso.servidor["captura.lancar"] = {
       id: "c3",
       tipo: "tarefa",
