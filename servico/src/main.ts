@@ -26,6 +26,8 @@ import {
 } from "./areas/dia/atividade.ts";
 import { RelogioDoDia } from "./areas/dia/relogio.ts";
 import { TempoDoDia } from "./areas/dia/tempo.ts";
+import { atendentesDoFoco, ouvirAtalhoDoFoco } from "./areas/foco/canal.ts";
+import { RepositorioFoco, ServicoFoco } from "./areas/foco/foco.ts";
 import { RepositorioLembretes, ServicoLembretes } from "./areas/lembretes/lembretes.ts";
 import { RepositorioNotas, ServicoNotas } from "./areas/notas/notas.ts";
 import { atendentesDasTarefas } from "./areas/tarefas/canal.ts";
@@ -102,6 +104,8 @@ const nativo: AplicadorNativo = {
 let servidor: ServidorWs | null = null;
 // Os vigias do Nuno (F2-26) nascem com o runtime; os eventos de antes disso não pedem julgamento.
 let vigiaNuno: VigiaNuno | null = null;
+// O foco (F3-18) nasce com o relógio do dia, mais adiante; até lá, ninguém está em foco.
+let foco: ServicoFoco | null = null;
 const repositorioConfig = new RepositorioConfig(banco);
 // A cotação nova vale já (F3-08), venha de config.definir ou de config.importar: os dois passam
 // pelo aviso abaixo. A reação (acordar quem saiu do teto) nasce com o runtime, mais adiante.
@@ -136,6 +140,8 @@ const notificacoes = new ServicoNotificacoes(
     agentes: () => agentesDoTime.agentes().map((a) => ({ id: a.id, nome: a.nome })),
     silencio: () => config.obter().config.silencio,
     windows: avisosPelaCasca(canal),
+    // Com um foco correndo, o Windows só mostra aprovações e lembretes; na pausa, tudo volta.
+    emFoco: () => foco?.emFoco() ?? false,
   },
   {
     estado: (estado) => servidor?.emitir("notificacoes.mudou", estado),
@@ -440,6 +446,14 @@ const lembretes = new ServicoLembretes(
   },
 );
 relogio.registrar(lembretes);
+// Foco (F3-18): o fim de cada etapa pelo mesmo relógio; a janela conta o tempo pelo fim planejado.
+const servicoFoco = new ServicoFoco(
+  new RepositorioFoco(banco),
+  { lerDia: () => repositorioConfig.ler().dia, notificacoes, relogio },
+  { mudou: (estado) => servidor?.emitir("foco.mudou", estado) },
+);
+foco = servicoFoco;
+relogio.registrar(servicoFoco);
 // Tarefas (F3-15): "hoje" no fuso de config; a tarefa com hora mantém o lembrete ligado a ela.
 const tarefas = new ServicoTarefas(
   new RepositorioTarefas(banco),
@@ -571,6 +585,7 @@ servidor = await abrirServidorWs(token, {
   "notas.apagar": (pedido) => notas.apagar(pedido),
   "notas.buscar": (pedido) => notas.buscar(pedido),
   ...atendentesDasTarefas(tarefas),
+  ...atendentesDoFoco(servicoFoco),
   // Abrir a área lê o Google de novo, se a última leitura não acabou de terminar (F3-23).
   "agenda.calendarios": () => {
     leituraGoogle?.aoAbrirArea();
@@ -602,15 +617,6 @@ servidor = await abrirServidorWs(token, {
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
   ...semAtendente([
-    "foco.obter",
-    "foco.iniciar",
-    "foco.alternar",
-    "foco.pausar",
-    "foco.retomar",
-    "foco.estender",
-    "foco.terminar",
-    "foco.pularPausa",
-    "foco.historico",
     "rotinas.listar",
     "rotinas.definir",
     "rotinas.hoje",
@@ -661,6 +667,8 @@ function sinalDeAtividade(motivo: MotivoAtividade): void {
 }
 sinalDeAtividade("subida");
 canal.aoAvisar("atividade", (aviso) => sinalDeAtividade(motivoDaCasca(aviso)));
+// O atalho do foco (Ctrl+Alt+P) vem da casca e inicia, pausa ou retoma.
+ouvirAtalhoDoFoco(canal, servicoFoco);
 canal.aoAvisar("retomou", () => {
   sinalDeAtividade("retomada");
   // Na volta da suspensão, os lembretes que venceram com o PC dormindo chegam juntos.

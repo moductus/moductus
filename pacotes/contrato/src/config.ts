@@ -16,8 +16,12 @@ export const Atalhos = z.object({
   sistema: z.string().min(1),
   dock: z.string().min(1),
   captura: z.string().min(1),
-  /** Começa ou pausa o foco de qualquer lugar (`foco.alternar`). */
-  foco: z.string().min(1),
+  /**
+   * Começa ou pausa o foco de qualquer lugar (`foco.alternar`). Vazio é sem atalho: o padrão
+   * (Ctrl+Alt+P) colidia com um atalho que o usuário já tinha salvo, e o dele vale; o motivo vem em
+   * `falhasAtalhos.foco` até ele escolher outro.
+   */
+  foco: z.string(),
 });
 export type Atalhos = z.infer<typeof Atalhos>;
 

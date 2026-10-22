@@ -264,6 +264,14 @@
   --altura-prioridade: 18px;
   --raio-prioridade: 2px;
   --largura-quando-tarefa: 44px;
+  /* Notas (AreaNotas.dc.html, PainelNotas.dc.html): a lista à esquerda, a coluna do que está
+     ligado à nota à direita, a margem do texto, a linha de leitura e o entrelinha de quem escreve */
+  --largura-lista-notas: 290px;
+  --largura-lado-nota: 250px;
+  --espaco-nota-lateral: 48px;
+  --largura-texto-nota: 620px;
+  --altura-min-texto-nota: 160px;
+  --altura-linha-escrita: 1.6;
 }
 
 /* Menos animação no Windows: pela mídia do WebView ou pelo "Efeitos de animação" que a casca
