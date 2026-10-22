@@ -234,6 +234,13 @@
   --altura-boas-vindas: 150px;
   --largura-cartao-treino: 380px;
   --largura-progresso-tutorial: 120px;
+  /* Tour (TutorialTour.dc.html): a bolha de 340 com o título em 15, os pontos de progresso, o
+     afastamento dela para o anel ao lado, e a cabeça de quem ainda não tem missão, mais apagada */
+  --largura-bolha-tour: 340px;
+  --tipo-titulo-bolha: 15px;
+  --tamanho-ponto-tour: 6px;
+  --afastamento-bolha-tour: 36px;
+  --opacidade-missao-depois: 0.6;
   /* Segunda volta de borda da opção marcada (a cor vem junto, do tema): 2 sem mudar o tamanho */
   --sombra-opcao-marcada: inset 0 0 0 1px;
 
@@ -338,6 +345,11 @@
   --sombra-painel: 0 24px 48px rgba(0, 0, 0, 0.45);
   --sombra-dock: none;
   --desfoque: none;
+  /* O que fica fora da parada do tour escurece (TutorialTour.dc.html) */
+  --veu-tour: rgba(0, 0, 0, 0.55);
+  --sombra-anel-tour: 0 0 0 100vmax var(--veu-tour);
+  --fundo-bolha-tour: var(--fundo-janela);
+  --sombra-bolha-tour: var(--sombra-painel);
 
   --fonte-interface: "Geist", "Segoe UI", system-ui, sans-serif;
   --fonte-mono: "Geist Mono", Consolas, monospace;
@@ -390,6 +402,10 @@
   --sombra-painel: 0 16px 40px rgba(40, 36, 28, 0.12);
   --sombra-dock: 0 8px 24px rgba(40, 36, 28, 0.08);
   --desfoque: none;
+  --veu-tour: rgba(40, 36, 28, 0.22);
+  --sombra-anel-tour: 0 0 0 100vmax var(--veu-tour);
+  --fundo-bolha-tour: var(--fundo-janela);
+  --sombra-bolha-tour: var(--sombra-painel);
 
   --fonte-interface: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
   --fonte-mono: "JetBrains Mono", Consolas, monospace;
@@ -442,6 +458,11 @@
   --sombra-dock: none;
   /* O desfoque de verdade é o Acrylic da janela; este vale para camadas dentro dela. */
   --desfoque: blur(32px) saturate(140%);
+  /* A bolha fica quase sólida: ela fala por cima do véu. Sem sombra de painel no Vidro, a dela. */
+  --veu-tour: rgba(5, 7, 12, 0.48);
+  --sombra-anel-tour: 0 0 0 100vmax var(--veu-tour);
+  --fundo-bolha-tour: rgba(26, 30, 41, 0.92);
+  --sombra-bolha-tour: 0 16px 40px rgba(0, 0, 0, 0.3);
 
   --fonte-interface: "Onest", "Segoe UI", system-ui, sans-serif;
   --fonte-mono: "IBM Plex Mono", Consolas, monospace;

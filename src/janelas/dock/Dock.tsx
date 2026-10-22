@@ -22,6 +22,7 @@ import { ROTULOS_CONTAGEM, useContagens } from "../../servico/contagens.ts";
 import { marcarVistasDe, usePontosTime } from "../../servico/notificacoes.ts";
 import { useTime } from "../../servico/time.ts";
 import { AREAS_DOCK, DADOS_AREAS } from "../areas.ts";
+import { useTour } from "../tour/tour.ts";
 import { pontoDoAgente, rotuloDoAgente } from "./agentes.ts";
 import { proximoIndice } from "./navegacao.ts";
 import "./Dock.css";
@@ -66,6 +67,8 @@ export function Dock() {
   const agora = useAgora();
   const hora = formatarHora(agora);
   const nav = useRef<HTMLElement>(null);
+  // No tour, o dock é a parada 1 (com o anel) e escurece nas outras; nada nele recebe clique.
+  const { parada } = useTour();
 
   // A casca avisa que o dock ganhou o foco pelo atalho: o teclado começa na primeira área.
   useEffect(() => {
@@ -109,6 +112,8 @@ export function Dock() {
       data-forma={config.forma}
       data-lado={config.lado}
       data-tela-cheia={telaCheia}
+      data-tour={parada === null ? undefined : parada === 1 ? "parada" : "veu"}
+      inert={parada !== null || undefined}
       onKeyDown={aoTeclar}
     >
       <button

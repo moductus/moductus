@@ -1,21 +1,34 @@
-//! Ícone na bandeja: clique abre o Sistema; o menu mostra o dock, o time e encerra o app.
+//! Ícone na bandeja: clique abre o Sistema; o menu mostra o dock, o time, a Ajuda e encerra o app.
 //!
 //! A parte do time (pausar todos ou um agente, o estado de cada um) vem pronta do serviço pelo canal
 //! do sidecar (`{"tipo":"bandeja","dica","itens"}`): a casca só desenha o menu nativo e devolve o id
 //! do item clicado (`{"tipo":"bandeja-clique","item"}`). A regra fica no serviço (`servico/src/bandeja`).
 //! Sem serviço de pé, o menu volta aos itens fixos.
+//!
+//! A Ajuda (fixa) traz de volta o tour e os Primeiros passos: a casca só avisa a interface por
+//! evento, e o Sistema faz o resto (`src/janelas/tour`, `PrimeirosPassos.tsx`).
 
 use serde::Deserialize;
 use tauri::{
     menu::{IsMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Runtime,
+    AppHandle, Emitter, Runtime,
 };
 
 const ID: &str = "moductus";
 const DICA: &str = "Moductus";
 /// Prefixo dos itens que vieram do serviço: o clique neles volta ao serviço sem o prefixo.
 const DO_SERVICO: &str = "servico:";
+/// Itens da Ajuda: o id do menu e o evento que ele manda à interface.
+const AJUDA: [(&str, &str, &str); 2] = [
+    ("ajuda-tour", "Ver o tour", "tutorial:tour"),
+    ("ajuda-primeiros-passos", "Primeiros passos", "tutorial:rever"),
+];
+
+/// O evento que um item da Ajuda manda à interface, se o clique foi num deles.
+pub fn evento_da_ajuda(id: &str) -> Option<&'static str> {
+    AJUDA.iter().find(|(item, _, _)| *item == id).map(|(_, _, evento)| *evento)
+}
 
 /// O menu que o serviço manda.
 #[derive(Debug, Default, Deserialize, PartialEq)]
@@ -67,7 +80,13 @@ pub fn iniciar(app: &AppHandle) -> tauri::Result<()> {
             "dock" => crate::dock::alternar_visivel(),
             "sair" => app.exit(0),
             outro => {
-                if let Some(item) = id_do_servico(outro) {
+                if let Some(evento) = evento_da_ajuda(outro) {
+                    // Os Primeiros passos ficam no Início: o Sistema abre lá antes de trazê-los.
+                    if evento == "tutorial:rever" {
+                        crate::janelas::sistema_abrir(app.clone(), "inicio".to_string());
+                    }
+                    let _ = app.emit(evento, ());
+                } else if let Some(item) = id_do_servico(outro) {
                     crate::servico::avisar(serde_json::json!({ "tipo": "bandeja-clique", "item": item }));
                 }
             }
@@ -109,7 +128,8 @@ fn aplicar(app: &AppHandle, menu: &MenuServico) {
     }
 }
 
-/// Os fixos da casca em volta dos itens do serviço: abrir o Sistema e o dock em cima, sair embaixo.
+/// Os fixos da casca em volta dos itens do serviço: abrir o Sistema e o dock em cima, a Ajuda e
+/// sair embaixo.
 fn montar<R: Runtime>(app: &AppHandle<R>, menu: &MenuServico) -> tauri::Result<Menu<R>> {
     let mut itens: Vec<MenuItemKind<R>> = vec![
         MenuItem::with_id(app, "sistema", "Abrir o Sistema", true, None::<&str>)?.kind(),
@@ -120,6 +140,11 @@ fn montar<R: Runtime>(app: &AppHandle<R>, menu: &MenuServico) -> tauri::Result<M
         itens.extend(nativos(app, &menu.itens)?);
     }
     itens.push(PredefinedMenuItem::separator(app)?.kind());
+    let ajuda = AJUDA
+        .iter()
+        .map(|(id, rotulo, _)| MenuItem::with_id(app, *id, *rotulo, true, None::<&str>).map(|i| i.kind()))
+        .collect::<tauri::Result<Vec<_>>>()?;
+    itens.push(Submenu::with_id_and_items(app, "ajuda", "Ajuda", true, &referencias(&ajuda))?.kind());
     itens.push(MenuItem::with_id(app, "sair", "Sair do Moductus", true, None::<&str>)?.kind());
     Menu::with_items(app, &referencias(&itens))
 }
@@ -176,6 +201,15 @@ mod testes {
         assert_eq!(id_do_servico("servico:"), None);
         assert_eq!(id_do_servico("sair"), None);
         assert_eq!(id_do_servico("pausar:alba:1h"), None);
+    }
+
+    #[test]
+    fn ajuda_traz_o_tour_e_os_primeiros_passos_pela_interface() {
+        assert_eq!(evento_da_ajuda("ajuda-tour"), Some("tutorial:tour"));
+        assert_eq!(evento_da_ajuda("ajuda-primeiros-passos"), Some("tutorial:rever"));
+        assert_eq!(evento_da_ajuda("ajuda"), None);
+        // Item do serviço com o mesmo nome não vira Ajuda: chega com o prefixo.
+        assert_eq!(evento_da_ajuda("servico:ajuda-tour"), None);
     }
 
     #[test]

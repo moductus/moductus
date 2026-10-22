@@ -57,6 +57,12 @@
   gap: var(--esp-18);
 }
 
+.primeiros-passos-listas {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .primeiros-passos-missoes {
   display: flex;
   flex-direction: column;
@@ -103,8 +109,33 @@
   min-width: 0;
 }
 
-.missao-nome {
+/* Só a missão da vez em negrito (TutorialTour.dc.html). */
+.missao[data-atual] .missao-nome {
   font-weight: var(--peso-forte);
+}
+
+/* ---------- As que chegam com outra área: apagadas, caixa tracejada, sem ação ---------- */
+.primeiros-passos-depois {
+  margin: 0;
+  padding: var(--esp-14) 0 var(--esp-2);
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-normal);
+  color: var(--texto-3);
+}
+
+.missao[data-depois] .missao-caixa {
+  border-style: dashed;
+  border-color: var(--texto-apagado);
+}
+
+.missao[data-depois] .missao-nome {
+  color: var(--texto-2);
+}
+
+.missao-cabeca-depois {
+  display: flex;
+  flex: none;
+  opacity: var(--opacidade-missao-depois);
 }
 
 .missao[data-feita="true"] .missao-nome {

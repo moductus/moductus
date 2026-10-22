@@ -5,6 +5,7 @@ import { Agentes } from "../../areas/agentes/Agentes.tsx";
 import { AREA_INICIAL, areaDoAtalho, escreverDestino, lerDestino, type Destino } from "../../areas/areas.ts";
 import { Arquivos } from "../../areas/arquivos/Arquivos.tsx";
 import { Configuracoes } from "../../areas/configuracoes/Configuracoes.tsx";
+import { useConfig } from "../../areas/configuracoes/useConfig.ts";
 import { Dev } from "../../areas/dev/Dev.tsx";
 import { Ferramentas } from "../../areas/ferramentas/Ferramentas.tsx";
 import { Financas } from "../../areas/financas/Financas.tsx";
@@ -16,6 +17,9 @@ import { Notas } from "../../areas/notas/Notas.tsx";
 import { Sessoes } from "../../areas/sessoes/Sessoes.tsx";
 import { Tarefas } from "../../areas/tarefas/Tarefas.tsx";
 import { registrar } from "../../nativo/eventos.ts";
+import { servico } from "../../servico/conexao.ts";
+import { CamadaTour } from "../tour/CamadaTour.tsx";
+import { EVENTO_REVER_TUTORIAL, EVENTO_VER_TOUR, useTour, type Tour } from "../tour/tour.ts";
 import { BarraLateral } from "./BarraLateral.tsx";
 import { BarraTitulo } from "./BarraTitulo.tsx";
 import { AcoesSistemaContexto, useAcoesSistema, usePrimeiroUso } from "./primeiro-uso/estado.ts";
@@ -43,6 +47,9 @@ function guardar(destino: Destino): void {
   }
 }
 
+/** A lateral é o que a parada 3 do tour aponta (TutorialTour.dc.html). */
+const medirLateral = () => document.querySelector(".barra-lateral")?.getBoundingClientRect() ?? null;
+
 /** Número do Ctrl+1…9, pela tecla física (vale em qualquer layout) ou pelo caractere. */
 function numeroDoAtalho(e: KeyboardEvent): number | null {
   if (!e.ctrlKey || e.altKey || e.shiftKey || e.metaKey) return null;
@@ -56,6 +63,8 @@ export function Sistema() {
   const [primeiroUso, setPrimeiroUso] = usePrimeiroUso();
   // Banco novo: a configuração inicial ocupa a janela até ser concluída ou pulada.
   const configurando = primeiroUso !== null && !primeiroUso.concluido;
+  const tour = useTour();
+  const emTour = tour.parada !== null;
 
   const ir = useCallback((novo: Destino) => {
     setDestino(novo);
@@ -66,7 +75,7 @@ export function Sistema() {
 
   // Atalhos locais da janela: Ctrl+1…9 trocam de área, Ctrl+K foca a busca.
   useEffect(() => {
-    if (configurando) return;
+    if (configurando || emTour) return;
     const aoTeclar = (e: KeyboardEvent) => {
       const numero = numeroDoAtalho(e);
       const area = numero === null ? null : areaDoAtalho(numero);
@@ -83,7 +92,7 @@ export function Sistema() {
     };
     window.addEventListener("keydown", aoTeclar);
     return () => window.removeEventListener("keydown", aoTeclar);
-  }, [ir, configurando]);
+  }, [ir, configurando, emTour]);
 
   // O dock pede uma área pelo evento; destino que não existe é ignorado e fica no log.
   useEffect(() => {
@@ -97,15 +106,34 @@ export function Sistema() {
     };
   }, [ir]);
 
+  // A Ajuda da bandeja: o tour de novo, ou os Primeiros passos de volta no Início.
+  const { ir: andar } = tour;
+  useEffect(() => {
+    const paradas = [
+      listen(EVENTO_VER_TOUR, () => andar(1)),
+      listen(EVENTO_REVER_TUTORIAL, () => {
+        ir({ area: "inicio" });
+        servico
+          .pedir("primeiroUso.marcar", { alvo: "tutorial", estado: "pendente" })
+          .then(setPrimeiroUso)
+          .catch(() => registrar(`${EVENTO_REVER_TUTORIAL} sem serviço`));
+      }),
+    ].map((p) => p.catch(() => () => undefined));
+    return () => paradas.forEach((p) => void p.then((f) => f()));
+  }, [andar, ir, setPrimeiroUso]);
+
   return (
     <AcoesSistemaContexto.Provider value={acoes}>
-      <div className="sistema">
+      {/* Durante o tour, a janela fica escurecida e fora do teclado; só a camada responde. */}
+      <div className="sistema" inert={emTour || undefined}>
         <BarraTitulo />
         {configurando ? (
           <PrimeiroUso
             aoConcluir={(estado, depois) => {
               setPrimeiroUso(estado);
               ir(depois);
+              // O tour começa logo depois da configuração; quem vai importar de outro PC segue lá.
+              if (depois.area === "inicio") andar(1);
             }}
           />
         ) : (
@@ -117,7 +145,23 @@ export function Sistema() {
           </div>
         )}
       </div>
+      {emTour && <TourNoSistema tour={tour} />}
     </AcoesSistemaContexto.Provider>
+  );
+}
+
+/** A parte do tour no Sistema: véu nas paradas das outras janelas; na 3, o anel na lateral. */
+function TourNoSistema({ tour }: { tour: Tour }) {
+  const { estado } = useConfig();
+  return (
+    <CamadaTour
+      parada={tour.parada}
+      ir={tour.ir}
+      minha={3}
+      medir={medirLateral}
+      lado="direita"
+      atalho={estado?.config.atalhos.sistema}
+    />
   );
 }
 

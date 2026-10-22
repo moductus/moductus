@@ -32,6 +32,21 @@
   box-shadow: var(--sombra-dock);
 }
 
+/* Tour (TutorialTour.dc.html): na parada 1, o anel de 2 px por dentro do dock; nas outras, o véu. */
+.dock[data-tour="parada"] {
+  outline: var(--espessura-foco) solid var(--destaque);
+  outline-offset: var(--recuo-foco-interno);
+}
+
+.dock[data-tour="veu"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  background: var(--veu-tour);
+}
+
 .dock button {
   position: relative;
   display: flex;

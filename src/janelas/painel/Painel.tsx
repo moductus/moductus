@@ -9,7 +9,23 @@ import { CabecalhoPainel } from "./Cabecalho.tsx";
 import { PainelAgentes } from "./PainelAgentes.tsx";
 import { PainelDev } from "./PainelDev.tsx";
 import { PainelNotas } from "./PainelNotas.tsx";
+import { CamadaTour } from "../tour/CamadaTour.tsx";
+import { AREA_TOUR, useTour } from "../tour/tour.ts";
 import "./Painel.css";
+
+/**
+ * O que a parada 2 do tour aponta: o alto do cartão, do cabeçalho até o fim do primeiro bloco
+ * (TutorialTour.dc.html).
+ */
+function medirTopoDoCartao() {
+  const cartao = document.querySelector(".painel-cartao");
+  if (!cartao) return null;
+  const caixa = cartao.getBoundingClientRect();
+  const blocos = [...cartao.children].slice(0, 2);
+  const fim = Math.max(caixa.top, ...blocos.map((b) => b.getBoundingClientRect().bottom));
+  const folga = parseFloat(getComputedStyle(cartao).paddingTop) || 0;
+  return { left: caixa.left, top: caixa.top, width: caixa.width, height: fim - caixa.top + folga };
+}
 
 /** O estado vazio das áreas que ainda não leem o serviço. */
 function Vazio({ area }: { area: AreaPainel }) {
@@ -36,6 +52,10 @@ export function Painel() {
   const { lado } = useConfiguracaoDock();
   const canal = useCanal(useServico({ silencioso: true }));
   const area = abertura && eAreaPainel(abertura.area) ? abertura.area : null;
+  // As paradas 1 e 2 do tour são do painel: a 1 só com a bolha ao lado do dock, a 2 sobre o Hoje.
+  const tour = useTour();
+  const paradaDoPainel = tour.parada === 1 || tour.parada === 2 ? tour.parada : null;
+  const soBolha = abertura?.area === AREA_TOUR;
 
   useEffect(() => {
     let n = 0;
@@ -63,20 +83,31 @@ export function Painel() {
   const dados = area ? DADOS_AREAS[area] : null;
   return (
     <main className="painel" data-lado={lado} aria-label={`Painel ${dados?.nome ?? ""}`.trim()}>
-      <section className="painel-cartao">
-        {area === "agentes" ? (
-          <PainelAgentes canal={canal} abertura={abertura?.n ?? 0} />
-        ) : area === "dev" ? (
-          <PainelDev canal={canal} />
-        ) : area === "notas" ? (
-          <PainelNotas canal={canal} />
-        ) : (
-          <>
-            <CabecalhoPainel titulo={dados?.nome ?? ""} icone={dados?.icone} />
-            {area && <Vazio area={area} />}
-          </>
-        )}
-      </section>
+      {tour.parada !== null && (
+        <CamadaTour
+          parada={tour.parada}
+          ir={tour.ir}
+          minha={paradaDoPainel}
+          medir={paradaDoPainel === 2 ? medirTopoDoCartao : undefined}
+          lado="abaixo"
+        />
+      )}
+      {!soBolha && (
+        <section className="painel-cartao" inert={tour.parada !== null || undefined}>
+          {area === "agentes" ? (
+            <PainelAgentes canal={canal} abertura={abertura?.n ?? 0} />
+          ) : area === "dev" ? (
+            <PainelDev canal={canal} />
+          ) : area === "notas" ? (
+            <PainelNotas canal={canal} />
+          ) : (
+            <>
+              <CabecalhoPainel titulo={dados?.nome ?? ""} icone={dados?.icone} />
+              {area && <Vazio area={area} />}
+            </>
+          )}
+        </section>
+      )}
     </main>
   );
 }

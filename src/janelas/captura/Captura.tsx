@@ -24,6 +24,8 @@ import {
   type Contexto,
 } from "./previa.ts";
 import { useCaptura, type EstadoCaptura } from "./useCaptura.ts";
+import { BolhaTour } from "../tour/BolhaTour.tsx";
+import { FRASE_TOUR, useTecladoTour, useTour } from "../tour/tour.ts";
 import "./Captura.css";
 
 /** As teclas do "Na verdade é", na ordem das alternativas (Alt, para o número ficar na frase). */
@@ -67,7 +69,7 @@ export function Captura() {
   const c = useCaptura(canal, contexto);
   const atalho = textoDoAtalho(config?.config.atalhos.captura ?? "Ctrl+Alt+Space");
 
-  const cartao = useRef<HTMLElement>(null);
+  const janela = useRef<HTMLDivElement>(null);
   const frase = useRef<HTMLInputElement>(null);
   const idDicas = useId();
 
@@ -76,9 +78,30 @@ export function Captura() {
   const errosCampos = Object.values(c.errosCampos);
   const pronto = c.atual && lancavel && errosCampos.length === 0 && !c.lancando;
 
-  // A janela acompanha a altura do cartão.
+  // A parada 4 do tour: a frase de exemplo já entendida, só para ver; nada se lança.
+  const tour = useTour();
+  const naParada = tour.parada === 4;
+  useTecladoTour(tour);
+  const { mostrarExemplo, limpar } = c;
   useEffect(() => {
-    const el = cartao.current;
+    if (!naParada) return;
+    mostrarExemplo(FRASE_TOUR);
+    return limpar;
+  }, [naParada, mostrarExemplo, limpar]);
+  // A captura some ao perder o foco (a casca a esconde): sem a bolha, o tour acaba ali.
+  const { ir: andar, navegando } = tour;
+  useEffect(() => {
+    if (!naParada) return;
+    const aoSair = () => {
+      if (!navegando.current) andar(null);
+    };
+    window.addEventListener("blur", aoSair);
+    return () => window.removeEventListener("blur", aoSair);
+  }, [naParada, andar, navegando]);
+
+  // A janela acompanha a altura do cartão (e da bolha do tour, embaixo dele).
+  useEffect(() => {
+    const el = janela.current;
     if (!el || typeof ResizeObserver !== "function") return;
     const observador = new ResizeObserver(() => {
       void invoke("captura_altura", { altura: Math.ceil(el.getBoundingClientRect().height) }).catch(
@@ -129,6 +152,7 @@ export function Captura() {
 
   const aoEnviar = (e: FormEvent) => {
     e.preventDefault();
+    if (naParada) return;
     void c.lancar().then((lancou) => {
       if (lancou) frase.current?.focus();
     });
@@ -145,123 +169,138 @@ export function Captura() {
         : (c.aviso ?? "");
 
   return (
-    <main ref={cartao} className="captura" aria-label="Captura">
-      <form className="captura-formulario" onSubmit={aoEnviar} aria-describedby={idDicas}>
-        <div className="captura-cabecalho">
-          <Icone nome="mais" tamanho={18} className="captura-icone" />
-          <input
-            ref={frase}
-            className="captura-frase"
-            aria-label="Captura rápida"
-            placeholder="Capture uma tarefa, gasto ou nota"
-            autoComplete="off"
-            spellCheck={false}
-            maxLength={1000}
-            value={c.texto}
-            onChange={(e) => c.mudarTexto(e.target.value)}
-          />
-          <Atalho teclas={atalho} />
-        </div>
-
-        {c.previa && c.tipo && c.campos && (
-          <div className="captura-corpo">
-            <p className="captura-entendeu">
-              <span>{quemEntendeu(c.previa, c.tipo)}</span>
-              <span className="captura-tipo">{NOME_DO_TIPO[c.tipo]}</span>
-            </p>
-            <Campos estado={c} contexto={contexto} />
-            {c.erro ? (
-              <p className="captura-linha captura-linha--erro" role="alert">
-                {c.erro}
-              </p>
-            ) : (
-              aviso && <p className="captura-linha">{aviso}</p>
-            )}
-            {errosCampos.length > 0 && (
-              <p className="captura-linha captura-linha--erro" role="alert">
-                {errosCampos.join(" ")}
-              </p>
-            )}
+    <div ref={janela} className="captura-janela">
+      <main className="captura" aria-label="Captura" data-tour={naParada ? "parada" : undefined}>
+        <form
+          className="captura-formulario"
+          onSubmit={aoEnviar}
+          aria-describedby={idDicas}
+          inert={naParada || undefined}
+        >
+          <div className="captura-cabecalho">
+            <Icone nome="mais" tamanho={18} className="captura-icone" />
+            <input
+              ref={frase}
+              className="captura-frase"
+              aria-label="Captura rápida"
+              placeholder="Capture uma tarefa, gasto ou nota"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={1000}
+              value={c.texto}
+              onChange={(e) => c.mudarTexto(e.target.value)}
+            />
+            <Atalho teclas={atalho} />
           </div>
-        )}
 
-        {!c.previa && (c.erro || c.aviso || c.lancamento) && (
-          <div className="captura-corpo captura-corpo--estado">
-            {c.lancamento && (
-              <p className="captura-lancado">
-                <span className="captura-lancado-texto">
-                  {lancado(c.lancamento.lancamento.tipo)}: {c.lancamento.titulo}
-                </span>
-                <Botao tamanho="pequeno" aria-keyshortcuts="Control+Z" onClick={() => void c.desfazer()}>
-                  Desfazer
-                  <span aria-hidden="true">
-                    <Atalho teclas="Ctrl+Z" />
+          {c.previa && c.tipo && c.campos && (
+            <div className="captura-corpo">
+              <p className="captura-entendeu">
+                <span>{quemEntendeu(c.previa, c.tipo)}</span>
+                <span className="captura-tipo">{NOME_DO_TIPO[c.tipo]}</span>
+              </p>
+              <Campos estado={c} contexto={contexto} />
+              {c.erro ? (
+                <p className="captura-linha captura-linha--erro" role="alert">
+                  {c.erro}
+                </p>
+              ) : (
+                aviso && <p className="captura-linha">{aviso}</p>
+              )}
+              {errosCampos.length > 0 && (
+                <p className="captura-linha captura-linha--erro" role="alert">
+                  {errosCampos.join(" ")}
+                </p>
+              )}
+            </div>
+          )}
+
+          {!c.previa && (c.erro || c.aviso || c.lancamento) && (
+            <div className="captura-corpo captura-corpo--estado">
+              {c.lancamento && (
+                <p className="captura-lancado">
+                  <span className="captura-lancado-texto">
+                    {lancado(c.lancamento.lancamento.tipo)}: {c.lancamento.titulo}
                   </span>
-                </Botao>
-              </p>
-            )}
-            {c.aviso && <p className="captura-linha">{c.aviso}</p>}
-            {c.erro && (
-              <p className="captura-linha captura-linha--erro" role="alert">
-                {c.erro}
-              </p>
-            )}
-          </div>
-        )}
+                  <Botao tamanho="pequeno" aria-keyshortcuts="Control+Z" onClick={() => void c.desfazer()}>
+                    Desfazer
+                    <span aria-hidden="true">
+                      <Atalho teclas="Ctrl+Z" />
+                    </span>
+                  </Botao>
+                </p>
+              )}
+              {c.aviso && <p className="captura-linha">{c.aviso}</p>}
+              {c.erro && (
+                <p className="captura-linha captura-linha--erro" role="alert">
+                  {c.erro}
+                </p>
+              )}
+            </div>
+          )}
 
-        {c.previa && c.tipo && (
-          <div className="captura-rodape">
-            {alternativas.length > 0 && (
-              <>
-                <span className="captura-na-verdade" id={`${idDicas}-alt`}>
-                  Na verdade é
+          {c.previa && c.tipo && (
+            <div className="captura-rodape">
+              {alternativas.length > 0 && (
+                <>
+                  <span className="captura-na-verdade" id={`${idDicas}-alt`}>
+                    Na verdade é
+                  </span>
+                  <div className="captura-alternativas" role="group" aria-labelledby={`${idDicas}-alt`}>
+                    {alternativas.map((tipo, i) => (
+                      <Botao
+                        key={tipo}
+                        tamanho="pequeno"
+                        aria-keyshortcuts={`Alt+${TECLAS_ALTERNATIVAS[i]}`}
+                        onClick={() => c.escolherTipo(tipo)}
+                      >
+                        {NOME_DO_TIPO[tipo]}
+                        <span aria-hidden="true">
+                          <Atalho teclas={`Alt+${TECLAS_ALTERNATIVAS[i]}`} />
+                        </span>
+                      </Botao>
+                    ))}
+                  </div>
+                </>
+              )}
+              <span className="captura-espaco" />
+              <Botao
+                type="submit"
+                variante="primario"
+                className="captura-lancar"
+                aria-disabled={!pronto}
+                aria-keyshortcuts="Enter"
+              >
+                Lançar
+                <span className="captura-lancar-tecla" aria-hidden="true">
+                  Enter
                 </span>
-                <div className="captura-alternativas" role="group" aria-labelledby={`${idDicas}-alt`}>
-                  {alternativas.map((tipo, i) => (
-                    <Botao
-                      key={tipo}
-                      tamanho="pequeno"
-                      aria-keyshortcuts={`Alt+${TECLAS_ALTERNATIVAS[i]}`}
-                      onClick={() => c.escolherTipo(tipo)}
-                    >
-                      {NOME_DO_TIPO[tipo]}
-                      <span aria-hidden="true">
-                        <Atalho teclas={`Alt+${TECLAS_ALTERNATIVAS[i]}`} />
-                      </span>
-                    </Botao>
-                  ))}
-                </div>
-              </>
-            )}
-            <span className="captura-espaco" />
-            <Botao
-              type="submit"
-              variante="primario"
-              className="captura-lancar"
-              aria-disabled={!pronto}
-              aria-keyshortcuts="Enter"
-            >
-              Lançar
-              <span className="captura-lancar-tecla" aria-hidden="true">
-                Enter
-              </span>
-            </Botao>
-          </div>
-        )}
+              </Botao>
+            </div>
+          )}
 
-        <p className="so-leitor" aria-live="polite">
-          {anuncio}
-        </p>
+          <p className="so-leitor" aria-live="polite">
+            {anuncio}
+          </p>
 
-        <p className="captura-dicas" id={idDicas}>
-          <span>Esc fecha</span>
-          <span aria-hidden="true">·</span>
-          <span>Tab edita um campo</span>
-          <span aria-hidden="true">·</span>
-          <span>dá para desfazer por 10 s depois de lançar</span>
-        </p>
-      </form>
-    </main>
+          <p className="captura-dicas" id={idDicas}>
+            <span>Esc fecha</span>
+            <span aria-hidden="true">·</span>
+            <span>Tab edita um campo</span>
+            <span aria-hidden="true">·</span>
+            <span>dá para desfazer por 10 s depois de lançar</span>
+          </p>
+        </form>
+      </main>
+      {naParada && (
+        <BolhaTour
+          parada={4}
+          ir={tour.ir}
+          atalho={config?.config.atalhos.captura}
+          className="captura-bolha-tour"
+        />
+      )}
+    </div>
   );
 }
 

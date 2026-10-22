@@ -18,6 +18,23 @@
   backdrop-filter: var(--desfoque);
 }
 
+/* A janela é o cartão e, na parada 4 do tour, a bolha embaixo dele (TutorialTour.dc.html). */
+.captura-janela {
+  display: flex;
+  flex-direction: column;
+}
+
+/* O anel por dentro: a borda da janela cortaria o de fora. */
+.captura[data-tour="parada"] {
+  outline: var(--espessura-foco) solid var(--destaque);
+  outline-offset: var(--recuo-foco-interno);
+}
+
+.captura-bolha-tour {
+  align-self: center;
+  margin-top: var(--esp-12);
+}
+
 .captura-formulario {
   display: flex;
   flex-direction: column;
