@@ -70,6 +70,11 @@ export interface EstadoCaptura {
   desfazer: () => Promise<void>;
   /** Esc: a próxima captura começa do zero (o desfazer em curso continua valendo). */
   limpar: () => void;
+  /**
+   * Uma frase de exemplo já entendida (o tour): só o entendimento local, sem o modelo, que gastaria
+   * por uma frase que ninguém vai lançar. Digitar ou limpar volta ao normal.
+   */
+  mostrarExemplo: (texto: string) => void;
 }
 
 function mensagemDe(erro: unknown, incerto = MENSAGEM_SEM_RESPOSTA): string {
@@ -95,6 +100,7 @@ export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCapt
   const lancandoAgora = useRef(false);
   const desfazendoAgora = useRef(false);
   const relogios = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const soExemplo = useRef(false);
 
   const pararRelogios = () => {
     for (const r of relogios.current) clearTimeout(r);
@@ -123,14 +129,15 @@ export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCapt
   const agendar = useCallback(() => {
     pararRelogios();
     if (textoAtual.current.trim() === "") return;
-    relogios.current = [
-      setTimeout(() => void entender(false), ESPERA_PREVIA_MS),
-      setTimeout(() => void entender(true), PAUSA_PARA_O_MODELO_MS),
-    ];
+    relogios.current = [setTimeout(() => void entender(false), ESPERA_PREVIA_MS)];
+    if (!soExemplo.current) {
+      relogios.current.push(setTimeout(() => void entender(true), PAUSA_PARA_O_MODELO_MS));
+    }
   }, [entender]);
 
   const mudarTexto = useCallback(
     (novo: string) => {
+      soExemplo.current = false;
       const mudouAFrase = novo.trim() !== textoAtual.current.trim();
       textoAtual.current = novo;
       setTexto(novo);
@@ -246,6 +253,7 @@ export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCapt
 
   const limpar = useCallback(() => {
     pararRelogios();
+    soExemplo.current = false;
     textoAtual.current = "";
     setTexto("");
     setPrevia(null);
@@ -255,6 +263,17 @@ export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCapt
     setErroAcao(null);
     setAviso(null);
   }, []);
+
+  const mostrarExemplo = useCallback(
+    (exemplo: string) => {
+      limpar();
+      soExemplo.current = true;
+      textoAtual.current = exemplo;
+      setTexto(exemplo);
+      void entender(false);
+    },
+    [limpar, entender],
+  );
 
   return {
     texto,
@@ -274,5 +293,6 @@ export function useCaptura(canal: EstadoConexao, contexto: Contexto): EstadoCapt
     lancar,
     desfazer,
     limpar,
+    mostrarExemplo,
   };
 }

@@ -81,18 +81,31 @@ describe("primeiro uso", () => {
     expect(servico.obter().concluido).toBe(false);
   });
 
-  test("tutorial: pular esconde, rever traz de volta; as cinco missões feitas o encerram", () => {
+  test("tutorial: pular esconde, rever traz de volta; as três missões que valem o encerram", () => {
     const { servico } = montar();
     servico.concluir({ passos: {} });
     expect(servico.marcar({ alvo: "tutorial", estado: "pulado" }).tutorial).toBe("pulado");
     expect(servico.marcar({ alvo: "tutorial", estado: "pendente" }).tutorial).toBe("pendente");
 
-    const missoes = ["alba-lembrete", "tula-extrato", "faina-aprovacao", "faina-downloads"] as const;
-    for (const missao of missoes) servico.marcar({ alvo: "missao", missao, estado: "feito" });
+    servico.marcar({ alvo: "missao", missao: "alba-lembrete", estado: "feito" });
+    servico.marcar({ alvo: "missao", missao: "faina-aprovacao", estado: "feito" });
     expect(servico.obter().tutorial).toBe("pendente");
     const fim = servico.marcar({ alvo: "missao", missao: "nuno-sessao", estado: "feito" });
     expect(fim.tutorial).toBe("feito");
-    expect(Object.values(fim.missoes)).toEqual(Array(5).fill("feito"));
+    // A da Tula e a dos Downloads chegam com Finanças e Arquivos: pendentes, não seguram o fim.
+    expect(fim.missoes["tula-extrato"]).toBe("pendente");
+    expect(fim.missoes["faina-downloads"]).toBe("pendente");
+  });
+
+  test("o lembrete da Alba fechando a última missão que vale encerra o tutorial", () => {
+    const { servico, eventos } = montar();
+    servico.concluir({ passos: {} });
+    servico.marcar({ alvo: "missao", missao: "faina-aprovacao", estado: "feito" });
+    servico.sessaoDoClaudeCode();
+    expect(servico.obter().tutorial).toBe("pendente");
+    servico.lembretePedido();
+    expect(servico.obter().tutorial).toBe("feito");
+    expect(eventos.at(-1)!.tutorial).toBe("feito");
   });
 
   test("a primeira sessão do Claude Code faz a missão do Nuno; as seguintes não gravam nem avisam", () => {

@@ -11,10 +11,27 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { auditar, marcos } from "../../../teste/acessibilidade.ts";
+import { SEGURA_FIM_MS } from "../../../areas/inicio/PrimeirosPassos.tsx";
 import { Sistema } from "../Sistema.tsx";
 
-// A casca não existe no teste: eventos, janela e comandos falsos.
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(() => Promise.resolve(() => undefined)) }));
+// A casca não existe no teste: eventos, janela e comandos falsos. O evento emitido chega a quem ouve,
+// como entre as janelas de verdade.
+const tauri = vi.hoisted(() => ({
+  emitidos: [] as [string, unknown][],
+  ouvintes: new Map<string, Set<(e: { payload: unknown }) => void>>(),
+}));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async (nome: string, fn: (e: { payload: unknown }) => void) => {
+    const lista = tauri.ouvintes.get(nome) ?? new Set();
+    lista.add(fn);
+    tauri.ouvintes.set(nome, lista);
+    return () => lista.delete(fn);
+  }),
+  emit: vi.fn(async (nome: string, payload: unknown) => {
+    tauri.emitidos.push([nome, payload]);
+    for (const fn of tauri.ouvintes.get(nome) ?? []) fn({ payload });
+  }),
+}));
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
     minimize: vi.fn(),
@@ -211,6 +228,9 @@ function desmontar() {
 
 beforeEach(() => {
   localStorage.clear();
+  tauri.emitidos = [];
+  tauri.ouvintes.clear();
+  vi.mocked(invoke).mockClear();
   falso.ouvintes.clear();
   falso.pedidos = [];
   falso.estado = bancoNovo();
@@ -235,6 +255,15 @@ const titulo = () => por("h1")?.textContent;
 const indicador = () => por(".uso-rodape [aria-live]")?.textContent;
 const botao = (texto: string) => todos("button").find((b) => b.textContent === texto);
 const pedidosDe = (metodo: string) => falso.pedidos.filter(([m]) => m === metodo).map(([, d]) => d);
+/** As paradas que o tour avisou às janelas, em ordem. */
+const paradas = () => tauri.emitidos.filter(([nome]) => nome === "tour:parada").map(([, p]) => p);
+const comandos = () => vi.mocked(invoke).mock.calls.map(([comando, args]) => [comando, args]);
+/** Um evento da casca (a Ajuda da bandeja), como chega à janela. */
+async function daCasca(nome: string) {
+  await act(async () => {
+    for (const fn of tauri.ouvintes.get(nome) ?? []) fn({ payload: null });
+  });
+}
 
 async function clicar(el: HTMLElement | undefined | null) {
   expect(el, "elemento para clicar").toBeTruthy();
@@ -359,6 +388,14 @@ describe("primeiro uso", () => {
     expect(por("main")!.dataset.area).toBe("inicio");
     expect(por('nav[aria-label="Áreas"]')).toBeTruthy();
     expect(por(".primeiros-passos h2")!.textContent).toBe("Primeiros passos");
+    // O tour começa logo depois: a parada 1 vai a todas as janelas e o painel abre ao lado do dock.
+    expect(paradas()).toEqual([1]);
+    expect(comandos()).toContainEqual(["painel_abrir", { area: "tour" }]);
+    expect(comandos()).toContainEqual(["painel_foco", { quer: true }]);
+    // O Sistema escurece e sai do teclado; a parada é de outra janela, então aqui só o véu.
+    expect(por(".sistema")!.inert).toBe(true);
+    expect(por(".tour-camada")!.dataset.tour).toBe("veu");
+    expect(por(".tour-bolha")).toBeNull();
   });
 
   it("conexões do Nuno de verdade: a prévia do settings.json vem antes, e só o sim liga", async () => {
@@ -414,6 +451,8 @@ describe("primeiro uso", () => {
     expect(pedidosDe("primeiroUso.concluir")).toEqual([{ passos: { "boas-vindas": "feito" } }]);
     expect(por("main")!.dataset.area).toBe("configuracoes");
     expect(por(".config-secao h2")!.textContent).toBe("Levar para outro PC");
+    // Quem vai importar segue para lá: o tour não começa por cima.
+    expect(paradas()).toEqual([]);
   });
 
   it("depois de concluído não aparece de novo: o Sistema abre direto nas áreas", async () => {
@@ -756,17 +795,156 @@ describe("Primeiros passos", () => {
     await montar();
   }
 
-  it("cinco missões, uma por agente, e o cartão de treino da Faina responde sem mexer em nada", async () => {
+  const progresso = () => por(".primeiros-passos [role='progressbar']")!.getAttribute("aria-valuetext");
+
+  it("contam as três missões desta versão; Tula e Downloads ficam embaixo, sem ação, até a área chegar", async () => {
     await noInicio();
-    expect(todos(".missao").map((m) => m.dataset.missao)).toEqual([...MISSOES_TUTORIAL]);
-    expect(por(".primeiros-passos [role='progressbar']")!.getAttribute("aria-valuetext")).toBe("0 de 5");
+    expect(todos(".missao:not([data-depois])").map((m) => m.dataset.missao)).toEqual([
+      "alba-lembrete",
+      "faina-aprovacao",
+      "nuno-sessao",
+    ]);
+    expect(progresso()).toBe("0 de 3");
+    const depois = todos(".missao[data-depois]");
+    expect(depois.map((m) => m.dataset.missao)).toEqual(["tula-extrato", "faina-downloads"]);
+    expect(depois.map((m) => m.querySelector(".selo")!.textContent)).toEqual([
+      "chega com Finanças",
+      "chega com Arquivos",
+    ]);
+    expect(depois.some((m) => m.querySelector("button"))).toBe(false);
+    expect(por(".primeiros-passos-depois")!.textContent).toBe("Chegam depois · não contam agora");
+    // A da vez (a primeira que falta) fica em destaque; feita, passa para a seguinte.
+    expect(por(".missao[data-atual]")!.dataset.missao).toBe("alba-lembrete");
+  });
+
+  it("o cartão de treino da Faina responde sem mexer em nada e conta como 1 de 3", async () => {
+    await noInicio();
     await clicar(botao("Mover 3 arquivos"));
     expect(pedidosDe("primeiroUso.marcar")).toEqual([
       { alvo: "missao", missao: "faina-aprovacao", estado: "feito" },
     ]);
     expect(por('[data-missao="faina-aprovacao"]')!.dataset.feita).toBe("true");
-    expect(por(".primeiros-passos [role='progressbar']")!.getAttribute("aria-valuetext")).toBe("1 de 5");
+    expect(progresso()).toBe("1 de 3");
     expect(por(".treino [role='status']")!.textContent).toMatch(/iriam para a Lixeira/);
+    // Só o serviço; nenhum comando da casca mexe em arquivo.
+    expect(comandos().map(([c]) => c)).not.toContain("abrir_arquivo");
+  });
+
+  it("o lembrete da Alba chega pelo serviço e a lista some quando as três ficam feitas", async () => {
+    await noInicio();
+    await act(async () =>
+      falso.emitir("primeiroUso.mudou", {
+        ...(falso.estado as EstadoPrimeiroUso),
+        missoes: { ...(falso.estado as EstadoPrimeiroUso).missoes, "alba-lembrete": "feito" },
+      }),
+    );
+    expect(por('[data-missao="alba-lembrete"]')!.dataset.feita).toBe("true");
+    expect(progresso()).toBe("1 de 3");
+    // O serviço encerra o tutorial quando as que valem ficam feitas (primeiro-uso.ts); a lista fica
+    // um instante e some.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await act(async () =>
+        falso.emitir("primeiroUso.mudou", { ...(falso.estado as EstadoPrimeiroUso), tutorial: "feito" }),
+      );
+      expect(por(".primeiros-passos")).toBeTruthy();
+      await act(async () => vi.advanceTimersByTimeAsync(SEGURA_FIM_MS));
+      expect(por(".primeiros-passos")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("o cartão de treino como última missão: a resposta fica na tela um instante antes de a lista sumir", async () => {
+    const base = bancoNovo();
+    falso.estado = {
+      ...base,
+      concluido: true,
+      concluidoEm: "2026-10-08T12:00:00.000Z",
+      missoes: { ...base.missoes, "alba-lembrete": "feito", "nuno-sessao": "feito" },
+    };
+    await montar();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await clicar(botao("Mover 3 arquivos"));
+      // O serviço de verdade encerra o tutorial nessa resposta.
+      await act(async () =>
+        falso.emitir("primeiroUso.mudou", { ...(falso.estado as EstadoPrimeiroUso), tutorial: "feito" }),
+      );
+      expect(progresso()).toBe("3 de 3");
+      expect(por(".treino [role='status']")!.textContent).toMatch(/iriam para a Lixeira/);
+      await act(async () => vi.advanceTimersByTimeAsync(SEGURA_FIM_MS - 100));
+      expect(por(".primeiros-passos")).toBeTruthy();
+      await act(async () => vi.advanceTimersByTimeAsync(100));
+      expect(por(".primeiros-passos")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("Pular some na hora, sem segurar", async () => {
+    await noInicio();
+    await clicar(botao("Pular"));
+    expect(por(".primeiros-passos")).toBeNull();
+  });
+
+  it("Ver o tour de novo começa o tour do começo", async () => {
+    await noInicio();
+    await clicar(botao("Ver o tour de novo"));
+    expect(paradas()).toEqual([1]);
+    expect(comandos()).toContainEqual(["painel_abrir", { area: "tour" }]);
+  });
+
+  it("Como funciona, na missão do Nuno, leva às Sessões de IA", async () => {
+    await noInicio();
+    await clicar(botao("Como funciona"));
+    expect(por("main")!.dataset.area).toBe("sessoes");
+  });
+
+  it("a Ajuda da bandeja traz os Primeiros passos de volta ao Início e o tour de novo", async () => {
+    falso.estado = {
+      ...bancoNovo(),
+      concluido: true,
+      concluidoEm: "2026-10-08T12:00:00.000Z",
+      tutorial: "feito",
+    };
+    localStorage.setItem("moductus.sistema.destino", "notas");
+    await montar();
+    expect(por(".primeiros-passos")).toBeNull();
+    await daCasca("tutorial:rever");
+    expect(pedidosDe("primeiroUso.marcar")).toEqual([{ alvo: "tutorial", estado: "pendente" }]);
+    expect(por("main")!.dataset.area).toBe("inicio");
+    expect(por(".primeiros-passos")).toBeTruthy();
+
+    await daCasca("tutorial:tour");
+    expect(paradas()).toEqual([1]);
+  });
+
+  it("a Ajuda não começa o tour no meio da configuração inicial", async () => {
+    await montar();
+    await daCasca("tutorial:tour");
+    expect(paradas()).toEqual([]);
+    expect(comandos().map(([c]) => c)).not.toContain("painel_abrir");
+  });
+
+  it("o Sistema escondido na parada 3 encerra o tour", async () => {
+    await noInicio();
+    await act(async () => {
+      for (const fn of tauri.ouvintes.get("tour:parada") ?? []) fn({ payload: 3 });
+    });
+    expect(por(".tour-camada")!.dataset.tour).toBe("parada");
+    const visibilidade = Object.getOwnPropertyDescriptor(Document.prototype, "visibilityState");
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    try {
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+    } finally {
+      delete (document as { visibilityState?: unknown }).visibilityState;
+      if (visibilidade) Object.defineProperty(Document.prototype, "visibilityState", visibilidade);
+    }
+    expect(paradas()).toEqual([null]);
+    expect(por(".tour-camada")).toBeNull();
   });
 
   it("Pular esconde; Rever o tutorial, em Configurações, Geral, traz de volta no Início", async () => {

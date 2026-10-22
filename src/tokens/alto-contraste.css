@@ -122,4 +122,29 @@
   .dock-capa-imagem {
     forced-color-adjust: none;
   }
+
+  /* ---------- tour: o véu escurece como no tema (é sombra e fundo), o anel vai no Highlight ---------- */
+  .tour-veu,
+  .tour-anel,
+  .dock[data-tour="veu"]::after {
+    forced-color-adjust: none;
+  }
+
+  .tour-anel {
+    border-color: Highlight;
+  }
+
+  .dock[data-tour="parada"],
+  .captura[data-tour="parada"] {
+    outline-color: Highlight;
+  }
+
+  .tour-ponto {
+    border: var(--espessura-borda) solid CanvasText;
+  }
+
+  .tour-ponto[data-atual] {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
 }

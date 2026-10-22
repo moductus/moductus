@@ -753,3 +753,42 @@ describe("painel Tarefas", () => {
     ]);
   });
 });
+
+describe("tour: a parada 2 sobre o painel Hoje (TutorialTour.dc.html)", () => {
+  it("o anel vai do alto do cartão ao fim do primeiro bloco do corpo, com a bolha logo abaixo", async () => {
+    servidor.foco = RODANDO;
+    // Sem layout no happy-dom: o cartão ocupa a janela, e o primeiro bloco do corpo acaba em 200.
+    const caixa = (left: number, top: number, width: number, height: number) =>
+      ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top }) as DOMRect;
+    const medida = vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: Element,
+    ) {
+      if (this.classList.contains("painel-cartao")) return caixa(12, 12, 400, 888);
+      const pai = this.parentElement;
+      if (pai?.classList.contains("painel-corpo") && pai.firstElementChild === this)
+        return caixa(30, 80, 364, 120);
+      if (this.classList.contains("painel-corpo")) return caixa(30, 80, 364, 820);
+      return caixa(0, 0, 0, 0);
+    });
+    try {
+      await abrir("hoje");
+      expect(recipiente.querySelector(".painel-corpo")!.firstElementChild).toBeTruthy();
+      await act(async () => eventosCasca.get("tour:parada")?.({ payload: 2 }));
+      await act(async () => new Promise((r) => requestAnimationFrame(() => r(undefined))));
+      const anel = recipiente.querySelector<HTMLElement>(".tour-anel")!;
+      expect([anel.style.left, anel.style.top, anel.style.width, anel.style.height]).toEqual([
+        "12px",
+        "12px",
+        "400px",
+        "188px",
+      ]);
+      const bolha = recipiente.querySelector<HTMLElement>('[role="dialog"]')!;
+      expect(bolha.getAttribute("aria-label")).toBe("Tour, 2 de 4");
+      expect(bolha.style.top).toBe("200px");
+      // O Hoje de verdade fica sob o véu, fora do clique.
+      expect(recipiente.querySelector<HTMLElement>(".painel-cartao")!.inert).toBe(true);
+    } finally {
+      medida.mockRestore();
+    }
+  });
+});

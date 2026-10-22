@@ -12,7 +12,25 @@ import { PainelHoje } from "./PainelHoje.tsx";
 import { PainelNotas } from "./PainelNotas.tsx";
 import { PainelFoco, type Recusas } from "./PainelFoco.tsx";
 import { PainelTarefas } from "./PainelTarefas.tsx";
+import { CamadaTour } from "../tour/CamadaTour.tsx";
+import { AREA_TOUR, useTour } from "../tour/tour.ts";
 import "./Painel.css";
+
+/**
+ * O que a parada 2 do tour aponta: o alto do cartão, do cabeçalho até o fim do primeiro bloco
+ * (TutorialTour.dc.html). No Hoje, o primeiro bloco é o primeiro filho do corpo (o lembrete ou o
+ * Foco); sem corpo (o estado vazio), é o filho do cartão logo depois do cabeçalho.
+ */
+function medirTopoDoCartao() {
+  const cartao = document.querySelector(".painel-cartao");
+  if (!cartao) return null;
+  const caixa = cartao.getBoundingClientRect();
+  const corpo = cartao.querySelector(":scope > .painel-corpo");
+  const bloco = corpo ? corpo.firstElementChild : (cartao.children[1] ?? cartao.firstElementChild);
+  const fim = bloco ? Math.max(caixa.top, bloco.getBoundingClientRect().bottom) : caixa.bottom;
+  const folga = parseFloat(getComputedStyle(cartao).paddingTop) || 0;
+  return { left: caixa.left, top: caixa.top, width: caixa.width, height: fim - caixa.top + folga };
+}
 
 /** O estado vazio das áreas que ainda não leem o serviço. */
 function Vazio({ area }: { area: AreaPainel }) {
@@ -43,6 +61,10 @@ export function Painel() {
   const [recusados, setRecusados] = useState<ReadonlySet<string>>(() => new Set());
   const recusar = useCallback((chave: string) => setRecusados((atual) => new Set(atual).add(chave)), []);
   const recusas = useMemo<Recusas>(() => ({ recusados, recusar }), [recusados, recusar]);
+  // As paradas 1 e 2 do tour são do painel: a 1 só com a bolha ao lado do dock, a 2 sobre o Hoje.
+  const tour = useTour();
+  const paradaDoPainel = tour.parada === 1 || tour.parada === 2 ? tour.parada : null;
+  const soBolha = abertura?.area === AREA_TOUR;
 
   useEffect(() => {
     let n = 0;
@@ -70,26 +92,37 @@ export function Painel() {
   const dados = area ? DADOS_AREAS[area] : null;
   return (
     <main className="painel" data-lado={lado} aria-label={`Painel ${dados?.nome ?? ""}`.trim()}>
-      <section className="painel-cartao">
-        {area === "agentes" ? (
-          <PainelAgentes canal={canal} abertura={abertura?.n ?? 0} />
-        ) : area === "dev" ? (
-          <PainelDev canal={canal} />
-        ) : area === "hoje" ? (
-          <PainelHoje canal={canal} abertura={abertura?.n ?? 0} />
-        ) : area === "tarefas" ? (
-          <PainelTarefas canal={canal} abertura={abertura?.n ?? 0} />
-        ) : area === "notas" ? (
-          <PainelNotas canal={canal} />
-        ) : area === "foco" ? (
-          <PainelFoco canal={canal} abertura={abertura?.n ?? 0} recusas={recusas} />
-        ) : (
-          <>
-            <CabecalhoPainel titulo={dados?.nome ?? ""} icone={dados?.icone} />
-            {area && <Vazio area={area} />}
-          </>
-        )}
-      </section>
+      {tour.parada !== null && (
+        <CamadaTour
+          parada={tour.parada}
+          ir={tour.ir}
+          minha={paradaDoPainel}
+          medir={paradaDoPainel === 2 ? medirTopoDoCartao : undefined}
+          lado="abaixo"
+        />
+      )}
+      {!soBolha && (
+        <section className="painel-cartao" inert={tour.parada !== null || undefined}>
+          {area === "agentes" ? (
+            <PainelAgentes canal={canal} abertura={abertura?.n ?? 0} />
+          ) : area === "dev" ? (
+            <PainelDev canal={canal} />
+          ) : area === "hoje" ? (
+            <PainelHoje canal={canal} abertura={abertura?.n ?? 0} />
+          ) : area === "tarefas" ? (
+            <PainelTarefas canal={canal} abertura={abertura?.n ?? 0} />
+          ) : area === "notas" ? (
+            <PainelNotas canal={canal} />
+          ) : area === "foco" ? (
+            <PainelFoco canal={canal} abertura={abertura?.n ?? 0} recusas={recusas} />
+          ) : (
+            <>
+              <CabecalhoPainel titulo={dados?.nome ?? ""} icone={dados?.icone} />
+              {area && <Vazio area={area} />}
+            </>
+          )}
+        </section>
+      )}
     </main>
   );
 }

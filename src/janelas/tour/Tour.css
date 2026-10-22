@@ -1,0 +1,99 @@
+/*
+ * Tour do tutorial (TutorialTour.dc.html; DESIGN.md §5 "Tour"): o anel de 2 px no destaque em volta
+ * da parada, o véu no resto da janela e a bolha ao lado do que aponta. A camada cobre a janela
+ * inteira e segura o clique: fora da bolha, nada recebe clique durante o tour.
+ */
+.tour-camada {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+}
+
+.tour-veu {
+  position: absolute;
+  inset: 0;
+  background: var(--veu-tour);
+}
+
+/* O véu é a sombra do anel: escurece tudo em volta, e o que está dentro fica como está. */
+.tour-anel {
+  position: absolute;
+  box-sizing: border-box;
+  border: var(--espessura-foco) solid var(--destaque);
+  border-radius: var(--raio-painel);
+  box-shadow: var(--sombra-anel-tour);
+  pointer-events: none;
+}
+
+/* ---------- Bolha ---------- */
+.tour-bolha {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-10);
+  box-sizing: border-box;
+  width: var(--largura-bolha-tour);
+  max-width: 100%;
+  padding: var(--esp-16);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-painel);
+  background: var(--fundo-bolha-tour);
+  box-shadow: var(--sombra-bolha-tour);
+  backdrop-filter: var(--desfoque);
+  color: var(--texto);
+}
+
+.tour-bolha--solta {
+  position: absolute;
+  top: var(--afastamento-bolha-tour);
+  left: var(--margem-painel);
+}
+
+.tour-camada[data-lado="direita"] .tour-bolha--solta {
+  margin: var(--afastamento-bolha-tour) 0 0 var(--afastamento-bolha-tour);
+}
+
+.tour-camada[data-lado="abaixo"] .tour-bolha--solta {
+  margin-top: var(--esp-12);
+}
+
+.tour-bolha-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.tour-pontos {
+  display: flex;
+  gap: var(--esp-4);
+}
+
+.tour-ponto {
+  width: var(--tamanho-ponto-tour);
+  height: var(--tamanho-ponto-tour);
+  border-radius: 50%;
+  background: var(--fundo-trilho);
+}
+
+.tour-ponto[data-atual] {
+  background: var(--destaque);
+}
+
+.tour-bolha-titulo {
+  margin: 0;
+  font-size: var(--tipo-titulo-bolha);
+  font-weight: var(--peso-forte);
+}
+
+.tour-bolha-texto {
+  margin: 0;
+  color: var(--texto-2);
+  text-wrap: pretty;
+}
+
+.tour-bolha-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--esp-8);
+}

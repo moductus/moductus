@@ -19,6 +19,19 @@ vi.mock("@tauri-apps/api/core", () => ({
     comandos.push(comando);
   }),
 }));
+// O tour chega pelo evento entre as janelas; o que a captura emite volta a ela, como na casca.
+const doTour = new Set<(e: { payload: unknown }) => void>();
+const emitidos: unknown[] = [];
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async (_nome: string, fn: (e: { payload: unknown }) => void) => {
+    doTour.add(fn);
+    return () => doTour.delete(fn);
+  }),
+  emit: vi.fn(async (_nome: string, payload: unknown) => {
+    emitidos.push(payload);
+    for (const fn of doTour) fn({ payload });
+  }),
+}));
 vi.mock("../../nativo/eventos.ts", () => ({
   registrar: () => undefined,
   useServico: () => ({ estado: "pronto", porta: 1, token: "x" }),
@@ -112,6 +125,8 @@ afterEach(() => {
   recipiente?.remove();
   comandos.length = 0;
   pedidos.length = 0;
+  emitidos.length = 0;
+  doTour.clear();
   atender.clear();
   vi.useRealTimers();
 });
@@ -480,5 +495,83 @@ describe("abrir e fechar", () => {
     expect(comandos).toContain("captura_fechar");
     expect(frase().value).toBe("");
     expect(recipiente.querySelector(".captura-corpo")).toBeNull();
+  });
+});
+
+describe("a parada 4 do tour", () => {
+  async function naParada(p: number | null) {
+    await act(async () => {
+      for (const fn of doTour) fn({ payload: p });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  }
+
+  it("mostra a frase de exemplo entendida só pelo código, com a bolha embaixo", async () => {
+    await montar();
+    await naParada(4);
+    expect(frase().value).toBe("ligar pro banco amanhã 15h");
+    expect(texto(".captura-entendeu")).toBe("Tarefas entendeu comoTarefa");
+    // Nem o modelo, que gastaria por uma frase que ninguém vai lançar.
+    await passar(3000);
+    expect(pedidosDe("captura.entender")).toEqual([{ texto: "ligar pro banco amanhã 15h" }]);
+    expect(recipiente.querySelector("main")!.dataset.tour).toBe("parada");
+    const bolha = recipiente.querySelector<HTMLElement>(".captura-bolha-tour")!;
+    expect(bolha.getAttribute("aria-label")).toBe("Tour, 4 de 4");
+    expect(bolha.querySelector(".atalho")!.textContent).toBe("CtrlAltEspaço");
+    expect([...bolha.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
+      "Voltar",
+      "Terminar o tour",
+    ]);
+  });
+
+  it("nada se lança: o formulário fica fora do alcance e o Enter não manda nada", async () => {
+    await montar();
+    await naParada(4);
+    expect(recipiente.querySelector("form")!.inert).toBe(true);
+    await enter();
+    expect(pedidosDe("captura.lancar")).toEqual([]);
+  });
+
+  it("Terminar leva ao Início e a próxima captura começa vazia", async () => {
+    await montar();
+    await naParada(4);
+    const terminar = [...recipiente.querySelectorAll("button")].find(
+      (b) => b.textContent === "Terminar o tour",
+    )!;
+    await act(async () => {
+      terminar.click();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(emitidos).toEqual([null]);
+    expect(comandos).toEqual(expect.arrayContaining(["captura_fechar", "sistema_abrir"]));
+    expect(frase().value).toBe("");
+    expect(recipiente.querySelector(".captura-bolha-tour")).toBeNull();
+  });
+
+  it("Esc pula o tour em vez de só fechar a captura", async () => {
+    await montar();
+    await naParada(4);
+    await tecla("Escape");
+    expect(emitidos).toEqual([null]);
+    expect(frase().value).toBe("");
+  });
+
+  it("aberta pelo atalho numa parada de outra janela, o Esc é o da captura, não o do tour", async () => {
+    await montar();
+    await naParada(1);
+    expect(recipiente.querySelector(".captura-bolha-tour")).toBeNull();
+    await tecla("Escape");
+    expect(emitidos).toEqual([]);
+    expect(comandos).toContain("captura_fechar");
+  });
+
+  it("sumir por perder o foco encerra o tour, para nada ficar escurecido sem bolha", async () => {
+    await montar();
+    await naParada(4);
+    await act(async () => {
+      window.dispatchEvent(new FocusEvent("blur"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(emitidos).toEqual([null]);
   });
 });

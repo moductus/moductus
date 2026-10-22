@@ -19,6 +19,16 @@ export const MISSOES_TUTORIAL = [
 export const MissaoTutorial = z.enum(MISSOES_TUTORIAL);
 export type MissaoTutorial = z.infer<typeof MissaoTutorial>;
 
+/**
+ * As missões que dá para fazer nesta versão. As outras chegam com a área delas (a da Tula com
+ * Finanças, a dos Downloads com Arquivos): aparecem apagadas e não contam para encerrar o tutorial.
+ */
+export const MISSOES_QUE_VALEM = [
+  "alba-lembrete",
+  "faina-aprovacao",
+  "nuno-sessao",
+] as const satisfies readonly MissaoTutorial[];
+
 export const EstadoEtapa = z.enum(["pendente", "feito", "pulado"]);
 export type EstadoEtapa = z.infer<typeof EstadoEtapa>;
 
