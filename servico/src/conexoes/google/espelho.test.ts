@@ -792,3 +792,80 @@ describe("volta 1 da revisão", () => {
     });
   });
 });
+
+describe("volta 2 da revisão", () => {
+  test("o evento da agenda com o título apagado lá não adota e volta ao Google", async () => {
+    const m = await montar();
+    await m.espelho.sincronizar();
+    const e = m.agenda.criarEvento({
+      calendarioId: m.calendarioDoEspelho()!.id,
+      titulo: "Consulta",
+      inicio: utc(AMANHA, "14:00"),
+      fim: utc(AMANHA, "15:00"),
+      diaInteiro: false,
+    });
+    await m.espelho.sincronizar();
+    m.mudarLa(e.id, { summary: "  ", end: sp(AMANHA, "15:30") });
+    await m.espelho.sincronizar();
+    expect(m.agenda.obterEvento({ id: e.id })).toMatchObject({
+      titulo: "Consulta",
+      fim: utc(AMANHA, "15:30"),
+    });
+    expect(m.noGoogleDe(e.id)).toMatchObject({
+      summary: "Consulta",
+      end: { dateTime: utc(AMANHA, "15:30") },
+    });
+    expect(m.fila()).toEqual([]);
+  });
+
+  test("a duração mudada lá vira a estimativa da tarefa; a que não cabe volta", async () => {
+    const m = await montar();
+    const t = m.tarefas.criar({ titulo: "Dentista", venceEm: AMANHA, hora: "15:00" });
+    await m.espelho.sincronizar();
+    const escritasAntes = m.escritas().length;
+    m.mudarLa(t.id, { end: sp(AMANHA, "16:15") });
+    await m.espelho.sincronizar();
+    expect(m.tarefa(t.id)).toMatchObject({ hora: "15:00", duracaoEstimadaMin: 75 });
+    expect(m.escritas()).toHaveLength(escritasAntes);
+
+    // Mais de um dia não é estimativa de tarefa: o evento volta a 75 min.
+    m.mudarLa(t.id, { end: sp("2026-10-22", "15:00") });
+    await m.espelho.sincronizar();
+    expect(m.tarefa(t.id).duracaoEstimadaMin).toBe(75);
+    expect(m.noGoogleDe(t.id)).toMatchObject({ end: { dateTime: utc(AMANHA, "16:15") } });
+  });
+
+  test("o lembrete com evento próprio fica com a duração que você deu lá", async () => {
+    const m = await montar();
+    const l = await m.lembretes.criar({ texto: "Pagar boleto", quando: utc(AMANHA, "09:00") });
+    await m.espelho.sincronizar();
+    const escritasAntes = m.escritas().length;
+    m.mudarLa(l.id, { end: sp(AMANHA, "09:45") });
+    await m.espelho.sincronizar();
+    expect(m.escritas()).toHaveLength(escritasAntes);
+    // Mudou aqui depois: vai a hora nova, com a duração de lá.
+    await m.lembretes.definir({ id: l.id, quando: utc(AMANHA, "10:00") });
+    await m.espelho.sincronizar();
+    expect(m.noGoogleDe(l.id)).toMatchObject({
+      start: { dateTime: utc(AMANHA, "10:00") },
+      end: { dateTime: utc(AMANHA, "10:45") },
+    });
+  });
+
+  test("a passada que termina sem falha zera a espera: a próxima queda recomeça dos 15 s", async () => {
+    const m = await montar();
+    await m.espelho.sincronizar();
+    m.rede.fora = true;
+    await m.lembretes.criar({ texto: "Pagar boleto", quando: utc(AMANHA, "09:00") });
+    await m.espelho.sincronizar();
+    m.passar(ESPERA_INICIAL_MS);
+    await m.espelho.sincronizar();
+    // A rede voltou, mas o lembrete ainda espera a vez: a passada não manda nada e não falha.
+    m.rede.fora = false;
+    expect(await m.espelho.sincronizar()).toBe("esperando");
+    m.rede.fora = true;
+    await m.lembretes.criar({ texto: "Ligar pro banco", quando: utc(AMANHA, "10:00") });
+    await m.espelho.sincronizar();
+    expect(m.armados.at(-1)).toBe(ESPERA_INICIAL_MS);
+  });
+});

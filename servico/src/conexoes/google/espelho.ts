@@ -67,6 +67,8 @@ export const MAXIMO_TITULO_ADOTADO = 500;
 /** A tarefa sem estimativa ocupa isso no Google; o lembrete, isso. Os dois não marcam ocupado. */
 export const DURACAO_TAREFA_MIN = 30;
 export const DURACAO_LEMBRETE_MIN = 15;
+/** A duração mudada no Google que cabe na estimativa da tarefa (contrato: de 1 a 1440 min). */
+export const MAXIMO_DURACAO_MIN = 1440;
 
 /** O que o Google aceita de alerta por evento: até 5, de 0 a 4 semanas antes. */
 export const MAXIMO_ALERTAS = 5;
@@ -160,6 +162,12 @@ function lerImpressao(texto: string | null): EventoDoItem | null {
 /** Quantos minutos antes do início o lembrete toca (negativo é depois). */
 const minutosAntes = (inicio: string, toca: string) =>
   Math.round((Date.parse(inicio) - Date.parse(toca)) / 60_000);
+
+/** A duração de um evento em minutos inteiros, se cabe de 1 a {@link MAXIMO_DURACAO_MIN}. */
+function duracaoQueCabe(inicio: string, fim: string): number | null {
+  const minutos = (Date.parse(fim) - Date.parse(inicio)) / 60_000;
+  return Number.isInteger(minutos) && minutos >= 1 && minutos <= MAXIMO_DURACAO_MIN ? minutos : null;
+}
 
 /** O título de lá que cabe numa tarefa ou num lembrete: nem vazio, nem maior que o contrato. */
 const tituloAdotavel = (titulo: string) =>
@@ -612,7 +620,10 @@ export type ResultadoEspelho = "enviado" | "desligada" | "esperando";
 
 /** O que vem do Google e volta às áreas, que são donas da tarefa e do lembrete. */
 export interface AdotarDoGoogle {
-  tarefa: (id: string, mudanca: { titulo?: string; venceEm?: string; hora?: string }) => void;
+  tarefa: (
+    id: string,
+    mudanca: { titulo?: string; venceEm?: string; hora?: string; duracaoEstimadaMin?: number },
+  ) => void;
   lembrete: (id: string, mudanca: { texto?: string; quando?: string }) => Promise<void>;
 }
 
@@ -686,6 +697,8 @@ export class EspelhoGoogleAgenda {
    */
   private falhasSeguidas = 0;
   private esperarAte = 0;
+  /** A passada em curso já teve uma falha que espera (na leitura de volta ou num envio). */
+  private esperouNaPassada = false;
 
   constructor(private readonly deps: DependenciasEspelho) {
     this.agora = deps.agora ?? (() => new Date());
@@ -800,6 +813,7 @@ export class EspelhoGoogleAgenda {
     if (this.deps.google.conexao().estado === "desligada") return "desligada";
     const acesso = this.acesso();
     let recriou = false;
+    this.esperouNaPassada = false;
     for (;;) {
       try {
         const espelho = await this.garantirCalendario(acesso);
@@ -811,11 +825,18 @@ export class EspelhoGoogleAgenda {
             // Sem rede para ler, o envio tenta assim mesmo: é ele que marca a espera de cada item.
             if (erro instanceof EspelhoSumiu || !ehPassageira(erro)) throw erro;
             console.error(`google: a leitura do "Moductus" falhou: ${mensagem(erro)}`);
+            this.esperouNaPassada = true;
           }
           // O que veio de lá e não foi adotado (o título vazio, a tarefa que virou dia inteiro) volta.
           this.conciliar();
         }
-        return await this.enviar(espelho, acesso);
+        const resultado = await this.enviar(espelho, acesso);
+        // A passada inteira sem falha que espera: a rede está de volta, a espera recomeça do início.
+        if (!this.esperouNaPassada) {
+          this.falhasSeguidas = 0;
+          this.esperarAte = 0;
+        }
+        return resultado;
       } catch (erro) {
         if (erro instanceof EspelhoSumiu && !recriou) {
           try {
@@ -938,12 +959,15 @@ export class EspelhoGoogleAgenda {
     }
     const regra = l.recorrencia !== null && lerRecorrencia(l.recorrencia).entendida ? l.recorrencia : null;
     const inicio = regra !== null ? (l.inicio_recorrencia ?? l.quando) : (l.adiado_ate ?? l.quando);
+    // O lembrete não tem duração: a do evento é a que está lá (a mudada no celular fica), 15 min de início.
+    const la = lerImpressao(this.deps.repo.mapa("lembrete", id)?.enviado ?? null);
+    const duracao = (la && !la.diaInteiro && duracaoQueCabe(la.inicio, la.fim)) || DURACAO_LEMBRETE_MIN;
     return {
       titulo: l.texto,
       descricao: null,
       local: null,
       inicio,
-      fim: depois(inicio, DURACAO_LEMBRETE_MIN),
+      fim: depois(inicio, duracao),
       diaInteiro: false,
       recorrencia: regra,
       fuso: regra === null ? null : fuso,
@@ -1012,7 +1036,14 @@ export class EspelhoGoogleAgenda {
         if (vistos.has(chave)) continue;
         // O evento da agenda tem a fila dele (`ServicoAgenda`); aqui só sai o que ficou para trás.
         if (m.item_tipo === "evento") {
-          if (repo.evento(m.item_id) !== null || repo.pendente("evento", m.item_id) !== null) continue;
+          if (repo.pendente("evento", m.item_id) !== null) continue;
+          const doEvento = this.desejado("evento", m.item_id, fuso);
+          if (doEvento !== null) {
+            // O que veio de lá e não foi adotado (o título vazio, a adoção recusada) volta.
+            if (m.etag_externo !== null && m.enviado !== impressao(doEvento))
+              repo.enfileirar("evento", m.item_id, "mudar", instante);
+            continue;
+          }
           // Com o mapa, o envio já foi tentado: o POST pode ter chegado e perdido a resposta.
           repo.enfileirar("evento", m.item_id, "apagar", instante);
           continue;
@@ -1035,16 +1066,15 @@ export class EspelhoGoogleAgenda {
   /** Manda o que já pode ir. A falha que espera para a passada: a rede caiu para todos. */
   private async enviar(espelho: LinhaEspelho, acesso: Acesso): Promise<ResultadoEspelho> {
     const repo = this.deps.repo;
-    let saiu = false;
     for (const linha of repo.devidos(this.agora().toISOString(), ENVIOS_POR_VEZ)) {
       try {
         await this.enviarUm(espelho, linha, acesso);
-        saiu = true;
       } catch (erro) {
         if (erro instanceof EspelhoSumiu) throw erro;
         if (ehPassageira(erro)) {
           this.esperar(linha, erro);
           this.adiarPassada();
+          this.esperouNaPassada = true;
           return "esperando";
         }
         // O Google recusou este evento (400, 403): fica anotado e sai da fila até o item mudar.
@@ -1059,11 +1089,6 @@ export class EspelhoGoogleAgenda {
           repo.tirarDaFila(linha);
         });
       }
-    }
-    // Só um envio que deu certo diz que a rede voltou; a passada que não mandou nada não zera a espera.
-    if (saiu) {
-      this.falhasSeguidas = 0;
-      this.esperarAte = 0;
     }
     // O que ficou na fila (esperando a vez, ou além das {@link ENVIOS_POR_VEZ}) vai na próxima.
     return repo.proximaTentativa() === null ? "enviado" : "esperando";
@@ -1347,7 +1372,9 @@ export class EspelhoGoogleAgenda {
 
   /**
    * Leva às áreas o que mudou lá: título (se cabe no contrato), início (a tarefa só com hora; o
-   * lembrete recorrente segue a regra daqui) e, no evento da agenda, também fim, descrição e local.
+   * lembrete recorrente segue a regra daqui), a duração da tarefa (vira a estimativa, de 1 a 1440
+   * min) e, no evento da agenda, também fim, descrição e local. A duração do lembrete fica no
+   * `enviado`, que ele não tem coluna para isso.
    */
   private async adotar(
     m: LinhaMapa,
@@ -1360,10 +1387,15 @@ export class EspelhoGoogleAgenda {
     const mudouInicio = c.inicio !== enviado.inicio || c.diaInteiro !== enviado.diaInteiro;
     if (m.item_tipo === "tarefa") {
       const hora = mudouInicio && !c.diaInteiro ? noFuso(new Date(c.inicio), fuso) : null;
-      if (titulo === undefined && hora === null) return;
+      // A duração mudada lá vira a estimativa, se cabe nela; a que não cabe volta.
+      const duracao = c.diaInteiro ? null : duracaoQueCabe(c.inicio, c.fim);
+      const novaDuracao =
+        duracao !== null && duracao !== duracaoQueCabe(enviado.inicio, enviado.fim) ? duracao : undefined;
+      if (titulo === undefined && hora === null && novaDuracao === undefined) return;
       this.deps.adotar.tarefa(m.item_id, {
         ...(titulo !== undefined ? { titulo } : {}),
         ...(hora !== null ? { venceEm: hora.dia, hora: hora.hora } : {}),
+        ...(novaDuracao !== undefined ? { duracaoEstimadaMin: novaDuracao } : {}),
       });
       return;
     }
