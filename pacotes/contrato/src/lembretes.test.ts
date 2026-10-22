@@ -75,6 +75,19 @@ describe("lembretes", () => {
     expect(PedidoLembretes.safeParse({ ids: [] }).success).toBe(false);
   });
 
+  test("adiar e concluir levam a ocorrência que estava tocando, só para um lembrete", () => {
+    const quando = "2026-10-08T17:45:00.000Z";
+    expect(PedidoAdiarLembretes.safeParse({ ids: ["a"], minutos: 10, quando }).success).toBe(true);
+    expect(PedidoAdiarLembretes.safeParse({ ids: ["a", "b"], minutos: 10, quando }).success).toBe(false);
+    expect(METODOS["lembretes.concluir"].entrada.safeParse({ ids: ["a"], quando }).success).toBe(true);
+    expect(METODOS["lembretes.concluir"].entrada.safeParse({ ids: ["a", "b"], quando }).success).toBe(false);
+    expect(METODOS["lembretes.concluir"].entrada.safeParse({ ids: ["a", "b"] }).success).toBe(true);
+    // Como o banco guarda: com milissegundos e Z.
+    expect(
+      PedidoAdiarLembretes.safeParse({ ids: ["a"], minutos: 10, quando: "2026-10-08T17:45Z" }).success,
+    ).toBe(false);
+  });
+
   test("o painel Hoje traz o que chega, o que toca e os atrasados com a ausência", () => {
     const perdido = { ...lembrete, estado: "perdido" };
     const hoje = {

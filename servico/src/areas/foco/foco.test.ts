@@ -123,6 +123,7 @@ describe("ciclo", () => {
       cicloAtual: 1,
       ciclosAtePausaLonga: 4,
       proxima: "pausa",
+      podeEstender: true,
       focoHojeMin: 0,
       ciclosHoje: 0,
     });
@@ -138,6 +139,8 @@ describe("ciclo", () => {
       etapa: null,
       cicloAtual: 1,
       proxima: "pausa",
+      // O foco que o relógio fechou completo ainda estica pelo "+5 min".
+      podeEstender: true,
       focoHojeMin: 25,
       ciclosHoje: 1,
     });
@@ -295,6 +298,7 @@ describe("ciclo", () => {
       etapa: null,
       cicloAtual: 1,
       proxima: "pausa",
+      podeEstender: false,
       focoHojeMin: 10,
       ciclosHoje: 0,
     });

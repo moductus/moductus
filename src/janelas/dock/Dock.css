@@ -92,6 +92,24 @@
   right: var(--esp-3);
 }
 
+/* O tempo restante do foco embaixo do ícone (Dock.dc.html); em pausa, apagado como no painel. */
+.dock-tempo {
+  position: absolute;
+  right: 0;
+  bottom: var(--esp-2);
+  left: 0;
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  line-height: 1;
+  color: var(--texto);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.dock-tempo[data-pausado] {
+  color: var(--texto-3);
+}
+
 .dock-controle {
   height: var(--altura-controle-dock);
 }

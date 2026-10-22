@@ -19,6 +19,7 @@ import {
 import { useAgora } from "../../areas/tempo.ts";
 import { useCanal } from "../../servico/conexao.ts";
 import { ROTULOS_CONTAGEM, useContagens } from "../../servico/contagens.ts";
+import { minutosDoDock, useEstadoFoco, useSegundosRestantes } from "../../servico/foco.ts";
 import { marcarVistasDe, usePontosTime } from "../../servico/notificacoes.ts";
 import { useTime } from "../../servico/time.ts";
 import { AREAS_DOCK, DADOS_AREAS } from "../areas.ts";
@@ -28,6 +29,21 @@ import "./Dock.css";
 
 /** Convite das cabeças do time enquanto nenhum modelo está conectado. */
 export const CONVITE_AGENTES = CONVITE_MODELO;
+
+/**
+ * O tempo no ícone do Foco (Dock.dc.html): os minutos inteiros do relógio do painel, que a janela
+ * conta sozinha e só acorda quando o número muda. Sem etapa, nada; o rótulo diz o mesmo em texto.
+ */
+function useTempoDoFoco(canal: ReturnType<typeof useCanal>) {
+  const foco = useEstadoFoco(canal);
+  const etapa = foco?.etapa ?? null;
+  const segundos = useSegundosRestantes(etapa, 60);
+  if (etapa === null || segundos === null) return null;
+  const minutos = minutosDoDock(segundos);
+  const pausada = etapa.pausadaEm !== null;
+  const situacao = pausada ? "em pausa, " : etapa.tipo === "foco" ? "" : "na pausa, ";
+  return { minutos, pausada, rotulo: `${situacao}${minutos} min restantes` };
+}
 
 /** Área aberta no painel lateral, para marcar o botão; `null` com o painel fechado. */
 function useAreaAberta(): string | null {
@@ -58,6 +74,7 @@ export function Dock() {
   const pontos = usePontosTime(canal);
   // Os badges e as sessões esperando vêm contados do serviço, os mesmos da barra lateral do Sistema.
   const contagens = useContagens(canal);
+  const tempoDoFoco = useTempoDoFoco(canal);
   // As sessões do terminal esperando você são do Nuno, que fica de olho nelas (Dock.dc.html).
   const esperandoNoTerminal = contagens.sessoesEsperando;
   const config = useConfiguracaoDock();
@@ -125,10 +142,13 @@ export function Dock() {
         const area = DADOS_AREAS[id];
         const valor = area.contagem ? contagens[area.contagem] : 0;
         // O nome do botão leva a contagem ("Tarefas, 4 tarefas pendentes"): o aria-label cobre o badge.
+        const tempo = id === "foco" ? tempoDoFoco : null;
         const rotulo =
           area.contagem && valor > 0
             ? `${area.nome}, ${textoDaContagem(valor, ROTULOS_CONTAGEM[area.contagem])}`
-            : area.nome;
+            : tempo
+              ? `${area.nome}, ${tempo.rotulo}`
+              : area.nome;
         return (
           <button
             key={id}
@@ -144,6 +164,12 @@ export function Dock() {
             <Icone nome={area.icone} tamanho={20} />
             {/* Zero não desenha o badge. */}
             {area.contagem && <Contagem valor={valor} rotulo={ROTULOS_CONTAGEM[area.contagem]} />}
+            {/* O tempo restante embaixo do ícone; o aria-label já diz o mesmo. */}
+            {tempo && (
+              <span className="dock-tempo" data-pausado={tempo.pausada || undefined} aria-hidden="true">
+                {tempo.minutos}
+              </span>
+            )}
           </button>
         );
       })}

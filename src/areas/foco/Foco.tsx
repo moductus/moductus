@@ -532,7 +532,7 @@ function CartaoTerminado({
         </div>
       )}
       <Botoes>
-        {!terminado.interrompida && (
+        {foco.podeEstender && (
           <Botao variante="fantasma" onClick={() => void pedir("foco.estender", { minutos: MINUTOS_A_MAIS })}>
             {`+${MINUTOS_A_MAIS} min de foco`}
           </Botao>

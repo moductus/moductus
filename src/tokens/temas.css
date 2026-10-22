@@ -21,11 +21,12 @@
   --esp-24: 24px;
   --esp-32: 32px;
 
-  /* Tipo: 11 meta e atalho, 12 rótulo, 13 corpo, 17–22 título de painel,
-     26 título do Sistema, 30–36 número grande (mono) */
+  /* Tipo: 11 meta e atalho, 12 rótulo, 13 corpo, 15 o lembrete tocando, 17–22 título de
+     painel, 26 título do Sistema, 30–36 número grande (mono) */
   --tipo-11: 11px;
   --tipo-12: 12px;
   --tipo-13: 13px;
+  --tipo-15: 15px;
   --tipo-17: 17px;
   --tipo-20: 20px;
   --tipo-22: 22px;
@@ -243,6 +244,13 @@
   --largura-barra-trabalho: 40%;
   --dur-correr: 1.4s;
   --altura-trilho-sessao: 3px;
+  /* Painel Foco (PainelFoco.dc.html): o relógio grande em mono, os ciclos da rodada em trilhos
+     de 6 px e as linhas do "Depois deste" */
+  --tipo-relogio-foco: 48px;
+  --tracado-relogio-foco: -0.03em;
+  --altura-trilho-ciclo: 6px;
+  --raio-trilho-ciclo: 3px;
+  --altura-linha-foco: 36px;
   /* Selo dos PRs do painel Dev numa coluna só, para os títulos alinharem */
   --largura-selo-pr: 66px;
   /* Agentes (Conversas.dc.html e AreaAgente.dc.html): lista de conversas, cabeçalho da conversa,
@@ -255,6 +263,12 @@
   --raio-balao-ponta: 4px;
   --espessura-aba: 2px;
   --largura-hora: 40px;
+  /* Painéis Hoje e Tarefas (PainelTarefas.dc.html, LembreteHoje.dc.html): a linha de tarefa, a
+     barrinha da prioridade e o campo da frase */
+  --altura-linha-tarefa: 38px;
+  --largura-prioridade: 3px;
+  --altura-prioridade: 18px;
+  --altura-campo-frase: 38px;
   /* Notas (AreaNotas.dc.html, PainelNotas.dc.html): a lista à esquerda, a coluna do que está
      ligado à nota à direita, a margem do texto, a linha de leitura e o entrelinha de quem escreve */
   --largura-lista-notas: 290px;

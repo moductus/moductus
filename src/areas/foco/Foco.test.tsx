@@ -95,6 +95,7 @@ function estado(campos: Partial<EstadoFoco> = {}): EstadoFoco {
     cicloAtual: 1,
     ciclosAtePausaLonga: 4,
     proxima: "foco",
+    podeEstender: false,
     focoHojeMin: 0,
     ciclosHoje: 0,
     ...campos,
@@ -269,7 +270,13 @@ describe("Foco: ciclo rodando", () => {
 describe("Foco: ciclo terminado e rodada completa", () => {
   it("a Alba propõe a pausa e a tarefa ligada pode ser marcada ali mesmo", async () => {
     const f1 = etapa("F1", "foco", local(14, 12), 25);
-    falso.estado = estado({ cicloAtual: 1, proxima: "pausa", focoHojeMin: 25, ciclosHoje: 1 });
+    falso.estado = estado({
+      cicloAtual: 1,
+      proxima: "pausa",
+      podeEstender: true,
+      focoHojeMin: 25,
+      ciclosHoje: 1,
+    });
     falso.historico = historico([f1]);
     await montar();
     expect(texto(".fala-texto")).toBe(
@@ -278,10 +285,21 @@ describe("Foco: ciclo terminado e rodada completa", () => {
     await clicar("Marcar como feita");
     expect(pediu("tarefas.concluir")).toEqual([{ id: "t1" }]);
     expect(botao("Marcar como feita")).toBeUndefined();
+    await clicar("+5 min de foco");
+    expect(pediu("foco.estender")).toEqual([{ minutos: 5 }]);
     await clicar("Começar a pausa");
     await clicar("Pular a pausa");
     expect(pediu("foco.iniciar")).toEqual([{ tipo: "pausa" }]);
     expect(pediu("foco.pularPausa")).toHaveLength(1);
+  });
+
+  it("o foco encerrado antes da hora não oferece o +5 min", async () => {
+    const f1 = etapa("F1", "foco", local(14, 12), 25, { interrompida: true, duracaoRealMin: 10 });
+    falso.estado = estado({ cicloAtual: 1, proxima: "pausa", podeEstender: false });
+    falso.historico = historico([f1]);
+    await montar();
+    expect(botao("+5 min de foco")).toBeUndefined();
+    expect(botao("Começar a pausa")).toBeDefined();
   });
 
   it("depois da pausa longa, o resumo da rodada até “Fechar por aqui”", async () => {

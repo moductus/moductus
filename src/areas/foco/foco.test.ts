@@ -52,6 +52,7 @@ function estado(campos: Partial<EstadoFoco> = {}): EstadoFoco {
     cicloAtual: 1,
     ciclosAtePausaLonga: 4,
     proxima: "foco",
+    podeEstender: false,
     focoHojeMin: 0,
     ciclosHoje: 0,
     ...campos,

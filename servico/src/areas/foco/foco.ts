@@ -40,6 +40,15 @@ import { somarDias, TempoDoDia } from "../dia/tempo.ts";
 
 export class ErroDoFoco extends Error {}
 
+/**
+ * Se o "+5 min" vale: a etapa em andamento estica; sem ela, só o foco de hoje que o relógio fechou
+ * completo volta a correr. O encerrado antes da hora ("Terminar ciclo") e a pausa não.
+ */
+function podeEstender({ andamento, ultima }: Situacao): boolean {
+  if (andamento !== null) return true;
+  return ultima !== null && ultima.tipo === "foco" && ultima.interrompida === 0;
+}
+
 export const MENSAGEM_EM_ANDAMENTO = "já há uma etapa do foco em andamento";
 export const MENSAGEM_PARADO = "não há etapa do foco em andamento";
 export const MENSAGEM_JA_PAUSADA = "a etapa do foco já está em pausa";
@@ -373,6 +382,7 @@ export class ServicoFoco implements FonteDoRelogio {
       cicloAtual: Math.max(1, this.cicloAtual(situacao, ciclos)),
       ciclosAtePausaLonga: ciclos.ciclosAtePausaLonga,
       proxima: this.proxima(situacao, ciclos),
+      podeEstender: podeEstender(situacao),
       focoHojeMin: minutos,
       ciclosHoje,
     };
@@ -460,9 +470,7 @@ export class ServicoFoco implements FonteDoRelogio {
       return this.mudou(null);
     }
     const ultima = situacao.ultima;
-    if (ultima === null || ultima.tipo !== "foco" || ultima.interrompida === 1) {
-      throw new ErroDoFoco(MENSAGEM_PARADO);
-    }
+    if (ultima === null || !podeEstender(situacao)) throw new ErroDoFoco(MENSAGEM_PARADO);
     this.repo.gravar(
       ultima.id,
       {
