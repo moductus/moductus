@@ -67,6 +67,7 @@ import {
   MudancaLembretes,
   NovoLembrete,
   PedidoAdiarLembretes,
+  PedidoConcluirLembretes,
   PedidoLembretes,
   PedidoListarLembretes,
 } from "./lembretes.ts";
@@ -231,7 +232,7 @@ export const METODOS = {
   "lembretes.definir": metodo(MudancaLembrete, Lembrete),
   "lembretes.adiar": metodo(PedidoAdiarLembretes, z.array(Lembrete)),
   /** "Feito": o recorrente volta com o próximo horário; o de uma vez sai. */
-  "lembretes.concluir": metodo(PedidoLembretes, MudancaLembretes),
+  "lembretes.concluir": metodo(PedidoConcluirLembretes, MudancaLembretes),
   "lembretes.cancelar": metodo(PedidoLembretes, Apagados),
 
   "agenda.calendarios": metodo(z.undefined(), z.array(Calendario)),

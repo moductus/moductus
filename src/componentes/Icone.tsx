@@ -69,6 +69,8 @@ const DESENHOS = {
   silencio: (
     <path d="M13.7 21a2 2 0 0 1-3.4 0M18.6 13A17.9 17.9 0 0 1 18 8M6.3 6.3A6 6 0 0 0 6 8c0 7-3 9-3 9h14M18 8a6 6 0 0 0-9.3-5M2 2l20 20" />
   ),
+  // Sino do lembrete (LembreteHoje.dc.html).
+  sino: <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />,
 } satisfies Record<string, ReactElement>;
 
 export type NomeIcone = keyof typeof DESENHOS;

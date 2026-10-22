@@ -1,8 +1,11 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
+  ADIAR_LEMBRETE_MIN,
+  MENSAGEM_LEMBRETE_NAO_TOCA,
   MudancaLembrete,
   NovoLembrete,
   PedidoAdiarLembretes,
+  PedidoConcluirLembretes,
   PedidoLembretes,
   PedidoListarLembretes,
   type Apagados,
@@ -49,12 +52,9 @@ export const MENSAGEM_EVENTO = "o evento deste lembrete não existe mais";
 export const TOLERANCIA_MS = 2 * 60_000;
 /** O próximo lembrete aparece no topo do Hoje, sem som, a partir de 30 min antes. */
 export const ANTECEDENCIA_MS = 30 * 60_000;
-/** O "Adiar 10 min" do aviso do Windows. */
-export const ADIAR_DO_AVISO_MIN = 10;
-
 /** Os botões do aviso, os mesmos do lembrete tocando no painel Hoje (LembreteHoje.dc.html). */
 export const BOTOES_DO_LEMBRETE: readonly BotaoAviso[] = [
-  { id: "adiar", rotulo: `Adiar ${ADIAR_DO_AVISO_MIN} min` },
+  { id: "adiar", rotulo: `Adiar ${ADIAR_LEMBRETE_MIN} min` },
   { id: "feito", rotulo: "Feito" },
 ];
 
@@ -545,6 +545,7 @@ export class ServicoLembretes implements FonteDoRelogio {
   async adiar(entrada: PedidoAdiarLembretes, carimbo: Carimbo = DO_USUARIO): Promise<Lembrete[]> {
     const pedido = PedidoAdiarLembretes.parse(entrada);
     const linhas = [...new Set(pedido.ids)].map((id) => this.exigir(id));
+    exigirTocando(linhas, pedido.quando);
     const agora = this.agora();
     const ate = new Date(agora.getTime() + pedido.minutos * 60_000).toISOString();
     this.repo.transacao(() => {
@@ -567,9 +568,10 @@ export class ServicoLembretes implements FonteDoRelogio {
    * "Feito": o de uma vez vai para a lixeira; o recorrente volta a agendado na primeira ocorrência
    * depois de agora (ou depois da que estava marcada, se ainda não chegou), e sai se a regra acabou.
    */
-  async concluir(entrada: PedidoLembretes, carimbo: Carimbo = DO_USUARIO): Promise<MudancaLembretes> {
-    const pedido = PedidoLembretes.parse(entrada);
+  async concluir(entrada: PedidoConcluirLembretes, carimbo: Carimbo = DO_USUARIO): Promise<MudancaLembretes> {
+    const pedido = PedidoConcluirLembretes.parse(entrada);
     const linhas = [...new Set(pedido.ids)].map((id) => this.exigir(id));
+    exigirTocando(linhas, pedido.quando);
     const agora = this.agora();
     const fuso = this.fontes.lerFuso();
     const continuam: string[] = [];
@@ -771,7 +773,7 @@ export class ServicoLembretes implements FonteDoRelogio {
     const linha = this.repo.lembrete(alvo.slice(0, arroba));
     if (!linha || linha.estado !== "disparado" || linha.quando !== alvo.slice(arroba + 1)) return false;
     if (botao === "adiar") {
-      await this.adiar({ ids: [linha.id], minutos: ADIAR_DO_AVISO_MIN });
+      await this.adiar({ ids: [linha.id], minutos: ADIAR_LEMBRETE_MIN });
       return true;
     }
     if (botao === "feito") {
@@ -884,6 +886,17 @@ export class ServicoLembretes implements FonteDoRelogio {
  * O aviso agrupado dos que venceram numa ausência (ADR-0032): um só, com quantos e onde o PC
  * estava, e os textos no corpo. Nada toca um por um.
  */
+/**
+ * A trava do botão do aviso do Windows para quem pede com a ocorrência (o painel Hoje): só vale
+ * para o lembrete que ainda toca nela. Sem ocorrência, o pedido vale como sempre.
+ */
+function exigirTocando(linhas: readonly LinhaLembrete[], quando: string | undefined): void {
+  if (quando === undefined) return;
+  if (linhas.some((l) => l.estado !== "disparado" || l.quando !== quando)) {
+    throw new Error(MENSAGEM_LEMBRETE_NAO_TOCA);
+  }
+}
+
 export function avisoDosAtrasados(perdidos: readonly LinhaLembrete[], ausencia: Ausencia): NovoAviso {
   const n = perdidos.length;
   const onde = ausencia.de === null ? "o Moductus estava fechado" : "o PC dormia";
