@@ -11,7 +11,7 @@ import { Ferramentas } from "../../areas/ferramentas/Ferramentas.tsx";
 import { Financas } from "../../areas/financas/Financas.tsx";
 import { Foco } from "../../areas/foco/Foco.tsx";
 import { Inicio } from "../../areas/inicio/Inicio.tsx";
-import { PrimeirosPassos } from "../../areas/inicio/PrimeirosPassos.tsx";
+import { PrimeirosPassos, useMostrarPrimeirosPassos } from "../../areas/inicio/PrimeirosPassos.tsx";
 import { Memoria } from "../../areas/memoria/Memoria.tsx";
 import { Notas } from "../../areas/notas/Notas.tsx";
 import { Sessoes } from "../../areas/sessoes/Sessoes.tsx";
@@ -106,11 +106,15 @@ export function Sistema() {
     };
   }, [ir]);
 
-  // A Ajuda da bandeja: o tour de novo, ou os Primeiros passos de volta no Início.
-  const { ir: andar } = tour;
+  // A Ajuda da bandeja: o tour de novo, ou os Primeiros passos de volta no Início. Durante a
+  // configuração inicial o tour não vem: ele começa sozinho quando ela termina.
+  const { ir: andar, navegando } = tour;
   useEffect(() => {
     const paradas = [
-      listen(EVENTO_VER_TOUR, () => andar(1)),
+      listen(EVENTO_VER_TOUR, () => {
+        if (configurando) registrar(`${EVENTO_VER_TOUR} ignorado na configuração`);
+        else andar(1);
+      }),
       listen(EVENTO_REVER_TUTORIAL, () => {
         ir({ area: "inicio" });
         servico
@@ -120,7 +124,19 @@ export function Sistema() {
       }),
     ].map((p) => p.catch(() => () => undefined));
     return () => paradas.forEach((p) => void p.then((f) => f()));
-  }, [andar, ir, setPrimeiroUso]);
+  }, [andar, ir, setPrimeiroUso, configurando]);
+
+  // Na parada 3 a bolha é do Sistema: se ele some (o atalho ou a bandeja o escondem), o tour acaba
+  // ali, para o resto não ficar escurecido sem bolha.
+  const naParada = tour.parada === 3;
+  useEffect(() => {
+    if (!naParada) return;
+    const aoMudar = () => {
+      if (document.visibilityState === "hidden" && !navegando.current) andar(null);
+    };
+    document.addEventListener("visibilitychange", aoMudar);
+    return () => document.removeEventListener("visibilitychange", aoMudar);
+  }, [naParada, andar, navegando]);
 
   return (
     <AcoesSistemaContexto.Provider value={acoes}>
@@ -173,12 +189,13 @@ interface PropsConteudoArea {
 
 function ConteudoArea({ destino, ir, primeiroUso }: PropsConteudoArea) {
   const { aoMudarPrimeiroUso } = useAcoesSistema();
+  const mostrarPassos = useMostrarPrimeirosPassos(primeiroUso);
   switch (destino.area) {
     case "inicio":
       return (
         <Inicio
           antes={
-            primeiroUso?.concluido && primeiroUso.tutorial === "pendente" ? (
+            mostrarPassos && primeiroUso ? (
               <PrimeirosPassos estado={primeiroUso} aoMudar={aoMudarPrimeiroUso} />
             ) : null
           }

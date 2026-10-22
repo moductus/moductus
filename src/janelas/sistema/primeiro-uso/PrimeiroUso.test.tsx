@@ -11,6 +11,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { auditar, marcos } from "../../../teste/acessibilidade.ts";
+import { SEGURA_FIM_MS } from "../../../areas/inicio/PrimeirosPassos.tsx";
 import { Sistema } from "../Sistema.tsx";
 
 // A casca não existe no teste: eventos, janela e comandos falsos. O evento emitido chega a quem ouve,
@@ -839,10 +840,51 @@ describe("Primeiros passos", () => {
     );
     expect(por('[data-missao="alba-lembrete"]')!.dataset.feita).toBe("true");
     expect(progresso()).toBe("1 de 3");
-    // O serviço encerra o tutorial quando as que valem ficam feitas (primeiro-uso.ts).
-    await act(async () =>
-      falso.emitir("primeiroUso.mudou", { ...(falso.estado as EstadoPrimeiroUso), tutorial: "feito" }),
-    );
+    // O serviço encerra o tutorial quando as que valem ficam feitas (primeiro-uso.ts); a lista fica
+    // um instante e some.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await act(async () =>
+        falso.emitir("primeiroUso.mudou", { ...(falso.estado as EstadoPrimeiroUso), tutorial: "feito" }),
+      );
+      expect(por(".primeiros-passos")).toBeTruthy();
+      await act(async () => vi.advanceTimersByTimeAsync(SEGURA_FIM_MS));
+      expect(por(".primeiros-passos")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("o cartão de treino como última missão: a resposta fica na tela um instante antes de a lista sumir", async () => {
+    const base = bancoNovo();
+    falso.estado = {
+      ...base,
+      concluido: true,
+      concluidoEm: "2026-10-08T12:00:00.000Z",
+      missoes: { ...base.missoes, "alba-lembrete": "feito", "nuno-sessao": "feito" },
+    };
+    await montar();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await clicar(botao("Mover 3 arquivos"));
+      // O serviço de verdade encerra o tutorial nessa resposta.
+      await act(async () =>
+        falso.emitir("primeiroUso.mudou", { ...(falso.estado as EstadoPrimeiroUso), tutorial: "feito" }),
+      );
+      expect(progresso()).toBe("3 de 3");
+      expect(por(".treino [role='status']")!.textContent).toMatch(/iriam para a Lixeira/);
+      await act(async () => vi.advanceTimersByTimeAsync(SEGURA_FIM_MS - 100));
+      expect(por(".primeiros-passos")).toBeTruthy();
+      await act(async () => vi.advanceTimersByTimeAsync(100));
+      expect(por(".primeiros-passos")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("Pular some na hora, sem segurar", async () => {
+    await noInicio();
+    await clicar(botao("Pular"));
     expect(por(".primeiros-passos")).toBeNull();
   });
 
@@ -876,6 +918,33 @@ describe("Primeiros passos", () => {
 
     await daCasca("tutorial:tour");
     expect(paradas()).toEqual([1]);
+  });
+
+  it("a Ajuda não começa o tour no meio da configuração inicial", async () => {
+    await montar();
+    await daCasca("tutorial:tour");
+    expect(paradas()).toEqual([]);
+    expect(comandos().map(([c]) => c)).not.toContain("painel_abrir");
+  });
+
+  it("o Sistema escondido na parada 3 encerra o tour", async () => {
+    await noInicio();
+    await act(async () => {
+      for (const fn of tauri.ouvintes.get("tour:parada") ?? []) fn({ payload: 3 });
+    });
+    expect(por(".tour-camada")!.dataset.tour).toBe("parada");
+    const visibilidade = Object.getOwnPropertyDescriptor(Document.prototype, "visibilityState");
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    try {
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+    } finally {
+      delete (document as { visibilityState?: unknown }).visibilityState;
+      if (visibilidade) Object.defineProperty(Document.prototype, "visibilityState", visibilidade);
+    }
+    expect(paradas()).toEqual([null]);
+    expect(por(".tour-camada")).toBeNull();
   });
 
   it("Pular esconde; Rever o tutorial, em Configurações, Geral, traz de volta no Início", async () => {

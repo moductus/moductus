@@ -5,7 +5,7 @@ import {
   type MissaoTutorial,
   type PedidoMarcarTutorial,
 } from "@moductus/contrato";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
 import type { Agente, EstadoPersonagem } from "../../componentes/personagem/agentes.ts";
@@ -72,6 +72,31 @@ const VALEM: readonly MissaoTutorial[] = MISSOES_QUE_VALEM;
 const DEPOIS = MISSOES_TUTORIAL.filter((m) => !VALEM.includes(m));
 
 const ARQUIVOS_TREINO = ["exemplo-1.tmp", "exemplo-2.tmp", "exemplo-3.tmp"];
+
+/** Quanto a lista fica na tela depois da última missão, para a confirmação dela ser lida. */
+export const SEGURA_FIM_MS = 2500;
+
+/**
+ * Se os Primeiros passos aparecem no Início: depois da configuração, com o tutorial pendente.
+ * Quando a última missão o encerra, a lista fica um instante (o "3 de 3" e a resposta do cartão de
+ * treino) antes de sumir; pulado, some na hora.
+ */
+export function useMostrarPrimeirosPassos(estado: EstadoPrimeiroUso | null): boolean {
+  const pendente = !!estado?.concluido && estado.tutorial === "pendente";
+  const terminou = !!estado?.concluido && estado.tutorial === "feito";
+  const [anterior, setAnterior] = useState(pendente);
+  const [segurando, setSegurando] = useState(false);
+  if (anterior !== pendente) {
+    setAnterior(pendente);
+    setSegurando(anterior && terminou);
+  }
+  useEffect(() => {
+    if (!segurando) return;
+    const relogio = setTimeout(() => setSegurando(false), SEGURA_FIM_MS);
+    return () => clearTimeout(relogio);
+  }, [segurando]);
+  return pendente || (segurando && terminou);
+}
 
 function marcar(pedido: PedidoMarcarTutorial): Promise<EstadoPrimeiroUso> {
   return servico.pedir("primeiroUso.marcar", pedido);
