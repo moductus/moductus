@@ -556,6 +556,15 @@ describe("a parada 4 do tour", () => {
     expect(frase().value).toBe("");
   });
 
+  it("aberta pelo atalho numa parada de outra janela, o Esc é o da captura, não o do tour", async () => {
+    await montar();
+    await naParada(1);
+    expect(recipiente.querySelector(".captura-bolha-tour")).toBeNull();
+    await tecla("Escape");
+    expect(emitidos).toEqual([]);
+    expect(comandos).toContain("captura_fechar");
+  });
+
   it("sumir por perder o foco encerra o tour, para nada ficar escurecido sem bolha", async () => {
     await montar();
     await naParada(4);

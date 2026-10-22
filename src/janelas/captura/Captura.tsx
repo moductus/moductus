@@ -81,7 +81,9 @@ export function Captura() {
   // A parada 4 do tour: a frase de exemplo já entendida, só para ver; nada se lança.
   const tour = useTour();
   const naParada = tour.parada === 4;
-  useTecladoTour(tour);
+  // O teclado do tour só vale aqui na parada da captura: nas outras ela está fechada, e um Esc
+  // nela (aberta pelo atalho no meio do tour) é o Esc dela.
+  useTecladoTour({ parada: naParada ? 4 : null, ir: tour.ir });
   const { mostrarExemplo, limpar } = c;
   useEffect(() => {
     if (!naParada) return;
