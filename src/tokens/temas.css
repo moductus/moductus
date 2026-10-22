@@ -270,6 +270,29 @@
   --altura-alternativa-captura: 30px;
   --altura-lancar-captura: 34px;
   --opacidade-tecla-captura: 0.75;
+  /* Sistema · Foco (AreaFoco.dc.html): o relógio em 64, a barra do ciclo e os segmentos da rodada,
+     a coluna das etapas com o estado à direita, as linhas do dia, o gráfico da semana e os
+     cartões vazios */
+  --tipo-relogio-area-foco: 64px;
+  --tracado-relogio-area-foco: -0.03em;
+  --altura-barra-ciclo: 6px;
+  --raio-barra-ciclo: 3px;
+  --altura-segmento-rodada: 8px;
+  --raio-segmento-rodada: 3px;
+  --opacidade-pausa-rodada: 0.55;
+  --largura-etapas-foco: 400px;
+  --largura-min-ciclo-foco: 420px;
+  --largura-min-cartao-foco: 240px;
+  --altura-linha-etapa: 27px;
+  --largura-estado-etapa: 52px;
+  --altura-linha-ciclo: 40px;
+  --altura-grafico-foco: 150px;
+  --largura-barra-foco: 34px;
+  --altura-barra-foco: 110px;
+  --opacidade-dia-sem-foco: 0.25;
+  --largura-ciclos-tarefa: 18px;
+  --altura-vazio-foco: 150px;
+  --tamanho-numero-passo: 20px;
 }
 
 /* Menos animação no Windows: pela mídia do WebView ou pelo "Efeitos de animação" que a casca

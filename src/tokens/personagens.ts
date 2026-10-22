@@ -22,6 +22,8 @@ export const TAMANHO_PERSONAGEM = {
   notificacoes: 28,
   /** Cabeça em "Ligado a esta nota" (AreaNotas.dc.html). */
   ligado: 20,
+  /** Cabeça da fala da Alba no ciclo do foco (AreaFoco.dc.html). */
+  ciclo: 28,
   /** Corpo inteiro no time das boas-vindas (Uso1Boas.dc.html). */
   boasVindas: 116,
   /** Corpo inteiro na apresentação do time (Uso4Time.dc.html). */

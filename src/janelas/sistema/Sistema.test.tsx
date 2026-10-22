@@ -126,8 +126,8 @@ describe("Sistema", () => {
         expect(por("main .conversa-nome").textContent).toBe("Time");
         continue;
       }
-      // Sessões de IA e Dev já leem o serviço: sem ele, dizem que esperam a resposta.
-      if (area.id === "sessoes" || area.id === "dev") {
+      // Sessões de IA, Foco e Dev já leem o serviço: sem ele, dizem que esperam a resposta.
+      if (area.id === "sessoes" || area.id === "dev" || area.id === "foco") {
         expect(por('main [role="status"]').textContent).toBe("Esperando o serviço responder.");
         continue;
       }
