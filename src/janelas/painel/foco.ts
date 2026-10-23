@@ -132,7 +132,13 @@ export function useRelida<T>(
 }
 
 const EVENTOS_TAREFAS: readonly NomeEvento[] = ["tarefas.mudou"];
-const EVENTOS_AGENDA: readonly NomeEvento[] = ["agenda.mudou", "agenda.calendarios", "tarefas.mudou"];
+// Os dias de trabalho (`rotinas.mudou`) decidem se o dia tem livre.
+const EVENTOS_AGENDA: readonly NomeEvento[] = [
+  "agenda.mudou",
+  "agenda.calendarios",
+  "tarefas.mudou",
+  "rotinas.mudou",
+];
 
 const pedirTarefas = () =>
   Promise.all([

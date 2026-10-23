@@ -245,7 +245,8 @@ describe("Configurações › O dia", () => {
     await digitar("Fim do expediente", "08:00");
     expect(pedidosDe("config.definir")).toEqual([]);
     expect(por('[role="alert"]')!.textContent).toBe(MENSAGEM_EXPEDIENTE_AO_CONTRARIO);
-    expect(controle<HTMLInputElement>("Fim do expediente").value).toBe("08:00");
+    // A hora recusada não fica na tela: o campo volta ao gravado.
+    expect(controle<HTMLInputElement>("Fim do expediente").value).toBe("18:00");
 
     await digitar("Fim do expediente", "17:30");
     expect(pedidosDe("config.definir")).toEqual([
@@ -258,6 +259,47 @@ describe("Configurações › O dia", () => {
       },
     ]);
     expect(por('[role="alert"]')).toBeNull();
+  });
+
+  it("começo recusado e fim aceito em seguida: a tela termina igual ao que o serviço gravou", async () => {
+    servicoQueAceita();
+    await montar();
+    await digitar("Começo do expediente", "19:00");
+    expect(pedidosDe("config.definir")).toEqual([]);
+    expect(controle<HTMLInputElement>("Começo do expediente").value).toBe("09:00");
+
+    await digitar("Fim do expediente", "20:00");
+    expect(pedidosDe("config.definir")).toEqual([
+      {
+        dia: {
+          ...CONFIG_PADRAO.dia,
+          fuso: "America/Sao_Paulo",
+          expediente: { inicio: "09:00", fim: "20:00" },
+        },
+      },
+    ]);
+    expect(controle<HTMLInputElement>("Começo do expediente").value).toBe("09:00");
+    expect(controle<HTMLInputElement>("Fim do expediente").value).toBe("20:00");
+    expect(por('[role="alert"]')).toBeNull();
+  });
+
+  it("a hora que o serviço recusa volta ao campo com a gravada, no briefing, no fechamento e no expediente", async () => {
+    servicoQueAceita();
+    await montar();
+    const responder = falso.responder;
+    falso.responder = (metodo, dados) =>
+      metodo === "rotinas.definir" || metodo === "config.definir"
+        ? Promise.reject(new Error("recusado"))
+        : responder(metodo, dados);
+    await digitar("Hora de parar", "18:30");
+    expect(controle<HTMLInputElement>("Hora de parar").value).toBe("18:00");
+    expect(por('[role="status"]')!.textContent).toBe("");
+    await digitar("Horário fixo do briefing", "07:15");
+    expect(controle<HTMLInputElement>("Horário fixo do briefing").value).toBe("08:30");
+    expect(radio("Na primeira atividade do dia").checked).toBe(true);
+    await digitar("Fim do expediente", "17:00");
+    expect(controle<HTMLInputElement>("Fim do expediente").value).toBe("18:00");
+    expect(por('[role="alert"]')!.textContent).toBe("recusado");
   });
 
   it("os ciclos e o fuso mudam a chave do dia, e a rodada acompanha", async () => {

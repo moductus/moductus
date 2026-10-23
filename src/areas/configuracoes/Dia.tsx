@@ -45,8 +45,11 @@ interface PropsCampoHora {
   rotulo: string;
   valor: string;
   desativado: boolean;
-  /** Só a hora completa chega aqui; o que é digitado pela metade fica no campo. */
-  aoMudar: (hora: string) => void;
+  /**
+   * Só a hora completa chega aqui; o que é digitado pela metade fica no campo. Recusada (`false`,
+   * pela tela ou pelo serviço), o campo volta à hora gravada.
+   */
+  aoMudar: (hora: string) => boolean | Promise<boolean>;
 }
 
 /** Hora `HH:MM` em fonte mono; o rótulo fica para o leitor de tela, a frase em volta diz o resto. */
@@ -67,8 +70,12 @@ function CampoHora({ rotulo, valor, desativado, aoMudar }: PropsCampoHora) {
       value={rascunho}
       disabled={desativado}
       onChange={(e) => {
-        setRascunho(e.target.value);
-        if (HORA.test(e.target.value) && e.target.value !== valor) aoMudar(e.target.value);
+        const hora = e.target.value;
+        setRascunho(hora);
+        if (!HORA.test(hora) || hora === valor) return;
+        void Promise.resolve(aoMudar(hora)).then((aceita) => {
+          if (!aceita) setRascunho(valor);
+        });
       }}
     />
   );
@@ -189,9 +196,10 @@ function Briefing({ rotina, desativado, definir }: PropsRotina) {
             rotulo="Horário fixo do briefing"
             valor={horaFixa}
             desativado={travado}
-            aoMudar={(hora) => {
-              setHoraFixa(hora);
-              void definir({ id: rotina.id, hora });
+            aoMudar={async (hora) => {
+              const feita = await definir({ id: rotina.id, hora });
+              if (feita) setHoraFixa(hora);
+              return feita !== null;
             }}
           />
         </div>
@@ -212,6 +220,7 @@ function Fechamento({ rotina, desativado, definir, fuso }: PropsRotina & { fuso:
     const de = troca?.de ?? hora;
     const feita = await definir({ id: rotina.id, hora: para });
     if (feita) setTroca(feita.hora === de ? null : { de, para: feita.hora ?? para });
+    return feita !== null;
   };
   const desfazer = async () => {
     if (!troca) return;
@@ -231,7 +240,7 @@ function Fechamento({ rotina, desativado, definir, fuso }: PropsRotina & { fuso:
           rotulo="Hora de parar"
           valor={hora}
           desativado={desativado || !rotina.ativa}
-          aoMudar={(para) => void mudar(para)}
+          aoMudar={mudar}
         />
       </div>
       <p className="config-dia-rotulo">
@@ -264,18 +273,22 @@ function CartaoExpediente({
 }: {
   expediente: Expediente;
   desativado: boolean;
-  aoMudar: (expediente: Expediente) => void;
+  aoMudar: (expediente: Expediente) => Promise<boolean>;
 }) {
   const id = useId();
   const [erro, setErro] = useState<string | null>(null);
+  /**
+   * O par é sempre o gravado com a hora nova: a recusada volta ao campo gravado, então a próxima
+   * troca nunca leva junto uma hora que só existia na tela.
+   */
   const mudar = (parte: Partial<Expediente>) => {
     const novo = { ...expediente, ...parte };
     if (novo.fim <= novo.inicio) {
       setErro(MENSAGEM_EXPEDIENTE_AO_CONTRARIO);
-      return;
+      return false;
     }
     setErro(null);
-    aoMudar(novo);
+    return aoMudar(novo);
   };
   return (
     <Cartao como="section" className="config-dia-cartao" aria-labelledby={id}>
@@ -387,7 +400,7 @@ export function SecaoDia() {
   const fechamento = rotinas.rotinas.find((r) => r.tipo === "fechamento") ?? null;
   const primeira = briefing ?? fechamento;
   const dias = primeira?.diasSemana ?? [];
-  const mudarDia = (parte: Partial<ConfigDia>) => void definirConfig({ dia: { ...dia, ...parte } });
+  const mudarDia = (parte: Partial<ConfigDia>) => definirConfig({ dia: { ...dia, ...parte } });
   const erro = rotinas.erro ?? erroConfig;
 
   return (
@@ -428,7 +441,7 @@ export function SecaoDia() {
             valor={dia.fuso}
             opcoes={fusos}
             desativada={travado}
-            aoMudar={(novo) => mudarDia({ fuso: novo })}
+            aoMudar={(novo) => void mudarDia({ fuso: novo })}
           />
         </div>
       </Cartao>
@@ -447,7 +460,7 @@ export function SecaoDia() {
           ciclos={dia.foco}
           atalho={estado.config.atalhos.foco}
           desativado={travado}
-          aoMudar={(foco) => mudarDia({ foco })}
+          aoMudar={(foco) => void mudarDia({ foco })}
         />
       </div>
     </Secao>

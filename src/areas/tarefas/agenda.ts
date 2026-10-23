@@ -260,8 +260,8 @@ type Lidos = Omit<DadosAgenda, "google">;
 /**
  * A agenda de hoje, os calendários e a conexão do Google, pelo canal: ao conectar, quando o dia
  * muda e de novo a cada `agenda.mudou`, `agenda.calendarios`, `tarefas.mudou` (a tarefa nova ou
- * feita muda o encaixe que o serviço sugere) e `config.mudou` (fuso e expediente mudam os blocos
- * livres). A conexão segue também o `conexoes.mudou`; o aviso que chega com a carga a caminho é
+ * feita muda o encaixe que o serviço sugere), `config.mudou` (fuso e expediente mudam os blocos
+ * livres) e `rotinas.mudou` (fora dos dias de trabalho não há livre). A conexão segue também o `conexoes.mudou`; o aviso que chega com a carga a caminho é
  * mais novo que ela. Avisos do mesmo instante viram uma recarga só; a recarga que falha com dados
  * do mesmo dia na tela mantém o que já estava. Dados de outro dia nunca valem: na virada, até a
  * agenda nova chegar a leitura espera, e se ela falhar, falhou.
@@ -292,6 +292,7 @@ export function useAgendaDoDia(canal: EstadoConexao, dia: string): Leitura<Dados
       servico.ouvir("agenda.calendarios", recarregar),
       servico.ouvir("tarefas.mudou", recarregar),
       servico.ouvir("config.mudou", recarregar),
+      servico.ouvir("rotinas.mudou", recarregar),
       servico.ouvir("conexoes.mudou", (c) => {
         if (c.tipo !== "google-agenda") return;
         // Os calendários que a conexão traz ou leva chegam pelo `agenda.calendarios`.

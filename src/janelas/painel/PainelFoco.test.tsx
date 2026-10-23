@@ -415,6 +415,13 @@ describe("painel Foco", () => {
     expect(pedidos("execucoes.desfazer")).toEqual([{ chamadaId: "01JCHAMADA0000000000000000" }]);
   });
 
+  it("os dias de trabalho mudados (rotinas.mudou) releem o dia da agenda", async () => {
+    await montar();
+    const antes = pedidos("agenda.consultar").length;
+    await emitir("rotinas.mudou", []);
+    expect(pedidos("agenda.consultar").length).toBe(antes + 1);
+  });
+
   it("Não guarda a recusa: a mesma sugestão não volta quando a agenda é relida", async () => {
     servidor.tarefas = [tarefa("t1", "Separar comprovantes do mês")];
     servidor.dia = {
