@@ -193,8 +193,8 @@ describe("Atalho", () => {
 });
 
 describe("Ícone", () => {
-  it("tem os 24 desenhos, o restaurar da janela, o escudo, o alerta, a seta de lista, o mais da captura e das tarefas, o silêncio do foco, o sino do lembrete e o calendário do detalhe, com 33 nomes (hoje e início são a casa)", () => {
-    expect(NOMES_ICONES).toHaveLength(33);
+  it("tem os 24 desenhos, o restaurar da janela, o escudo, o alerta, a seta de lista, o mais da captura e das tarefas, o silêncio do foco, o sino do lembrete, o calendário do detalhe e os cinco de editar o Início, com 38 nomes (hoje e início são a casa)", () => {
+    expect(NOMES_ICONES).toHaveLength(38);
     montar(
       <>
         <Icone nome="hoje" />

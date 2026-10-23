@@ -59,6 +59,8 @@ const MINHA: Config = {
     foco: { focoMin: 45, pausaMin: 10, pausaLongaMin: 20, ciclosAtePausaLonga: 3 },
   },
   cambio: { cotacoes: { EUR: { milionesimos: 920_000, data: "2026-10-16", fonte: "frankfurter" } } },
+  // Os blocos do Início são preferência: vão junto para o outro PC.
+  inicio: { ordem: ["briefing", "foco", "tarefas", "financas", "dev", "sessoes"], escondidos: ["financas"] },
 };
 
 const manifestoValido = (extra: Partial<Record<string, unknown>> = {}) => ({

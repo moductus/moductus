@@ -75,6 +75,24 @@ const DESENHOS = {
   calendario: (
     <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
   ),
+  // Editar os blocos do Início (InicioEditar.dc.html): a alça de arrastar (pontos cheios, que o
+  // traço fino apagaria), mover para cima e para baixo, esconder e mostrar.
+  arrastar: (
+    <g fill="currentColor" stroke="none">
+      <circle cx="9" cy="6" r="1.4" />
+      <circle cx="9" cy="12" r="1.4" />
+      <circle cx="9" cy="18" r="1.4" />
+      <circle cx="15" cy="6" r="1.4" />
+      <circle cx="15" cy="12" r="1.4" />
+      <circle cx="15" cy="18" r="1.4" />
+    </g>
+  ),
+  subir: <path d="M12 19V5M5 12l7-7 7 7" />,
+  descer: <path d="M12 5v14M19 12l-7 7-7-7" />,
+  esconder: (
+    <path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4M6.6 6.6C3.9 8.4 2 12 2 12s4 7 10 7a9.6 9.6 0 0 0 5.4-1.6" />
+  ),
+  mostrar: <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />,
 } satisfies Record<string, ReactElement>;
 
 export type NomeIcone = keyof typeof DESENHOS;
