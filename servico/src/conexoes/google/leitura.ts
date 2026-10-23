@@ -42,14 +42,29 @@ const ORIGEM = "conexao";
 
 const mensagem = (erro: unknown) => (erro instanceof Error ? erro.message : String(erro));
 
-interface LinhaCalendarioGoogle {
+export interface LinhaCalendarioGoogle {
   id: string;
   id_externo: string;
   nome: string;
   cor: string | null;
   espelho: number;
   ler: number;
+  pode_escrever: number;
   token_sincronizacao: string | null;
+}
+
+/** Um evento do cache com o que a escrita no Google precisa: os ids de lá e o calendário dele. */
+export interface EventoDoCache {
+  id: string;
+  id_externo: string | null;
+  titulo: string;
+  descricao: string | null;
+  inicio: string;
+  fim: string;
+  dia_inteiro: number;
+  local: string | null;
+  recorrencia: string | null;
+  calendario_id: string;
 }
 
 /** O que mudou no cache numa leitura: os eventos gravados e os que saíram, pelos ids daqui. */
@@ -70,10 +85,28 @@ export class RepositorioLeituraGoogle {
   calendarios(): LinhaCalendarioGoogle[] {
     return this.db
       .prepare(
-        `SELECT id, id_externo, nome, cor, espelho, ler, token_sincronizacao FROM calendarios
+        `SELECT id, id_externo, nome, cor, espelho, ler, pode_escrever, token_sincronizacao FROM calendarios
           WHERE fonte = 'google' AND apagado_em IS NULL ORDER BY id`,
       )
       .all() as unknown as LinhaCalendarioGoogle[];
+  }
+
+  /** Um calendário vivo do Google, pelo id daqui. */
+  calendario(id: string): LinhaCalendarioGoogle | null {
+    return this.calendarios().find((c) => c.id === id) ?? null;
+  }
+
+  /** Um evento vivo do cache, de calendário vivo, pelo id daqui. */
+  evento(id: string): EventoDoCache | null {
+    const linha = this.db
+      .prepare(
+        `SELECT e.id, e.id_externo, e.titulo, e.descricao, e.inicio, e.fim, e.dia_inteiro, e.local,
+                e.recorrencia, e.calendario_id
+           FROM eventos e JOIN calendarios c ON c.id = e.calendario_id
+          WHERE e.id = ? AND e.apagado_em IS NULL AND c.apagado_em IS NULL`,
+      )
+      .get(id) as unknown as EventoDoCache | undefined;
+    return linha ?? null;
   }
 
   /** Os que a Alba lê: os que você escolheu, fora o espelho. */
@@ -96,18 +129,35 @@ export class RepositorioLeituraGoogle {
       if (!atual) {
         this.db
           .prepare(
-            `INSERT INTO calendarios (id, nome, fonte, id_externo, cor, ler, criado_em, atualizado_em, origem)
-             VALUES (?, ?, 'google', ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO calendarios (id, nome, fonte, id_externo, cor, ler, pode_escrever, criado_em, atualizado_em, origem)
+             VALUES (?, ?, 'google', ?, ?, ?, ?, ?, ?, ?)`,
           )
-          .run(novoId(), lido.nome, lido.idExterno, lido.cor, lido.principal ? 1 : 0, agora, agora, ORIGEM);
+          .run(
+            novoId(),
+            lido.nome,
+            lido.idExterno,
+            lido.cor,
+            lido.principal ? 1 : 0,
+            lido.podeEscrever ? 1 : 0,
+            agora,
+            agora,
+            ORIGEM,
+          );
         mudou = true;
         continue;
       }
       // O espelho é do Moductus: o que vem na lista não muda o que ele guarda dele (F3-24).
-      if (atual.espelho === 1 || (atual.nome === lido.nome && atual.cor === lido.cor)) continue;
+      const escreve = lido.podeEscrever ? 1 : 0;
+      if (
+        atual.espelho === 1 ||
+        (atual.nome === lido.nome && atual.cor === lido.cor && atual.pode_escrever === escreve)
+      )
+        continue;
       this.db
-        .prepare("UPDATE calendarios SET nome = ?, cor = ?, atualizado_em = ?, origem = ? WHERE id = ?")
-        .run(lido.nome, lido.cor, agora, ORIGEM, atual.id);
+        .prepare(
+          "UPDATE calendarios SET nome = ?, cor = ?, pode_escrever = ?, atualizado_em = ?, origem = ? WHERE id = ?",
+        )
+        .run(lido.nome, lido.cor, escreve, agora, ORIGEM, atual.id);
       mudou = true;
     }
     for (const sumiu of existentes.values()) {
@@ -320,7 +370,10 @@ export interface AvisosLeitura {
 }
 
 export interface DependenciasLeitura {
-  google: Pick<ServicoGoogleAgenda, "conexao" | "tokenDeAcesso" | "acessoRecusado" | "marcarLeitura">;
+  google: Pick<
+    ServicoGoogleAgenda,
+    "conexao" | "tokenDeAcesso" | "acessoRecusado" | "marcarLeitura" | "anotarConta"
+  >;
   repo: RepositorioLeituraGoogle;
   /** O fuso de `config`, para data e hora do Google sem fuso nenhum. */
   lerFuso: () => string;
@@ -400,6 +453,11 @@ export class LeituraGoogleAgenda {
       return;
     }
     void this.atualizar();
+  }
+
+  /** A Alba escreveu num calendário de fora (F3-25): o que foi escrito volta pela leitura, já. */
+  aoEscrever(): void {
+    this.aoEscolherCalendario();
   }
 
   /** Abrir a área da agenda: lê, a não ser que a última leitura tenha acabado de terminar. */
@@ -497,6 +555,9 @@ export class LeituraGoogleAgenda {
     const agora = this.agora().toISOString();
     const lista = this.deps.repo.transacao(() => this.deps.repo.gravarCalendarios(lidos, agora));
     this.avisarMudanca({ mudados: [], apagados: lista.apagados }, lista.mudou);
+    // O id do principal é o e-mail da conta: é ele que confirma a conta que o conectar não leu.
+    const principal = lidos.find((c) => c.principal);
+    if (principal) this.deps.google.anotarConta(principal.idExterno);
 
     for (const calendario of this.deps.repo.paraLer()) {
       if (geracao !== this.geracao) return;

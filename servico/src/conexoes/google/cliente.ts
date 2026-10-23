@@ -26,6 +26,15 @@ export const ESCOPOS_AO_CONECTAR = [
   "https://www.googleapis.com/auth/calendar.events.readonly",
 ] as const;
 
+/** Criar e mudar evento nos outros calendários, com aprovação (F3-25). */
+export const ESCOPO_ESCREVER_NOS_OUTROS = "https://www.googleapis.com/auth/calendar.events";
+
+/**
+ * O consentimento completo de novo (ADR-0031): app instalado não tem autorização incremental, então
+ * o pedido leva os quatro, e o refresh token novo substitui o anterior.
+ */
+export const ESCOPOS_PARA_ESCREVER = [...ESCOPOS_AO_CONECTAR, ESCOPO_ESCREVER_NOS_OUTROS] as const;
+
 /** Onde o fluxo bate; o teste troca por um servidor OAuth falso em 127.0.0.1. */
 export interface EnderecosGoogle {
   autorizacao: string;

@@ -8,8 +8,9 @@ import type { EnderecosGoogle } from "./cliente.ts";
  * é da `LeituraGoogleAgenda`. Resposta grande ou malformada vira erro, nunca trava o serviço, e o
  * token de acesso não aparece em mensagem nenhuma.
  *
- * A escrita (F3-24) é só no calendário "Moductus": criar e conferir o calendário, e inserir, mudar
- * e apagar evento nele. Quando e o quê é do `EspelhoGoogleAgenda`.
+ * A escrita (F3-24) é no calendário "Moductus": criar e conferir o calendário, e inserir, mudar
+ * e apagar evento nele. Quando e o quê é do `EspelhoGoogleAgenda`. Inserir e mudar servem também
+ * aos outros calendários, com aprovação (F3-25, `EscritaGoogleAgenda`).
  */
 
 /** Pedido ao Google que não responde nisso desiste: a rede caiu ou está lenta demais. */
@@ -167,6 +168,8 @@ export interface CalendarioLido {
   cor: string | null;
   /** O principal, cujo id é o e-mail da conta: o único que a Alba lê sem você escolher. */
   principal: boolean;
+  /** Se a conta edita os eventos dele (`accessRole` `owner` ou `writer`), com aprovação (F3-25). */
+  podeEscrever: boolean;
 }
 
 /** Lê uma página da lista de calendários; o que não tem a forma de um calendário fica de fora. */
@@ -192,6 +195,7 @@ export async function paginaDeCalendarios(
       nome: nome.slice(0, 200),
       cor: texto(item.backgroundColor)?.slice(0, 32) || null,
       principal: item.primary === true,
+      podeEscrever: item.accessRole === "owner" || item.accessRole === "writer",
     });
   }
   return { calendarios, proxima: texto(corpo.nextPageToken) || null };

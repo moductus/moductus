@@ -18,6 +18,7 @@ import {
 import { RepositorioTarefasDoDia } from "../../areas/agenda/tarefas-do-dia.ts";
 import { TempoDoDia } from "../../areas/dia/tempo.ts";
 import { abrirBanco } from "../../banco/conexao.ts";
+import { escritaSemGoogle } from "../../conexoes/google/fixtures/google-falso.ts";
 import { ProvedorFalso, roteiros, type PassoRoteiro } from "../../provedores/falso.ts";
 import { RegistroProvedores } from "../../provedores/registro.ts";
 import { Catalogo } from "../catalogo.ts";
@@ -70,7 +71,9 @@ function montar() {
     { mudou: (mudanca) => avisos.push(mudanca), calendarios: () => {} },
     { agora },
   );
-  const catalogo = new Catalogo(ferramentasAgenda(agenda, new TempoDoDia(() => FUSO, agora)));
+  const catalogo = new Catalogo(
+    ferramentasAgenda(agenda, new TempoDoDia(() => FUSO, agora), escritaSemGoogle()),
+  );
   const falso = new ProvedorFalso("p-alba");
   const runtime = new Runtime(
     {
@@ -277,7 +280,9 @@ describe("leitura", () => {
       "agenda.calendarios",
       "agenda.consultar",
       "agenda.criar_evento",
+      "agenda.criar_evento_em",
       "agenda.mudar_evento",
+      "agenda.mudar_evento_em",
       "agenda.obter_evento",
     ]);
   });

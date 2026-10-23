@@ -22,6 +22,7 @@ import { m020 } from "./020-eventos-excecoes.ts";
 import { m021 } from "./021-foco-etapas.ts";
 import { m022 } from "./022-agenda-espelho.ts";
 import { m023 } from "./023-alba-listas.ts";
+import { m024 } from "./024-alba-do-dia.ts";
 
 /** Todas as migrações, em ordem. Migração publicada não muda: corrige-se com outra. */
 export const MIGRACOES: readonly Migracao[] = [
@@ -48,4 +49,5 @@ export const MIGRACOES: readonly Migracao[] = [
   m021,
   m022,
   m023,
+  m024,
 ];

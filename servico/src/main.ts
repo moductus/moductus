@@ -8,6 +8,8 @@ import { RepositorioExecucoes, ServicoExecucoes } from "./agentes/execucoes.ts";
 import { aberturaMcpDoRuntime } from "./agentes/mcp.ts";
 import { classificadorPeloRuntime, Roteador } from "./agentes/roteador.ts";
 import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
+import { VigiaAlba } from "./agentes/vigias/alba.ts";
+import { RepositorioMarcasDosVigias } from "./agentes/vigias/marcas.ts";
 import { VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
@@ -48,6 +50,7 @@ import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { ServicoGoogleAgenda } from "./conexoes/google/google-agenda.ts";
 import { EspelhoGoogleAgenda, RepositorioEspelhoGoogle } from "./conexoes/google/espelho.ts";
+import { EscritaGoogleAgenda } from "./conexoes/google/escrita.ts";
 import { LeituraGoogleAgenda, RepositorioLeituraGoogle } from "./conexoes/google/leitura.ts";
 import { ferramentasAgenda } from "./ferramentas/agenda/agenda.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
@@ -109,6 +112,8 @@ const nativo: AplicadorNativo = {
 let servidor: ServidorWs | null = null;
 // Os vigias do Nuno (F2-26) nascem com o runtime; os eventos de antes disso não pedem julgamento.
 let vigiaNuno: VigiaNuno | null = null;
+// Os vigias da Alba (F3-28) nascem com o relógio do dia; a agenda que muda antes disso não perde nada.
+let vigiaAlba: VigiaAlba | null = null;
 // O foco (F3-18) nasce com o relógio do dia, mais adiante; até lá, ninguém está em foco.
 let foco: ServicoFoco | null = null;
 const repositorioConfig = new RepositorioConfig(banco);
@@ -297,15 +302,20 @@ const agenda = new ServicoAgenda(
       servidor?.emitir("agenda.mudou", mudanca);
       // O evento do "Moductus" entrou na fila de saída: o espelho manda.
       espelhoGoogle?.aoMudar();
+      vigiaAlba?.agendaMudou();
     },
-    calendarios: (calendarios) => servidor?.emitir("agenda.calendarios", calendarios),
+    calendarios: (calendarios) => {
+      servidor?.emitir("agenda.calendarios", calendarios);
+      vigiaAlba?.agendaMudou();
+    },
   },
 );
 // Os calendários do Google no cache da agenda (F3-23, ADR-0035): a cada 10 min com variação, na
 // retomada, ao abrir a área e ao escolher ler um calendário. A falha vira a fala de erro da Alba.
+const repositorioLeituraGoogle = new RepositorioLeituraGoogle(banco);
 leituraGoogle = new LeituraGoogleAgenda({
   google: googleAgenda,
-  repo: new RepositorioLeituraGoogle(banco),
+  repo: repositorioLeituraGoogle,
   lerFuso: () => repositorioConfig.ler().dia.fuso,
   avisos: {
     eventos: ({ mudados, apagados }) => {
@@ -337,13 +347,21 @@ leituraGoogle = new LeituraGoogleAgenda({
 });
 // O dia das ferramentas da Alba: "hoje" e "amanhã" no fuso de config, lido a cada pergunta.
 const tempoDoDia = new TempoDoDia(() => repositorioConfig.ler().dia.fuso);
+// Criar e mudar evento nos outros calendários do Google (F3-25), só com o sim do cartão; o que foi
+// escrito volta ao cache pela leitura.
+const escritaGoogle = new EscritaGoogleAgenda({
+  google: googleAgenda,
+  repo: repositorioLeituraGoogle,
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  aoEscrever: () => leituraGoogle?.aoEscrever(),
+});
 // As ferramentas de cada área (F2-26: as do Nuno; F3-26: as da Alba); cada agente só vê as da lista
 // dele. As das áreas que nascem mais adiante entram quando elas nascem, antes do servidor abrir.
 const catalogo = new Catalogo([
   ...ferramentasSessoes(sessoes),
   ...ferramentasUso(sessoes),
   ...ferramentasGithub(github),
-  ...ferramentasAgenda(agenda, tempoDoDia),
+  ...ferramentasAgenda(agenda, tempoDoDia, escritaGoogle),
 ]);
 const repositorioAgentes = new RepositorioAgentes(banco);
 // Quem rodava essas execuções era o serviço que parou: fecham como erro e os cartões delas expiram.
@@ -554,8 +572,12 @@ espelhoGoogle = new EspelhoGoogleAgenda({
         }
       });
       servidor?.emitir("agenda.mudou", { eventos, apagados });
+      vigiaAlba?.agendaMudou();
     },
-    calendarios: () => servidor?.emitir("agenda.calendarios", agenda.calendarios()),
+    calendarios: () => {
+      servidor?.emitir("agenda.calendarios", agenda.calendarios());
+      vigiaAlba?.agendaMudou();
+    },
     recriado: ({ titulo, corpo }) => {
       notificacoes
         .avisar({
@@ -717,13 +739,40 @@ const agendador = new Agendador({
 agendador.vigiar();
 // A primeira atividade do dia (F3-27, ADR-0033): o desbloqueio ou o logon (a casca avisa
 // `atividade`), a retomada e a subida, depois das 05:00 no fuso de config, ou o horário fixo do
-// briefing. Uma vez por dia; o briefing que sai daqui é a F3-29.
+// briefing, que o vigia da Alba confere no relógio do dia. Uma vez por dia; o briefing que sai
+// daqui é a F3-29.
+const repositorioAtividade = new RepositorioAtividade(banco);
 const primeiraAtividade = new PrimeiraAtividade(
-  new RepositorioAtividade(banco),
+  repositorioAtividade,
   new TempoDoDia(() => repositorioConfig.ler().dia.fuso),
   (inicio) => console.error(`dia: ${inicio.dia} começou (${inicio.motivo})`),
 );
-primeiraAtividade.vigiar();
+// Os vigias da Alba (F3-28, AGENTS.md §6): a virada do dia, os alertas dos compromissos e as horas
+// das rotinas, no relógio do dia, sem modelo. O fechamento que sai daqui é a F3-30.
+const leituraNotificacoes = new RepositorioNotificacoes(banco);
+vigiaAlba = new VigiaAlba({
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  abertasEntre: (desde, ate) => tarefas.abertasQueVenciam(desde, ate),
+  compromissos: (janela) => agenda.alertasDeCompromissos(janela),
+  jaAvisou: (referencia) => leituraNotificacoes.idsDa(referencia).length > 0,
+  avisar: (aviso) => notificacoes.avisar(aviso),
+  rotinas: repositorioAtividade,
+  briefingNoHorario: () => sinalDeAtividade("horario"),
+  marcas: new RepositorioMarcasDosVigias(banco),
+  relogio,
+  avisos: {
+    // As abertas de ontem passam à vista das atrasadas, com o dia em que venciam: as janelas e as
+    // contagens não esperam a próxima leitura delas.
+    virou: ({ de, para, abertas }) => {
+      console.error(`dia: virou de ${de} para ${para}, ${abertas.length} aberta(s) vêm para hoje`);
+      if (abertas.length > 0) servidor?.emitir("tarefas.mudou", { tarefas: abertas, apagadas: [] });
+      recontarAreas();
+    },
+    fechamento: ({ dia, atrasado }) =>
+      console.error(`dia: hora do fechamento de ${dia}${atrasado ? " (atrasado)" : ""}`),
+  },
+});
+for (const fonte of vigiaAlba.fontes) relogio.registrar(fonte);
 // O que venceu com o serviço parado vira atrasado, num aviso só; depois o timer fica armado.
 relogio.ligar().catch((erro: unknown) => console.error(`relógio do dia não ligou: ${String(erro)}`));
 /** Um sinal de atividade; banco com problema não derruba quem avisou. */

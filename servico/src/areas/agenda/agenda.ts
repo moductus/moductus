@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
+  Alertas,
   CALENDARIO_LOCAL,
   type Agenda,
   type Apagados,
@@ -23,7 +24,14 @@ import { colunasDeOrigem, DO_USUARIO, type Carimbo } from "../../banco/tabela.ts
 import { novoId } from "../../banco/ulid.ts";
 import { RecusaDesfazer, type ContextoDesfazer } from "../../ferramentas/ferramenta.ts";
 import { lerRecorrencia } from "../dia/recorrencia.ts";
-import { PRIMEIRO_NUMERO, ULTIMO_NUMERO, diaNoFuso, numeroDoDia, somarDias } from "../dia/tempo.ts";
+import {
+  PRIMEIRO_NUMERO,
+  ULTIMO_NUMERO,
+  diaNoFuso,
+  inicioDoDia,
+  numeroDoDia,
+  somarDias,
+} from "../dia/tempo.ts";
 import {
   MAX_OCORRENCIAS_POR_EVENTO,
   duracaoPassaDoPeriodo,
@@ -153,6 +161,32 @@ const paraExpandir = (l: LinhaEvento): EventoParaExpandir => ({
   fuso: l.fuso,
 });
 
+/** Um aviso de compromisso: a ocorrência (como a agenda a mostra), quando ela começa e quando toca. */
+export interface AlertaDeCompromisso {
+  eventoId: string;
+  titulo: string;
+  local: string | null;
+  diaInteiro: boolean;
+  /** O começo da ocorrência como a agenda o escreve: instante, ou dia no de dia inteiro. */
+  inicio: string;
+  comeca: Date;
+  minutos: number;
+  toca: Date;
+}
+
+/** Os minutos de cada alerta, sem repetir; o que não passa no contrato fica de fora. */
+function alertasValidos(texto: string): number[] {
+  let lidos: unknown;
+  try {
+    lidos = JSON.parse(texto);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(lidos)) return [];
+  const minutos = lidos.filter((m): m is number => Alertas.element.safeParse(m).success);
+  return [...new Set(minutos)];
+}
+
 /** Os campos que se gravam de um evento. */
 export interface CamposEvento {
   titulo: string;
@@ -227,6 +261,20 @@ export class RepositorioAgenda {
             AND (? IS NULL OR e.inicio < ?) AND (e.recorrencia IS NOT NULL OR e.fim >= ?)`,
       )
       .all(antesDe, antesDe, desde) as unknown as LinhaEvento[];
+  }
+
+  /**
+   * Os eventos vivos dos calendários lidos que têm algum alerta e podem ainda começar depois de
+   * `desde` (dia, com a mesma peneira larga de {@link eventosQuePodemEncostar}).
+   */
+  eventosComAlerta(desde: string): LinhaEvento[] {
+    return this.db
+      .prepare(
+        `SELECT ${COLUNAS_EVENTO} FROM eventos e JOIN calendarios c ON c.id = e.calendario_id
+          WHERE e.apagado_em IS NULL AND c.apagado_em IS NULL AND c.ler = 1
+            AND json_array_length(e.alertas) > 0 AND (e.recorrencia IS NOT NULL OR e.fim >= ?)`,
+      )
+      .all(desde) as unknown as LinhaEvento[];
   }
 
   /** O evento vivo, de calendário vivo. */
@@ -455,6 +503,60 @@ export class ServicoAgenda {
       tarefas: this.deps.tarefas.abertasAte(pedido.ate),
     });
     return { ocorrencias, dias };
+  }
+
+  /**
+   * Os avisos de compromisso (os `alertas` do evento, em minutos antes do começo) para o relógio da
+   * Alba: cada ocorrência que começa depois de `comecamDepoisDe`, com cada alerta dela que toca até
+   * `tocamAte`, inclusive os que já tocaram; quem decide o que avisar é o vigia. O de dia inteiro
+   * começa à meia-noite do dia no fuso. Alerta fora do que o contrato aceita (veio de outro PC) não
+   * conta. Em ordem de toque.
+   */
+  alertasDeCompromissos(janela: { comecamDepoisDe: Date; tocamAte: Date }): AlertaDeCompromisso[] {
+    const { fuso } = this.deps.lerDia();
+    const de = janela.comecamDepoisDe.getTime();
+    const ate = janela.tocamAte.getTime();
+    const diaDe = diaNoFuso(janela.comecamDepoisDe, fuso);
+    const desde = numeroDoDia(diaDe) > PRIMEIRO_NUMERO ? somarDias(diaDe, -1) : diaDe;
+    const linhas = this.deps.repo.eventosComAlerta(desde);
+    const alertasDe = new Map<string, number[]>();
+    let maiorMin = 0;
+    for (const l of linhas) {
+      const minutos = alertasValidos(l.alertas);
+      if (minutos.length === 0) continue;
+      alertasDe.set(l.id, minutos);
+      maiorMin = Math.max(maiorMin, ...minutos);
+    }
+    if (alertasDe.size === 0) return [];
+    // A ocorrência mais longe que ainda toca até `tocamAte` começa no máximo o maior alerta depois.
+    const limite = Math.min(ate + maiorMin * 60_000, (ULTIMO_NUMERO + 1) * 86_400_000 - 1);
+    const diaAte = diaNoFuso(new Date(Math.max(limite, de)), fuso);
+    const ocorrencias = ocorrenciasNoIntervalo(
+      linhas.filter((l) => alertasDe.has(l.id)).map(paraExpandir),
+      diaDe,
+      diaAte,
+      fuso,
+    );
+    const alertas: AlertaDeCompromisso[] = [];
+    for (const o of ocorrencias) {
+      const comeca = o.diaInteiro ? inicioDoDia(o.inicio, fuso).getTime() : Date.parse(o.inicio);
+      if (comeca <= de) continue;
+      for (const minutos of alertasDe.get(o.eventoId) ?? []) {
+        const toca = comeca - minutos * 60_000;
+        if (toca > ate) continue;
+        alertas.push({
+          eventoId: o.eventoId,
+          titulo: o.titulo,
+          local: o.local,
+          diaInteiro: o.diaInteiro,
+          inicio: o.inicio,
+          comeca: new Date(comeca),
+          minutos,
+          toca: new Date(toca),
+        });
+      }
+    }
+    return alertas.sort((a, b) => a.toca.getTime() - b.toca.getTime());
   }
 
   obterEvento(pedido: PedidoEvento): EventoAgenda {

@@ -107,8 +107,8 @@ function pedeJulgamento(fatos: readonly Fato[]): boolean {
   return fatos.length >= 2 || fatos.some((f) => f.fonte === "github");
 }
 
-/** O texto do GitHub não fecha o bloco de dado antes da hora nem abre outro. */
-function dado(texto: string): string {
+/** O texto de fora (o do GitHub) não fecha o bloco de dado antes da hora nem abre outro. */
+export function dado(texto: string): string {
   return texto.replaceAll(INICIO_DADO, "‹‹‹").replaceAll(FIM_DADO, "›››");
 }
 

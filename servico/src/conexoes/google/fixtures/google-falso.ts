@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Credenciais } from "../../../casca/credenciais.ts";
 import type { ClienteOAuth, EnderecosGoogle } from "../cliente.ts";
+import { EscritaGoogleAgenda } from "../escrita.ts";
+import { AVISO_DESLIGADA } from "../google-agenda.ts";
 
 /**
  * Um Google de mentira em 127.0.0.1 para os testes (nenhum pedido sai da máquina): o endpoint de
@@ -21,6 +23,8 @@ export interface CalendarioFalso {
   primary?: boolean;
   backgroundColor?: string;
   description?: string;
+  /** `owner` e `writer` editam; `reader` e `freeBusyReader` só veem. */
+  accessRole?: string;
 }
 
 interface EventoGuardado {
@@ -92,6 +96,10 @@ export interface GoogleFalso {
   falharCriarCalendario: number | null;
   /** Inserir e mudar evento respondem 400, como o Google faz com um corpo que ele não aceita. */
   recusarEventos: boolean;
+  /** A conta de quem autoriza no navegador, que o calendário principal (`/primary`) devolve. */
+  conta: string;
+  /** O calendário principal responde 500: o Moductus não fica sabendo a conta. */
+  falharConta: boolean;
   fechar(): Promise<void>;
 }
 
@@ -283,8 +291,9 @@ export async function abrirGoogleFalso(
       if (rota.startsWith("/calendar/v3/")) return calendarioApi(req, res, endereco, await lerJson(req));
       if (rota === "/primary") {
         const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
+        if (falso.falharConta) return responder(res, 500, { error: { code: 500 } });
         return token && acessos.has(token)
-          ? responder(res, 200, { id: conta, primary: true })
+          ? responder(res, 200, { id: falso.conta, primary: true })
           : responder(res, 401, { error: { code: 401 } });
       }
       const campos = await ler(req);
@@ -375,7 +384,9 @@ export async function abrirGoogleFalso(
     trocarRenovacao: false,
     redirecionamentos: [],
     revogarTudoNoGoogle: () => renovacoes.clear(),
-    calendarios: [{ id: conta, summary: conta, primary: true, backgroundColor: "#9fe1e7" }],
+    calendarios: [
+      { id: conta, summary: conta, primary: true, backgroundColor: "#9fe1e7", accessRole: "owner" },
+    ],
     gravarEvento(calendarioId, evento) {
       const doCalendario = eventos.get(calendarioId) ?? new Map<string, EventoGuardado>();
       eventos.set(calendarioId, doCalendario);
@@ -416,6 +427,8 @@ export async function abrirGoogleFalso(
     escritas: [],
     falharCriarCalendario: null,
     recusarEventos: false,
+    conta,
+    falharConta: false,
     abrir: {
       endereco(endereco) {
         const url = new URL(endereco);
@@ -454,6 +467,29 @@ export async function abrirGoogleFalso(
       }),
   };
   return falso;
+}
+
+/** A escrita nos outros calendários sem o Google conectado: tudo recusa com o aviso de desligada. */
+export function escritaSemGoogle(): EscritaGoogleAgenda {
+  const desligada = () => Promise.reject(new Error(AVISO_DESLIGADA));
+  return new EscritaGoogleAgenda({
+    google: {
+      conexao: () => ({
+        tipo: "google-agenda",
+        estado: "desligada",
+        conta: null,
+        ultimoErro: null,
+        conectadaEm: null,
+      }),
+      tokenDeAcesso: desligada,
+      acessoRecusado: () => undefined,
+      escreveNosOutros: () => false,
+      permitirEscrita: desligada,
+    },
+    repo: { calendario: () => null, evento: () => null },
+    lerFuso: () => "UTC",
+    aoEscrever: () => undefined,
+  });
 }
 
 /** O Gerenciador de Credenciais num mapa: nada vai ao Windows. */

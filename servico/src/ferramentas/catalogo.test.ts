@@ -50,6 +50,11 @@ function montar() {
       descricao: "Comenta num PR",
       entrada: z.object({ pr: z.number().int().positive(), texto: z.string().min(1) }),
       efeito: "externo",
+      // Resolve antes do cartão: o texto vai sem as bordas, e o #13 nem chega a pedir.
+      conferir: (e) => {
+        if (e.pr === 13) throw new Error("o #13 já foi fechado");
+        return { ...e, texto: e.texto.trim() };
+      },
       executar: anotar("github.comentar"),
       cartao: ({ pr }) => ({ descricao: `Vou comentar no #${pr}.`, rotulo: `Comentar no #${pr}` }),
     }),
@@ -264,6 +269,33 @@ describe("execução pelo catálogo", () => {
     ).rejects.toThrow("cancelada");
     expect(pedidos).toBe(0);
     expect(rodou).toEqual([]);
+  });
+
+  test("externo que a área já recusa volta o motivo sem pedir aprovação", async () => {
+    const { catalogo, rodou } = montar();
+    let pedidos = 0;
+    const autorizar: Autorizar = () => {
+      pedidos++;
+      return Promise.resolve({ permitida: true });
+    };
+    const executar = catalogo.doAgente(["github.*"]).executor(contexto("nuno"), autorizar);
+    const r = await executar({ id: "c1", nome: "github__comentar", entrada: { pr: 13, texto: "Pronto" } });
+    expect(r).toEqual({ ok: false, erro: "github.comentar falhou: o #13 já foi fechado" });
+    expect(pedidos).toBe(0);
+    expect(rodou).toEqual([]);
+  });
+
+  test("o cartão e a execução recebem a entrada que o conferir resolveu", async () => {
+    const { catalogo, rodou } = montar();
+    const pedidos: unknown[] = [];
+    const autorizar: Autorizar = (p) => {
+      pedidos.push(p.entrada);
+      return Promise.resolve({ permitida: true });
+    };
+    const executar = catalogo.doAgente(["github.*"]).executor(contexto("nuno"), autorizar);
+    await executar({ id: "c1", nome: "github__comentar", entrada: { pr: 7, texto: "  Pronto  " } });
+    expect(pedidos).toEqual([{ pr: 7, texto: "Pronto" }]);
+    expect(rodou.map((r) => r.entrada)).toEqual([{ pr: 7, texto: "Pronto" }]);
   });
 
   test("externo sem quem autorize é recusado e não roda", async () => {

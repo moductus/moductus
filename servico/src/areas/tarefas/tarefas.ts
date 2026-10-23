@@ -407,6 +407,16 @@ export class ServicoTarefas {
     return this.repo.contarAbertasAte(this.tempo.hoje());
   }
 
+  /**
+   * As abertas que venciam de `desde` até antes de `ate`: na virada do dia, as que passam de ontem
+   * para hoje, marcadas pelo dia em que venciam (a vista `atrasadas`).
+   */
+  abertasQueVenciam(desde: string, ate: string): Tarefa[] {
+    return this.listar({ vista: "atrasadas" }).filter(
+      (t) => t.estado === "aberta" && t.venceEm !== null && t.venceEm >= desde && t.venceEm < ate,
+    );
+  }
+
   obter(pedido: PedidoTarefa): Tarefa {
     return this.paraTarefa(this.exigir(pedido.id));
   }
