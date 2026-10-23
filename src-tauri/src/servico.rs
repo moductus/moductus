@@ -7,7 +7,7 @@
 //! Canal com o serviço pelo stdio, em linhas JSON: o serviço avisa `pronto` com a porta
 //! e pede credenciais (`{"tipo":"credencial","id",…}`), variáveis do usuário
 //! (`{"tipo":"ambiente","id",…}`), avisos do Windows (`{"tipo":"notificacao","id",…}`) e
-//! abrir endereço ou arquivo (`{"tipo":"abrir","id",…}`), respondidos no stdin; o menu do time na bandeja (`{"tipo":"bandeja",…}`) vem sem id. Pelo
+//! abrir endereço ou arquivo (`{"tipo":"abrir","id",…}`) e o painel Hoje (`{"tipo":"painel","id",…}`), respondidos no stdin; o menu do time na bandeja (`{"tipo":"bandeja",…}`) vem sem id. Pelo
 //! stdin também vão avisos da casca sem id, como a retomada da suspensão (`{"tipo":"retomou"}`),
 //! o clique num aviso do Windows (`notificacao-clique`) e num item da bandeja (`bandeja-clique`).
 
@@ -211,6 +211,7 @@ fn ouvir(app: &AppHandle, saida: std::process::ChildStdout, token: &str) {
                     .unwrap_or_else(|e| serde_json::json!({ "erro": format!("pedido inválido: {e}") }));
                 responder(id, resposta);
             }
+            ("painel", Some(id)) => responder(id, crate::janelas::atender_servico(app, &linha)),
             // A lista de projetos troca aqui, na ordem do canal; endereço e arquivo vão numa thread.
             ("abrir", Some(id)) => crate::abrir::receber(&linha, move |resposta| responder(id, resposta)),
             ("ambiente", Some(id)) => {

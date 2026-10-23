@@ -428,3 +428,32 @@ export class VigiaNuno {
     return new Map(doGithub.map((f, i) => [f.chave, blocoDoItem(f.item, lidos[i] ?? null)]));
   }
 }
+
+const quantos = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
+
+/**
+ * A linha do Nuno no briefing (AGENTS.md §2, ADR-0039): o que espera você no GitHub, numa linha,
+ * só com contagens (o texto do GitHub, que qualquer um escreve, fica de fora). O uso do limite não
+ * entra enquanto nenhuma ferramenta expõe uma fonte estável (AGENTS.md §5). Sem novidade, ou sem o
+ * GitHub lido, `null`: o Nuno não aparece.
+ */
+export function resumoDoDiaDoNuno(situacao: SituacaoGithub): string | null {
+  if (situacao.atualizadoEm === null) return null;
+  const abertos = situacao.itens.filter((i) => i.estado === "aberto");
+  const reviews = abertos.filter((i) => i.tipo === "pr" && i.meuPapel === "revisor" && i.precisaDeMim).length;
+  const meus = abertos.filter((i) => i.tipo === "pr" && i.meuPapel === "autor");
+  const ci = meus.filter((i) => i.ciEstado === "falhou").length;
+  const mudancas = meus.filter((i) => i.precisaDeMim && i.ciEstado !== "falhou").length;
+  const atribuidos = abertos.filter((i) => i.meuPapel === "atribuido" && i.precisaDeMim);
+  const issues = atribuidos.filter((i) => i.tipo === "issue").length;
+  const prsAtribuidos = atribuidos.length - issues;
+  const partes: string[] = [];
+  if (reviews > 0) partes.push(`${quantos(reviews, "PR espera", "PRs esperam")} seu review`);
+  if (ci > 0) partes.push(`CI quebrado em ${quantos(ci, "PR seu", "PRs seus")}`);
+  if (mudancas > 0) partes.push(`mudanças pedidas em ${quantos(mudancas, "PR seu", "PRs seus")}`);
+  if (prsAtribuidos > 0) partes.push(`${quantos(prsAtribuidos, "PR atribuído", "PRs atribuídos")} a você`);
+  if (issues > 0) partes.push(`${quantos(issues, "issue atribuída", "issues atribuídas")} a você`);
+  if (partes.length === 0) return null;
+  const linha = partes.join(" · ");
+  return `${linha.charAt(0).toUpperCase()}${linha.slice(1)}.`;
+}

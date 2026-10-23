@@ -142,6 +142,49 @@ pub fn painel_fechar(app: AppHandle) {
     let _ = app.emit("painel:fechado", ());
 }
 
+/// As áreas que o serviço abre sozinho: o painel Hoje, onde o briefing e o fechamento aparecem.
+const AREAS_DO_SERVICO: [&str; 1] = ["hoje"];
+
+/// Pedido do serviço pelo canal do sidecar (`{"tipo":"painel","id",…}`).
+#[derive(Debug, PartialEq, Deserialize)]
+#[serde(tag = "op", rename_all = "kebab-case")]
+pub enum PedidoPainel {
+    /// Mostra o painel na área, sem ativar e sem alternar.
+    Mostrar { area: String },
+    /// Se o painel está à vista nessa área.
+    Aberto { area: String },
+}
+
+/// Lê o pedido do serviço; área fora da lista é recusada.
+pub fn pedido_do_servico(linha: &str) -> Result<PedidoPainel, String> {
+    let pedido: PedidoPainel = serde_json::from_str(linha).map_err(|e| format!("pedido inválido: {e}"))?;
+    let (PedidoPainel::Mostrar { area } | PedidoPainel::Aberto { area }) = &pedido;
+    if !AREAS_DO_SERVICO.contains(&area.as_str()) {
+        return Err(format!("o serviço não abre o painel em {area}"));
+    }
+    Ok(pedido)
+}
+
+/// O serviço pede o painel (o briefing apareceu) ou pergunta se ele está aberto. Em tela cheia o
+/// painel não aparece por cima do jogo ou da apresentação: responde `ok: false`.
+pub fn atender_servico(app: &AppHandle, linha: &str) -> serde_json::Value {
+    match pedido_do_servico(linha) {
+        Err(erro) => serde_json::json!({ "erro": erro }),
+        Ok(PedidoPainel::Mostrar { area }) => {
+            if crate::tela_cheia::agora() {
+                return serde_json::json!({ "ok": false, "tela_cheia": true });
+            }
+            painel_mostrar(app.clone(), area);
+            serde_json::json!({ "ok": true })
+        }
+        Ok(PedidoPainel::Aberto { area }) => {
+            let aberta = PAINEL.lock().unwrap().as_ref().map(|(a, _)| a.clone());
+            let visivel = janela(app, "painel").is_some_and(|p| unsafe { IsWindowVisible(hwnd(&p)) }.as_bool());
+            serde_json::json!({ "aberto": visivel && aberta.as_deref() == Some(area.as_str()) })
+        }
+    }
+}
+
 /// A interface do painel avisa que desenhou a área: fecha a medição de abertura.
 #[tauri::command]
 pub fn painel_pronto(area: String) -> Option<f64> {
@@ -353,6 +396,21 @@ pub fn captura_fechar(app: AppHandle) {
 #[cfg(test)]
 mod testes {
     use super::*;
+
+    #[test]
+    fn servico_so_abre_o_painel_hoje() {
+        assert_eq!(
+            pedido_do_servico(r#"{"tipo":"painel","id":3,"op":"mostrar","area":"hoje"}"#),
+            Ok(PedidoPainel::Mostrar { area: "hoje".into() })
+        );
+        assert_eq!(
+            pedido_do_servico(r#"{"tipo":"painel","id":4,"op":"aberto","area":"hoje"}"#),
+            Ok(PedidoPainel::Aberto { area: "hoje".into() })
+        );
+        assert!(pedido_do_servico(r#"{"tipo":"painel","id":5,"op":"mostrar","area":"agentes"}"#).is_err());
+        assert!(pedido_do_servico(r#"{"tipo":"painel","id":6,"op":"fechar","area":"hoje"}"#).is_err());
+        assert!(pedido_do_servico(r#"{"tipo":"painel","id":7,"op":"mostrar"}"#).is_err());
+    }
 
     #[test]
     fn painel_encosta_no_dock_pelo_lado_de_dentro() {
