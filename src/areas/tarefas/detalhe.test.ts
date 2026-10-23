@@ -8,6 +8,7 @@ import {
   maisNova,
   momentoCurto,
   moverInicio,
+  notaDoCalendario,
   opcoesDuracao,
   opcoesLembrete,
   opcoesRepeticao,
@@ -199,6 +200,19 @@ describe("calendários e pedido à Alba", () => {
     expect(espelhoLigado([calendario({})], conexao)?.id).toBe("m");
     expect(espelhoLigado([calendario({})], { ...conexao, estado: "desligada" })).toBeNull();
     expect(espelhoLigado([calendario({ espelho: false })], conexao)).toBeNull();
+  });
+
+  it("a nota de cada calendário vem da fonte dele", () => {
+    expect(notaDoCalendario(calendario({ id: "local", nome: "Local", fonte: "local", espelho: false }))).toBe(
+      "fica só aqui, sem aviso no celular",
+    );
+    expect(notaDoCalendario(calendario({}))).toBe("Google · vai para o celular, sem pedir");
+    expect(notaDoCalendario(calendario({ nome: "Trabalho", espelho: false }))).toBe(
+      "Google · mudar para cá é pedido à Alba",
+    );
+    expect(notaDoCalendario(calendario({ nome: "Empresa", fonte: "outlook", espelho: false }))).toBe(
+      "Outlook · mudar para cá é pedido à Alba",
+    );
   });
 
   it("o pedido diz qual evento, de qual calendário e quando", () => {

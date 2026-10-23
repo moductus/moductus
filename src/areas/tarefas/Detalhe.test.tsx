@@ -349,6 +349,18 @@ describe("o detalhe da tarefa", () => {
     expect(por(".tarefas-detalhe-salvo")?.textContent).toBe("salvo agora");
   });
 
+  it("a data pela metade, que o navegador não lê, volta ao que era sem tirar a data", async () => {
+    responder();
+    await montar();
+    await abrirTarefa("t1");
+    const data = campo("Data");
+    // O campo date com o ano pela metade: o valor vem vazio e a validade diz que não leu.
+    Object.defineProperty(data, "validity", { configurable: true, value: { badInput: true } });
+    await escreverESair(data, "");
+    expect(pedidosDe("tarefas.definir")).toEqual([]);
+    expect(data.value).toBe(HOJE);
+  });
+
   it("o título gravado ao passar para as notas não puxa o foco de volta", async () => {
     responder();
     await montar();
@@ -580,5 +592,66 @@ describe("o detalhe do evento", () => {
     await abrirEvento("Consulta no dentista");
     await avisar("agenda.mudou", { eventos: [], apagados: ["ev1"] });
     expect(detalhe()?.textContent).toContain("Este evento saiu da agenda.");
+  });
+
+  it("mudar o começo e ir para o fim: o foco fica no mesmo campo, com o fim novo, e o Esc fecha", async () => {
+    responder({ eventos: [evento()] });
+    await montar();
+    await abrirEvento("Consulta no dentista");
+    const inicio = campo("Hora de início");
+    const fim = campo("Hora do fim");
+    // O Tab: o começo perde o foco (e grava) e o fim o ganha antes de a resposta chegar.
+    await act(async () => {
+      inicio.focus();
+      inicio.value = "16:00";
+      fim.focus();
+    });
+    expect(pedidosDe("agenda.definirEvento")).toEqual([
+      { id: "ev1", diaInteiro: false, inicio: as("16:00"), fim: as("17:00") },
+    ]);
+    expect(campo("Hora do fim")).toBe(fim);
+    expect(document.activeElement).toBe(fim);
+    expect(fim.value).toBe("17:00");
+    await tecla(fim, "Escape");
+    expect(detalhe()).toBeNull();
+  });
+
+  it("o que você está digitando fica quando o evento muda por fora", async () => {
+    responder({ eventos: [evento()] });
+    await montar();
+    await abrirEvento("Consulta no dentista");
+    const local = campo("Local");
+    await act(async () => {
+      local.focus();
+      local.value = "Rua das Flores";
+    });
+    await avisar("agenda.mudou", {
+      eventos: [evento({ local: "Centro", atualizadoEm: AGORA.toISOString() })],
+      apagados: [],
+    });
+    expect(local.value).toBe("Rua das Flores");
+    expect(document.activeElement).toBe(local);
+    // O que não está em edição recebe o de fora.
+    expect(campo<HTMLTextAreaElement>("Descrição").value).toBe("Levar os exames de setembro.");
+  });
+
+  it("sem a lista de conexões, a escolha de calendário aparece como sem Google", async () => {
+    responder({ eventos: [evento()] });
+    // Só o primeiro pedido falha: o do detalhe, que nasce com a área, antes da coluna Agenda.
+    let pedidos = 0;
+    falso.servidor["conexoes.listar"] = () => {
+      if (pedidos++ === 0) throw new Error("o serviço caiu");
+      return [GOOGLE];
+    };
+    await montar();
+    await abrirEvento("Consulta no dentista");
+    expect(todos(".tarefas-detalhe-calendario-nome").map((c) => c.textContent)).toEqual([
+      "Local",
+      "Moductus",
+      "Trabalho",
+    ]);
+    expect(por(".tarefas-detalhe-google")?.textContent).toBe(
+      "Google desconectado· o celular avisa 1 dia e 30 min antes",
+    );
   });
 });

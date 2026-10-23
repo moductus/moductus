@@ -1,4 +1,12 @@
-import { useId, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { Icone } from "../../componentes/Icone.tsx";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
@@ -74,8 +82,26 @@ interface PropsEntrada {
 }
 
 /**
+ * O valor gravado escrito no campo quando ele muda por fora (a resposta do serviço, o fim que o
+ * começo levou), sempre no mesmo elemento: o foco e o Esc continuam onde estavam. No campo em que
+ * você está e já digitou, o que você digitou fica; ao sair, ele é comparado com o valor novo. O
+ * campo focado em que nada foi digitado (o fim, logo depois do Tab) recebe o valor novo.
+ */
+function useValorNoCampo<T extends HTMLInputElement | HTMLTextAreaElement>(valor: string) {
+  const campo = useRef<T>(null);
+  const anterior = useRef(valor);
+  useEffect(() => {
+    const el = campo.current;
+    const digitou = el === document.activeElement && el?.value !== anterior.current;
+    anterior.current = valor;
+    if (el && !digitou && el.value !== valor) el.value = valor;
+  }, [valor]);
+  return campo;
+}
+
+/**
  * Campo que grava ao sair (ou no Enter, que sai do campo): enquanto você digita, nada vai ao
- * serviço. Sem estado próprio: o valor gravado que muda por fora recria o campo com ele.
+ * serviço. O que o navegador não consegue ler (a data pela metade) volta ao valor gravado.
  */
 export function Entrada({
   rotulo,
@@ -91,20 +117,20 @@ export function Entrada({
   obrigatoria,
 }: PropsEntrada) {
   const id = useId();
-  // O foco inicial vale uma vez: o campo recriado pelo valor gravado não o puxa de volta.
-  const focou = useRef(false);
-  const primeiroFoco = (campo: HTMLInputElement | null) => {
-    if (!autoFocus || focou.current || !campo) return;
-    focou.current = true;
-    campo.focus();
-  };
+  const campo = useValorNoCampo<HTMLInputElement>(valor);
+  // O detalhe abre no título, pronto para editar; só ao montar (a ref não muda).
+  const focoInicial = useRef(autoFocus);
+  useEffect(() => {
+    if (focoInicial.current) campo.current?.focus();
+  }, [campo]);
   const aoSair = (e: FocusEvent<HTMLInputElement>) => {
-    const campo = e.currentTarget;
-    if (obrigatoria && campo.value.trim() === "") {
-      campo.value = valor;
+    const el = e.currentTarget;
+    // Data ou hora pela metade: o navegador dá vazio, que não é "tirar a data".
+    if (el.validity.badInput || (obrigatoria && el.value.trim() === "")) {
+      el.value = valor;
       return;
     }
-    if (campo.value !== valor) aoGravar(campo.value);
+    if (el.value !== valor) aoGravar(el.value);
   };
   return (
     <div className={["tarefas-detalhe-campo", className].filter(Boolean).join(" ")}>
@@ -112,8 +138,7 @@ export function Entrada({
         {rotulo}
       </label>
       <input
-        key={valor}
-        ref={primeiroFoco}
+        ref={campo}
         id={id}
         type={tipo}
         className="tarefas-detalhe-entrada"
@@ -147,13 +172,14 @@ export function AreaDeTexto({
   maxLength?: number;
 }) {
   const id = useId();
+  const campo = useValorNoCampo<HTMLTextAreaElement>(valor);
   return (
     <div className="tarefas-detalhe-campo">
       <label htmlFor={id} className="tarefas-detalhe-rot">
         {rotulo}
       </label>
       <textarea
-        key={valor}
+        ref={campo}
         id={id}
         rows={2}
         className="tarefas-detalhe-texto"

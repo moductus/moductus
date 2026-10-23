@@ -301,8 +301,9 @@ export function espelhoLigado(calendarios: readonly Calendario[], google: Conexa
 /** O que cada calendário diz ao lado do nome, na escolha do evento (DetalheEvento.dc.html). */
 export function notaDoCalendario(c: Calendario): string {
   if (c.fonte === "local") return "fica só aqui, sem aviso no celular";
-  if (c.espelho) return "Google · vai para o celular, sem pedir";
-  return "Google · mudar para cá é pedido à Alba";
+  const fonte = c.fonte === "google" ? "Google" : "Outlook";
+  if (c.espelho) return `${fonte} · vai para o celular, sem pedir`;
+  return `${fonte} · mudar para cá é pedido à Alba`;
 }
 
 /** "Trabalho · Google", o calendário do evento só leitura. */
@@ -389,7 +390,10 @@ export function useCalendarios(canal: EstadoConexao): Calendarios | null {
       .then((conexoes) => {
         if (vivo) setGoogle((antes) => antes ?? conexoes.find((c) => c.tipo === "google-agenda") ?? null);
       })
-      .catch(() => undefined);
+      // Sem a lista, o detalhe segue como sem Google: a escolha de calendário não fica esperando.
+      .catch(() => {
+        if (vivo) setGoogle((antes) => antes ?? null);
+      });
     return () => {
       vivo = false;
     };
