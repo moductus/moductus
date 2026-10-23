@@ -21,7 +21,7 @@ export function cobre(padrao: string, nome: string): boolean {
 /** Uma ação `externo` prestes a rodar: o que a aprovação precisa para montar o cartão. */
 export interface PedidoAutorizacao {
   ferramenta: Ferramenta;
-  /** A entrada já validada. */
+  /** A entrada já validada e, com `conferir`, resolvida: a que o cartão mostra e a que roda. */
   entrada: unknown;
   contexto: ContextoFerramenta;
 }
@@ -124,6 +124,7 @@ export class EscopoAgente {
       }
       const validacao = f.validar(chamada.entrada);
       if (!validacao.ok) return { ok: false, erro: validacao.erro };
+      let entrada = validacao.valor;
 
       if (f.efeito === "externo") {
         if (!autorizar) {
@@ -132,13 +133,21 @@ export class EscopoAgente {
             erro: `${f.nome} age fora do Moductus e precisa da aprovação do usuário, que esta execução não pode pedir.`,
           };
         }
-        const autorizacao = await autorizar({ ferramenta: f, entrada: validacao.valor, contexto });
+        // O que a área já sabe recusar não vira cartão: o sim seria pedido para nada. O cartão, a
+        // aprovação e a execução levam a entrada resolvida aqui, a mesma.
+        try {
+          entrada = f.conferir(validacao.valor);
+        } catch (erro) {
+          const mensagem = erro instanceof Error ? erro.message : String(erro);
+          return { ok: false, erro: `${f.nome} falhou: ${mensagem}` };
+        }
+        const autorizacao = await autorizar({ ferramenta: f, entrada, contexto });
         contexto.sinal.throwIfAborted();
         if (!autorizacao.permitida) return { ok: false, erro: autorizacao.motivo };
       }
 
       try {
-        const valor = await f.executar(validacao.valor, contexto);
+        const valor = await f.executar(entrada, contexto);
         return { ok: true, valor: valor ?? null };
       } catch (erro) {
         contexto.sinal.throwIfAborted();

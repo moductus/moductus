@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   REPETE_DEFINIDO_FORA,
+  descreverRegra,
   diaSemanaDe,
   diasNoIntervalo,
   escreverRecorrencia,
@@ -397,5 +398,30 @@ describe("com hora, no relógio do fuso", () => {
       isos(instantesNoIntervalo("FREQ=DAILY;COUNT=5", dez, SP, "2026-10-22", "2026-10-31").ocorrencias),
     ).toEqual(["2026-10-22T13:00:00.000Z", "2026-10-23T13:00:00.000Z"]);
     expect(proximoInstante("FREQ=DAILY;COUNT=5", dez, SP, new Date("2026-10-23T13:00:00.000Z"))).toBeNull();
+  });
+});
+
+describe("a regra em frase", () => {
+  const frase = (texto: string) => {
+    const leitura = lerRecorrencia(texto);
+    if (!leitura.entendida) throw new Error(leitura.motivo);
+    return descreverRegra(leitura.regra);
+  };
+
+  test("frequência, intervalo, dias, ordem, contagem e fim", () => {
+    expect(frase("FREQ=DAILY")).toBe("todo dia");
+    expect(frase("FREQ=DAILY;INTERVAL=3")).toBe("a cada 3 dias");
+    expect(frase("FREQ=WEEKLY")).toBe("toda semana");
+    expect(frase("FREQ=WEEKLY;BYDAY=MO,WE")).toBe("toda segunda e quarta");
+    expect(frase("FREQ=WEEKLY;BYDAY=SA,SU")).toBe("todo sábado e domingo");
+    expect(frase("FREQ=WEEKLY;INTERVAL=2;BYDAY=FR")).toBe("a cada 2 semanas, sexta");
+    expect(frase("FREQ=MONTHLY;BYMONTHDAY=5")).toBe("todo dia 5");
+    expect(frase("FREQ=MONTHLY;BYMONTHDAY=-1")).toBe("todo último dia do mês");
+    expect(frase("FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=1,15")).toBe("a cada 2 meses, dia 1 e 15");
+    expect(frase("FREQ=MONTHLY;BYDAY=-1FR")).toBe("toda última sexta do mês");
+    expect(frase("FREQ=MONTHLY;BYDAY=2TU")).toBe("toda segunda terça do mês");
+    expect(frase("FREQ=YEARLY")).toBe("todo ano");
+    expect(frase("FREQ=WEEKLY;BYDAY=MO;COUNT=10")).toBe("toda segunda, 10 vezes");
+    expect(frase("FREQ=DAILY;UNTIL=20261130")).toBe("todo dia, até 30/11/2026");
   });
 });

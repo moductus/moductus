@@ -5,7 +5,9 @@ import type { RepositorioConexoes } from "../conexoes.ts";
 import {
   CLIENTE_DO_AUTOR,
   ENDERECOS_GOOGLE,
+  ESCOPO_ESCREVER_NOS_OUTROS,
   ESCOPOS_AO_CONECTAR,
+  ESCOPOS_PARA_ESCREVER,
   validarCliente,
   type ClienteOAuth,
   type EnderecosGoogle,
@@ -23,6 +25,7 @@ import {
   trocarCodigo,
   urlDeAutorizacao,
   type ReceptorOAuth,
+  type TokensOAuth,
 } from "./oauth.ts";
 
 /** Nomes no Gerenciador de Credenciais (ficam "Moductus/google-agenda" e "Moductus/google-agenda-cliente"). */
@@ -61,6 +64,27 @@ export const avisoNavegador = (motivo: string) =>
   `Não consegui abrir o navegador (${motivo}). Conecte de novo.`;
 export const avisoFalhou = (motivo: string) =>
   `Não consegui conectar ao Google (${motivo}). Conecte de novo.`;
+
+/**
+ * Ditos quando a permissão de escrever nos outros calendários (F3-25) não chega: voltam à Alba como
+ * o erro da ferramenta, e a conexão continua como estava, porque a leitura segue valendo.
+ */
+export const AVISO_ESCRITA_NEGADA = "A permissão para editar eventos foi negada no Google. Nada foi escrito.";
+export const AVISO_ESCRITA_PRAZO = "Passaram 5 minutos sem a permissão no navegador. Nada foi escrito.";
+export const AVISO_ESCRITA_ESCOPO =
+  "Faltou marcar a permissão de editar eventos na tela do Google. Nada foi escrito.";
+export const AVISO_ESCRITA_OUTRA_CONTA =
+  "A permissão veio de outra conta do Google. Nada foi escrito; autorize com a conta conectada.";
+export const AVISO_ESCRITA_MUDOU =
+  "A conexão com o Google mudou enquanto a permissão era pedida. Nada foi escrito; peça de novo.";
+export const AVISO_ESCRITA_SEM_CONTA =
+  "Não sei qual conta do Google está conectada. Nada foi escrito; reconecte em Configurações › Conexões.";
+export const AVISO_ESCRITA_CONECTANDO =
+  "O Google Agenda está conectando agora. Nada foi escrito; peça de novo quando terminar.";
+export const avisoEscritaNavegador = (motivo: string) =>
+  `Não consegui abrir o navegador (${motivo}). Nada foi escrito.`;
+export const avisoEscritaFalhou = (motivo: string) =>
+  `Não consegui a permissão do Google (${motivo}). Nada foi escrito.`;
 
 /** Token de acesso que vence nisso é renovado antes de usar. */
 const MARGEM_RENOVACAO_MS = 60_000;
@@ -101,6 +125,31 @@ function lerJson<T>(texto: string | null, valido: (v: Record<string, unknown>) =
   }
 }
 
+/** A casca não abriu o navegador: nada chegou ao Google. */
+class FalhaNavegador extends Error {
+  override readonly name = "FalhaNavegador";
+}
+
+/** Os escopos gravados na linha da conexão (JSON); o que não se lê é lista vazia. */
+function escoposDaLinha(texto: string | null | undefined): string[] {
+  try {
+    const valor = JSON.parse(texto ?? "[]") as unknown;
+    return Array.isArray(valor) ? valor.filter((e): e is string => typeof e === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/** O que dizer à Alba quando a permissão de escrever nos outros não chegou. */
+function avisoDaEscrita(erro: unknown): string {
+  if (erro instanceof FalhaNavegador) return avisoEscritaNavegador(erro.message);
+  if (erro instanceof FalhaAutorizacao) {
+    if (erro.motivo === "negado") return AVISO_ESCRITA_NEGADA;
+    if (erro.motivo === "prazo") return AVISO_ESCRITA_PRAZO;
+  }
+  return avisoEscritaFalhou(mensagem(erro));
+}
+
 /** O que dizer ao usuário quando conectar não chegou ao fim. */
 function avisoDe(erro: unknown): string {
   if (erro instanceof FalhaAutorizacao) {
@@ -128,14 +177,17 @@ function avisoDe(erro: unknown): string {
  * casca para abrir a autorização no navegador e espera até 5 minutos; com o código, troca pelos
  * tokens, confere os escopos e guarda o refresh token no Gerenciador de Credenciais. O token de
  * acesso fica só na memória. Desconectar revoga no Google e apaga a credencial mesmo se o revoke
- * falhar. `invalid_grant` na renovação põe a conexão em erro pedindo para reconectar.
+ * falhar. `invalid_grant` na renovação põe a conexão em erro pedindo para reconectar. Escrever nos
+ * outros calendários pede o consentimento de novo, na primeira vez (F3-25).
  */
 export class ServicoGoogleAgenda {
   private readonly agora: () => Date;
   private readonly enderecos: EnderecosGoogle;
   private readonly buscar: typeof fetch;
   private emAndamento: Promise<Conexao> | null = null;
-  private receptor: ReceptorOAuth | null = null;
+  private permitindo: Promise<void> | null = null;
+  /** Os receptores abertos (conectar e pedir a escrita): desconectar fecha todos. */
+  private readonly receptores = new Set<ReceptorOAuth>();
   /** Muda a cada desconectar: o que começou antes não grava depois. */
   private geracao = 0;
   private acesso: { token: string; venceEm: number } | null = null;
@@ -172,33 +224,10 @@ export class ServicoGoogleAgenda {
 
   private async conectar(geracao: number): Promise<Conexao> {
     const antes = this.conexao();
-    let receptor: ReceptorOAuth | null = null;
     try {
       const cliente = await this.cliente();
       if (!cliente) return this.falhar(AVISO_SEM_CLIENTE, antes);
-      const { verificador, desafio } = gerarPkce();
-      const state = gerarState();
-      receptor = await abrirReceptorOAuth(state, this.deps.prazoMs ?? PRAZO_AUTORIZACAO_MS);
-      this.receptor = receptor;
-      const url = urlDeAutorizacao(this.enderecos, {
-        cliente,
-        redirecionamento: receptor.redirecionamento,
-        escopos: ESCOPOS_AO_CONECTAR,
-        desafio,
-        state,
-      });
-      try {
-        await this.deps.abrir.endereco(url);
-      } catch (erro) {
-        return this.falhar(avisoNavegador(mensagem(erro)), antes);
-      }
-      const codigo = await receptor.codigo;
-      const tokens = await trocarCodigo(
-        this.buscar,
-        this.enderecos,
-        { cliente, codigo, verificador, redirecionamento: receptor.redirecionamento },
-        this.agora().getTime(),
-      );
+      const tokens = await this.autorizarNoNavegador(cliente, ESCOPOS_AO_CONECTAR);
       // Desconectou enquanto o código era trocado: o token novo não fica valendo.
       if (geracao !== this.geracao) {
         await this.revogarSemFalhar(tokens.tokenDeRenovacao ?? tokens.tokenDeAcesso);
@@ -245,12 +274,158 @@ export class ServicoGoogleAgenda {
     } catch (erro) {
       // Desconectar no meio cancela o receptor: não é erro, a conexão já está desligada.
       if (geracao !== this.geracao) return this.conexao();
+      if (erro instanceof FalhaNavegador) return this.falhar(avisoNavegador(erro.message), antes);
       console.error(`google: conectar falhou: ${mensagem(erro)}`);
       return this.falhar(avisoDe(erro), antes);
-    } finally {
-      receptor?.cancelar();
-      if (this.receptor === receptor) this.receptor = null;
     }
+  }
+
+  /**
+   * O consentimento no navegador: receptor em 127.0.0.1, PKCE e `state`, a casca abre a URL e o
+   * código vira tokens. O receptor fecha ao terminar, de qualquer jeito.
+   */
+  private async autorizarNoNavegador(
+    cliente: ClienteOAuth,
+    escopos: readonly string[],
+  ): Promise<TokensOAuth> {
+    const { verificador, desafio } = gerarPkce();
+    const state = gerarState();
+    const receptor = await abrirReceptorOAuth(state, this.deps.prazoMs ?? PRAZO_AUTORIZACAO_MS);
+    this.receptores.add(receptor);
+    try {
+      const url = urlDeAutorizacao(this.enderecos, {
+        cliente,
+        redirecionamento: receptor.redirecionamento,
+        escopos,
+        desafio,
+        state,
+      });
+      try {
+        await this.deps.abrir.endereco(url);
+      } catch (erro) {
+        throw new FalhaNavegador(mensagem(erro), { cause: erro });
+      }
+      const codigo = await receptor.codigo;
+      return await trocarCodigo(
+        this.buscar,
+        this.enderecos,
+        { cliente, codigo, verificador, redirecionamento: receptor.redirecionamento },
+        this.agora().getTime(),
+      );
+    } finally {
+      receptor.cancelar();
+      this.receptores.delete(receptor);
+    }
+  }
+
+  /**
+   * Se a conexão já deixa escrever nos outros calendários, pela linha dela: o cartão da Alba avisa
+   * que, na primeira vez, o Google pede a permissão no navegador.
+   */
+  escreveNosOutros(): boolean {
+    const linha = this.deps.conexoes.obter("google-agenda");
+    return escoposDaLinha(linha?.escopos).includes(ESCOPO_ESCREVER_NOS_OUTROS);
+  }
+
+  /**
+   * Garante a permissão de escrever nos outros calendários (`calendar.events`, ADR-0031). Se a
+   * credencial ainda não tem, pede o consentimento completo de novo, com os quatro escopos, e o
+   * refresh token novo substitui o guardado. Só roda depois do sim do cartão: negar o cartão nunca
+   * chega aqui. Falhar não mexe na conexão (a leitura continua valendo) e lança o motivo. Dois
+   * pedidos juntos viram um consentimento só.
+   */
+  permitirEscrita(): Promise<void> {
+    if (this.permitindo) return this.permitindo;
+    const fluxo = this.ampliar(this.geracao).finally(() => {
+      if (this.permitindo === fluxo) this.permitindo = null;
+    });
+    this.permitindo = fluxo;
+    return fluxo;
+  }
+
+  private async ampliar(geracao: number): Promise<void> {
+    const guardada = await this.guardada();
+    if (!guardada) {
+      throw new Error(this.conexao().estado === "desligada" ? AVISO_DESLIGADA : AVISO_RECONECTAR);
+    }
+    if (guardada.escopos.includes(ESCOPO_ESCREVER_NOS_OUTROS)) return;
+    if (this.emAndamento) throw new Error(AVISO_ESCRITA_CONECTANDO);
+    // A credencial só troca com a conta confirmada. Sem ela (o Google não a disse ao conectar), vale
+    // a do calendário principal que a leitura anotou; sem nenhuma, nem abre o navegador.
+    const contaConhecida = guardada.conta ?? this.conexao().conta;
+    if (contaConhecida === null) throw new Error(AVISO_ESCRITA_SEM_CONTA);
+    const cliente = await this.cliente();
+    if (!cliente) throw new Error(AVISO_SEM_CLIENTE);
+    let tokens: TokensOAuth;
+    try {
+      tokens = await this.autorizarNoNavegador(cliente, ESCOPOS_PARA_ESCREVER);
+    } catch (erro) {
+      if (geracao !== this.geracao) throw new Error(AVISO_DESLIGADA, { cause: erro });
+      console.error(`google: a permissão de escrever falhou: ${mensagem(erro)}`);
+      throw new Error(avisoDaEscrita(erro), { cause: erro });
+    }
+    // Revogar o token novo tiraria o acesso inteiro da conta, inclusive o que já valia: o que não
+    // serve fica sem uso. Só o de outra conta, ou de uma conexão que já saiu, é revogado.
+    if (geracao !== this.geracao) {
+      await this.revogarSemFalhar(tokens.tokenDeRenovacao ?? tokens.tokenDeAcesso);
+      throw new Error(AVISO_DESLIGADA);
+    }
+    // A conta antes dos escopos: o token de outra conta sai mesmo com a permissão desmarcada.
+    const conta = await lerConta(this.buscar, this.enderecos, tokens.tokenDeAcesso);
+    // Sem a conta não dá para saber de quem é o token, e revogar poderia ser o desta conexão.
+    if (conta === null) throw new Error(avisoEscritaFalhou("não consegui confirmar a conta"));
+    if (conta !== contaConhecida) {
+      await this.revogarSemFalhar(tokens.tokenDeRenovacao ?? tokens.tokenDeAcesso);
+      throw new Error(AVISO_ESCRITA_OUTRA_CONTA);
+    }
+    if (!tokens.tokenDeRenovacao) throw new Error(avisoEscritaFalhou("sem a autorização duradoura"));
+    if (ESCOPOS_PARA_ESCREVER.some((e) => !tokens.escopos.includes(e))) throw new Error(AVISO_ESCRITA_ESCOPO);
+    // Desconectou ou conectou de novo enquanto o navegador estava aberto: este token não é desta conexão.
+    const atual = await this.guardada();
+    if (geracao !== this.geracao || atual?.tokenDeRenovacao !== guardada.tokenDeRenovacao) {
+      if (geracao !== this.geracao) await this.revogarSemFalhar(tokens.tokenDeRenovacao);
+      throw new Error(geracao !== this.geracao ? AVISO_DESLIGADA : AVISO_ESCRITA_MUDOU);
+    }
+    const nova: Guardada = { tokenDeRenovacao: tokens.tokenDeRenovacao, escopos: tokens.escopos, conta };
+    await this.deps.credenciais.guardar(CREDENCIAL_GOOGLE, JSON.stringify(nova));
+    // Desconectou enquanto guardava: o que acabou de ser guardado ressuscitaria a credencial.
+    if (geracao !== this.geracao) {
+      await this.revogarSemFalhar(tokens.tokenDeRenovacao);
+      await this.deps.credenciais.apagar(CREDENCIAL_GOOGLE).catch(() => undefined);
+      throw new Error(AVISO_DESLIGADA);
+    }
+    this.acesso = { token: tokens.tokenDeAcesso, venceEm: tokens.venceEm };
+    const antes = this.conexao();
+    const linha = this.deps.conexoes.obter("google-agenda");
+    this.gravar(antes, {
+      estado: antes.estado,
+      ultimoErro: antes.ultimoErro,
+      conectadaEm: antes.conectadaEm,
+      credencial: linha?.credencial ?? CREDENCIAL_GOOGLE,
+      conta,
+      escopos: tokens.escopos,
+    });
+  }
+
+  /**
+   * A conta pelo calendário principal que a leitura achou (o id dele é o e-mail): só preenche a
+   * que o Google não disse ao conectar, nunca troca uma que já está lá.
+   */
+  anotarConta(conta: string): void {
+    const antes = this.conexao();
+    if (antes.estado === "desligada" || antes.conta !== null) return;
+    const linha = this.deps.conexoes.obter("google-agenda");
+    this.gravar(
+      antes,
+      {
+        estado: antes.estado,
+        ultimoErro: antes.ultimoErro,
+        conectadaEm: antes.conectadaEm,
+        credencial: linha?.credencial ?? null,
+        conta,
+      },
+      "conexao",
+    );
   }
 
   /**
@@ -259,8 +434,9 @@ export class ServicoGoogleAgenda {
    */
   async desligar(): Promise<Conexao> {
     this.geracao++;
-    this.receptor?.cancelar();
+    for (const receptor of this.receptores) receptor.cancelar();
     this.emAndamento = null;
+    this.permitindo = null;
     this.acesso = null;
     this.renovando = null;
     const antes = this.conexao();
@@ -348,12 +524,16 @@ export class ServicoGoogleAgenda {
       throw erro;
     }
     if (geracao !== this.geracao) throw new Error(AVISO_DESLIGADA);
-    // O Google às vezes troca o refresh token: o novo substitui o guardado.
+    // A credencial pode ter trocado enquanto o Google respondia (a permissão de escrever, F3-25): a
+    // mais nova vence, e este token, da autorização anterior, só serve a quem pediu.
+    const atual = await this.guardada();
+    if (atual?.tokenDeRenovacao !== guardada.tokenDeRenovacao) return tokens.tokenDeAcesso;
+    // O Google às vezes troca o refresh token: o novo substitui o guardado, com os escopos de agora.
     const trocado = tokens.tokenDeRenovacao;
     if (trocado && trocado !== guardada.tokenDeRenovacao) {
       await this.deps.credenciais.guardar(
         CREDENCIAL_GOOGLE,
-        JSON.stringify({ ...guardada, tokenDeRenovacao: trocado } satisfies Guardada),
+        JSON.stringify({ ...atual, tokenDeRenovacao: trocado } satisfies Guardada),
       );
       // Desconectou enquanto gravava: o que acabou de ser guardado ressuscitaria a credencial.
       if (geracao !== this.geracao) {

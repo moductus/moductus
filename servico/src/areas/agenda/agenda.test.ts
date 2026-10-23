@@ -6,6 +6,7 @@ import { CALENDARIO_LOCAL, METODOS, type MudancaAgenda, type NovoEvento } from "
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { MENSAGENS_DESFAZER, RepositorioExecucoes, ServicoExecucoes } from "../../agentes/execucoes.ts";
 import { abrirBanco } from "../../banco/conexao.ts";
+import { escritaSemGoogle } from "../../conexoes/google/fixtures/google-falso.ts";
 import { Catalogo } from "../../ferramentas/catalogo.ts";
 import { ferramentasAgenda } from "../../ferramentas/agenda/agenda.ts";
 import {
@@ -74,6 +75,7 @@ function montar(
         () => fuso,
         () => relogio.agora,
       ),
+      escritaSemGoogle(),
     ),
   );
   const historico = new ServicoExecucoes(execucoes, catalogo, { agora: () => relogio.agora });
