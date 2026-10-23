@@ -202,6 +202,8 @@ export const METODOS = {
   "google.obter": metodo(z.undefined(), SituacaoGoogle),
   /** "Ler agora": lê o Calendar já e devolve como ficou; a falha vem na `Conexao`. */
   "google.atualizar": metodo(z.undefined(), SituacaoGoogle),
+  /** "Cancelar" na espera do navegador: fecha só o receptor; a conexão fica como estava antes. */
+  "google.cancelar": metodo(z.undefined(), Conexao),
   /** Recusado com a conexão feita: o refresh token é do cliente que o gerou. */
   "google.definirCliente": metodo(PedidoClienteGoogle, SituacaoGoogle),
 

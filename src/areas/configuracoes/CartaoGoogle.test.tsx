@@ -95,6 +95,9 @@ function servico(inicial: Conexao = conexao("google-agenda"), inicio: SituacaoGo
         return Promise.resolve(google);
       case "google.obter":
         return Promise.resolve(atual);
+      // Cancelar não mexe na conexão: volta a de antes, como o serviço.
+      case "google.cancelar":
+        return Promise.resolve(google);
       case "google.atualizar":
         atual = { ...atual, lidaEm: "2026-10-18T14:40:00.000Z" };
         return Promise.resolve(atual);
@@ -215,7 +218,8 @@ describe("Configurações › Conexões › Google Agenda", () => {
     expect(auditar(recipiente)).toEqual([]);
 
     await clicar("Cancelar");
-    expect(pedidosDe("conexoes.desligar")).toEqual([{ tipo: "google-agenda" }]);
+    expect(pedidosDe("google.cancelar")).toEqual([undefined]);
+    expect(pedidosDe("conexoes.desligar")).toEqual([]);
     // O serviço fecha a autorização e avisa: o cartão volta a oferecer a conexão.
     await emitir("google.mudou", situacao());
     expect(selo()).toBe("desconectado");
@@ -295,6 +299,64 @@ describe("Configurações › Conexões › Google Agenda", () => {
     expect(google().textContent).toContain('3 itens esperam na fila para o "Moductus".');
     await clicar("Reconectar");
     expect(pedidosDe("conexoes.ligar")).toEqual([{ tipo: "google-agenda" }]);
+  });
+
+  it("cancelar um reconectar devolve o cartão ao erro de antes, sem desconectar", async () => {
+    const erro = {
+      ...CONECTADA,
+      estado: "erro" as const,
+      ultimoErro: "O Google não aceita mais a autorização.",
+    };
+    servico(
+      erro,
+      situacao({
+        problema: "reconectar",
+        autorizacao: { endereco: ENDERECO, venceEm: "2026-10-18T14:04:12.000Z" },
+      }),
+    );
+    await montar();
+    expect(selo()).toBe("esperando você no navegador");
+    await clicar("Cancelar");
+    expect(pedidosDe("google.cancelar")).toEqual([undefined]);
+    expect(pedidosDe("conexoes.desligar")).toEqual([]);
+    await emitir("google.mudou", situacao({ problema: "reconectar" }));
+    expect(selo()).toBe("precisa reconectar");
+    expect(google().textContent).toContain("O Google não aceita mais a autorização.");
+  });
+
+  it("a leitura falhou: Desconectar pede a confirmação no lugar, como no reconectar", async () => {
+    servico(
+      { ...CONECTADA, estado: "erro", ultimoErro: "Não consegui ler o Google Agenda." },
+      situacao({ problema: "leitura" }),
+    );
+    await montar();
+    await clicar("Desconectar");
+    expect(botao("Desconectar").getAttribute("aria-expanded")).toBe("true");
+    expect(google().querySelector('[aria-label="Desconectar o Google Agenda"]')).not.toBeNull();
+    expect(google().textContent).not.toContain("Não consegui ler o Google Agenda.");
+    expect(pedidosDe("conexoes.desligar")).toEqual([]);
+    expect(auditar(recipiente)).toEqual([]);
+    await clicar("Desconectar o Google");
+    expect(pedidosDe("conexoes.desligar")).toEqual([{ tipo: "google-agenda" }]);
+    expect(selo()).toBe("desconectado");
+  });
+
+  it("desconectar que não apagou a credencial: o botão principal desconecta de novo", async () => {
+    servico(
+      {
+        ...CONECTADA,
+        estado: "erro",
+        ultimoErro: "Não consegui apagar a credencial do Google (fora). Tente de novo.",
+      },
+      situacao({ problema: "desconectar" }),
+    );
+    await montar();
+    expect(selo()).toBe("não desconectou");
+    expect(botao("Tentar de novo")).toBeUndefined();
+    await clicar("Desconectar de novo");
+    expect(pedidosDe("conexoes.desligar")).toEqual([{ tipo: "google-agenda" }]);
+    expect(pedidosDe("conexoes.ligar")).toEqual([]);
+    expect(selo()).toBe("desconectado");
   });
 
   it("a leitura falhou: Tentar agora lê de novo", async () => {

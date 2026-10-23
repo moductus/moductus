@@ -39,6 +39,8 @@ export interface ConexoesDaTela {
   desligar: (tipo: TipoConexao) => Promise<void>;
   lerGithub: () => Promise<void>;
   lerGoogle: () => Promise<void>;
+  /** "Cancelar" na espera do navegador: a conexão volta a como estava antes de conectar. */
+  cancelarGoogle: () => Promise<void>;
   /** Marca ou desmarca um calendário do Google para a Alba ler. */
   lerCalendario: (id: string, ler: boolean) => Promise<void>;
   /** Salva o cliente OAuth do usuário (ou volta ao do Moductus com `null`). */
@@ -179,6 +181,16 @@ export function useConexoes(): ConexoesDaTela {
     [fazer],
   );
 
+  // Não passa por `fazer`: o conectar ainda está em andamento e é ele que limpa o "ligando".
+  const cancelarGoogle = useCallback(async () => {
+    setErros((e) => ({ ...e, "google-agenda": undefined }));
+    try {
+      juntar(await servico.pedir("google.cancelar"));
+    } catch (e) {
+      setErros((atual) => ({ ...atual, "google-agenda": mensagemDeErro(e) }));
+    }
+  }, [juntar]);
+
   const lerCalendario = useCallback(async (id: string, ler: boolean) => {
     setErros((e) => ({ ...e, "google-agenda": undefined }));
     try {
@@ -219,6 +231,7 @@ export function useConexoes(): ConexoesDaTela {
     desligar,
     lerGithub,
     lerGoogle,
+    cancelarGoogle,
     lerCalendario,
     definirClienteGoogle,
   };

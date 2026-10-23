@@ -915,6 +915,12 @@ function ItemGoogle({ conexoes }: { conexoes: ConexoesDaTela }) {
   const [depois, setDepois] = useState(false);
   const { google, calendarios } = conexoes;
   const ligada = google?.estado === "ligada";
+  // Ligou (aqui ou em outra janela): o cartão aberto fecha, e desconectar depois volta à linha.
+  const [ligadaAntes, setLigadaAntes] = useState(ligada);
+  if (ligada !== ligadaAntes) {
+    setLigadaAntes(ligada);
+    if (ligada) setAberto(false);
+  }
   const passo = conexoes.andamento["google-agenda"];
   const ocupado = passo !== undefined || !conexoes.conectado || !google;
   const conta = google?.conta ?? "Conta do Google";
@@ -943,11 +949,7 @@ function ItemGoogle({ conexoes }: { conexoes: ConexoesDaTela }) {
             <Botao
               variante="fantasma"
               disabled={ocupado}
-              onClick={() => {
-                // Desconectado, a linha volta a oferecer "Conectar", sem reabrir o cartão.
-                setAberto(false);
-                void conexoes.desligar("google-agenda");
-              }}
+              onClick={() => void conexoes.desligar("google-agenda")}
             >
               {passo === "desligando" ? "Desconectando…" : "Desconectar"}
             </Botao>

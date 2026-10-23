@@ -515,6 +515,14 @@ describe("primeiro uso", () => {
     await clicar(botaoEm(".uso-item--google", "Desconectar"));
     expect(pedidosDe("conexoes.desligar")).toEqual([{ tipo: "google-agenda" }]);
     expect(botaoEm(".uso-item--google", "Conectar")).toBeTruthy();
+
+    // Conectou de novo e desconectou em outra janela: a linha oferece "Conectar", sem o cartão aberto.
+    await clicar(botaoEm(".uso-item--google", "Conectar"));
+    await clicar(botao("Conectar com o Google"));
+    expect(todos(".uso-item--google .uso-item-linha .selo").map((s) => s.textContent)).toEqual(["conectado"]);
+    await act(async () => falso.emitir("conexoes.mudou", desligada("google-agenda")));
+    expect(por(".uso-item--google .config-google-autorizar")).toBeNull();
+    expect(botaoEm(".uso-item--google", "Conectar")).toBeTruthy();
   });
 
   it("pular a configuração no meio grava o que foi visto e vai ao Início", async () => {

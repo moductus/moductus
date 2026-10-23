@@ -2,16 +2,18 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { SituacaoGoogle } from "@moductus/contrato";
+import { SituacaoGoogle, type Conexao } from "@moductus/contrato";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { abrirBanco } from "../../banco/conexao.ts";
 import { RepositorioConexoes } from "../conexoes.ts";
 import type { ClienteOAuth } from "./cliente.ts";
 import { abrirGoogleFalso, credenciaisNaMemoria, type GoogleFalso } from "./fixtures/google-falso.ts";
 import {
+  AVISO_DESLIGADA,
   AVISO_RECONECTAR,
   AVISO_TROCAR_CLIENTE,
   CREDENCIAL_CLIENTE_GOOGLE,
+  CREDENCIAL_GOOGLE,
   ServicoGoogleAgenda,
 } from "./google-agenda.ts";
 import { PRAZO_AUTORIZACAO_MS } from "./oauth.ts";
@@ -45,13 +47,14 @@ async function montar() {
   const credenciais = credenciaisNaMemoria();
   const conexoes = new RepositorioConexoes(db);
   let mudancas = 0;
+  const avisos: Conexao[] = [];
   let fila = 0;
   const leituras: string[] = [];
   const servico = new ServicoGoogleAgenda({
     conexoes,
     credenciais,
     abrir: { endereco: (url) => google.abrir.endereco(url) },
-    avisar: () => undefined,
+    avisar: (c) => avisos.push(c),
     situacaoMudou: () => mudancas++,
     clienteDoAutor: CLIENTE_DE_TESTE,
     enderecos: google.enderecos,
@@ -73,9 +76,20 @@ async function montar() {
     servico,
     situacao,
     mudancas: () => mudancas,
+    avisos,
+    conexoes,
     leituras,
     porNaFila: (n: number) => (fila = n),
   };
+}
+
+/** O receptor fechou: ninguém mais escuta no `redirect_uri` da última autorização. */
+async function receptorFechado(google: GoogleFalso): Promise<boolean> {
+  const volta = google.autorizacoes.at(-1)?.searchParams.get("redirect_uri") ?? "";
+  return fetch(volta).then(
+    () => false,
+    () => true,
+  );
 }
 
 describe("a situação do Google Agenda no cartão", () => {
@@ -194,5 +208,78 @@ describe("a situação do Google Agenda no cartão", () => {
     expect((await situacao.obter()).autorizacao).toBeNull();
     autorizacao.endereco = "https://accounts.google.com/o/oauth2/v2/auth?state=x";
     expect((await situacao.obter()).autorizacao).toEqual(autorizacao);
+  });
+});
+
+describe("cancelar o conectar na espera do navegador", () => {
+  test("conexão nova cancelada continua desligada: nada gravado, nada avisado, receptor fechado", async () => {
+    const { google, credenciais, servico, avisos, conexoes } = await montar();
+    google.navegacao = "nada";
+    const fluxo = servico.ligar();
+    await vi.waitFor(() => expect(google.autorizacoes).toHaveLength(1));
+    expect(servico.autorizacaoAberta()).not.toBeNull();
+
+    const depois = await servico.cancelarConexao();
+    expect(depois).toMatchObject({ estado: "desligada", ultimoErro: null });
+    expect(await fluxo).toEqual(depois);
+    expect(conexoes.obter("google-agenda")).toBeNull();
+    expect(avisos).toEqual([]);
+    expect(credenciais.valores.size).toBe(0);
+    expect(servico.autorizacaoAberta()).toBeNull();
+    await vi.waitFor(async () => expect(await receptorFechado(google)).toBe(true));
+    expect(google.pedidos.some((p) => p.rota.includes("revoke"))).toBe(false);
+  });
+
+  test("reconectar cancelado fica como estava: o erro, a conta e a data de antes, sem aviso novo", async () => {
+    const { google, servico, situacao, avisos } = await montar();
+    await servico.ligar();
+    google.revogarTudoNoGoogle();
+    servico.acessoRecusado(await servico.tokenDeAcesso());
+    await expect(servico.tokenDeAcesso()).rejects.toThrow(AVISO_RECONECTAR);
+    const antes = servico.conexao();
+    const avisados = avisos.length;
+
+    google.navegacao = "nada";
+    const fluxo = servico.ligar();
+    await vi.waitFor(() => expect(google.autorizacoes).toHaveLength(2));
+    expect(await servico.cancelarConexao()).toEqual(antes);
+    expect(await fluxo).toEqual(antes);
+    expect(avisos).toHaveLength(avisados);
+    expect((await situacao.obter()).problema).toBe("reconectar");
+  });
+
+  test("conectada, um conectar cancelado não desconecta: a credencial e a leitura continuam", async () => {
+    const { credenciais, servico } = await montar();
+    const ligada = await servico.ligar();
+    expect(await servico.cancelarConexao()).toEqual(ligada);
+    expect(credenciais.valores.has(CREDENCIAL_GOOGLE)).toBe(true);
+    expect(await servico.tokenDeAcesso()).toMatch(/^acesso-/);
+  });
+});
+
+describe("o que a situação não mostra e o desconectar que falhou", () => {
+  test("pedir a permissão de escrever nos outros não expõe a autorização ao cartão", async () => {
+    const { google, servico, situacao } = await montar();
+    await servico.ligar();
+    google.navegacao = "nada";
+    const permissao = servico.permitirEscrita().catch((erro: unknown) => erro);
+    await vi.waitFor(() => expect(google.autorizacoes).toHaveLength(2));
+    expect(servico.autorizacaoAberta()).toBeNull();
+    expect((await situacao.obter()).autorizacao).toBeNull();
+    // Cancelar o conectar não alcança este receptor.
+    await servico.cancelarConexao();
+    expect(await receptorFechado(google)).toBe(false);
+    await servico.desligar();
+    expect(await permissao).toMatchObject({ message: AVISO_DESLIGADA });
+  });
+
+  test("desconectar que não apagou a credencial é problema de desconectar, e tentar de novo desconecta", async () => {
+    const { credenciais, servico, situacao } = await montar();
+    await servico.ligar();
+    vi.spyOn(credenciais, "apagar").mockRejectedValueOnce(new Error("Gerenciador fora"));
+    expect((await servico.desligar()).estado).toBe("erro");
+    expect((await situacao.obter()).problema).toBe("desconectar");
+    expect((await servico.desligar()).estado).toBe("desligada");
+    expect((await situacao.obter()).problema).toBeNull();
   });
 });

@@ -62,6 +62,9 @@ export const CORPO_LEITURA_FALHOU =
 export const AVISO_LEITURA = `${TITULO_LEITURA_FALHOU} ${CORPO_LEITURA_FALHOU}`;
 export const avisoNavegador = (motivo: string) =>
   `Não consegui abrir o navegador (${motivo}). Conecte de novo.`;
+/** Desconectar não conseguiu apagar a credencial: o cartão oferece desconectar de novo. */
+export const INICIO_AVISO_APAGAR = "Não consegui apagar a credencial do Google";
+export const avisoApagar = (motivo: string) => `${INICIO_AVISO_APAGAR} (${motivo}). Tente de novo.`;
 export const avisoFalhou = (motivo: string) =>
   `Não consegui conectar ao Google (${motivo}). Conecte de novo.`;
 
@@ -199,6 +202,10 @@ export class ServicoGoogleAgenda {
   private renovando: Promise<string> | null = null;
   /** A autorização do conectar aberta no navegador, para o cartão copiar ou abrir de novo. */
   private autorizacao: AutorizacaoGoogle | null = null;
+  /** O receptor do conectar, que "Cancelar" fecha sem tocar nos outros. */
+  private receptorDoConectar: ReceptorOAuth | null = null;
+  /** O conectar em andamento foi cancelado: termina sem gravar nada. */
+  private cancelouConectar = false;
 
   constructor(private readonly deps: DependenciasGoogle) {
     this.agora = deps.agora ?? (() => new Date());
@@ -231,10 +238,17 @@ export class ServicoGoogleAgenda {
 
   private async conectar(geracao: number): Promise<Conexao> {
     const antes = this.conexao();
+    this.cancelouConectar = false;
     try {
       const cliente = await this.cliente();
+      if (this.cancelouConectar) return this.conexao();
       if (!cliente) return this.falhar(AVISO_SEM_CLIENTE, antes);
       const tokens = await this.autorizarNoNavegador(cliente, ESCOPOS_AO_CONECTAR, true);
+      // Cancelou quando o código já tinha chegado: o token novo não fica valendo, e nada muda aqui.
+      if (this.cancelouConectar) {
+        await this.revogarSemFalhar(tokens.tokenDeRenovacao ?? tokens.tokenDeAcesso);
+        return this.conexao();
+      }
       // Desconectou enquanto o código era trocado: o token novo não fica valendo.
       if (geracao !== this.geracao) {
         await this.revogarSemFalhar(tokens.tokenDeRenovacao ?? tokens.tokenDeAcesso);
@@ -281,6 +295,8 @@ export class ServicoGoogleAgenda {
     } catch (erro) {
       // Desconectar no meio cancela o receptor: não é erro, a conexão já está desligada.
       if (geracao !== this.geracao) return this.conexao();
+      // "Cancelar" também: a conexão fica como estava antes de conectar.
+      if (this.cancelouConectar) return this.conexao();
       if (erro instanceof FalhaNavegador) return this.falhar(avisoNavegador(erro.message), antes);
       console.error(`google: conectar falhou: ${mensagem(erro)}`);
       return this.falhar(avisoDe(erro), antes);
@@ -312,6 +328,9 @@ export class ServicoGoogleAgenda {
         state,
       });
       if (expor) {
+        this.receptorDoConectar = receptor;
+        // Cancelou enquanto o receptor abria: ele fecha antes de o navegador abrir.
+        if (this.cancelouConectar) receptor.cancelar();
         exposta = { endereco: url, venceEm: new Date(this.agora().getTime() + prazoMs).toISOString() };
         this.autorizacao = exposta;
         this.deps.situacaoMudou?.();
@@ -331,11 +350,26 @@ export class ServicoGoogleAgenda {
     } finally {
       receptor.cancelar();
       this.receptores.delete(receptor);
+      if (this.receptorDoConectar === receptor) this.receptorDoConectar = null;
       if (exposta && this.autorizacao === exposta) {
         this.autorizacao = null;
         this.deps.situacaoMudou?.();
       }
     }
+  }
+
+  /**
+   * "Cancelar" na espera do navegador (F3-44): fecha só o receptor do conectar e devolve a conexão
+   * como estava antes, sem gravar erro nem mexer na credencial ou no cache da leitura. Uma conexão
+   * nova cancelada continua desligada. Sem conectar em andamento, só devolve a conexão.
+   */
+  async cancelarConexao(): Promise<Conexao> {
+    const fluxo = this.emAndamento;
+    if (!fluxo) return this.conexao();
+    this.cancelouConectar = true;
+    this.receptorDoConectar?.cancelar();
+    await fluxo.catch(() => undefined);
+    return this.conexao();
   }
 
   /** A autorização do conectar que espera no navegador; `null` fora dela. */
@@ -349,6 +383,7 @@ export class ServicoGoogleAgenda {
     if (conexao.estado !== "erro") return null;
     if (conexao.ultimoErro === AVISO_RECONECTAR) return "reconectar";
     if (conexao.ultimoErro === AVISO_LEITURA) return "leitura";
+    if (conexao.ultimoErro?.startsWith(INICIO_AVISO_APAGAR)) return "desconectar";
     return "conectar";
   }
 
@@ -490,10 +525,7 @@ export class ServicoGoogleAgenda {
     try {
       await this.deps.credenciais.apagar(CREDENCIAL_GOOGLE);
     } catch (erro) {
-      return this.falhar(
-        `Não consegui apagar a credencial do Google (${mensagem(erro)}). Tente de novo.`,
-        antes,
-      );
+      return this.falhar(avisoApagar(mensagem(erro)), antes);
     }
     return this.gravar(antes, {
       estado: "desligada",

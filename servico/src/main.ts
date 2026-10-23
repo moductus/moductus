@@ -648,6 +648,7 @@ servidor = await abrirServidorWs(token, {
   "conexoes.desligar": (pedido) => conexoes.desligar(pedido),
   "google.obter": () => situacaoGoogle.obter(),
   "google.atualizar": () => situacaoGoogle.atualizar(),
+  "google.cancelar": () => googleAgenda.cancelarConexao(),
   "google.definirCliente": (pedido) => situacaoGoogle.definirCliente(pedido),
   "github.obter": () => github.obter(),
   "github.atualizar": () => github.atualizar(),

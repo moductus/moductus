@@ -207,9 +207,10 @@ export type PreviaConexao = z.infer<typeof PreviaConexao>;
 
 /**
  * Por que o Google Agenda está em erro (Configurações › Conexões, F3-44): conectar não chegou ao
- * fim, o Google não aceita mais a autorização (reconectar) ou a última leitura falhou.
+ * fim, o Google não aceita mais a autorização (reconectar), a última leitura falhou ou desconectar
+ * não conseguiu apagar a credencial.
  */
-export const ProblemaGoogle = z.enum(["conectar", "reconectar", "leitura"]);
+export const ProblemaGoogle = z.enum(["conectar", "reconectar", "leitura", "desconectar"]);
 export type ProblemaGoogle = z.infer<typeof ProblemaGoogle>;
 
 /** A autorização aberta no navegador enquanto o conectar espera: o endereço e quando o prazo acaba. */

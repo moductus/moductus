@@ -119,13 +119,14 @@ export function CartaoGoogle({ conexoes, abertoAoMontar, aoFechar }: PropsCartao
   );
   const fila = esperandoNaFila(situacao?.fila ?? 0);
 
-  // Esperando a volta do Google no navegador; cancelar fecha o receptor e nada muda.
+  // Esperando a volta do Google no navegador; cancelar fecha só o receptor e a conexão fica como
+  // estava antes (uma nova continua desconectada).
   if (situacao?.autorizacao || passo === "ligando") {
     return (
       <Esperando
         autorizacao={situacao?.autorizacao ?? null}
-        cancelando={passo === "desligando" || !conexoes.conectado}
-        aoCancelar={() => void conexoes.desligar("google-agenda")}
+        desativado={passo === "desligando" || !conexoes.conectado}
+        aoCancelar={conexoes.cancelarGoogle}
       />
     );
   }
@@ -206,12 +207,34 @@ export function CartaoGoogle({ conexoes, abertoAoMontar, aoFechar }: PropsCartao
               : resumoConectado(google, calendarios)
           }
           acoes={
-            <Botao disabled={ocupado} onClick={() => void conexoes.lerGoogle()}>
-              {passo === "lendo" ? "Lendo…" : "Tentar agora"}
+            <>
+              {botaoDesconectar}
+              <Botao disabled={ocupado} onClick={() => void conexoes.lerGoogle()}>
+                {passo === "lendo" ? "Lendo…" : "Tentar agora"}
+              </Botao>
+            </>
+          }
+        >
+          {confirmacao || <MensagemDeErro erro={google.ultimoErro} fila={fila} pedido={erroDoPedido} />}
+        </CartaoConexao>
+      );
+    }
+    // Desconectar não apagou a credencial: o botão principal repete o desconectar, já confirmado.
+    if (problema === "desconectar") {
+      return (
+        <CartaoConexao
+          nome="Google Agenda"
+          agente="alba"
+          destacado
+          estado={{ texto: "não desconectou", tom: "perigo" }}
+          descricao={resumoConectado(google, calendarios)}
+          acoes={
+            <Botao variante="primario" disabled={ocupado} onClick={desconectar}>
+              {passo === "desligando" ? "Desconectando…" : "Desconectar de novo"}
             </Botao>
           }
         >
-          <MensagemDeErro erro={google.ultimoErro} fila={fila} pedido={erroDoPedido} />
+          <MensagemDeErro erro={google.ultimoErro} fila={null} pedido={erroDoPedido} />
         </CartaoConexao>
       );
     }
@@ -473,15 +496,20 @@ function Autorizar({
 /** Esperando o navegador: a Alba diz o que fazer, o prazo corre e dá para abrir ou copiar de novo. */
 function Esperando({
   autorizacao,
-  cancelando,
+  desativado,
   aoCancelar,
 }: {
   autorizacao: AutorizacaoGoogle | null;
-  cancelando: boolean;
-  aoCancelar: () => void;
+  desativado: boolean;
+  aoCancelar: () => Promise<void>;
 }) {
   const agora = useAgora(1000);
   const [copiado, setCopiado] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const cancelar = () => {
+    setCancelando(true);
+    void aoCancelar().finally(() => setCancelando(false));
+  };
   const abrir = useAbrir();
   const copiar = (endereco: string) => {
     void navigator.clipboard
@@ -497,8 +525,8 @@ function Esperando({
       estado={{ texto: "esperando você no navegador", tom: "neutro" }}
       descricao={DESCRICAO}
       acoes={
-        <Botao variante="fantasma" disabled={cancelando} onClick={aoCancelar}>
-          Cancelar
+        <Botao variante="fantasma" disabled={desativado || cancelando} onClick={cancelar}>
+          {cancelando ? "Cancelando…" : "Cancelar"}
         </Botao>
       }
     >
