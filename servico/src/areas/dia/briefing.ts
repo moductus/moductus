@@ -60,6 +60,16 @@ export interface ResumoDoAgente {
   resumoDoDia(): string | null;
 }
 
+/**
+ * O último dia em que o fechamento valia e não chegou ao fim (o PC suspendeu antes da hora de parar,
+ * ou depois de "Adiar 30 min"), com o que foi feito nele: vira o "Ontem" no topo do briefing.
+ */
+export interface DiaSemFechamento {
+  dia: string;
+  feitas: number;
+  focoMin: number;
+}
+
 /** O que o briefing lê para montar as linhas. */
 export interface DadosDoBriefing {
   agora: Date;
@@ -74,6 +84,8 @@ export interface DadosDoBriefing {
   atrasadas: readonly Tarefa[];
   /** Os resumos que vieram, já na ordem e sem os vazios. */
   resumos: readonly { agenteId: string; nome: string; texto: string }[];
+  /** O fechamento que não apareceu no último dia dele, se houve o que contar. */
+  semFechamento?: DiaSemFechamento | null;
 }
 
 /** As linhas prontas, o que delas vai ao modelo e a frase que sai sem ele. */
@@ -86,7 +98,7 @@ export interface Montagem {
   molde: string;
 }
 
-const quantos = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
+export const quantos = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
 
 /** "7h", "7h30" ou "45 min". */
 export function duracao(minutos: number): string {
@@ -96,6 +108,22 @@ export function duracao(minutos: number): string {
   return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
 }
 
+/** "5 feitas · 2h10 de foco"; `null` quando nada foi feito (a Alba não cobra). */
+export function oQueFoiFeito(feitas: number, focoMin: number): string | null {
+  const partes: string[] = [];
+  if (feitas > 0) partes.push(quantos(feitas, "feita", "feitas"));
+  if (focoMin > 0) partes.push(`${duracao(focoMin)} de foco`);
+  return partes.length > 0 ? partes.join(" · ") : null;
+}
+
+/** O mesmo, como vai ao modelo. */
+export function oQueFoiFeitoParaModelo(feitas: number, focoMin: number): string {
+  const partes: string[] = [];
+  if (feitas > 0) partes.push(quantos(feitas, "tarefa feita", "tarefas feitas"));
+  if (focoMin > 0) partes.push(`${duracao(focoMin)} de foco`);
+  return partes.join(", ");
+}
+
 /** Uma linha só, aparada no tamanho: título com quebra de linha ou enorme não estica o briefing. */
 export function umaLinha(texto: string, maximo: number): string {
   const limpo = texto.replace(/\s+/g, " ").trim();
@@ -103,7 +131,7 @@ export function umaLinha(texto: string, maximo: number): string {
 }
 
 /** Prioridade maior primeiro; depois a que tem hora, mais cedo; depois a ordem da lista. */
-function porPrioridade(a: Tarefa, b: Tarefa): number {
+export function porPrioridade(a: Tarefa, b: Tarefa): number {
   if (a.prioridade !== b.prioridade) return b.prioridade - a.prioridade;
   if (a.hora !== b.hora) return a.hora === null ? 1 : b.hora === null ? -1 : a.hora < b.hora ? -1 : 1;
   return a.ordem - b.ordem;
@@ -160,12 +188,27 @@ export function montarBriefing(d: DadosDoBriefing): Montagem {
     paraModelo.push(`Alba, o dia: ${modelo.join(" ")}`);
   }
 
-  // 2. Ontem: as abertas que ficaram de antes de hoje.
-  if (d.atrasadas.length > 0) {
-    const n = d.atrasadas.length;
-    const texto = n === 1 ? "1 ficou aberta." : `${n} ficaram abertas.`;
-    linhas.push({ agenteId: ALBA, rotulo: "Ontem", texto, tarefaIds: d.atrasadas.map((t) => t.id) });
-    paraModelo.push(`Ontem: ${quantos(n, "tarefa ficou aberta", "tarefas ficaram abertas")}.`);
+  // 2. Ontem: as abertas que ficaram de antes de hoje. O fechamento que não apareceu (o PC
+  // suspendeu antes da hora de parar) vem junto, no topo (AGENTS.md §2 "Fechamento do dia").
+  const n = d.atrasadas.length;
+  const abertas = n === 0 ? null : n === 1 ? "1 ficou aberta." : `${n} ficaram abertas.`;
+  const abertasParaModelo = quantos(n, "tarefa ficou aberta", "tarefas ficaram abertas");
+  const feito = d.semFechamento ? oQueFoiFeito(d.semFechamento.feitas, d.semFechamento.focoMin) : null;
+  if (feito !== null && d.semFechamento) {
+    const s = d.semFechamento;
+    linhas.unshift({
+      agenteId: ALBA,
+      rotulo: "Ontem",
+      texto: abertas === null ? `${feito}.` : `${feito}. ${abertas}`,
+      tarefaIds: d.atrasadas.map((t) => t.id),
+    });
+    const modelo = oQueFoiFeitoParaModelo(s.feitas, s.focoMin);
+    paraModelo.unshift(
+      `Ontem (o fechamento não apareceu): ${modelo}${n > 0 ? `; ${abertasParaModelo}` : ""}.`,
+    );
+  } else if (abertas !== null) {
+    linhas.push({ agenteId: ALBA, rotulo: "Ontem", texto: abertas, tarefaIds: d.atrasadas.map((t) => t.id) });
+    paraModelo.push(`Ontem: ${abertasParaModelo}.`);
   }
 
   // 3 a 5. Tula, Nuno e Faina, cada um numa linha, só quando têm novidade.
@@ -214,6 +257,8 @@ export interface DependenciasBriefing {
   relogio: { mudou(): void };
   /** O briefing que acabou de aparecer (`rotinas.apareceu`). */
   apareceu: (apresentacao: ApresentacaoRotina) => void;
+  /** O fechamento que não apareceu no último dia dele (`ServicoFechamento.semFechamento`). */
+  semFechamento?: (hoje: string) => DiaSemFechamento | null;
 }
 
 export interface OpcoesBriefing {
@@ -249,8 +294,19 @@ export class ServicoBriefing implements FonteDoRelogio {
       dia: agenda.dias.find((d) => d.dia === dia) ?? null,
       hoje: this.deps.tarefas.listar({ vista: "hoje" }).filter((t) => abertas(t) && t.venceEm === dia),
       atrasadas: this.deps.tarefas.listar({ vista: "atrasadas" }).filter(abertas),
-      resumos: this.resumos(),
+      resumos: resumosDosAgentes(this.deps.resumos, this.deps.estadoDo),
+      semFechamento: this.semFechamento(dia),
     });
+  }
+
+  /** O fechamento de ontem que não apareceu; se a conta falhar, o briefing sai sem ele. */
+  private semFechamento(dia: string): DiaSemFechamento | null {
+    try {
+      return this.deps.semFechamento?.(dia) ?? null;
+    } catch (erro) {
+      console.error(`briefing: o fechamento de ontem não se leu: ${String(erro)}`);
+      return null;
+    }
   }
 
   /**
@@ -334,29 +390,32 @@ export class ServicoBriefing implements FonteDoRelogio {
       semPainelDoTime: true,
     });
   }
+}
 
-  /**
-   * Os resumos dos agentes na ordem do AGENTS.md; o de agente pausado ou desligado não entra, e o
-   * que falha fica de fora, sem levar os outros.
-   */
-  private resumos(): DadosDoBriefing["resumos"] {
-    const posicao = (id: string) => {
-      const i = ORDEM_DOS_RESUMOS.indexOf(id);
-      return i < 0 ? ORDEM_DOS_RESUMOS.length : i;
-    };
-    const ordenados = [...this.deps.resumos].sort((a, b) => posicao(a.agenteId) - posicao(b.agenteId));
-    const saida: { agenteId: string; nome: string; texto: string }[] = [];
-    for (const r of ordenados) {
-      try {
-        const estado = this.deps.estadoDo(r.agenteId);
-        if (estado === "pausado" || estado === "desligado") continue;
-        const texto = r.resumoDoDia();
-        const limpo = texto === null ? "" : umaLinha(texto, 200);
-        if (limpo !== "") saida.push({ agenteId: r.agenteId, nome: r.nome, texto: limpo });
-      } catch (erro) {
-        console.error(`briefing: o resumo de ${r.agenteId} falhou: ${String(erro)}`);
-      }
+/**
+ * Os resumos dos agentes na ordem do AGENTS.md; o de agente pausado ou desligado não entra, e o
+ * que falha fica de fora, sem levar os outros. Vale para o briefing e para o fechamento.
+ */
+export function resumosDosAgentes(
+  resumos: readonly ResumoDoAgente[],
+  estadoDo: (agenteId: string) => EstadoAgente | null,
+): DadosDoBriefing["resumos"] {
+  const posicao = (id: string) => {
+    const i = ORDEM_DOS_RESUMOS.indexOf(id);
+    return i < 0 ? ORDEM_DOS_RESUMOS.length : i;
+  };
+  const ordenados = [...resumos].sort((a, b) => posicao(a.agenteId) - posicao(b.agenteId));
+  const saida: { agenteId: string; nome: string; texto: string }[] = [];
+  for (const r of ordenados) {
+    try {
+      const estado = estadoDo(r.agenteId);
+      if (estado === "pausado" || estado === "desligado") continue;
+      const texto = r.resumoDoDia();
+      const limpo = texto === null ? "" : umaLinha(texto, 200);
+      if (limpo !== "") saida.push({ agenteId: r.agenteId, nome: r.nome, texto: limpo });
+    } catch (erro) {
+      console.error(`rotinas: o resumo de ${r.agenteId} falhou: ${String(erro)}`);
     }
-    return saida;
   }
+  return saida;
 }

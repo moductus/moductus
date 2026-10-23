@@ -407,6 +407,14 @@ export class ServicoTarefas {
     return this.repo.contarAbertasAte(this.tempo.hoje());
   }
 
+  /** Quantas foram feitas no dia, no fuso de `config`, sem as subtarefas: o "5 feitas" do fechamento. */
+  feitasNoDia(dia: string): number {
+    return this.repo.contarFeitasEntre(
+      this.tempo.inicioDoDia(dia).toISOString(),
+      this.tempo.inicioDoDia(somarDias(dia, 1)).toISOString(),
+    );
+  }
+
   /**
    * As abertas que venciam de `desde` até antes de `ate`: na virada do dia, as que passam de ontem
    * para hoje, marcadas pelo dia em que venciam (a vista `atrasadas`).

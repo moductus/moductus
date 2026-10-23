@@ -39,7 +39,14 @@ const MEIO_DIA = new Date(2026, 9, 9, 12, 0);
  * Banco migrado de verdade, relógio na mão e uma casca de mentira que só anota: nenhum aviso
  * chega ao Windows. `telaCheia` diz o que a casca responde e conta as perguntas.
  */
-function montar(opcoes: { silencio?: Partial<Silencio>; emFoco?: boolean; cascaFalha?: boolean } = {}) {
+function montar(
+  opcoes: {
+    silencio?: Partial<Silencio>;
+    emFoco?: boolean;
+    cascaFalha?: boolean;
+    diaEncerrado?: () => boolean;
+  } = {},
+) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-notificacoes-"));
   pastas.push(pasta);
   const db = abrirBanco(pasta);
@@ -66,6 +73,7 @@ function montar(opcoes: { silencio?: Partial<Silencio>; emFoco?: boolean; cascaF
       agentes: () => agentes.agentes().map((a) => ({ id: a.id, nome: a.nome })),
       silencio: () => silencio,
       emFoco: () => opcoes.emFoco ?? false,
+      ...(opcoes.diaEncerrado ? { diaEncerrado: opcoes.diaEncerrado } : {}),
       windows: {
         mostrar: async (aviso) => {
           if (opcoes.cascaFalha) throw new Error("a casca não respondeu");
@@ -314,6 +322,29 @@ describe("silêncio", () => {
     const esperando = await emFoco.servico.avisar({ ...briefing, referencia: "rotina:r2" });
     expect(emFoco.casca.mostrados).toEqual([]);
     expect(emFoco.servico.naoVistas().map((x) => x.id)).toEqual([esperando.id]);
+  });
+});
+
+describe("dia encerrado", () => {
+  test("cala só o Windows, menos aprovação e lembrete, mesmo com o silêncio desligado", async () => {
+    let encerrado = true;
+    const { servico, casca, eventos, linhas } = montar({
+      silencio: { foco: false, telaCheia: false },
+      diaEncerrado: () => encerrado,
+    });
+    const doNuno = await servico.avisar({ agenteId: "nuno", tipo: "aviso", titulo: "Contexto em 85%" });
+    const erro = await servico.avisar({ agenteId: "nuno", tipo: "erro", titulo: "CI quebrou" });
+    await servico.avisar(lembrete());
+    await servico.avisar({ agenteId: "nuno", tipo: "aprovacao", titulo: "Pedido do terminal" });
+    expect(casca.mostrados.map((m) => m.titulo)).toEqual(["Ligar pro banco", "Pedido do terminal"]);
+    // O ponto e o registro continuam: o que ficou quieto no Windows espera no dock, não visto.
+    expect(eventos.novas.map((n) => n.id)).toEqual(expect.arrayContaining([doNuno.id, erro.id]));
+    expect(servico.naoVistas().map((x) => x.id)).toEqual(expect.arrayContaining([doNuno.id, erro.id]));
+    expect(linhas()).toHaveLength(4);
+
+    encerrado = false;
+    await servico.avisar({ agenteId: "nuno", tipo: "aviso", titulo: "Bom dia" });
+    expect(casca.mostrados.map((m) => m.titulo)).toContain("Bom dia");
   });
 });
 
