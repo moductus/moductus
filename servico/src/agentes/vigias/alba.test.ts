@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { RepositorioAgenda, ServicoAgenda } from "../../areas/agenda/agenda.ts";
 import { RepositorioTarefasDoDia } from "../../areas/agenda/tarefas-do-dia.ts";
 import { PrimeiraAtividade, RepositorioAtividade, type InicioDoDia } from "../../areas/dia/atividade.ts";
+import { RepositorioRotinas, ServicoRotinas } from "../../areas/dia/horarios.ts";
 import { RelogioDoDia } from "../../areas/dia/relogio.ts";
 import { TempoDoDia, somarDias } from "../../areas/dia/tempo.ts";
 import { RepositorioTarefas } from "../../areas/tarefas/repositorio.ts";
@@ -296,6 +297,19 @@ describe("rotinas", () => {
     await segundo.retomar();
     expect(outro.fechamentos).toEqual([]);
     expect(outro.viradas).toHaveLength(1);
+  });
+
+  test("a hora de parar mudada em Configurações vale já hoje, sem esperar a próxima volta do relógio", async () => {
+    const m = montar(sp(DIA, "17:00"));
+    const { relogio } = await m.ligar();
+    await m.ate(sp(DIA, "17:10"));
+    const rotinas = new ServicoRotinas({ repo: new RepositorioRotinas(m.db), emitir: () => {}, relogio });
+    // A hora nova já chegou: o fechamento sai no próximo giro, não na guarda de um minuto.
+    rotinas.definir({ id: "fechamento", hora: "17:10" });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(m.fechamentos).toEqual([{ dia: DIA, previsto: sp(DIA, "17:10"), atrasado: false }]);
+    await m.ate(sp(DIA, "18:30"));
+    expect(m.fechamentos).toHaveLength(1);
   });
 
   test("fechamento desligado não chega", async () => {

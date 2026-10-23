@@ -39,7 +39,10 @@ export const Rotina = z
   });
 export type Rotina = z.infer<typeof Rotina>;
 
-/** Configurações › O dia: a hora (vazia no briefing é a primeira atividade), os dias e desligar. */
+/**
+ * Configurações › O dia: a hora (vazia no briefing é a primeira atividade), os dias e desligar. Os
+ * dias são os dias de trabalho: valem para as duas rotinas e para o expediente.
+ */
 export const MudancaRotina = z.object({
   id: Id,
   hora: HoraDoDia.nullable().optional(),

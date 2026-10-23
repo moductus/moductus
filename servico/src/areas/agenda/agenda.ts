@@ -421,8 +421,11 @@ export interface DependenciasAgenda {
   repo: RepositorioAgenda;
   tarefas: RepositorioTarefasDoDia;
   chamadas: RegistroChamadas;
-  /** Fuso e expediente de `config`, lidos a cada pergunta: mudou no Sistema, vale na hora. */
-  lerDia: () => Pick<ConfigDia, "fuso" | "expediente">;
+  /**
+   * Fuso e expediente de `config` e os dias de trabalho (as rotinas), lidos a cada pergunta: mudou
+   * no Sistema, vale na hora. Sem os dias, todo dia tem expediente.
+   */
+  lerDia: () => Pick<ConfigDia, "fuso" | "expediente"> & { diasDeTrabalho?: readonly number[] };
 }
 
 export interface OpcoesAgenda {
@@ -476,7 +479,7 @@ export class ServicoAgenda {
    * Google), e cada dia com os blocos livres, o planejado, o "dia cheio" e os encaixes.
    */
   consultar(pedido: PedidoAgenda): Agenda {
-    const { fuso, expediente } = this.deps.lerDia();
+    const { fuso, expediente, diasDeTrabalho } = this.deps.lerDia();
     const agora = this.agora();
     // A folga da peneira para nas pontas do calendário (0001-01-01 e 9999-12-31).
     const desde = numeroDoDia(pedido.de) > PRIMEIRO_NUMERO ? somarDias(pedido.de, -1) : pedido.de;
@@ -499,6 +502,7 @@ export class ServicoAgenda {
       agora,
       fuso,
       expediente,
+      diasDeTrabalho,
       ocorrencias,
       tarefas: this.deps.tarefas.abertasAte(pedido.ate),
     });

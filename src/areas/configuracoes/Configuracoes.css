@@ -1151,3 +1151,274 @@
   text-align: center;
   color: var(--sucesso);
 }
+
+/* ---------- O dia (ConfigDia.dc.html) ---------- */
+
+.config-dia-rotulo {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-dia-titulo {
+  margin: 0;
+  font-size: var(--tipo-13);
+  font-weight: var(--peso-forte);
+}
+
+/* Dias de trabalho à esquerda e o fuso à direita, alinhados pela base; sem largura, o fuso desce. */
+.cartao.config-dia-topo {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--esp-16) var(--esp-32);
+  padding: var(--esp-16);
+}
+
+.config-dia-dias {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-8);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.config-dia-dias > legend {
+  padding: 0 0 var(--esp-8);
+}
+
+.config-dia-semana {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-6);
+}
+
+.config-dia-semana-dia {
+  width: var(--largura-dia-semana);
+  height: var(--altura-botao);
+  padding: 0;
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-controle);
+  background: transparent;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-dia-semana-dia[aria-pressed="true"] {
+  border-color: var(--destaque);
+  background: var(--destaque);
+  font-weight: var(--peso-forte);
+  color: var(--sobre-destaque);
+}
+
+.config-dia-semana-dia:disabled {
+  cursor: default;
+}
+
+.config-dia-semana-dia:disabled:not([aria-pressed="true"]) {
+  opacity: var(--opacidade-desativado);
+}
+
+.config-dia-fuso {
+  flex: 0 1 var(--largura-campo-fuso);
+  min-width: 0;
+}
+
+/* Rótulo em cima e a lista na altura do campo. */
+.config-dia-campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  min-width: 0;
+}
+
+.config-dia-campo > .config-dia-rotulo,
+.config-dia-campo > label {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-dia-lista select {
+  min-width: 0;
+  height: var(--altura-campo);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Duas colunas de cartões; cada coluna tem ao menos metade da largura, então nunca passam de
+   duas, e abaixo da largura mínima viram uma. */
+.config-dia-grade {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(max(min(100%, var(--largura-min-cartao-dia)), calc((100% - var(--esp-16)) / 2)), 1fr)
+  );
+  gap: var(--esp-16);
+  align-items: stretch;
+}
+
+.cartao.config-dia-cartao {
+  gap: var(--esp-12);
+  padding: var(--esp-16);
+}
+
+.config-dia-cabeca {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+}
+
+.config-dia-cabeca > .config-dia-titulo {
+  flex: 1;
+}
+
+.config-dia-ligado,
+.config-dia-atalho {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-dia-modos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.config-dia-modo {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-12);
+  padding: var(--esp-10) var(--esp-12);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-controle);
+}
+
+.config-dia-modo[data-marcada="true"] {
+  border-color: var(--destaque);
+  background: var(--fundo-elevado);
+  box-shadow: var(--sombra-opcao-marcada) var(--destaque);
+}
+
+.config-dia-modo:has(input[type="radio"]:focus-visible) {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco);
+}
+
+.config-dia-modos:disabled .config-dia-modo {
+  opacity: var(--opacidade-desativado);
+}
+
+.config-dia-modo-escolha {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--esp-12);
+  min-width: 0;
+  cursor: pointer;
+}
+
+.config-dia-modo-escolha input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--destaque);
+}
+
+.config-dia-modo-escolha input:focus-visible {
+  outline: 0;
+}
+
+.config-dia-modo-textos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  min-width: 0;
+}
+
+.config-dia-modo-nome {
+  font-weight: var(--peso-forte);
+}
+
+/* A hora em mono, centrada, na largura de "18:30". */
+.config-dia-hora {
+  flex: none;
+  width: var(--largura-campo-hora);
+}
+
+.config-dia-hora .campo-entrada {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+  text-align: center;
+}
+
+.config-dia-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-12);
+}
+
+.config-dia-linha-nome {
+  flex: 1;
+}
+
+.config-dia-expediente {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-10);
+}
+
+/* O aviso da hora de parar fica no pé do cartão, onde aparece sem empurrar o resto. */
+.config-dia-status-lugar {
+  margin-top: auto;
+}
+
+.config-dia-status {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  padding: var(--esp-8) var(--esp-12);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-elevado);
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.config-dia-status > span {
+  flex: 1;
+}
+
+.config-dia-ciclos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--esp-10);
+}
+
+/* A rodada inteira: cada etapa ocupa o tempo dela; a pausa mais leve que o foco, como na área Foco. */
+.config-dia-segmentos {
+  display: flex;
+  gap: var(--esp-3);
+}
+
+.config-dia-segmento {
+  flex: 1 1 0;
+  height: var(--altura-segmento-rodada);
+  border-radius: var(--raio-segmento-rodada);
+  background: var(--destaque);
+}
+
+.config-dia-segmento:not([data-tipo="foco"]) {
+  background: var(--texto-3);
+  opacity: var(--opacidade-pausa-rodada);
+}
