@@ -56,6 +56,8 @@ export const EXPORTACAO: Readonly<Record<string, Exportacao>> = {
   // 022-agenda-espelho: os eventos que este PC pôs no "Moductus"; o PC novo espelha do zero e acha
   // os de lá pelo `moductus_id`.
   agenda_espelho: "deste_pc",
+  // 024-alba-do-dia: até onde os vigias daqui olharam; o PC novo começa a olhar de lá.
+  vigias_marcas: "deste_pc",
 };
 
 /**

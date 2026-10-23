@@ -14,6 +14,7 @@ import {
 import type { NovoAviso } from "../../notificacoes/notificacoes.ts";
 import type { RepositorioAgentes } from "../agentes.ts";
 import type { Runtime } from "../runtime.ts";
+import type { MarcasDosVigias } from "./marcas.ts";
 import { FIM_DADO, INICIO_DADO, dado } from "./nuno.ts";
 
 /**
@@ -21,7 +22,8 @@ import { FIM_DADO, INICIO_DADO, dado } from "./nuno.ts";
  * que cuida do que não pede julgamento. Nenhum deles chama o modelo:
  *
  * - **Virada do dia:** à meia-noite no fuso de `config` (ou na primeira conferência depois dela,
- *   se o PC dormia), as abertas que venciam no dia que passou vêm para hoje marcadas. A marca é o
+ *   com o PC dormindo ou desligado: o último dia visto fica em `vigias_marcas`), as abertas que
+ *   venciam nos dias que passaram vêm para hoje marcadas. A marca é o
  *   próprio dia em que venciam, na vista `atrasadas` (F3-15): a virada não regrava nada, só avisa
  *   quem mostra o dia.
  * - **Compromisso chegando:** cada alerta do evento (minutos antes do começo) avisa em nome da
@@ -29,7 +31,8 @@ import { FIM_DADO, INICIO_DADO, dado } from "./nuno.ts";
  *   começou; o que já começou há mais de 2 min fica só na agenda. Cada alerta avisa uma vez, também
  *   depois de o serviço reiniciar (a referência da notificação).
  * - **Rotinas:** o horário fixo do briefing (quem decide é a primeira atividade) e a hora de parar
- *   do fechamento, uma vez por dia.
+ *   do fechamento, uma vez por dia: a marca de que ele saiu é gravada quando sai, e reiniciar não o
+ *   repete.
  *
  * O modelo só acorda para redigir a rotina ({@link redacaoPelaAlba}) e entender a captura
  * (`areas/captura/modelo.ts`), sempre sem ferramentas e com prazo, como o despertar do Nuno.
@@ -81,8 +84,16 @@ export interface DependenciasVigiaAlba {
   rotinas: Pick<RepositorioAtividade, "briefing" | "fechamento" | "jaApareceu">;
   /** O horário fixo do briefing pode ter chegado: a primeira atividade decide (`sinal("horario")`). */
   briefingNoHorario: () => void;
+  /** Até onde a virada e o fechamento já olharam, gravado a cada mudança. */
+  marcas: MarcasDosVigias;
+  /** O relógio do dia, para se rearmar quando a agenda muda. */
+  relogio: { mudou(): void };
   avisos: AvisosVigiaAlba;
 }
+
+/** O último dia que a virada viu e o último dia em que o fechamento saiu (`vigias_marcas`). */
+export const MARCA_DIA = "alba.dia";
+export const MARCA_FECHAMENTO = "alba.fechamento";
 
 /** De 1 (segunda) a 7 (domingo), como a ISO 8601 e `rotinas.dias_semana`. */
 const diaIso = (diaDaSemana: number) => (diaDaSemana === 0 ? 7 : diaDaSemana);
@@ -92,7 +103,7 @@ export class VigiaAlba {
   readonly compromissos: FonteCompromissos;
   readonly rotinas: FonteDoRelogio;
 
-  constructor(deps: DependenciasVigiaAlba) {
+  constructor(private readonly deps: DependenciasVigiaAlba) {
     this.virada = new FonteVirada(deps);
     this.compromissos = new FonteCompromissos(deps);
     this.rotinas = new FonteRotinas(deps);
@@ -103,21 +114,26 @@ export class VigiaAlba {
     return [this.virada, this.compromissos, this.rotinas];
   }
 
-  /** Um evento ou calendário mudou: os alertas guardados valem de novo só depois de relidos. */
+  /** Um evento ou calendário mudou: os alertas são relidos e o relógio se rearma por eles. */
   agendaMudou(): void {
     this.compromissos.mudou();
+    this.deps.relogio.mudou();
   }
 }
 
 class FonteVirada implements FonteDoRelogio {
   readonly nome = "virada do dia";
-  /** O dia da última conferência; `null` antes da primeira (na subida não há o que virar). */
+  /**
+   * O dia da última conferência, lido da marca na primeira; `null` até lá, ou na primeira subida do
+   * Moductus, que não tem o que virar.
+   */
   private dia: string | null = null;
+  private lida = false;
 
   constructor(private readonly deps: DependenciasVigiaAlba) {}
 
   proximo(agora: Date): Date | null {
-    if (this.dia === null) return null;
+    if (!this.lida || this.dia === null) return null;
     const fuso = this.deps.lerFuso();
     const hoje = diaNoFuso(agora, fuso);
     // O fuso mudou para um em que já é amanhã: confere já.
@@ -127,13 +143,22 @@ class FonteVirada implements FonteDoRelogio {
 
   conferir({ agora }: Conferencia): void {
     const hoje = diaNoFuso(agora, this.deps.lerFuso());
+    if (!this.lida) {
+      this.dia = this.deps.marcas.ler(MARCA_DIA);
+      this.lida = true;
+    }
     const antes = this.dia;
-    // Relógio ou fuso para trás não vira o dia ao contrário: só passa a contar dele.
-    if (antes === null || hoje <= antes) {
+    if (antes === hoje) return;
+    // Relógio ou fuso para trás não vira o dia ao contrário: só passa a contar dele. A primeira
+    // subida também só começa a contar.
+    if (antes === null || hoje < antes) {
+      this.deps.marcas.gravar(MARCA_DIA, hoje);
       this.dia = hoje;
       return;
     }
     const abertas = this.deps.abertasEntre(antes, hoje);
+    // A marca antes do aviso: o serviço que cai depois dele não avisa a mesma virada de novo.
+    this.deps.marcas.gravar(MARCA_DIA, hoje);
     this.dia = hoje;
     this.deps.avisos.virou({ de: antes, para: hoje, abertas });
   }
@@ -230,8 +255,11 @@ export function avisoDoCompromisso(a: AlertaDeCompromisso, agora: Date, fuso: st
 
 class FonteRotinas implements FonteDoRelogio {
   readonly nome = "rotinas";
-  /** O dia em que o fechamento já saiu neste serviço; o registro só existe depois que ele aparece. */
-  private fechou: string | null = null;
+  /**
+   * O dia em que o fechamento saiu por último, lido da marca na primeira vez: o registro da rotina
+   * só existe depois que o usuário responde, e reiniciar não pode repetir o de hoje.
+   */
+  private fechou: string | null | undefined = undefined;
 
   constructor(private readonly deps: DependenciasVigiaAlba) {}
 
@@ -246,7 +274,7 @@ class FonteRotinas implements FonteDoRelogio {
       candidatos.push(instanteNoFuso(dia, briefing.hora, fuso));
     }
     const fechamento = this.deps.rotinas.fechamento();
-    if (fechamento?.hora && valeHoje(fechamento) && this.fechou !== dia) {
+    if (fechamento?.hora && valeHoje(fechamento) && this.ultimoFechamento() !== dia) {
       if (fechamento.hora > hora) candidatos.push(instanteNoFuso(dia, fechamento.hora, fuso));
       else if (!this.deps.rotinas.jaApareceu(dia, FECHAMENTO)) candidatos.push(agora);
     }
@@ -266,14 +294,20 @@ class FonteRotinas implements FonteDoRelogio {
     if (falha !== null) throw falha;
   }
 
+  private ultimoFechamento(): string | null {
+    if (this.fechou === undefined) this.fechou = this.deps.marcas.ler(MARCA_FECHAMENTO);
+    return this.fechou;
+  }
+
   /** Uma vez por dia, na hora de parar ou na primeira conferência depois dela no mesmo dia. */
   private fechamento(agora: Date): void {
     const fuso = this.deps.lerFuso();
     const { dia, hora, diaDaSemana } = noFuso(agora, fuso);
-    if (this.fechou === dia) return;
+    if (this.ultimoFechamento() === dia) return;
     const rotina = this.deps.rotinas.fechamento();
     if (!rotina?.ativa || rotina.hora === null || !rotina.diasSemana.includes(diaIso(diaDaSemana))) return;
     if (hora < rotina.hora || this.deps.rotinas.jaApareceu(dia, FECHAMENTO)) return;
+    this.deps.marcas.gravar(MARCA_FECHAMENTO, dia);
     this.fechou = dia;
     const previsto = instanteNoFuso(dia, rotina.hora, fuso);
     this.deps.avisos.fechamento({
@@ -324,10 +358,33 @@ export function pedidoDaRedacao(p: Pick<PedidoRedacao, "pedido" | "linhas" | "da
   return linhas.join("\n");
 }
 
-/** Os números da frase vêm todos das linhas: número da conta do modelo não aparece (números honestos). */
+/**
+ * Número por extenso que a frase não pode ter: as linhas trazem os números em algarismo, e o que o
+ * modelo escreve por extenso não dá para conferir. "Um" e "uma" ficam de fora: são também o artigo.
+ */
+const POR_EXTENSO = new Set(
+  (
+    "dois duas tres quatro cinco seis sete oito nove dez onze doze treze catorze quatorze quinze " +
+    "dezesseis dezessete dezoito dezenove vinte trinta quarenta cinquenta sessenta setenta oitenta " +
+    "noventa cem cento duzentos duzentas trezentos trezentas mil"
+  ).split(" "),
+);
+
+const numeros = (texto: string) => (texto.match(/\d+/g) ?? []).map((n) => String(Number(n)));
+
+/**
+ * Os números da frase vêm todos das linhas, em algarismo: número da conta do modelo não aparece
+ * (números honestos). "9h" vale para "09:00"; "sete reuniões" não vale, nem com "7 reuniões" nelas.
+ */
 export function numerosConferem(frase: string, linhas: readonly string[]): boolean {
-  const permitidos = new Set(linhas.join(" ").match(/\d+/g) ?? []);
-  return (frase.match(/\d+/g) ?? []).every((n) => permitidos.has(n));
+  const palavras = frase
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .split(/[^\p{L}]+/u);
+  if (palavras.some((p) => POR_EXTENSO.has(p))) return false;
+  const permitidos = new Set(numeros(linhas.join(" ")));
+  return numeros(frase).every((n) => permitidos.has(n));
 }
 
 /**

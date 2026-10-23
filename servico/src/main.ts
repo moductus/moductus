@@ -9,6 +9,7 @@ import { aberturaMcpDoRuntime } from "./agentes/mcp.ts";
 import { classificadorPeloRuntime, Roteador } from "./agentes/roteador.ts";
 import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
 import { VigiaAlba } from "./agentes/vigias/alba.ts";
+import { RepositorioMarcasDosVigias } from "./agentes/vigias/marcas.ts";
 import { VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
@@ -747,6 +748,8 @@ vigiaAlba = new VigiaAlba({
   avisar: (aviso) => notificacoes.avisar(aviso),
   rotinas: repositorioAtividade,
   briefingNoHorario: () => sinalDeAtividade("horario"),
+  marcas: new RepositorioMarcasDosVigias(banco),
+  relogio,
   avisos: {
     // As abertas de ontem passam à vista das atrasadas, com o dia em que venciam: as janelas e as
     // contagens não esperam a próxima leitura delas.

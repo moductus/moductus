@@ -18,6 +18,7 @@ import { RegistroProvedores } from "../../provedores/registro.ts";
 import { RepositorioAgentes } from "../agentes.ts";
 import { RepositorioExecucoes } from "../execucoes.ts";
 import { Runtime } from "../runtime.ts";
+import { RepositorioMarcasDosVigias } from "./marcas.ts";
 import { FIM_DADO, INICIO_DADO } from "./nuno.ts";
 import {
   numerosConferem,
@@ -56,14 +57,16 @@ function bancoNovo(prefixo: string) {
  * Banco migrado de verdade, as áreas de verdade (Tarefas, Agenda, a primeira atividade) e o relógio
  * do dia com o tempo falso do vitest, ligado em `inicio` (hora de São Paulo). Os avisos ficam numa
  * lista que faz as vezes de `notificacoes`: a referência que já está nela "já avisou", também para
- * o vigia que nasce depois de o serviço reiniciar. O vigia não recebe runtime: não tem como chamar
- * o modelo.
+ * o vigia que nasce depois de o serviço reiniciar; as marcas ficam no banco, como no serviço. A
+ * agenda avisa o vigia a cada mudança, como no main.ts. O vigia não recebe runtime: não tem como
+ * chamar o modelo.
  */
 function montar(inicio: Date) {
   vi.useFakeTimers();
   vi.setSystemTime(inicio);
   const db = bancoNovo("moductus-vigia-alba-");
   const lerFuso = () => FUSO;
+  let vigia: VigiaAlba | null = null;
   const agenda = new ServicoAgenda(
     {
       repo: new RepositorioAgenda(db),
@@ -71,7 +74,7 @@ function montar(inicio: Date) {
       chamadas: new RepositorioExecucoes(db),
       lerDia: () => ({ fuso: FUSO, expediente: { inicio: "09:00", fim: "18:00" } }),
     },
-    { mudou: () => {}, calendarios: () => {} },
+    { mudou: () => vigia?.agendaMudou(), calendarios: () => vigia?.agendaMudou() },
   );
   const tarefas = new ServicoTarefas(
     new RepositorioTarefas(db),
@@ -84,8 +87,12 @@ function montar(inicio: Date) {
   const avisos: NovoAviso[] = [];
   const viradas: ViradaDoDia[] = [];
   const fechamentos: HoraDoFechamento[] = [];
+  const marcas = new RepositorioMarcasDosVigias(db);
+  /** Uma subida do serviço: vigia e relógio novos, com o mesmo banco. */
   const ligar = async () => {
-    const vigia = new VigiaAlba({
+    const relogio = new RelogioDoDia();
+    relogios.push(relogio);
+    vigia = new VigiaAlba({
       lerFuso,
       abertasEntre: (desde, ate) => tarefas.abertasQueVenciam(desde, ate),
       compromissos: (janela) => agenda.alertasDeCompromissos(janela),
@@ -93,13 +100,13 @@ function montar(inicio: Date) {
       avisar: async (aviso) => avisos.push(aviso),
       rotinas,
       briefingNoHorario: () => void atividade.sinal("horario"),
+      marcas,
+      relogio,
       avisos: { virou: (v) => viradas.push(v), fechamento: (f) => fechamentos.push(f) },
     });
-    const relogio = new RelogioDoDia();
-    relogios.push(relogio);
     for (const fonte of vigia.fontes) relogio.registrar(fonte);
     await relogio.ligar();
-    return { vigia, relogio };
+    return { relogio };
   };
   /** Avança o relógio até a hora de São Paulo, deixando os timers dispararem no caminho. */
   const ate = (instante: Date) => vi.advanceTimersByTimeAsync(instante.getTime() - Date.now());
@@ -125,6 +132,27 @@ describe("virada do dia", () => {
 
     // O dia seguinte inteiro não vira de novo.
     await m.ate(sp(somarDias(DIA, 1), "23:00"));
+    expect(m.viradas).toHaveLength(1);
+  });
+
+  test("o PC desligado à noite: a subida do dia seguinte avisa a virada uma vez", async () => {
+    const m = montar(sp(DIA, "22:00"));
+    m.tarefas.criar({ titulo: "Ligar pro banco", venceEm: DIA });
+    // A primeira subida do Moductus não tem o que virar: só grava o dia.
+    const { relogio } = await m.ligar();
+    expect(m.viradas).toEqual([]);
+    relogio.parar();
+
+    vi.setSystemTime(sp(somarDias(DIA, 1), "08:00"));
+    const { relogio: manha } = await m.ligar();
+    expect(m.viradas).toHaveLength(1);
+    expect(m.viradas[0]).toMatchObject({ de: DIA, para: somarDias(DIA, 1) });
+    expect(m.viradas[0]!.abertas.map((t) => t.titulo)).toEqual(["Ligar pro banco"]);
+    manha.parar();
+
+    // Reiniciar no mesmo dia não avisa de novo.
+    vi.setSystemTime(sp(somarDias(DIA, 1), "10:00"));
+    await m.ligar();
     expect(m.viradas).toHaveLength(1);
   });
 
@@ -204,7 +232,7 @@ describe("compromisso chegando", () => {
 
   test("evento criado em cima da hora, com o alerta já passado, avisa assim que a agenda muda", async () => {
     const m = montar(sp(DIA, "13:00"));
-    const { vigia, relogio } = await m.ligar();
+    await m.ligar();
     await m.ate(sp(DIA, "13:10"));
     m.agenda.criarEvento({
       titulo: "Ligação",
@@ -213,8 +241,6 @@ describe("compromisso chegando", () => {
       diaInteiro: false,
       alertas: [10],
     });
-    vigia.agendaMudou();
-    relogio.mudou();
     await vi.advanceTimersByTimeAsync(0);
     expect(m.avisos.map((a) => a.corpo)).toEqual(["Começa às 13:15"]);
   });
@@ -239,6 +265,20 @@ describe("rotinas", () => {
       )
       .run(amanha);
     await m.ate(sp(amanha, "19:00"));
+    expect(m.fechamentos).toHaveLength(1);
+  });
+
+  test("o fechamento que já saiu hoje não sai de novo quando o serviço reinicia", async () => {
+    const m = montar(sp(DIA, "17:00"));
+    const { relogio } = await m.ligar();
+    await m.ate(sp(DIA, "18:00"));
+    expect(m.fechamentos).toHaveLength(1);
+    relogio.parar();
+
+    // Ninguém respondeu (rotinas_registro vazio), e mesmo assim a subida das 18:30 não repete.
+    vi.setSystemTime(sp(DIA, "18:30"));
+    await m.ligar();
+    await m.ate(sp(DIA, "21:00"));
     expect(m.fechamentos).toHaveLength(1);
   });
 
@@ -349,5 +389,12 @@ describe("redação da rotina (despertar contido)", () => {
     expect(numerosConferem("Hoje: 3 reuniões, a próxima às 10:00.", PEDIDO.linhas)).toBe(true);
     expect(numerosConferem("Hoje: 4 reuniões.", PEDIDO.linhas)).toBe(false);
     expect(numerosConferem("Bom dia, o dia está tranquilo.", PEDIDO.linhas)).toBe(true);
+    // Zero à esquerda não muda o número: "às 9h" vale para "às 09:00".
+    expect(numerosConferem("A primeira é às 9h.", ["reunião às 09:00"])).toBe(true);
+    // Por extenso não dá para conferir: cai no molde, mesmo que o número esteja nas linhas.
+    expect(numerosConferem("Hoje: sete reuniões.", ["7 reuniões"])).toBe(false);
+    expect(numerosConferem("Três tarefas vencem hoje.", ["3 tarefas"])).toBe(false);
+    // "Um" e "uma" são também o artigo.
+    expect(numerosConferem("Uma reunião às 10:00 e um bloco livre.", PEDIDO.linhas)).toBe(true);
   });
 });
