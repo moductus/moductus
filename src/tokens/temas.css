@@ -433,8 +433,9 @@
 
   --sombra-janela: 0 24px 64px rgba(0, 0, 0, 0.45);
   --sombra-painel: 0 24px 48px rgba(0, 0, 0, 0.45);
-  /* O bloco do Início selecionado ao editar (InicioEditar.dc.html) */
-  --sombra-bloco-editando: 0 8px 24px rgba(0, 0, 0, 0.35);
+  /* O bloco do Início selecionado ao editar (InicioEditar.dc.html): a segunda volta de borda no
+     destaque, por dentro (2 sem mudar o tamanho), e a sombra que o levanta */
+  --sombra-bloco-editando: inset 0 0 0 1px var(--destaque), 0 8px 24px rgba(0, 0, 0, 0.35);
   --sombra-dock: none;
   --desfoque: none;
   /* O que fica fora da parada do tour escurece (TutorialTour.dc.html) */
@@ -492,7 +493,7 @@
 
   --sombra-janela: 0 24px 64px rgba(40, 36, 28, 0.16);
   --sombra-painel: 0 16px 40px rgba(40, 36, 28, 0.12);
-  --sombra-bloco-editando: 0 8px 24px rgba(40, 36, 28, 0.14);
+  --sombra-bloco-editando: inset 0 0 0 1px var(--destaque), 0 8px 24px rgba(40, 36, 28, 0.14);
   --sombra-dock: 0 8px 24px rgba(40, 36, 28, 0.08);
   --desfoque: none;
   --veu-tour: rgba(40, 36, 28, 0.22);
@@ -548,7 +549,7 @@
 
   --sombra-janela: 0 24px 64px rgba(0, 0, 0, 0.35);
   --sombra-painel: none;
-  --sombra-bloco-editando: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --sombra-bloco-editando: inset 0 0 0 1px var(--destaque), 0 8px 24px rgba(0, 0, 0, 0.35);
   --sombra-dock: none;
   /* O desfoque de verdade é o Acrylic da janela; este vale para camadas dentro dela. */
   --desfoque: blur(32px) saturate(140%);

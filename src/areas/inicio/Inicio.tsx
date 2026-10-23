@@ -42,7 +42,9 @@ function useBlocosDoInicio() {
     [definir],
   );
 
-  return { inicio: local ?? gravado, aplicar, erro };
+  const limparErro = useCallback(() => setErro(false), []);
+
+  return { inicio: local ?? gravado, aplicar, erro, limparErro };
 }
 
 /** `antes`: o que vem acima dos blocos do dia (os Primeiros passos, enquanto pendentes). */
@@ -50,7 +52,7 @@ export function Inicio({ antes }: { antes?: ReactNode }) {
   const canal = useCanal(useServico({ silencioso: true }));
   const agora = useAgora();
   const { ir } = useAcoesSistema();
-  const { inicio, aplicar, erro } = useBlocosDoInicio();
+  const { inicio, aplicar, erro, limparErro } = useBlocosDoInicio();
   const [editando, setEditando] = useState(false);
   const [status, setStatus] = useState(PRONTO);
   const refTarefas = useRef<HTMLElement>(null);
@@ -62,7 +64,9 @@ export function Inicio({ antes }: { antes?: ReactNode }) {
     setStatus(texto);
   };
 
+  // Uma edição nova começa limpa: a recusa da anterior já não vale para ela.
   const comecar = () => {
+    limparErro();
     setStatus(PRONTO);
     setEditando(true);
   };

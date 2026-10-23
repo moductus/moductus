@@ -252,12 +252,10 @@
   grid-row: auto;
 }
 
-/* O selecionado: a borda vira destaque com uma segunda volta por dentro (2 sem mudar o tamanho). */
+/* O selecionado: a borda vira destaque, com a segunda volta e a sombra do token. */
 .inicio-editar-bloco[data-selecionado] {
   border-color: var(--destaque);
-  box-shadow:
-    var(--sombra-opcao-marcada) var(--destaque),
-    var(--sombra-bloco-editando);
+  box-shadow: var(--sombra-bloco-editando);
 }
 
 .inicio-editar-bloco[data-arrastando] {

@@ -145,13 +145,12 @@ function MaisNaArea({ quantos, area, nome }: { quantos: number; area: IdArea; no
 
 /**
  * A abertura do briefing da Alba (Sistema.dc.html). O briefing inteiro, com as linhas e as ações,
- * é o do painel Hoje; aqui fica só a abertura. Enquanto ele não apareceu hoje, ou o serviço não
- * o trouxe, o bloco diz quando ele chega.
+ * é o do painel Hoje; aqui fica só a abertura. Enquanto ele não apareceu hoje, o bloco diz quando
+ * ele chega; se o serviço não respondeu, diz isso e oferece tentar de novo.
  */
 function BlocoBriefing({ canal }: { canal: EstadoConexao }) {
   const idRotulo = useId();
   const leitura = useBriefingDeHoje(canal);
-  const briefing = leitura.estado === "pronta" ? leitura.dados : null;
   return (
     <section className="inicio-briefing" data-bloco="briefing" aria-labelledby={idRotulo}>
       <Personagem agente="alba" modo="cabeca" tamanho="inicio" estado="ocioso" />
@@ -159,9 +158,18 @@ function BlocoBriefing({ canal }: { canal: EstadoConexao }) {
         <h2 id={idRotulo} className="inicio-briefing-rotulo">
           Alba · briefing da manhã
         </h2>
-        <p className="inicio-briefing-texto">
-          {briefing?.abertura ?? "O briefing da manhã aparece aqui quando a Alba abrir o dia."}
-        </p>
+        {leitura.estado === "esperando" && <Vazio texto="Lendo o briefing." lendo />}
+        {leitura.estado === "falhou" && (
+          <Vazio
+            texto="Não consegui ler o briefing agora."
+            acao={<TentarDeNovo aoClicar={leitura.tentarDeNovo} />}
+          />
+        )}
+        {leitura.estado === "pronta" && (
+          <p className="inicio-briefing-texto">
+            {leitura.dados?.abertura ?? "O briefing da manhã aparece aqui quando a Alba abrir o dia."}
+          </p>
+        )}
       </div>
     </section>
   );

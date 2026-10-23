@@ -30,32 +30,45 @@ interface PropsEditar {
  * esboço do conteúdo, arrastável, com mover para cima, para baixo e esconder; o bloco selecionado
  * também anda com Alt ↑ e Alt ↓. Os escondidos ficam no fim, com Mostrar.
  */
+/** Onde o foco fica depois de uma mudança. */
+type AlvoDoFoco = "cartao" | "subir" | "descer" | "mostrar";
+
 export function EditarBlocos({ inicio, aplicar, status, erro }: PropsEditar) {
   const idDica = useId();
   const lista = visiveis(inicio);
   const fora = escondidos(inicio);
   const [selecionado, setSelecionado] = useState<IdBlocoInicio | null>(null);
   const [arrastando, setArrastando] = useState<IdBlocoInicio | null>(null);
-  // O bloco que andou pelo teclado volta a ter o foco depois que a grade se reordena.
-  const [focar, setFocar] = useState<{ id: IdBlocoInicio } | null>(null);
+  // Reordenar move os cartões no DOM e o foco cairia no fim da página: depois da mudança ele volta
+  // ao cartão, ao botão que foi clicado (ou ao cartão, se o botão desabilitou na ponta) ou ao Mostrar.
+  const [focar, setFocar] = useState<{ id: IdBlocoInicio; alvo: AlvoDoFoco } | null>(null);
   const cartoes = useRef(new Map<IdBlocoInicio, HTMLElement>());
+  const grade = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (focar) cartoes.current.get(focar.id)?.focus();
+    if (!focar) return;
+    const cartao = cartoes.current.get(focar.id);
+    const alvo =
+      focar.alvo === "mostrar"
+        ? grade.current?.querySelector<HTMLElement>(`[data-mostrar="${focar.id}"]`)
+        : focar.alvo === "cartao"
+          ? cartao
+          : cartao?.querySelector<HTMLButtonElement>(`[data-mover="${focar.alvo}"]:not(:disabled)`);
+    (alvo ?? cartao)?.focus();
   }, [focar]);
 
-  const andar = (id: IdBlocoInicio, passo: -1 | 1, peloTeclado: boolean) => {
+  const andar = (id: IdBlocoInicio, passo: -1 | 1, alvo: AlvoDoFoco) => {
     const novo = mover(inicio, id, passo);
     if (!novo) return;
     aplicar(novo, textoDaMudanca(novo, id, "moveu"));
-    if (peloTeclado) setFocar({ id });
+    setFocar({ id, alvo });
   };
 
   const aoTeclar = (id: IdBlocoInicio) => (e: KeyboardEvent<HTMLElement>) => {
     if (!e.altKey || e.ctrlKey || e.shiftKey || e.metaKey) return;
     if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
     e.preventDefault();
-    andar(id, e.key === "ArrowUp" ? -1 : 1, true);
+    andar(id, e.key === "ArrowUp" ? -1 : 1, "cartao");
   };
 
   const aoSoltar = (alvo: IdBlocoInicio) => (e: DragEvent<HTMLElement>) => {
@@ -76,7 +89,7 @@ export function EditarBlocos({ inicio, aplicar, status, erro }: PropsEditar) {
           <Atalho teclas="Alt+↓" />. Esconder não apaga nada: o bloco vai para Escondidos.
         </span>
       </p>
-      <div className="inicio-grade">
+      <div ref={grade} className="inicio-grade">
         {lista.map((id, i) => {
           const { nome, descricao, esboco } = DADOS_BLOCOS[id];
           const lugar = posicao(inicio, id);
@@ -127,15 +140,17 @@ export function EditarBlocos({ inicio, aplicar, status, erro }: PropsEditar) {
                   tamanho="pequeno"
                   icone="subir"
                   aria-label={`Mover ${nome} para cima`}
+                  data-mover="subir"
                   disabled={i === 0}
-                  onClick={() => andar(id, -1, false)}
+                  onClick={() => andar(id, -1, "subir")}
                 />
                 <Botao
                   tamanho="pequeno"
                   icone="descer"
                   aria-label={`Mover ${nome} para baixo`}
+                  data-mover="descer"
                   disabled={i === lista.length - 1}
-                  onClick={() => andar(id, 1, false)}
+                  onClick={() => andar(id, 1, "descer")}
                 />
                 <span className="inicio-editar-vao" />
                 <Botao
@@ -144,9 +159,9 @@ export function EditarBlocos({ inicio, aplicar, status, erro }: PropsEditar) {
                   aria-label={`Esconder ${nome}`}
                   onClick={() => {
                     aplicar(esconder(inicio, id), textoDaMudanca(inicio, id, "escondeu"));
-                    // O cartão sai da grade: o foco fica no vizinho, não cai no fim da página.
+                    // O cartão sai da grade: o foco fica no vizinho; sem vizinho, no Mostrar dele.
                     const vizinho = lista[i + 1] ?? lista[i - 1];
-                    if (vizinho) setFocar({ id: vizinho });
+                    setFocar(vizinho ? { id: vizinho, alvo: "cartao" } : { id, alvo: "mostrar" });
                   }}
                 >
                   Esconder
@@ -180,10 +195,11 @@ export function EditarBlocos({ inicio, aplicar, status, erro }: PropsEditar) {
                   tamanho="pequeno"
                   icone="mostrar"
                   aria-label={`Mostrar ${nome}`}
+                  data-mostrar={id}
                   onClick={() => {
                     const novo = mostrar(inicio, id);
                     aplicar(novo, textoDaMudanca(novo, id, "mostrou"));
-                    setFocar({ id });
+                    setFocar({ id, alvo: "cartao" });
                   }}
                 >
                   Mostrar

@@ -78,6 +78,8 @@ const PR: ItemGithub = {
 const servidor = {
   config: CONFIG_PADRAO as Config,
   recusarConfig: false,
+  /** O briefing de hoje, nenhum ainda, ou o pedido recusado (`rotinas.hoje` ainda sem atendente). */
+  briefing: BRIEFING as ApresentacaoRotina | null | "recusa",
 };
 const definicoes: MudancaConfig[] = [];
 
@@ -97,7 +99,8 @@ const pedir = vi.fn(async (metodo: string, dados?: unknown): Promise<unknown> =>
       servidor.config = { ...servidor.config, ...(dados as MudancaConfig) };
       return estado();
     case "rotinas.hoje":
-      return { briefing: BRIEFING, fechamento: null, diaEncerrado: false };
+      if (servidor.briefing === "recusa") throw new Error("rotinas.hoje ainda não está disponível");
+      return { briefing: servidor.briefing, fechamento: null, diaEncerrado: false };
     case "listas.listar":
       return [{ id: "entrada", nome: "Entrada", ordem: 0, cor: null, arquivada: false }];
     case "tarefas.listar": {
@@ -192,6 +195,7 @@ beforeEach(() => {
   vi.setSystemTime(AGORA);
   servidor.config = CONFIG_PADRAO;
   servidor.recusarConfig = false;
+  servidor.briefing = BRIEFING;
   definicoes.length = 0;
   ouvintes.clear();
   ir.mockClear();
@@ -347,21 +351,63 @@ describe("Início", () => {
     expect(ir).toHaveBeenCalledWith({ area: "tarefas" });
   });
 
-  it("sem briefing hoje (ou sem a rotina no serviço), o bloco diz quando ele chega e o aviso o traz", async () => {
-    const original = pedir.getMockImplementation()!;
-    pedir.mockImplementation(async (metodo, dados) => {
-      if (metodo === "rotinas.hoje")
-        throw new Error("rotinas.hoje ainda não está disponível nesta versão do serviço");
-      return original(metodo, dados);
-    });
-    try {
-      await montar();
-      const briefing = por('[data-bloco="briefing"]')!;
-      expect(briefing.textContent).toContain("O briefing da manhã aparece aqui quando a Alba abrir o dia.");
-      await act(async () => ouvintes.get("rotinas.apareceu")!.forEach((fn) => fn(BRIEFING)));
-      expect(briefing.textContent).toContain(BRIEFING.abertura);
-    } finally {
-      pedir.mockImplementation(original);
-    }
+  it("sem briefing hoje, o bloco diz quando ele chega, e o aviso do serviço o traz", async () => {
+    servidor.briefing = null;
+    await montar();
+    const briefing = por('[data-bloco="briefing"]')!;
+    expect(briefing.textContent).toContain("O briefing da manhã aparece aqui quando a Alba abrir o dia.");
+    expect(briefing.querySelector('[role="alert"], button')).toBeNull();
+    await act(async () => ouvintes.get("rotinas.apareceu")!.forEach((fn) => fn(BRIEFING)));
+    expect(briefing.textContent).toContain(BRIEFING.abertura);
+  });
+
+  it("briefing que o serviço não leu diz isso, separado do vazio, e Tentar de novo lê outra vez", async () => {
+    servidor.briefing = "recusa";
+    await montar();
+    const briefing = por('[data-bloco="briefing"]')!;
+    expect(briefing.textContent).toContain("Não consegui ler o briefing agora.");
+    expect(briefing.textContent).not.toContain("aparece aqui quando a Alba abrir o dia");
+    servidor.briefing = BRIEFING;
+    await act(async () => briefing.querySelector("button")!.click());
+    expect(briefing.textContent).toContain(BRIEFING.abertura);
+    expect(briefing.querySelector("button")).toBeNull();
+  });
+
+  it("Mover devolve o foco ao botão clicado; se ele desabilitou na ponta, ao cartão", async () => {
+    await montar();
+    await clicar("Editar blocos");
+    await clicar("Mover Dev para baixo");
+    expect(editaveis().indexOf("Bloco Dev")).toBe(5);
+    // Dev ficou por último: o "para baixo" desabilitou e o foco ficou no cartão.
+    expect(document.activeElement?.getAttribute("aria-label")).toBe("Bloco Dev");
+    await clicar("Mover Dev para cima");
+    expect(editaveis().indexOf("Bloco Dev")).toBe(4);
+    expect(document.activeElement).toBe(botao("Mover Dev para cima"));
+  });
+
+  it("esconder o último bloco que aparece leva o foco ao Mostrar dele", async () => {
+    servidor.config = {
+      ...CONFIG_PADRAO,
+      inicio: { ...CONFIG_PADRAO.inicio, escondidos: ["briefing", "tarefas", "foco", "financas", "dev"] },
+    };
+    await montar();
+    await clicar("Editar blocos");
+    expect(editaveis()).toEqual(["Bloco Sessões de IA"]);
+    await clicar("Esconder Sessões de IA");
+    expect(editaveis()).toEqual([]);
+    expect(document.activeElement).toBe(botao("Mostrar Sessões de IA"));
+  });
+
+  it("a recusa de uma edição não fica para a próxima: Editar blocos começa sem o erro", async () => {
+    await montar();
+    await clicar("Editar blocos");
+    servidor.recusarConfig = true;
+    await clicar("Esconder Foco");
+    expect(por(".inicio-status")!.textContent).toContain("Não consegui guardar a mudança");
+    await clicar("Concluir");
+    servidor.recusarConfig = false;
+    await clicar("Editar blocos");
+    expect(por('[role="alert"]')).toBeNull();
+    expect(por(".inicio-status")!.textContent).toBe("Cada mudança vale na hora.");
   });
 });
