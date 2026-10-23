@@ -50,6 +50,7 @@ pub fn run() {
             janelas::painel_abrir,
             janelas::painel_fechar,
             janelas::painel_pronto,
+            janelas::painel_area_atual,
             janelas::painel_foco,
             janelas::sistema_alternar,
             janelas::sistema_abrir,

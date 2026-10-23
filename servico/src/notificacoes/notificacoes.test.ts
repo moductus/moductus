@@ -114,12 +114,12 @@ const lembrete = (extra: Partial<NovoAviso> = {}): NovoAviso => ({
 });
 
 describe("entrega pela preferência", () => {
-  test("tudo avisa qualquer tipo; só o que precisa, aprovação, lembrete e erro; nada, nenhum", () => {
+  test("tudo avisa qualquer tipo; só o que precisa, aprovação, lembrete, erro e rotina; nada, nenhum", () => {
     const tipos = ["aprovacao", "lembrete", "erro", "aviso", "rotina"] as const;
     const avisa = (nivel: "tudo" | "so_o_que_precisa" | "nada") =>
       tipos.filter((t) => entregaPela({ nivel, canal: "ambos" }, t).avisa);
     expect(avisa("tudo")).toEqual(tipos);
-    expect(avisa("so_o_que_precisa")).toEqual(["aprovacao", "lembrete", "erro"]);
+    expect(avisa("so_o_que_precisa")).toEqual(["aprovacao", "lembrete", "erro", "rotina"]);
     expect(avisa("nada")).toEqual([]);
   });
 
@@ -163,6 +163,14 @@ describe("avisar", () => {
     ]);
     expect(eventos.novas.map((x) => x.id)).toEqual([n.id]);
     expect(servico.naoVistas().map((x) => x.id)).toEqual([n.id]);
+  });
+
+  test("o aviso que pede sai sem o painel do time no clique; os outros, com", async () => {
+    const { servico, casca } = montar();
+    servico.definir({ agenteId: "alba", nivel: "tudo", canal: "ambos" });
+    await servico.avisar(lembrete({ referencia: "rotina:r1", tipo: "rotina", semPainelDoTime: true }));
+    await servico.avisar(lembrete({ referencia: "lembrete:2" }));
+    expect(casca.mostrados.map((a) => a.semPainelDoTime)).toEqual([true, undefined]);
   });
 
   test('nível "nada" não avisa e registra: sem Windows, sem ponto, no histórico já visto', async () => {
@@ -288,6 +296,24 @@ describe("silêncio", () => {
     const erro = await servico.avisar({ agenteId: "nuno", tipo: "erro", titulo: "CI quebrou" });
     expect(casca.mostrados.map((m) => m.titulo)).toEqual(["Ligar pro banco"]);
     expect(servico.naoVistas().map((x) => x.id)).toContain(erro.id);
+  });
+
+  test("o aviso de rotina da Alba de fábrica chega ao Windows; durante o foco com silêncio, não", async () => {
+    const briefing = {
+      agenteId: "alba",
+      tipo: "rotina",
+      titulo: "Briefing da manhã",
+      corpo: "Bom dia.",
+    } as const;
+    const fabrica = montar();
+    const visto = await fabrica.servico.avisar({ ...briefing, referencia: "rotina:r1" });
+    expect(visto.vistaEm).toBeNull();
+    expect(fabrica.casca.mostrados.map((m) => m.titulo)).toEqual(["Briefing da manhã"]);
+
+    const emFoco = montar({ emFoco: true });
+    const esperando = await emFoco.servico.avisar({ ...briefing, referencia: "rotina:r2" });
+    expect(emFoco.casca.mostrados).toEqual([]);
+    expect(emFoco.servico.naoVistas().map((x) => x.id)).toEqual([esperando.id]);
   });
 });
 

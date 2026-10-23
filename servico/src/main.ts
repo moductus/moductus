@@ -8,9 +8,9 @@ import { RepositorioExecucoes, ServicoExecucoes } from "./agentes/execucoes.ts";
 import { aberturaMcpDoRuntime } from "./agentes/mcp.ts";
 import { classificadorPeloRuntime, Roteador } from "./agentes/roteador.ts";
 import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
-import { VigiaAlba } from "./agentes/vigias/alba.ts";
+import { redacaoPelaAlba, VigiaAlba } from "./agentes/vigias/alba.ts";
 import { RepositorioMarcasDosVigias } from "./agentes/vigias/marcas.ts";
-import { VigiaNuno } from "./agentes/vigias/nuno.ts";
+import { resumoDoDiaDoNuno, VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
@@ -26,7 +26,9 @@ import {
   RepositorioAtividade,
   type MotivoAtividade,
 } from "./areas/dia/atividade.ts";
+import { ServicoBriefing } from "./areas/dia/briefing.ts";
 import { RelogioDoDia } from "./areas/dia/relogio.ts";
+import { RepositorioRegistroRotinas } from "./areas/dia/rotinas.ts";
 import { TempoDoDia } from "./areas/dia/tempo.ts";
 import { atendentesDoFoco, ouvirAtalhoDoFoco } from "./areas/foco/canal.ts";
 import { RepositorioFoco, ServicoFoco } from "./areas/foco/foco.ts";
@@ -43,6 +45,7 @@ import { ambientePelaCasca } from "./casca/ambiente.ts";
 import { avisosPelaCasca, CLIQUE_NO_AVISO, lerClique } from "./casca/avisos.ts";
 import { CanalCasca } from "./casca/canal.ts";
 import { credenciaisPelaCasca } from "./casca/credenciais.ts";
+import { painelPelaCasca } from "./casca/painel.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
 import { RepositorioConexoes, ServicoConexoes } from "./conexoes/conexoes.ts";
 import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts";
@@ -760,17 +763,52 @@ const agendador = new Agendador({
 agendador.vigiar();
 // A primeira atividade do dia (F3-27, ADR-0033): o desbloqueio ou o logon (a casca avisa
 // `atividade`), a retomada e a subida, depois das 05:00 no fuso de config, ou o horário fixo do
-// briefing, que o vigia da Alba confere no relógio do dia. Uma vez por dia; o briefing que sai
-// daqui é a F3-29.
+// briefing, que o vigia da Alba confere no relógio do dia. Uma vez por dia, abre o briefing.
 const repositorioAtividade = new RepositorioAtividade(banco);
+const leituraNotificacoes = new RepositorioNotificacoes(banco);
+// O briefing da manhã (F3-29, ADR-0039): linhas por código, a abertura pela Alba sem ferramentas e
+// com prazo (sem modelo, o molde), o registro em `rotinas_registro` e o painel Hoje pela casca; se
+// ele ficar fechado 10 min sem resposta, o aviso do Windows sai pelo relógio do dia.
+const painelDoDock = painelPelaCasca(canal);
+const briefing = new ServicoBriefing({
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  agenda,
+  tarefas,
+  resumos: [
+    {
+      agenteId: "nuno",
+      get nome() {
+        return agentesDoTime.agente("nuno")?.nome ?? "Nuno";
+      },
+      resumoDoDia: () => resumoDoDiaDoNuno(github.obter()),
+    },
+  ],
+  // Pausado ou desligado, o agente não fala no briefing.
+  estadoDo: (agenteId) => agentes.procurar(agenteId)?.situacao.estado ?? null,
+  redigir: redacaoPelaAlba(runtime, repositorioAgentes),
+  registro: new RepositorioRegistroRotinas(banco),
+  painel: { mostrar: () => painelDoDock.mostrar("hoje"), aberto: () => painelDoDock.aberto("hoje") },
+  avisar: (aviso) => notificacoes.avisar(aviso),
+  relogio,
+  apareceu: (apresentacao) => servidor?.emitir("rotinas.apareceu", apresentacao),
+});
+relogio.registrar(briefing);
+canal.aoAvisar(CLIQUE_NO_AVISO, (aviso) => {
+  const clique = lerClique(aviso);
+  if (!clique || clique.botao !== null) return;
+  briefing.aoClicarNoAviso(leituraNotificacoes.notificacao(clique.id)?.referencia ?? null);
+});
 const primeiraAtividade = new PrimeiraAtividade(
   repositorioAtividade,
   new TempoDoDia(() => repositorioConfig.ler().dia.fuso),
-  (inicio) => console.error(`dia: ${inicio.dia} começou (${inicio.motivo})`),
+  // O briefing que falha (agenda, tarefas, banco) libera o dia: o próximo sinal tenta de novo.
+  (inicio) => {
+    console.error(`dia: ${inicio.dia} começou (${inicio.motivo})`);
+    return briefing.aparecer(inicio);
+  },
 );
 // Os vigias da Alba (F3-28, AGENTS.md §6): a virada do dia, os alertas dos compromissos e as horas
 // das rotinas, no relógio do dia, sem modelo. O fechamento que sai daqui é a F3-30.
-const leituraNotificacoes = new RepositorioNotificacoes(banco);
 vigiaAlba = new VigiaAlba({
   lerFuso: () => repositorioConfig.ler().dia.fuso,
   abertasEntre: (desde, ate) => tarefas.abertasQueVenciam(desde, ate),

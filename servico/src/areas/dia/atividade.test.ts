@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { abrirBanco } from "../../banco/conexao.ts";
 import { motivoDaCasca, PrimeiraAtividade, RepositorioAtividade, type InicioDoDia } from "./atividade.ts";
 import { TempoDoDia } from "./tempo.ts";
@@ -146,6 +146,42 @@ describe("primeira atividade do dia", () => {
     // 22:00 em São Paulo já é 01:00 do dia seguinte em UTC.
     as("22:00");
     expect(atividade.sinal("desbloqueio")?.dia).toBe("2026-10-19");
+  });
+});
+
+describe("começo que falha", () => {
+  test("o briefing que falhou (promessa ou exceção) deixa o próximo sinal tentar de novo", async () => {
+    const pasta = mkdtempSync(join(tmpdir(), "moductus-atividade-"));
+    pastas.push(pasta);
+    const db = abrirBanco(pasta);
+    bancos.push(db);
+    const agora = () => new Date("2026-10-19T11:00:00.000Z");
+    const tentativas: string[] = [];
+    const respostas: Array<() => void | Promise<unknown>> = [
+      () => Promise.reject(new Error("agenda fora")),
+      () => {
+        throw new Error("banco travado");
+      },
+      () => Promise.resolve(),
+    ];
+    const atividade = new PrimeiraAtividade(
+      new RepositorioAtividade(db),
+      new TempoDoDia(() => FUSO, agora),
+      (i) => {
+        tentativas.push(i.motivo);
+        return respostas.shift()!();
+      },
+      agora,
+    );
+    const erro = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(atividade.sinal("subida")).not.toBeNull();
+    await vi.waitFor(() => expect(erro).toHaveBeenCalledWith(expect.stringContaining("agenda fora")));
+    expect(() => atividade.sinal("desbloqueio")).toThrow("banco travado");
+    expect(atividade.sinal("retomada")).not.toBeNull();
+    await Promise.resolve();
+    expect(atividade.sinal("desbloqueio")).toBeNull();
+    expect(tentativas).toEqual(["subida", "desbloqueio", "retomada"]);
+    erro.mockRestore();
   });
 });
 
