@@ -357,6 +357,66 @@ describe("o que vai ao Google", () => {
     expect(m.mapa(e.id)).toBeUndefined();
   });
 
+  test("mudar a hora da tarefa espelhada aqui leva o lembrete junto e muda o evento lá, sem outro", async () => {
+    const m = await montar();
+    const t = m.tarefas.criar({
+      titulo: "Dentista",
+      venceEm: AMANHA,
+      hora: "15:00",
+      lembreteMinutosAntes: 30,
+    });
+    await m.espelho.sincronizar();
+    const idExterno = m.mapa(t.id)!.id_externo;
+
+    // O que o detalhe da tarefa manda ao trocar a hora.
+    m.tarefas.definir({ id: t.id, hora: "16:30" });
+    const [lembrete] = m.lembretes.listar({}).filter((l) => l.tarefaId === t.id);
+    expect(lembrete).toMatchObject({ quando: utc(AMANHA, "16:00"), estado: "agendado" });
+    expect(m.tarefa(t.id).lembreteMinutosAntes).toBe(30);
+
+    expect(await m.espelho.sincronizar()).toBe("enviado");
+    expect(m.noGoogle()).toEqual([
+      expect.objectContaining({
+        id: idExterno,
+        start: { dateTime: utc(AMANHA, "16:30"), timeZone: FUSO },
+        end: { dateTime: utc(AMANHA, "17:00"), timeZone: FUSO },
+        reminders: { useDefault: false, overrides: [{ method: "popup", minutes: 30 }] },
+      }),
+    ]);
+    expect(m.escritas("POST").filter((e) => e.endsWith("/events"))).toHaveLength(1);
+    expect(m.fila()).toEqual([]);
+  });
+
+  test("o evento passado do local ao Moductus vai ao Google; de volta ao local, sai de lá", async () => {
+    const m = await montar();
+    await m.espelho.sincronizar();
+    const calendarioId = m.calendarioDoEspelho()!.id;
+    const e = m.agenda.criarEvento({
+      titulo: "Consulta",
+      inicio: utc(AMANHA, "14:00"),
+      fim: utc(AMANHA, "15:00"),
+      diaInteiro: false,
+    });
+    await m.espelho.sincronizar();
+    expect(m.noGoogle()).toEqual([]);
+
+    m.agenda.definirEvento({ id: e.id, calendarioId });
+    await m.espelho.sincronizar();
+    expect(m.noGoogle()).toEqual([expect.objectContaining({ summary: "Consulta" })]);
+    const idExterno = m.mapa(e.id)!.id_externo;
+
+    m.agenda.definirEvento({ id: e.id, calendarioId: "local" });
+    await m.espelho.sincronizar();
+    expect(m.noGoogle()).toEqual([]);
+    expect(m.escritas("DELETE")).toEqual([
+      `DELETE /calendars/${encodeURIComponent(m.calendarioDoEspelho()!.id_externo)}/events/${idExterno}`,
+    ]);
+    expect(m.mapa(e.id)).toBeUndefined();
+    // O evento fica no local, inteiro: o apagar lá, lido de volta, não o leva à lixeira.
+    await m.espelho.sincronizar();
+    expect(m.agenda.obterEvento({ id: e.id })).toMatchObject({ calendarioId: "local", titulo: "Consulta" });
+  });
+
   test("concluir a tarefa tira o evento; reaberta antes de o apagar sair, ele fica", async () => {
     const m = await montar();
     const t = m.tarefas.criar({ titulo: "Entregar relatório", venceEm: AMANHA, hora: "17:00" });

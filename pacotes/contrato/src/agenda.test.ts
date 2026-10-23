@@ -74,6 +74,16 @@ describe("agenda", () => {
     expect(MudancaEvento.safeParse({ id: "x", inicio, fim, diaInteiro: false }).success).toBe(true);
   });
 
+  test("a mudança pode trocar o calendário, sozinha ou com outros campos; vazio não é calendário", () => {
+    expect(MudancaEvento.parse({ id: "x", calendarioId: "local" })).toEqual({
+      id: "x",
+      calendarioId: "local",
+    });
+    expect(MudancaEvento.safeParse({ id: "x", calendarioId: "m", titulo: "Dentista" }).success).toBe(true);
+    expect(MudancaEvento.safeParse({ id: "x", calendarioId: "" }).success).toBe(false);
+    expect(MudancaEvento.safeParse({ id: "x", calendarioId: null }).success).toBe(false);
+  });
+
   test("o intervalo vai de um dia a outro, até 62 dias", () => {
     expect(PedidoAgenda.safeParse({ de: "2026-10-01", ate: "2026-10-31" }).success).toBe(true);
     expect(PedidoAgenda.safeParse({ de: "2026-10-09", ate: "2026-10-08" }).success).toBe(false);

@@ -119,10 +119,12 @@ export const NovoEvento = z
   .refine(quandoCoerente, MENSAGEM_QUANDO);
 export type NovoEvento = z.infer<typeof NovoEvento>;
 
-/** Mudança parcial. Início, fim e dia inteiro andam juntos: quem muda um manda os três. */
+/**
+ * Mudança parcial. Início, fim e dia inteiro andam juntos: quem muda um manda os três.
+ * `calendarioId` passa o evento entre o local e o "Moductus"; para os outros é pedido à Alba.
+ */
 export const MudancaEvento = z
   .object(camposEvento)
-  .omit({ calendarioId: true })
   .partial()
   .extend({ id: Id })
   .refine(

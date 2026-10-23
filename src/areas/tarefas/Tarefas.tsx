@@ -21,7 +21,10 @@ import { dataCurta, EstadoVazio, Pagina } from "../Pagina.tsx";
 import { useAgora } from "../tempo.ts";
 import { CampoFrase } from "./CampoFrase.tsx";
 import { ColunaAgenda } from "./ColunaAgenda.tsx";
+import { DetalheEvento } from "./DetalheEvento.tsx";
+import { DetalheTarefa } from "./DetalheTarefa.tsx";
 import { dataDoDia } from "../dia.ts";
+import { useCalendarios, useTarefaAberta, type Aberto, type Calendarios } from "./detalhe.ts";
 import {
   contarLinhas,
   emLotes,
@@ -51,15 +54,40 @@ const ABERTAS = { um: "tarefa aberta", varios: "tarefas abertas" };
 /**
  * Tarefas (AreaTarefas.dc.html): a sub-navegação com Hoje, Próximos 7 dias, Todas, Lembretes e as
  * listas; o campo em linguagem natural com o "Entendi:"; as tarefas da vista em grupos, para marcar
- * e ordenar; e, ao lado, a Agenda de hoje com o encaixe da Alba. Abrir uma tarefa para editar é a
- * F3-36.
+ * e ordenar; e, ao lado, a Agenda de hoje com o encaixe da Alba. A tarefa ou o evento aberto vem
+ * numa coluna à direita (DetalheTarefa.dc.html, DetalheEvento.dc.html); com a tarefa aberta, a
+ * Agenda dá lugar ao detalhe.
  */
 export function Tarefas() {
   const canal = useCanal(useServico({ silencioso: true }));
   const agora = useAgora();
   const leitura = useDadosTarefas(canal, agora);
   const contagens = useContagens(canal);
+  const calendarios = useCalendarios(canal);
   const [vista, setVista] = useState<IdVista>("hoje");
+  const [aberto, setAberto] = useState<Aberto | null>(null);
+  // Quem abriu o detalhe recebe o foco de volta quando ele fecha.
+  const quemAbriu = useRef<HTMLElement | null>(null);
+  const devolverFoco = useRef(false);
+
+  useEffect(() => {
+    if (aberto !== null || !devolverFoco.current) return;
+    devolverFoco.current = false;
+    const alvo = quemAbriu.current;
+    quemAbriu.current = null;
+    if (alvo?.isConnected) alvo.focus();
+  }, [aberto]);
+
+  const abrir = (a: Aberto) => {
+    if (aberto === null && document.activeElement instanceof HTMLElement) {
+      quemAbriu.current = document.activeElement;
+    }
+    setAberto(a);
+  };
+  const fechar = () => {
+    devolverFoco.current = true;
+    setAberto(null);
+  };
 
   if (leitura.estado !== "pronta") {
     return (
@@ -105,13 +133,103 @@ export function Tarefas() {
           />
           <div className="tarefas-corpo">
             <div className="tarefas-principal">
-              <Vista key={ativa} vista={ativa} conteudo={conteudo} dados={dados} listas={listas} />
+              <Vista
+                key={ativa}
+                vista={ativa}
+                conteudo={conteudo}
+                dados={dados}
+                listas={listas}
+                tarefaAberta={aberto?.tipo === "tarefa" ? aberto.id : null}
+                aoAbrir={(id) => abrir({ tipo: "tarefa", id })}
+              />
             </div>
-            <ColunaAgenda canal={canal} dados={dados} agora={agora} />
+            {aberto?.tipo !== "tarefa" && (
+              <ColunaAgenda
+                canal={canal}
+                dados={dados}
+                agora={agora}
+                eventoAberto={aberto?.tipo === "evento" ? aberto.id : null}
+                aoAbrirEvento={(id) => abrir({ tipo: "evento", id })}
+              />
+            )}
           </div>
         </Pagina>
       </div>
+      {aberto?.tipo === "tarefa" && (
+        <TarefaAberta
+          key={aberto.id}
+          id={aberto.id}
+          dados={dados}
+          listas={dados.listas}
+          agora={agora}
+          calendarios={calendarios}
+          aoAbrir={(id) => abrir({ tipo: "tarefa", id })}
+          aoFechar={fechar}
+        />
+      )}
+      {aberto?.tipo === "evento" && (
+        <DetalheEvento
+          key={aberto.id}
+          canal={canal}
+          id={aberto.id}
+          fuso={dados.fuso}
+          horaPadrao={dados.expediente.inicio}
+          agora={agora}
+          calendarios={calendarios}
+          aoFechar={fechar}
+        />
+      )}
     </div>
+  );
+}
+
+/** As tarefas das vistas, uma vez cada (a mesma pode vir em dois recortes). */
+function todasAsTarefas(dados: DadosTarefas): Map<string, Tarefa> {
+  return new Map(
+    [...dados.atrasadas, ...dados.hoje, ...dados.abertas, ...dados.proximas].map((t) => [t.id, t]),
+  );
+}
+
+/** A tarefa aberta: a da vista, ou a última que chegou; fecha quando ela vai para a Lixeira. */
+function TarefaAberta({
+  id,
+  dados,
+  listas,
+  agora,
+  calendarios,
+  aoAbrir,
+  aoFechar,
+}: {
+  id: string;
+  dados: DadosTarefas;
+  listas: readonly Lista[];
+  agora: Date;
+  calendarios: Calendarios | null;
+  aoAbrir: (id: string) => void;
+  aoFechar: () => void;
+}) {
+  const todas = todasAsTarefas(dados);
+  const { tarefa, recebida } = useTarefaAberta(id, todas.get(id) ?? null);
+  const some = tarefa === null;
+  useEffect(() => {
+    if (some) aoFechar();
+  }, [some, aoFechar]);
+  if (!tarefa) return null;
+  const subtarefas = [...todas.values()]
+    .filter((t) => t.tarefaPaiId === id)
+    .sort((a, b) => a.ordem - b.ordem || (a.criadoEm < b.criadoEm ? -1 : 1));
+  return (
+    <DetalheTarefa
+      tarefa={tarefa}
+      subtarefas={subtarefas}
+      listas={listas}
+      fuso={dados.fuso}
+      agora={agora}
+      calendarios={calendarios}
+      aoReceber={recebida}
+      aoAbrir={aoAbrir}
+      aoFechar={aoFechar}
+    />
   );
 }
 
@@ -258,9 +376,11 @@ interface PropsVista {
   conteudo: ConteudoDaVista;
   dados: DadosTarefas;
   listas: readonly Lista[];
+  tarefaAberta: string | null;
+  aoAbrir: (id: string) => void;
 }
 
-function Vista({ vista, conteudo, dados, listas }: PropsVista) {
+function Vista({ vista, conteudo, dados, listas, tarefaAberta, aoAbrir }: PropsVista) {
   const [erro, setErro] = useState<string | null>(null);
   const { listaId, lista, grupos, lembretes } = conteudo;
 
@@ -290,7 +410,14 @@ function Vista({ vista, conteudo, dados, listas }: PropsVista) {
       ) : grupos.length === 0 ? (
         <VazioDaVista vista={vista} lista={lista} />
       ) : (
-        <ListaDeTarefas grupos={grupos} listas={listas} mostrarLista={listaId === null} fazer={fazer} />
+        <ListaDeTarefas
+          grupos={grupos}
+          listas={listas}
+          mostrarLista={listaId === null}
+          fazer={fazer}
+          tarefaAberta={tarefaAberta}
+          aoAbrir={aoAbrir}
+        />
       )}
     </>
   );
@@ -338,13 +465,16 @@ interface PropsListaDeTarefas {
   listas: readonly Lista[];
   mostrarLista: boolean;
   fazer: (pedido: () => Promise<unknown>) => void;
+  tarefaAberta: string | null;
+  aoAbrir: (id: string) => void;
 }
 
 /**
- * Os grupos da vista. Marcar conclui ou reabre; Alt+↑ e Alt+↓ (ou arrastar) mudam a ordem dentro
- * do grupo, entre tarefas do mesmo dia e hora; as atrasadas vêm para hoje de uma vez.
+ * Os grupos da vista. Marcar conclui ou reabre; o título abre o detalhe; Alt+↑ e Alt+↓ (ou
+ * arrastar) mudam a ordem dentro do grupo, entre tarefas do mesmo dia e hora; as atrasadas vêm
+ * para hoje de uma vez.
  */
-function ListaDeTarefas({ grupos, listas, mostrarLista, fazer }: PropsListaDeTarefas) {
+function ListaDeTarefas({ grupos, listas, mostrarLista, fazer, tarefaAberta, aoAbrir }: PropsListaDeTarefas) {
   const idDica = useId();
   const arrastando = useRef<{ id: string; grupo: string } | null>(null);
   // Depois de mudar a ordem, o foco volta à caixa da tarefa movida uma vez, quando a ordem nova
@@ -400,6 +530,8 @@ function ListaDeTarefas({ grupos, listas, mostrarLista, fazer }: PropsListaDeTar
               linha={l}
               lista={mostrarLista ? nomeDaLista(l.tarefa) : null}
               idDica={idDica}
+              aberta={tarefaAberta === l.tarefa.id}
+              aoAbrir={() => aoAbrir(l.tarefa.id)}
               aoMarcar={(feita) =>
                 fazer(() =>
                   servico.pedir(feita ? "tarefas.concluir" : "tarefas.reabrir", { id: l.tarefa.id }),
@@ -476,6 +608,8 @@ interface PropsLinha {
   linha: LinhaTarefa;
   lista: string | null;
   idDica: string;
+  aberta: boolean;
+  aoAbrir: () => void;
   aoMarcar: (feita: boolean) => void;
   aoTeclar: (e: KeyboardEvent) => void;
   arrastar: {
@@ -486,7 +620,7 @@ interface PropsLinha {
   };
 }
 
-function LinhaDaTarefa({ linha, lista, idDica, aoMarcar, aoTeclar, arrastar }: PropsLinha) {
+function LinhaDaTarefa({ linha, lista, idDica, aberta, aoAbrir, aoMarcar, aoTeclar, arrastar }: PropsLinha) {
   const { tarefa, nota, quando } = linha;
   const feita = tarefa.estado === "feita";
   const prioridade = textoDaPrioridade(tarefa.prioridade);
@@ -495,6 +629,7 @@ function LinhaDaTarefa({ linha, lista, idDica, aoMarcar, aoTeclar, arrastar }: P
       className="tarefa"
       data-tarefa={tarefa.id}
       data-feita={feita || undefined}
+      data-aberta={aberta || undefined}
       draggable
       onDragStart={arrastar.inicio}
       onDragOver={arrastar.sobre}
@@ -506,10 +641,17 @@ function LinhaDaTarefa({ linha, lista, idDica, aoMarcar, aoTeclar, arrastar }: P
       <span className="tarefa-prioridade" data-prioridade={tarefa.prioridade}>
         {prioridade && <span className="so-leitor">{prioridade}</span>}
       </span>
-      <span className="tarefa-texto">
+      {/* O título abre o detalhe; Alt+setas, nele, também mudam a ordem. */}
+      <button
+        type="button"
+        className="tarefa-texto tarefa-abrir"
+        aria-expanded={aberta}
+        aria-describedby={idDica}
+        onClick={aoAbrir}
+      >
         <span className="tarefa-titulo">{tarefa.titulo}</span>
         {nota && <span className="tarefa-nota">{nota}</span>}
-      </span>
+      </button>
       {lista !== null && <span className="tarefa-lista">{lista}</span>}
       <span className="tarefa-quando">{quando}</span>
     </li>

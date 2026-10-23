@@ -9,8 +9,10 @@ import {
   formatarMinutos,
   formatarRepeticao,
   hojeNoFuso,
+  instanteNoFuso,
   lancado,
   previaDoEnter,
+  relogioNoFuso,
   repeticaoNaLinha,
   somarDias,
   veioDe,
@@ -24,6 +26,17 @@ describe("o dia no fuso", () => {
     expect(hojeNoFuso(new Date("2026-10-09T01:30:00.000Z"), "America/Sao_Paulo")).toBe(HOJE);
     expect(hojeNoFuso(new Date("2026-10-09T01:30:00.000Z"), "UTC")).toBe("2026-10-09");
     expect(hojeNoFuso(new Date(2026, 9, 8, 12), "Lugar/Nenhum")).toBe(HOJE);
+  });
+
+  it("o instante de um dia e hora no fuso é a volta exata do relógio, inclusive no horário de verão", () => {
+    expect(instanteNoFuso("2026-10-08", "14:00", "America/Sao_Paulo")).toBe("2026-10-08T17:00:00.000Z");
+    // Nova York: UTC−4 em outubro, UTC−5 em dezembro.
+    expect(instanteNoFuso("2026-10-08", "09:30", "America/New_York")).toBe("2026-10-08T13:30:00.000Z");
+    expect(instanteNoFuso("2026-12-08", "09:30", "America/New_York")).toBe("2026-12-08T14:30:00.000Z");
+    // 02:30 não existe em 8 de março de 2026 lá: cai na hora seguinte que existe.
+    const pulo = instanteNoFuso("2026-03-08", "02:30", "America/New_York");
+    expect(relogioNoFuso(new Date(pulo), "America/New_York")).toEqual({ dia: "2026-03-08", hora: "03:30" });
+    expect(instanteNoFuso("0050-01-01", "00:00", "UTC")).toBe("0050-01-01T00:00:00.000Z");
   });
 
   it("as contas de dia valem no calendário inteiro do serviço, inclusive o ano 0050", () => {

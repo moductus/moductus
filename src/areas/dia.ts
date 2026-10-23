@@ -42,6 +42,33 @@ export function relogioNoFuso(instante: Date, fuso: string | null): { dia: strin
 /** Hoje no fuso da configuração (o mesmo do serviço). */
 export const hojeNoFuso = (agora: Date, fuso: string | null): string => relogioNoFuso(agora, fuso).dia;
 
+/** O dia e a hora do relógio como milissegundos UTC, sem fuso nenhum. */
+function msDoRelogio(dia: string, hora: string): number {
+  const p = partesDoDia(dia);
+  const [h = 0, m = 0] = hora.split(":").map(Number);
+  const d = new Date(0);
+  d.setUTCFullYear(p.ano, p.mes - 1, p.dia);
+  d.setUTCHours(h, m, 0, 0);
+  return d.getTime();
+}
+
+/**
+ * O instante (no formato do banco) em que o relógio do fuso marca `dia` e `hora`: a inversa de
+ * {@link relogioNoFuso}. Na hora que não existe (o pulo do horário de verão), a mais próxima depois.
+ */
+export function instanteNoFuso(dia: string, hora: string, fuso: string | null): string {
+  const alvo = msDoRelogio(dia, hora);
+  let ms = alvo;
+  // Duas voltas acertam a diferença do fuso; a terceira cobre a virada do horário de verão.
+  for (let i = 0; i < 3; i++) {
+    const visto = relogioNoFuso(new Date(ms), fuso);
+    const erro = alvo - msDoRelogio(visto.dia, visto.hora);
+    if (erro === 0) break;
+    ms += erro;
+  }
+  return new Date(ms).toISOString();
+}
+
 // ---------- Contas de dia ----------
 
 const DIA_MS = 86_400_000;

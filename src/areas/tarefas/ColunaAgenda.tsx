@@ -57,10 +57,16 @@ export function ColunaAgenda({
   canal,
   dados,
   agora,
+  eventoAberto = null,
+  aoAbrirEvento,
 }: {
   canal: EstadoConexao;
   dados: DadosTarefas;
   agora: Date;
+  /** O evento cujo detalhe está aberto: o bloco dele fica marcado. */
+  eventoAberto?: string | null;
+  /** Clicar num compromisso abre o detalhe dele. */
+  aoAbrirEvento?: (eventoId: string) => void;
 }) {
   const leitura = useAgendaDoDia(canal, dados.dia);
   const { ir } = useAcoesSistema();
@@ -158,8 +164,23 @@ export function ColunaAgenda({
       {pronta && coluna.diaTodo.length > 0 && (
         <ul className="tarefas-agenda-dia-todo" aria-label="O dia todo">
           {coluna.diaTodo.map((d) => (
-            <li key={d.chave} className="tarefas-agenda-dia-todo-item">
-              {d.nome}
+            <li
+              key={d.chave}
+              className="tarefas-agenda-dia-todo-item"
+              data-aberto={d.eventoId === eventoAberto || undefined}
+            >
+              {aoAbrirEvento ? (
+                <button
+                  type="button"
+                  className="tarefas-agenda-dia-todo-abrir"
+                  aria-expanded={d.eventoId === eventoAberto}
+                  onClick={() => aoAbrirEvento(d.eventoId)}
+                >
+                  {d.nome}
+                </button>
+              ) : (
+                d.nome
+              )}
             </li>
           ))}
         </ul>
@@ -183,10 +204,21 @@ export function ColunaAgenda({
                 className="tarefas-agenda-bloco"
                 data-tipo={b.tipo}
                 data-curto={b.fim - b.inicio < MINUTOS_BLOCO_CURTO || undefined}
+                data-aberto={(b.eventoId !== null && b.eventoId === eventoAberto) || undefined}
                 style={posicaoDoBloco(b, coluna.de)}
               >
                 <span className="tarefas-agenda-bloco-nome">{b.nome}</span>
                 <span className="tarefas-agenda-bloco-hora">{b.hora}</span>
+                {b.eventoId !== null && aoAbrirEvento && (
+                  // O bloco inteiro abre o detalhe; o texto dele fica para quem lê a régua.
+                  <button
+                    type="button"
+                    className="tarefas-agenda-bloco-abrir"
+                    aria-label={`${b.nome}, ${b.hora}`}
+                    aria-expanded={b.eventoId === eventoAberto}
+                    onClick={() => aoAbrirEvento(b.eventoId!)}
+                  />
+                )}
               </li>
             ))}
           </ol>

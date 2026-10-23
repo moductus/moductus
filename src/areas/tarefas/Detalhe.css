@@ -1,0 +1,546 @@
+/* O detalhe da tarefa e do evento (DetalheTarefa.dc.html, DetalheEvento.dc.html): uma coluna de
+   440 à direita da vista, no fundo da lateral, que rola sozinha. */
+.tarefas-detalhe {
+  display: flex;
+  flex: 0 1 var(--largura-detalhe-area);
+  flex-direction: column;
+  gap: var(--esp-12);
+  min-width: var(--largura-min-detalhe-area);
+  padding: var(--esp-20) var(--esp-24);
+  border-left: var(--espessura-borda) solid var(--borda);
+  background: var(--fundo-lateral);
+  overflow-y: auto;
+}
+
+.tarefas-detalhe-alto {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  min-height: var(--altura-botao-pequeno);
+}
+
+.tarefas-detalhe-rotulo {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--esp-8);
+  min-width: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.tarefas-detalhe-rot {
+  margin: 0;
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-normal);
+  color: var(--texto-3);
+}
+
+/* ---------- Campos ---------- */
+.tarefas-detalhe-campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  min-width: 0;
+}
+
+.tarefas-detalhe-entrada,
+.tarefas-detalhe-lista select {
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--altura-campo);
+  padding: 0 var(--esp-10);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-campo);
+  color: var(--texto);
+  font-size: var(--tipo-13);
+  transition: border-color var(--dur-entrada) ease-out;
+}
+
+.tarefas-detalhe-entrada[data-tipo="time"] {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+}
+
+.tarefas-detalhe-entrada:hover:not(:disabled),
+.tarefas-detalhe-lista select:hover:not(:disabled),
+.tarefas-detalhe-texto:hover {
+  border-color: var(--texto-apagado);
+}
+
+.tarefas-detalhe-entrada:focus-visible,
+.tarefas-detalhe-lista select:focus-visible,
+.tarefas-detalhe-texto:focus-visible {
+  border-color: var(--cor-foco);
+  outline: var(--espessura-borda) solid var(--cor-foco);
+}
+
+.tarefas-detalhe-entrada:disabled,
+.tarefas-detalhe-lista select:disabled {
+  opacity: var(--opacidade-desativado);
+  cursor: default;
+}
+
+/* O calendário da data segue o color-scheme do tema; a hora é só digitada (as setas mudam), como
+   no quadro, e cabe na coluna de 84. */
+.tarefas-detalhe-entrada::-webkit-calendar-picker-indicator {
+  opacity: var(--opacidade-hora-bloco-area);
+  cursor: pointer;
+}
+
+.tarefas-detalhe-entrada[data-tipo="time"]::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+.tarefas-detalhe-lista {
+  position: relative;
+  display: flex;
+  align-items: center;
+  color: var(--texto);
+}
+
+.tarefas-detalhe-lista select {
+  padding-right: calc(var(--esp-10) + var(--icone-12) + var(--esp-6));
+  appearance: none;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tarefas-detalhe-lista option {
+  background: var(--fundo-lista-nativa);
+  color: var(--texto-lista-nativa);
+}
+
+.tarefas-detalhe-lista > .icone {
+  position: absolute;
+  right: var(--esp-10);
+  pointer-events: none;
+}
+
+.tarefas-detalhe-lista[data-desativada] > .icone {
+  opacity: var(--opacidade-desativado);
+}
+
+.tarefas-detalhe-lista--curta select {
+  height: var(--altura-chip-area);
+  font-size: var(--tipo-12);
+}
+
+.tarefas-detalhe-texto {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: var(--esp-8) var(--esp-10);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-campo);
+  color: var(--texto);
+  font: inherit;
+  font-size: var(--tipo-13);
+  line-height: var(--entrelinha-texto-area);
+  resize: vertical;
+}
+
+.tarefas-detalhe-grade {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--esp-10) var(--esp-12);
+}
+
+/* ---------- Título e origem ---------- */
+.tarefas-detalhe-titulo {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+}
+
+.tarefas-detalhe-titulo .tarefas-detalhe-titulo-campo {
+  flex: 1;
+}
+
+.tarefas-detalhe-titulo-campo .tarefas-detalhe-entrada {
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+  letter-spacing: var(--tracado-titulo-detalhe-area);
+}
+
+.tarefas-detalhe-titulo-campo .tarefas-detalhe-entrada:focus-visible {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco);
+}
+
+.tarefas-detalhe-cabeca-evento {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+}
+
+.tarefas-detalhe-origem {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.tarefas-detalhe-origem-quem[data-agente="alba"] {
+  color: var(--agente-alba);
+}
+
+.tarefas-detalhe-origem-quem[data-agente="tula"] {
+  color: var(--agente-tula);
+}
+
+.tarefas-detalhe-origem-quem[data-agente="faina"] {
+  color: var(--agente-faina);
+}
+
+.tarefas-detalhe-origem-quem[data-agente="nuno"] {
+  color: var(--agente-nuno);
+}
+
+/* ---------- O "Moductus" ---------- */
+.tarefas-detalhe-faixa {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  padding: var(--esp-8) var(--esp-10);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-chip);
+  color: var(--texto-2);
+}
+
+.tarefas-detalhe-faixa-texto {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--tipo-12);
+}
+
+.tarefas-detalhe-google {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-8);
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+/* ---------- Subtarefas e etiquetas ---------- */
+.tarefas-detalhe-subtarefas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+}
+
+.tarefas-detalhe-subtarefas-cabeca {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-12);
+}
+
+.tarefas-detalhe-subtarefas-lista {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tarefas-detalhe-subtarefa,
+.tarefas-detalhe-nova {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  min-height: var(--altura-linha-subtarefa-area);
+}
+
+.tarefas-detalhe-subtarefa-titulo {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tarefas-detalhe-subtarefa[data-feita] .tarefas-detalhe-subtarefa-titulo {
+  color: var(--texto-apagado);
+  text-decoration: line-through;
+}
+
+.tarefas-detalhe-nova {
+  color: var(--texto-3);
+}
+
+.tarefas-detalhe-nova-entrada {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--texto);
+  font-size: var(--tipo-13);
+}
+
+.tarefas-detalhe-nova-entrada::placeholder {
+  color: var(--texto-3);
+}
+
+.tarefas-detalhe-nova:focus-within,
+.tarefas-detalhe-etiqueta-nova:focus-within {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco);
+  border-radius: var(--raio-caixa);
+}
+
+.tarefas-detalhe-etiquetas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-6);
+}
+
+.tarefas-detalhe-etiquetas > .tarefas-detalhe-rot {
+  margin-right: var(--esp-4);
+}
+
+.tarefas-detalhe-etiqueta-nova {
+  display: flex;
+  width: var(--largura-etiqueta-nova-area);
+}
+
+.tarefas-detalhe-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--esp-6);
+  box-sizing: border-box;
+  height: var(--altura-chip-area);
+  padding: 0 var(--esp-8);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-chip-area);
+  font-size: var(--tipo-11);
+  color: var(--texto-2);
+  white-space: nowrap;
+}
+
+.tarefas-detalhe-chip-tirar {
+  display: flex;
+  padding: 0;
+  border: 0;
+  border-radius: var(--raio-caixa);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tarefas-detalhe-chip-tirar:hover {
+  color: var(--texto);
+}
+
+/* ---------- O quando e o calendário do evento ---------- */
+.tarefas-detalhe-quando {
+  display: grid;
+  grid-template-columns: var(--largura-rotulo-quando-area) minmax(0, 1fr) var(--largura-hora-evento-area);
+  gap: var(--esp-8);
+  align-items: center;
+}
+
+.tarefas-detalhe-quando[data-dia-inteiro] {
+  grid-template-columns: var(--largura-rotulo-quando-area) minmax(0, 1fr);
+}
+
+.tarefas-detalhe-calendarios {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.tarefas-detalhe-calendarios legend {
+  padding: 0 0 var(--esp-4);
+}
+
+.tarefas-detalhe-calendario {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  box-sizing: border-box;
+  padding: var(--esp-7) var(--esp-10);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-controle);
+  cursor: pointer;
+}
+
+.tarefas-detalhe-calendario[data-marcada="true"] {
+  border-color: var(--destaque);
+  background: var(--fundo-cartao);
+  box-shadow: var(--sombra-opcao-marcada) var(--destaque);
+}
+
+.tarefas-detalhe-calendario[data-desativada] {
+  cursor: default;
+}
+
+.tarefas-detalhe-calendario:has(input:focus-visible) {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco);
+}
+
+.tarefas-detalhe-calendario input {
+  margin: 0;
+  accent-color: var(--destaque);
+}
+
+.tarefas-detalhe-calendario input:focus-visible {
+  outline: 0;
+}
+
+.tarefas-detalhe-calendario-nome {
+  flex: none;
+  font-weight: var(--peso-forte);
+}
+
+.tarefas-detalhe-calendario[data-desativada] .tarefas-detalhe-calendario-nome {
+  color: var(--texto-2);
+}
+
+.tarefas-detalhe-calendario-nota {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Só leitura ---------- */
+.tarefas-detalhe-titulo-leitura {
+  margin: 0;
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+  letter-spacing: var(--tracado-titulo-detalhe-area);
+}
+
+.tarefas-detalhe-campos-leitura {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.tarefas-detalhe-campo-leitura {
+  display: grid;
+  grid-template-columns: var(--largura-rotulo-leitura-area) minmax(0, 1fr);
+  gap: var(--esp-10);
+  padding: var(--esp-7) 0;
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.tarefas-detalhe-campo-leitura dd {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.tarefas-detalhe-acoes-leitura {
+  display: flex;
+  gap: var(--esp-8);
+}
+
+.tarefas-detalhe-acoes-leitura .botao[aria-expanded="true"] {
+  background: var(--fundo-ativo);
+}
+
+.tarefas-detalhe-pedido {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  height: var(--altura-campo-frase-area);
+  padding: 0 var(--esp-10);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-campo);
+}
+
+.tarefas-detalhe-pedido:focus-within {
+  border-color: var(--cor-foco);
+  outline: var(--espessura-borda) solid var(--cor-foco);
+}
+
+.tarefas-detalhe-pedido-entrada {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--texto);
+  font-size: var(--tipo-13);
+}
+
+.tarefas-detalhe-atalho {
+  padding: var(--esp-1) var(--esp-5);
+  border-radius: var(--raio-atalho);
+  background: var(--fundo-chip);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-2);
+}
+
+.tarefas-detalhe-enviado {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.tarefas-detalhe-enviado p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+/* ---------- Rodapé ---------- */
+.tarefas-detalhe-espaco {
+  flex: 1;
+}
+
+.tarefas-detalhe-rodape {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  padding-top: var(--esp-10);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.tarefas-detalhe-rodape .tarefas-detalhe-apagar {
+  padding: 0 var(--esp-4);
+  color: var(--perigo);
+}
+
+.tarefas-detalhe-salvo {
+  margin-left: auto;
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}

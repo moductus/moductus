@@ -208,6 +208,37 @@
   min-width: 0;
 }
 
+/* O título é o botão que abre o detalhe: sem cara de botão, a linha continua a do quadro. */
+.tarefa-abrir {
+  align-self: stretch;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--raio-caixa);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tarefa-abrir:focus-visible {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco-interno);
+}
+
+/* A tarefa aberta no detalhe, como no DetalheTarefa: fundo ativo e o traço do destaque. */
+.tarefa[data-aberta] {
+  border-bottom-color: transparent;
+  border-radius: var(--raio-controle);
+  background: var(--fundo-ativo);
+  box-shadow: var(--sombra-linha-aberta-area) var(--destaque);
+}
+
+.tarefa[data-aberta] .tarefa-titulo {
+  font-weight: var(--peso-forte);
+}
+
 .tarefa-titulo {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -386,6 +417,45 @@
 
 .tarefas-agenda-bloco[data-curto] .tarefas-agenda-bloco-hora {
   flex: none;
+}
+
+/* O compromisso aberto no detalhe ganha o anel do destaque, como no DetalheEvento. */
+.tarefas-agenda-bloco[data-aberto] {
+  background: var(--fundo-elevado);
+  box-shadow: var(--sombra-bloco-aberto-area) var(--destaque);
+}
+
+/* O bloco inteiro é o botão que abre o detalhe, por cima do nome e da hora. */
+.tarefas-agenda-bloco-abrir {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tarefas-agenda-bloco-abrir:focus-visible {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco-interno);
+}
+
+.tarefas-agenda-dia-todo-item[data-aberto] {
+  box-shadow: var(--sombra-bloco-aberto-area) var(--destaque);
+}
+
+.tarefas-agenda-dia-todo-abrir {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .tarefas-agenda-bloco-nome {
