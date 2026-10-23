@@ -1,8 +1,10 @@
 import {
+  CONFIG_PADRAO,
   fusoDoSistema,
   LISTA_ENTRADA,
   TipoLancavel,
   type CamposCaptura,
+  type Expediente,
   type Lembrete,
   type Lista,
   type PreviaCaptura,
@@ -29,7 +31,7 @@ import {
 import { dataCurta } from "../Pagina.tsx";
 
 /**
- * A área Tarefas (AreaTarefas.dc.html, sem a coluna Agenda, que é a F3-35): as vistas Hoje,
+ * A área Tarefas (AreaTarefas.dc.html; a coluna Agenda fica em `agenda.ts`): as vistas Hoje,
  * Próximos 7 dias, Todas e Lembretes, as listas, e o campo em linguagem natural. Quem decide o que
  * entra em cada recorte (hoje, atrasadas, próximas, no fuso do usuário) é o serviço; aqui as
  * tarefas que ele mandou viram grupos e linhas.
@@ -493,6 +495,8 @@ export interface DadosTarefas {
   proximas: Tarefa[];
   lembretes: Lembrete[];
   fuso: string;
+  /** O expediente de Configurações › Dia: a régua da coluna Agenda. */
+  expediente: Expediente;
   /** O dia de hoje no fuso, o mesmo para o qual os recortes foram pedidos. */
   dia: string;
 }
@@ -513,6 +517,7 @@ export function useDadosTarefas(canal: EstadoConexao, agora: Date): Leitura<Dado
   const [recortes, setRecortes] = useState<Recortes | null>(null);
   const [lembretes, setLembretes] = useState<Lembrete[] | null>(null);
   const [fuso, setFuso] = useState<string | null>(null);
+  const [expediente, setExpediente] = useState<Expediente | null>(null);
   const [falhouRecortes, setFalhouRecortes] = useState(false);
   const [falhouLembretes, setFalhouLembretes] = useState(false);
   const [versao, setVersao] = useState(0);
@@ -547,7 +552,10 @@ export function useDadosTarefas(canal: EstadoConexao, agora: Date): Leitura<Dado
         "lembretes.mudou",
         juntar("lembretes", () => setVersaoLembretes((v) => v + 1)),
       ),
-      servico.ouvir("config.mudou", (estado) => setFuso(estado.config.dia.fuso)),
+      servico.ouvir("config.mudou", (estado) => {
+        setFuso(estado.config.dia.fuso);
+        setExpediente(estado.config.dia.expediente);
+      }),
     ];
     return () => {
       paradas.forEach((parar) => parar());
@@ -561,7 +569,9 @@ export function useDadosTarefas(canal: EstadoConexao, agora: Date): Leitura<Dado
     servico
       .pedir("config.obter")
       .then((estado) => {
-        if (vivo) setFuso(estado.config.dia.fuso);
+        if (!vivo) return;
+        setFuso(estado.config.dia.fuso);
+        setExpediente(estado.config.dia.expediente);
       })
       .catch(() => undefined);
     return () => {
@@ -613,7 +623,9 @@ export function useDadosTarefas(canal: EstadoConexao, agora: Date): Leitura<Dado
 
   if (canal !== "conectado") return { estado: "esperando" };
   if (recortes && lembretes) {
-    return { estado: "pronta", dados: { ...recortes, lembretes, fuso: fusoDoDia } };
+    // Até a configuração chegar (ou se ela vier sem o dia), o expediente de fábrica.
+    const doDia = expediente ?? CONFIG_PADRAO.dia.expediente;
+    return { estado: "pronta", dados: { ...recortes, lembretes, fuso: fusoDoDia, expediente: doDia } };
   }
   // A leitura que já chegou não esconde a que falhou: sem uma das duas, a tela diz que não leu.
   const falhou = (falhouRecortes && !recortes) || (falhouLembretes && !lembretes);

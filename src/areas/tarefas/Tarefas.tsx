@@ -20,6 +20,7 @@ import { ListaNavegacao, type ItemNavegacao } from "../ListaNavegacao.tsx";
 import { dataCurta, EstadoVazio, Pagina } from "../Pagina.tsx";
 import { useAgora } from "../tempo.ts";
 import { CampoFrase } from "./CampoFrase.tsx";
+import { ColunaAgenda } from "./ColunaAgenda.tsx";
 import { dataDoDia } from "../dia.ts";
 import {
   contarLinhas,
@@ -48,9 +49,10 @@ import "./Tarefas.css";
 const ABERTAS = { um: "tarefa aberta", varios: "tarefas abertas" };
 
 /**
- * Tarefas (AreaTarefas.dc.html, sem a coluna Agenda): a sub-navegação com Hoje, Próximos 7 dias,
- * Todas, Lembretes e as listas; o campo em linguagem natural com o "Entendi:"; e as tarefas da vista
- * em grupos, para marcar e ordenar. Abrir uma tarefa para editar é a F3-36.
+ * Tarefas (AreaTarefas.dc.html): a sub-navegação com Hoje, Próximos 7 dias, Todas, Lembretes e as
+ * listas; o campo em linguagem natural com o "Entendi:"; as tarefas da vista em grupos, para marcar
+ * e ordenar; e, ao lado, a Agenda de hoje com o encaixe da Alba. Abrir uma tarefa para editar é a
+ * F3-36.
  */
 export function Tarefas() {
   const canal = useCanal(useServico({ silencioso: true }));
@@ -101,7 +103,12 @@ export function Tarefas() {
             hoje={hoje}
             contexto={{ listaId: conteudo.listaId, dia: ativa === "hoje" ? hoje : null }}
           />
-          <Vista key={ativa} vista={ativa} conteudo={conteudo} dados={dados} listas={listas} />
+          <div className="tarefas-corpo">
+            <div className="tarefas-principal">
+              <Vista key={ativa} vista={ativa} conteudo={conteudo} dados={dados} listas={listas} />
+            </div>
+            <ColunaAgenda canal={canal} dados={dados} agora={agora} />
+          </div>
         </Pagina>
       </div>
     </div>
