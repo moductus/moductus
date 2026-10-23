@@ -35,6 +35,8 @@ export interface NovoAviso {
   referencia?: string | null;
   /** Os botões do aviso do Windows; a ação de cada um mora na área ({@link registrarAcao}). */
   botoes?: readonly BotaoAviso[];
+  /** O clique no corpo do aviso do Windows não abre o painel do time: a área abre o que é dela. */
+  semPainelDoTime?: boolean;
   /** Carimbo da linha; o padrão é `agente` quando há agente e `conexao` quando não há. */
   origem?: Origem;
   execucaoId?: string | null;
@@ -48,6 +50,8 @@ export interface AvisoWindows {
   titulo: string;
   corpo: string | null;
   botoes: readonly BotaoAviso[];
+  /** O clique no corpo não abre o painel do time (a casca só relata o clique). */
+  semPainelDoTime?: boolean;
 }
 
 /** O que só a casca sabe fazer: mostrar e retirar o aviso do Windows e ver a tela cheia. */
@@ -451,7 +455,9 @@ export class ServicoNotificacoes {
       this.avisos.nova(notificacao);
       this.avisos.naoVistas(this.repo.naoVistas());
     }
-    if (entrega.windows) await this.mostrarNoWindows(notificacao, novo.botoes ?? [], agora);
+    if (entrega.windows) {
+      await this.mostrarNoWindows(notificacao, novo.botoes ?? [], agora, novo.semPainelDoTime === true);
+    }
     return notificacao;
   }
 
@@ -495,7 +501,12 @@ export class ServicoNotificacoes {
     }
   }
 
-  private async mostrarNoWindows(n: Notificacao, botoes: readonly BotaoAviso[], agora: Date): Promise<void> {
+  private async mostrarNoWindows(
+    n: Notificacao,
+    botoes: readonly BotaoAviso[],
+    agora: Date,
+    semPainelDoTime: boolean,
+  ): Promise<void> {
     try {
       const motivo = await motivoDoSilencio(this.fontes.silencio(), n.tipo, {
         agora,
@@ -507,7 +518,14 @@ export class ServicoNotificacoes {
       const agente = n.agenteId
         ? (this.fontes.agentes().find((a) => a.id === n.agenteId)?.nome ?? null)
         : null;
-      await this.fontes.windows.mostrar({ id: n.id, agente, titulo: n.titulo, corpo: n.corpo, botoes });
+      await this.fontes.windows.mostrar({
+        id: n.id,
+        agente,
+        titulo: n.titulo,
+        corpo: n.corpo,
+        botoes,
+        ...(semPainelDoTime ? { semPainelDoTime } : {}),
+      });
       // Resolvido durante o `mostrar`: o `retirar` do `resolvido` pode ter chegado antes do aviso.
       if (this.jaVista(n.id)) await this.fontes.windows.retirar(n.id);
     } catch (erro) {

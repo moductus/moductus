@@ -37,6 +37,8 @@ pub fn largura_janela_painel(escala: f64) -> i32 {
 }
 
 static PAINEL: Mutex<Option<(String, Instant)>> = Mutex::new(None);
+/// A área que a interface do painel confirmou ter desenhado (`painel_pronto`) desde a abertura.
+static CONFIRMADA: Mutex<Option<String>> = Mutex::new(None);
 static ARQUIVO_SISTEMA: OnceLock<PathBuf> = OnceLock::new();
 
 fn janela(app: &AppHandle, rotulo: &str) -> Option<WebviewWindow> {
@@ -112,6 +114,7 @@ fn abrir_painel(app: AppHandle, area: String, alternar: bool) {
         return;
     }
     *PAINEL.lock().unwrap() = Some((area.clone(), Instant::now()));
+    *CONFIRMADA.lock().unwrap() = None;
 
     let mut rd = RECT::default();
     unsafe {
@@ -138,11 +141,72 @@ pub fn painel_fechar(app: AppHandle) {
         dock::sem_ativar(dock::hwnd_de(&painel));
     }
     *PAINEL.lock().unwrap() = None;
+    *CONFIRMADA.lock().unwrap() = None;
     // O dock tira a marca da área aberta.
     let _ = app.emit("painel:fechado", ());
 }
 
-/// A interface do painel avisa que desenhou a área: fecha a medição de abertura.
+/// As áreas que o serviço abre sozinho: o painel Hoje, onde o briefing e o fechamento aparecem.
+const AREAS_DO_SERVICO: [&str; 1] = ["hoje"];
+
+/// Pedido do serviço pelo canal do sidecar (`{"tipo":"painel","id",…}`).
+#[derive(Debug, PartialEq, Deserialize)]
+#[serde(tag = "op", rename_all = "kebab-case")]
+pub enum PedidoPainel {
+    /// Mostra o painel na área, sem ativar e sem alternar.
+    Mostrar { area: String },
+    /// Se o painel está à vista nessa área.
+    Aberto { area: String },
+}
+
+/// Lê o pedido do serviço; área fora da lista é recusada.
+pub fn pedido_do_servico(linha: &str) -> Result<PedidoPainel, String> {
+    let pedido: PedidoPainel = serde_json::from_str(linha).map_err(|e| format!("pedido inválido: {e}"))?;
+    let (PedidoPainel::Mostrar { area } | PedidoPainel::Aberto { area }) = &pedido;
+    if !AREAS_DO_SERVICO.contains(&area.as_str()) {
+        return Err(format!("o serviço não abre o painel em {area}"));
+    }
+    Ok(pedido)
+}
+
+/// O serviço pede o painel (o briefing apareceu) ou pergunta se ele está aberto. Em tela cheia o
+/// painel não aparece por cima do jogo ou da apresentação: responde `ok: false`.
+pub fn atender_servico(app: &AppHandle, linha: &str) -> serde_json::Value {
+    match pedido_do_servico(linha) {
+        Err(erro) => serde_json::json!({ "erro": erro }),
+        Ok(PedidoPainel::Mostrar { area }) => {
+            if crate::tela_cheia::agora() {
+                return serde_json::json!({ "ok": false, "tela_cheia": true });
+            }
+            painel_mostrar(app.clone(), area);
+            serde_json::json!({ "ok": true })
+        }
+        Ok(PedidoPainel::Aberto { area }) => {
+            let aberta = PAINEL.lock().unwrap().as_ref().map(|(a, _)| a.clone());
+            let confirmada = CONFIRMADA.lock().unwrap().clone();
+            let visivel = janela(app, "painel").is_some_and(|p| unsafe { IsWindowVisible(hwnd(&p)) }.as_bool());
+            serde_json::json!({ "aberto": aberto_e_confirmado(visivel, aberta.as_deref(), confirmada.as_deref(), &area) })
+        }
+    }
+}
+
+/// O painel está à vista na área só quando a interface confirmou que a desenhou: a janela visível
+/// com o `painel:area` perdido (o WebView ainda subindo) mostra um cartão vazio, não o briefing.
+pub fn aberto_e_confirmado(visivel: bool, aberta: Option<&str>, confirmada: Option<&str>, area: &str) -> bool {
+    visivel && aberta == Some(area) && confirmada == Some(area)
+}
+
+/// O painel que acabou de montar pergunta a área aberta: o `painel:area` emitido antes de a
+/// interface ouvir se perdeu. Fechado, nenhuma.
+#[tauri::command]
+pub fn painel_area_atual(app: AppHandle) -> Option<String> {
+    let aberta = PAINEL.lock().unwrap().as_ref().map(|(a, _)| a.clone())?;
+    let visivel = janela(&app, "painel").is_some_and(|p| unsafe { IsWindowVisible(hwnd(&p)) }.as_bool());
+    visivel.then_some(aberta)
+}
+
+/// A interface do painel avisa que desenhou a área: fecha a medição de abertura e confirma a área
+/// para quem pergunta se o painel está à vista.
 #[tauri::command]
 pub fn painel_pronto(area: String) -> Option<f64> {
     let guarda = PAINEL.lock().unwrap();
@@ -150,6 +214,7 @@ pub fn painel_pronto(area: String) -> Option<f64> {
     if *aberta != area {
         return None;
     }
+    *CONFIRMADA.lock().unwrap() = Some(area.clone());
     let ms = inicio.elapsed().as_secs_f64() * 1000.0;
     crate::registro::info(&format!("painel {area} aberto em {ms:.1} ms"));
     Some(ms)
@@ -353,6 +418,32 @@ pub fn captura_fechar(app: AppHandle) {
 #[cfg(test)]
 mod testes {
     use super::*;
+
+    #[test]
+    fn servico_so_abre_o_painel_hoje() {
+        assert_eq!(
+            pedido_do_servico(r#"{"tipo":"painel","id":3,"op":"mostrar","area":"hoje"}"#),
+            Ok(PedidoPainel::Mostrar { area: "hoje".into() })
+        );
+        assert_eq!(
+            pedido_do_servico(r#"{"tipo":"painel","id":4,"op":"aberto","area":"hoje"}"#),
+            Ok(PedidoPainel::Aberto { area: "hoje".into() })
+        );
+        assert!(pedido_do_servico(r#"{"tipo":"painel","id":5,"op":"mostrar","area":"agentes"}"#).is_err());
+        assert!(pedido_do_servico(r#"{"tipo":"painel","id":6,"op":"fechar","area":"hoje"}"#).is_err());
+        assert!(pedido_do_servico(r#"{"tipo":"painel","id":7,"op":"mostrar"}"#).is_err());
+    }
+
+    #[test]
+    fn aberto_so_com_a_area_confirmada_pela_interface() {
+        assert!(aberto_e_confirmado(true, Some("hoje"), Some("hoje"), "hoje"));
+        // Visível, mas a interface ainda não desenhou o Hoje (o `painel:area` se perdeu na subida).
+        assert!(!aberto_e_confirmado(true, Some("hoje"), None, "hoje"));
+        // Confirmou outra área, ou a janela está escondida.
+        assert!(!aberto_e_confirmado(true, Some("hoje"), Some("tarefas"), "hoje"));
+        assert!(!aberto_e_confirmado(false, Some("hoje"), Some("hoje"), "hoje"));
+        assert!(!aberto_e_confirmado(true, Some("tarefas"), Some("tarefas"), "hoje"));
+    }
 
     #[test]
     fn painel_encosta_no_dock_pelo_lado_de_dentro() {

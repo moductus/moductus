@@ -26,7 +26,7 @@ const aviso = {
 describe("notificações", () => {
   test("os tipos e o padrão são os do DATA.md §7 e do PRODUCT.md §5", () => {
     expect(TipoNotificacao.options).toEqual(["aprovacao", "lembrete", "erro", "aviso", "rotina"]);
-    expect(TIPOS_QUE_PRECISAM).toEqual(["aprovacao", "lembrete", "erro"]);
+    expect(TIPOS_QUE_PRECISAM).toEqual(["aprovacao", "lembrete", "erro", "rotina"]);
     expect(PREFERENCIA_PADRAO).toEqual({ nivel: "so_o_que_precisa", canal: "ambos" });
     // O Nuno avisa tudo de fábrica (AreaNotificacoes.dc.html); os outros, só o que precisa.
     expect(preferenciaPadrao("nuno")).toEqual({ nivel: "tudo", canal: "ambos" });

@@ -148,7 +148,7 @@ Duas etapas, as duas com "pular" e "fazer depois":
 
 Você decide, por agente e por tipo (aprovação, lembrete, erro, aviso e rotina):
 
-- **Níveis:** *tudo*, *só o que precisa de mim* (pedidos de aprovação, lembretes e erros) ou *nada*. De fábrica, os agentes vêm em *só o que precisa de mim* e o **Nuno em *tudo***, porque o que ele observa (contexto de uma sessão passando de 80%, CI quebrado, sessão esperando) é aviso, não pedido. Com *só o que precisa de mim*, o aviso de contexto alto fica só no histórico.
+- **Níveis:** *tudo*, *só o que precisa de mim* (pedidos de aprovação, lembretes, erros e os avisos do briefing e do fechamento) ou *nada*. De fábrica, os agentes vêm em *só o que precisa de mim* e o **Nuno em *tudo***, porque o que ele observa (contexto de uma sessão passando de 80%, CI quebrado, sessão esperando) é aviso, não pedido. Com *só o que precisa de mim*, o aviso de contexto alto fica só no histórico.
 - **Onde:** aviso do Windows, só o ponto no dock, ou os dois. O pedido de aprovação sai do Windows com os mesmos botões do cartão (Negar, Sempre aqui, Permitir); clicar no corpo do aviso abre o painel do time. O aviso não repete o comando inteiro, porque a tela de bloqueio o mostraria. A cópia portable não mostra aviso do Windows, só o ponto no dock.
 - **Silêncio:** horário sem aviso (desligado de fábrica; a sugestão é das 22:00 às 07:30), tela cheia e apresentação, e foco (o Foco chega na fase 3; durante ele ainda passam aprovações e lembretes). O silêncio cala só o aviso do Windows: o ponto no dock e o histórico continuam.
 - Com *nada*, o agente continua trabalhando e registrando; o aviso fica no histórico, já visto, e você vê tudo no dock quando quiser.

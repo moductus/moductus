@@ -24,9 +24,12 @@ import { auditar } from "../../teste/acessibilidade.ts";
  */
 const eventosCasca = new Map<string, (e: { payload: unknown }) => void>();
 const chamadasCasca: { comando: string; args: unknown }[] = [];
+/** A área que a casca já tinha aberto quando o painel montou (`painel_area_atual`). */
+const casca = { areaAberta: null as string | null };
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (comando: string, args?: unknown) => {
     chamadasCasca.push({ comando, args });
+    if (comando === "painel_area_atual") return casca.areaAberta;
     if (comando === "servico_estado") return { estado: "pronto", porta: 1, token: "t" };
     if (comando === "dock_configuracao") return { lado: "esquerda", modo: "fixo", forma: "colada" };
     return undefined;
@@ -248,6 +251,7 @@ beforeEach(() => {
   servidor.acordar = async () => [];
   pedir.mockClear();
   chamadasCasca.length = 0;
+  casca.areaAberta = null;
 });
 
 afterEach(() => {
@@ -276,6 +280,27 @@ const cartoes = () => [...recipiente.querySelectorAll<HTMLElement>(".aprovacao")
 const botaoCom = (dentro: ParentNode, texto: string) =>
   [...dentro.querySelectorAll("button")].find((b) => b.textContent === texto)!;
 const linhaDo = (id: string) => recipiente.querySelector<HTMLElement>(`.time-linha[data-agente="${id}"]`)!;
+
+describe("painel: a área que a casca abriu antes de ele ouvir", () => {
+  it("ao montar, pergunta a área já aberta, desenha e confirma com painel_pronto", async () => {
+    casca.areaAberta = "agentes";
+    await montar();
+    await vi.waitFor(() => expect(cartoes()).toHaveLength(1));
+    expect(recipiente.querySelector("main")?.getAttribute("aria-label")).toBe("Painel Agentes");
+    await vi.waitFor(() =>
+      expect(chamadasCasca).toContainEqual({ comando: "painel_pronto", args: { area: "agentes" } }),
+    );
+  });
+
+  it("fechado, nada abre até o painel:area", async () => {
+    await montar();
+    expect(chamadasCasca.map((c) => c.comando)).toContain("painel_area_atual");
+    expect(cartoes()).toHaveLength(0);
+    expect(chamadasCasca.map((c) => c.comando)).not.toContain("painel_pronto");
+    await abrir("agentes");
+    expect(cartoes()).toHaveLength(1);
+  });
+});
 
 describe("painel Agentes: pedidos das sessões do terminal", () => {
   it("o pedido mostra projeto, ferramenta, esperando você e o comando inteiro em linha", async () => {
