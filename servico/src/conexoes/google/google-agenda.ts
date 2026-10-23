@@ -1,4 +1,4 @@
-import type { Conexao } from "@moductus/contrato";
+import type { AutorizacaoGoogle, Conexao, ProblemaGoogle } from "@moductus/contrato";
 import type { AbrirNaCasca } from "../../casca/abrir.ts";
 import type { Credenciais } from "../../casca/credenciais.ts";
 import type { RepositorioConexoes } from "../conexoes.ts";
@@ -62,6 +62,9 @@ export const CORPO_LEITURA_FALHOU =
 export const AVISO_LEITURA = `${TITULO_LEITURA_FALHOU} ${CORPO_LEITURA_FALHOU}`;
 export const avisoNavegador = (motivo: string) =>
   `Não consegui abrir o navegador (${motivo}). Conecte de novo.`;
+/** Desconectar não conseguiu apagar a credencial: o cartão oferece desconectar de novo. */
+export const INICIO_AVISO_APAGAR = "Não consegui apagar a credencial do Google";
+export const avisoApagar = (motivo: string) => `${INICIO_AVISO_APAGAR} (${motivo}). Tente de novo.`;
 export const avisoFalhou = (motivo: string) =>
   `Não consegui conectar ao Google (${motivo}). Conecte de novo.`;
 
@@ -102,6 +105,11 @@ export interface DependenciasGoogle {
   /** A casca abre a URL de autorização no navegador padrão (ADR-0038). */
   abrir: Pick<AbrirNaCasca, "endereco">;
   avisar: (conexao: Conexao) => void;
+  /**
+   * O que o cartão mostra além da conexão mudou (F3-44): a autorização abriu ou fechou, uma leitura
+   * terminou, o cliente trocou. Quem ouve lê a situação de novo.
+   */
+  situacaoMudou?: () => void;
   /** O cliente do Moductus; o teste usa um client id de teste. */
   clienteDoAutor?: ClienteOAuth | null;
   enderecos?: EnderecosGoogle;
@@ -192,6 +200,12 @@ export class ServicoGoogleAgenda {
   private geracao = 0;
   private acesso: { token: string; venceEm: number } | null = null;
   private renovando: Promise<string> | null = null;
+  /** A autorização do conectar aberta no navegador, para o cartão copiar ou abrir de novo. */
+  private autorizacao: AutorizacaoGoogle | null = null;
+  /** O receptor do conectar, que "Cancelar" fecha sem tocar nos outros. */
+  private receptorDoConectar: ReceptorOAuth | null = null;
+  /** O conectar em andamento foi cancelado: termina sem gravar nada. */
+  private cancelouConectar = false;
 
   constructor(private readonly deps: DependenciasGoogle) {
     this.agora = deps.agora ?? (() => new Date());
@@ -224,10 +238,17 @@ export class ServicoGoogleAgenda {
 
   private async conectar(geracao: number): Promise<Conexao> {
     const antes = this.conexao();
+    this.cancelouConectar = false;
     try {
       const cliente = await this.cliente();
+      if (this.cancelouConectar) return this.conexao();
       if (!cliente) return this.falhar(AVISO_SEM_CLIENTE, antes);
-      const tokens = await this.autorizarNoNavegador(cliente, ESCOPOS_AO_CONECTAR);
+      const tokens = await this.autorizarNoNavegador(cliente, ESCOPOS_AO_CONECTAR, true);
+      // Cancelou quando o código já tinha chegado: o token novo não fica valendo, e nada muda aqui.
+      if (this.cancelouConectar) {
+        await this.revogarSemFalhar(tokens.tokenDeRenovacao ?? tokens.tokenDeAcesso);
+        return this.conexao();
+      }
       // Desconectou enquanto o código era trocado: o token novo não fica valendo.
       if (geracao !== this.geracao) {
         await this.revogarSemFalhar(tokens.tokenDeRenovacao ?? tokens.tokenDeAcesso);
@@ -274,6 +295,8 @@ export class ServicoGoogleAgenda {
     } catch (erro) {
       // Desconectar no meio cancela o receptor: não é erro, a conexão já está desligada.
       if (geracao !== this.geracao) return this.conexao();
+      // "Cancelar" também: a conexão fica como estava antes de conectar.
+      if (this.cancelouConectar) return this.conexao();
       if (erro instanceof FalhaNavegador) return this.falhar(avisoNavegador(erro.message), antes);
       console.error(`google: conectar falhou: ${mensagem(erro)}`);
       return this.falhar(avisoDe(erro), antes);
@@ -282,16 +305,20 @@ export class ServicoGoogleAgenda {
 
   /**
    * O consentimento no navegador: receptor em 127.0.0.1, PKCE e `state`, a casca abre a URL e o
-   * código vira tokens. O receptor fecha ao terminar, de qualquer jeito.
+   * código vira tokens. O receptor fecha ao terminar, de qualquer jeito. O do conectar fica exposto
+   * ao cartão enquanto espera (`expor`); o da escrita não, porque cancelar ali seria desconectar.
    */
   private async autorizarNoNavegador(
     cliente: ClienteOAuth,
     escopos: readonly string[],
+    expor = false,
   ): Promise<TokensOAuth> {
     const { verificador, desafio } = gerarPkce();
     const state = gerarState();
-    const receptor = await abrirReceptorOAuth(state, this.deps.prazoMs ?? PRAZO_AUTORIZACAO_MS);
+    const prazoMs = this.deps.prazoMs ?? PRAZO_AUTORIZACAO_MS;
+    const receptor = await abrirReceptorOAuth(state, prazoMs);
     this.receptores.add(receptor);
+    let exposta: AutorizacaoGoogle | null = null;
     try {
       const url = urlDeAutorizacao(this.enderecos, {
         cliente,
@@ -300,6 +327,14 @@ export class ServicoGoogleAgenda {
         desafio,
         state,
       });
+      if (expor) {
+        this.receptorDoConectar = receptor;
+        // Cancelou enquanto o receptor abria: ele fecha antes de o navegador abrir.
+        if (this.cancelouConectar) receptor.cancelar();
+        exposta = { endereco: url, venceEm: new Date(this.agora().getTime() + prazoMs).toISOString() };
+        this.autorizacao = exposta;
+        this.deps.situacaoMudou?.();
+      }
       try {
         await this.deps.abrir.endereco(url);
       } catch (erro) {
@@ -315,7 +350,41 @@ export class ServicoGoogleAgenda {
     } finally {
       receptor.cancelar();
       this.receptores.delete(receptor);
+      if (this.receptorDoConectar === receptor) this.receptorDoConectar = null;
+      if (exposta && this.autorizacao === exposta) {
+        this.autorizacao = null;
+        this.deps.situacaoMudou?.();
+      }
     }
+  }
+
+  /**
+   * "Cancelar" na espera do navegador (F3-44): fecha só o receptor do conectar e devolve a conexão
+   * como estava antes, sem gravar erro nem mexer na credencial ou no cache da leitura. Uma conexão
+   * nova cancelada continua desligada. Sem conectar em andamento, só devolve a conexão.
+   */
+  async cancelarConexao(): Promise<Conexao> {
+    const fluxo = this.emAndamento;
+    if (!fluxo) return this.conexao();
+    this.cancelouConectar = true;
+    this.receptorDoConectar?.cancelar();
+    await fluxo.catch(() => undefined);
+    return this.conexao();
+  }
+
+  /** A autorização do conectar que espera no navegador; `null` fora dela. */
+  autorizacaoAberta(): AutorizacaoGoogle | null {
+    return this.autorizacao;
+  }
+
+  /** Por que a conexão está em erro, pelo aviso que ela guarda; `null` fora do erro. */
+  problema(): ProblemaGoogle | null {
+    const conexao = this.conexao();
+    if (conexao.estado !== "erro") return null;
+    if (conexao.ultimoErro === AVISO_RECONECTAR) return "reconectar";
+    if (conexao.ultimoErro === AVISO_LEITURA) return "leitura";
+    if (conexao.ultimoErro?.startsWith(INICIO_AVISO_APAGAR)) return "desconectar";
+    return "conectar";
   }
 
   /**
@@ -456,10 +525,7 @@ export class ServicoGoogleAgenda {
     try {
       await this.deps.credenciais.apagar(CREDENCIAL_GOOGLE);
     } catch (erro) {
-      return this.falhar(
-        `Não consegui apagar a credencial do Google (${mensagem(erro)}). Tente de novo.`,
-        antes,
-      );
+      return this.falhar(avisoApagar(mensagem(erro)), antes);
     }
     return this.gravar(antes, {
       estado: "desligada",
@@ -617,9 +683,11 @@ export class ServicoGoogleAgenda {
     if (this.emAndamento || (await this.guardada()) !== null) throw new Error(AVISO_TROCAR_CLIENTE);
     if (cliente === null) {
       await this.deps.credenciais.apagar(CREDENCIAL_CLIENTE_GOOGLE);
+      this.deps.situacaoMudou?.();
       return;
     }
     await this.deps.credenciais.guardar(CREDENCIAL_CLIENTE_GOOGLE, JSON.stringify(validarCliente(cliente)));
+    this.deps.situacaoMudou?.();
   }
 
   private async clienteProprio(): Promise<ClienteOAuth | null> {
@@ -678,6 +746,8 @@ export class ServicoGoogleAgenda {
     this.deps.conexoes.gravar("google-agenda", dados, this.agora().toISOString(), origem);
     const depois = this.conexao();
     if (!mesma(antes, depois)) this.deps.avisar(depois);
+    // A data da leitura e o problema mudam sem a conexão mudar: o cartão lê a situação de novo.
+    this.deps.situacaoMudou?.();
     return depois;
   }
 }

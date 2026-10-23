@@ -1,12 +1,13 @@
 import type { Conexao, MudancaArquivo } from "@moductus/contrato";
-import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useState, type KeyboardEvent } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { FalaAgente } from "../../componentes/FalaAgente.tsx";
 import { Icone } from "../../componentes/Icone.tsx";
-import { Personagem } from "../../componentes/personagem/Personagem.tsx";
-import { Selo, type TomSelo } from "../../componentes/Selo.tsx";
+import type { TomSelo } from "../../componentes/Selo.tsx";
 import { abrirSettingsClaude, useAbrir } from "../../nativo/abrir.ts";
 import { useAgora } from "../tempo.ts";
+import { CartaoConexao, Dado } from "./CartaoConexao.tsx";
+import { CartaoGoogle } from "./CartaoGoogle.tsx";
 import {
   comandoDoErro,
   eventosDoMoductus,
@@ -22,8 +23,9 @@ import { useConexoes, type ConexoesDaTela } from "./useConexoes.ts";
 import "./Configuracoes.css";
 
 /**
- * Configurações › Conexões (ConfigConexoes, ConfigConexoesPrevia, ConfigConexoesErros e
- * ConfigConexoesVazio.dc.html): o que os agentes alcançam fora do Moductus. Ligar o Claude Code
+ * Configurações › Conexões (ConfigConexoes, ConfigConexoesPrevia, ConfigConexoesErros,
+ * ConfigConexoesVazio e ConfigConexoesGoogle*.dc.html): o que os agentes alcançam fora do
+ * Moductus. O Google Agenda da Alba vem primeiro, pelo OAuth no navegador. Ligar o Claude Code
  * mostra antes o que muda no settings.json e só grava com o sim; o GitHub vai pelo gh já logado.
  */
 export function SecaoConexoes() {
@@ -49,6 +51,7 @@ export function SecaoConexoes() {
           </FalaAgente>
         </div>
       )}
+      <CartaoGoogle conexoes={conexoes} />
       <CartaoClaudeCode conexoes={conexoes} />
       <CartaoGithub conexoes={conexoes} />
       <CartaoOpenCode />
@@ -65,57 +68,6 @@ const SELO_LIGACAO: Readonly<Record<Conexao["estado"], { tom: TomSelo }>> = {
   desligada: { tom: "apagado" },
   erro: { tom: "perigo" },
 };
-
-interface PropsCartao {
-  nome: string;
-  /** O selo do estado: o texto diz, a cor acompanha. */
-  estado: { texto: string; tom: TomSelo } | null;
-  descricao: string;
-  acoes?: ReactNode;
-  emBreve?: boolean;
-  children?: ReactNode;
-}
-
-/** Um cartão de conexão: a cabeça do Nuno, o nome, para quem é, o estado e as ações à direita. */
-function CartaoConexao({ nome, estado, descricao, acoes, emBreve, children }: PropsCartao) {
-  const idNome = useId();
-  return (
-    <section className="config-conexao" aria-labelledby={idNome}>
-      <div className="config-conexao-topo">
-        <Personagem agente="nuno" modo="cabeca" tamanho="dock" estado="ocioso" />
-        <span className="config-conexao-textos">
-          <span className="config-conexao-linha">
-            <h3 id={idNome} className="config-conexao-nome">
-              {nome}
-            </h3>
-            <span className="config-conexao-quem">para o Nuno</span>
-            {estado && (
-              <Selo forma="ponto" tom={estado.tom}>
-                {estado.texto}
-              </Selo>
-            )}
-            {emBreve && <Selo>em breve</Selo>}
-          </span>
-          <span className="config-conexao-descricao">{descricao}</span>
-        </span>
-        {acoes && <span className="config-conexao-acoes">{acoes}</span>}
-      </div>
-      {children && <div className="config-conexao-corpo">{children}</div>}
-    </section>
-  );
-}
-
-/** Uma coluna do resumo de uma conexão ligada: rótulo pequeno e o valor. */
-function Dado({ rotulo, children, mono }: { rotulo: string; children: ReactNode; mono?: boolean }) {
-  return (
-    <div className="config-conexao-dado">
-      <dt>{rotulo}</dt>
-      <dd data-mono={mono || undefined} title={typeof children === "string" ? children : undefined}>
-        {children}
-      </dd>
-    </div>
-  );
-}
 
 /* ---------- Claude Code ---------- */
 

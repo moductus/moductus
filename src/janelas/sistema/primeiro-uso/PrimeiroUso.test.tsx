@@ -59,8 +59,10 @@ const falso = vi.hoisted(() => {
     recusarCriar: null as string | null,
     /** Como o teste de cada provedor termina. */
     teste: (_id: string): unknown => null,
-    /** As conexões do Nuno (Claude Code e GitHub). */
+    /** As conexões do Nuno (Claude Code e GitHub) e o Google Agenda da Alba. */
     conexoes: [] as { tipo: string; estado: string }[],
+    /** Os calendários que a leitura do Google trouxe. */
+    calendarios: [] as { id: string; ler: boolean }[],
     emitir(nome: string, dados: unknown) {
       for (const fn of ouvintes.get(nome) ?? []) fn(dados);
     },
@@ -99,6 +101,23 @@ const HOOKS = JSON.stringify(
   null,
   2,
 );
+
+const calendarioGoogle = (id: string, nome: string, mudar: { espelho?: boolean; ler?: boolean } = {}) => ({
+  id,
+  nome,
+  fonte: "google",
+  cor: null,
+  espelho: false,
+  podeEscrever: true,
+  ler: false,
+  sincronizadoEm: null,
+  ...mudar,
+});
+const CALENDARIOS_GOOGLE = [
+  calendarioGoogle("01K7MODUCTUS0000000000000A", "Moductus", { espelho: true, ler: true }),
+  calendarioGoogle("01K7PESSOAL00000000000000B", "Pessoal", { ler: true }),
+  calendarioGoogle("01K7FERIADOS0000000000000C", "Feriados no Brasil"),
+];
 
 const desligada = (tipo: string) => ({
   tipo,
@@ -150,8 +169,23 @@ function atender(metodo: string, dados: unknown): unknown {
       };
     case "conexoes.ligar": {
       const { tipo } = dados as { tipo: string };
-      falso.conexoes = falso.conexoes.map((c) => (c.tipo === tipo ? { ...c, estado: "ligada" } : c));
+      const conta = tipo === "google-agenda" ? "voce@gmail.com" : null;
+      falso.conexoes = falso.conexoes.map((c) => (c.tipo === tipo ? { ...c, estado: "ligada", conta } : c));
+      // Conectado o Google, a leitura traz a lista de calendários da conta.
+      if (tipo === "google-agenda") {
+        falso.calendarios = CALENDARIOS_GOOGLE;
+        falso.emitir("agenda.calendarios", falso.calendarios);
+      }
       return falso.conexoes.find((c) => c.tipo === tipo);
+    }
+    case "google.obter":
+      return { autorizacao: null, lidaEm: null, fila: 0, clienteProprio: false, problema: null };
+    case "agenda.calendarios":
+      return falso.calendarios;
+    case "agenda.definirCalendario": {
+      const { id, ler } = dados as { id: string; ler: boolean };
+      falso.calendarios = falso.calendarios.map((c) => (c.id === id ? { ...c, ler } : c));
+      return falso.calendarios.find((c) => c.id === id);
     }
     case "conexoes.desligar": {
       const { tipo } = dados as { tipo: string };
@@ -239,7 +273,8 @@ beforeEach(() => {
   falso.provedores = [];
   falso.criados = 0;
   falso.recusarCriar = null;
-  falso.conexoes = [desligada("hooks-claude-code"), desligada("github")];
+  falso.conexoes = [desligada("hooks-claude-code"), desligada("github"), desligada("google-agenda")];
+  falso.calendarios = [];
   falso.teste = (id) => ({
     ok: true,
     provedorId: id,
@@ -254,6 +289,9 @@ const todos = (seletor: string) => [...recipiente.querySelectorAll<HTMLElement>(
 const titulo = () => por("h1")?.textContent;
 const indicador = () => por(".uso-rodape [aria-live]")?.textContent;
 const botao = (texto: string) => todos("button").find((b) => b.textContent === texto);
+/** O botão dentro de um bloco: o Google e o Nuno têm, os dois, "Conectar" e "Agora não". */
+const botaoEm = (seletor: string, texto: string) =>
+  todos(`${seletor} button`).find((b) => b.textContent === texto);
 const pedidosDe = (metodo: string) => falso.pedidos.filter(([m]) => m === metodo).map(([, d]) => d);
 /** As paradas que o tour avisou às janelas, em ordem. */
 const paradas = () => tauri.emitidos.filter(([nome]) => nome === "tour:parada").map(([, p]) => p);
@@ -403,8 +441,11 @@ describe("primeiro uso", () => {
     for (const nome of ["Começar", "Continuar", "Depois", "Continuar"]) await clicar(botao(nome));
     expect(titulo()).toBe(TITULOS[4]);
     // As outras ainda chegam com a área de cada agente; a do Nuno conecta.
-    expect(todos(".uso-item .selo").map((s) => s.textContent)).toEqual(["fase 3", "fase 5", "fase 4"]);
-    await clicar(botao("Conectar"));
+    expect(todos(".uso-item > .selo").map((s) => s.textContent)).toEqual([
+      "chega com Arquivos",
+      "chega com Finanças",
+    ]);
+    await clicar(botaoEm(".uso-item--nuno", "Conectar"));
     expect(pedidosDe("conexoes.ligar")).toEqual([]);
 
     await clicar(botao("Ver o que muda"));
@@ -421,19 +462,67 @@ describe("primeiro uso", () => {
     expect(todos(".uso-item--nuno .uso-item-linha .selo").map((s) => s.textContent)).toEqual([
       "1 de 2 ligada",
     ]);
-    await clicar(botao("Conectar"));
+    await clicar(botaoEm(".uso-item--nuno", "Conectar"));
     expect(pedidosDe("conexoes.ligar")).toEqual([{ tipo: "hooks-claude-code" }, { tipo: "github" }]);
     expect(todos(".uso-item--nuno .uso-item-linha .selo").map((s) => s.textContent)).toEqual(["conectado"]);
     expect(auditar(recipiente)).toEqual([]);
 
     // Conectado, como no quadro: "Desconectar" desfaz as duas.
-    await clicar(botao("Desconectar"));
+    await clicar(botaoEm(".uso-item--nuno", "Desconectar"));
     expect(pedidosDe("conexoes.desligar")).toEqual([{ tipo: "hooks-claude-code" }, { tipo: "github" }]);
     // "Agora não" fecha os cartões e deixa para depois, sem ligar nada.
-    await clicar(botao("Agora não"));
+    await clicar(botaoEm(".uso-item--nuno", "Agora não"));
     expect(por(".uso-conexoes-nuno")).toBeNull();
     expect(todos(".uso-item--nuno .uso-item-linha .selo").map((s) => s.textContent)).toEqual(["depois"]);
-    expect(botao("Conectar")).toBeTruthy();
+    expect(botaoEm(".uso-item--nuno", "Conectar")).toBeTruthy();
+  });
+
+  it("Google Agenda da Alba: o que ela pode fazer antes do navegador, depois os calendários ali mesmo", async () => {
+    await montar();
+    for (const nome of ["Começar", "Continuar", "Depois", "Continuar"]) await clicar(botao(nome));
+    expect(titulo()).toBe(TITULOS[4]);
+    // "Agora não" deixa para depois, sem pedir nada ao Google.
+    await clicar(botaoEm(".uso-item--google", "Agora não"));
+    expect(todos(".uso-item--google .uso-item-linha .selo").map((s) => s.textContent)).toEqual(["depois"]);
+
+    // "Conectar" abre o cartão de Configurações: antes do navegador, o que a Alba pode fazer.
+    await clicar(botaoEm(".uso-item--google", "Conectar"));
+    expect(por(".uso-item--google .config-google-autorizar")!.textContent).toContain("O que sai deste PC");
+    expect(pedidosDe("conexoes.ligar")).toEqual([]);
+    // O Esc fecha só o cartão: o passo continua o mesmo.
+    await teclar(por(".config-google-autorizar")!, "Escape");
+    expect(por(".config-google-autorizar")).toBeNull();
+    expect(titulo()).toBe(TITULOS[4]);
+
+    await clicar(botaoEm(".uso-item--google", "Conectar"));
+    await clicar(botao("Conectar com o Google"));
+    expect(pedidosDe("conexoes.ligar")).toEqual([{ tipo: "google-agenda" }]);
+    // Conectado, como no quadro: a conta, o "Moductus" criado e os calendários sem ele, para marcar.
+    expect(todos(".uso-item--google .uso-item-linha .selo").map((s) => s.textContent)).toEqual(["conectado"]);
+    expect(por(".uso-item--google .uso-item-descricao")!.textContent).toBe(
+      "voce@gmail.com · criei o calendário “Moductus” para os lembretes chegarem ao celular.",
+    );
+    const caixas = todos('.uso-google-calendarios [role="checkbox"]');
+    expect(caixas.map((c) => [c.textContent, c.getAttribute("aria-checked")])).toEqual([
+      ["Pessoal", "true"],
+      ["Feriados no Brasil", "false"],
+    ]);
+    await clicar(caixas[1]);
+    expect(pedidosDe("agenda.definirCalendario")).toEqual([{ id: "01K7FERIADOS0000000000000C", ler: true }]);
+    expect(todos('.uso-google-calendarios [role="checkbox"]')[1]!.getAttribute("aria-checked")).toBe("true");
+    expect(auditar(recipiente)).toEqual([]);
+
+    await clicar(botaoEm(".uso-item--google", "Desconectar"));
+    expect(pedidosDe("conexoes.desligar")).toEqual([{ tipo: "google-agenda" }]);
+    expect(botaoEm(".uso-item--google", "Conectar")).toBeTruthy();
+
+    // Conectou de novo e desconectou em outra janela: a linha oferece "Conectar", sem o cartão aberto.
+    await clicar(botaoEm(".uso-item--google", "Conectar"));
+    await clicar(botao("Conectar com o Google"));
+    expect(todos(".uso-item--google .uso-item-linha .selo").map((s) => s.textContent)).toEqual(["conectado"]);
+    await act(async () => falso.emitir("conexoes.mudou", desligada("google-agenda")));
+    expect(por(".uso-item--google .config-google-autorizar")).toBeNull();
+    expect(botaoEm(".uso-item--google", "Conectar")).toBeTruthy();
   });
 
   it("pular a configuração no meio grava o que foi visto e vai ao Início", async () => {
