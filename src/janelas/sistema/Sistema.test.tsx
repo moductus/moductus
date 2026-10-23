@@ -196,13 +196,14 @@ describe("Sistema", () => {
     expect(areaAtual()).toBe("configuracoes");
   });
 
-  it("as Configurações têm as 9 seções, cada uma com conteúdo", async () => {
+  it("as Configurações têm as 10 seções, cada uma com conteúdo", async () => {
     await montar();
     act(() => itemArea("configuracoes").click());
     const nomes = [
       "Geral",
       "Tema e dock",
       "Notificações",
+      "O dia",
       "Modelos",
       "Agentes",
       "Conexões",
@@ -267,7 +268,7 @@ describe("acessibilidade do Sistema", () => {
     expect(marcos(recipiente)).toEqual(["banner", "navigation: Áreas", "main", "navigation: Seções"]);
   });
 
-  it("as 12 áreas e as 9 seções das Configurações passam na checagem", async () => {
+  it("as 12 áreas e as 10 seções das Configurações passam na checagem", async () => {
     await montar();
     for (const area of AREAS) {
       act(() => itemArea(area.id).click());

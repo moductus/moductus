@@ -2,7 +2,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { CALENDARIO_LOCAL, METODOS, type MudancaAgenda, type NovoEvento } from "@moductus/contrato";
+import {
+  CALENDARIO_LOCAL,
+  METODOS,
+  type Expediente,
+  type MudancaAgenda,
+  type NovoEvento,
+} from "@moductus/contrato";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { MENSAGENS_DESFAZER, RepositorioExecucoes, ServicoExecucoes } from "../../agentes/execucoes.ts";
 import { abrirBanco } from "../../banco/conexao.ts";
@@ -48,7 +54,11 @@ const sp = (dia: string, hora: string) => new Date(`${dia}T${hora}:00.000-03:00`
  */
 function montar(
   agora = sp(DIA, "07:00"),
-  { fuso = FUSO, expediente = { inicio: "09:00", fim: "18:00" } } = {},
+  {
+    fuso = FUSO,
+    expediente = { inicio: "09:00", fim: "18:00" },
+    diasDeTrabalho,
+  }: { fuso?: string; expediente?: Expediente; diasDeTrabalho?: readonly number[] } = {},
 ) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-agenda-"));
   pastas.push(pasta);
@@ -63,7 +73,7 @@ function montar(
       repo: new RepositorioAgenda(db),
       tarefas: new RepositorioTarefasDoDia(db),
       chamadas: execucoes,
-      lerDia: () => ({ fuso, expediente }),
+      lerDia: () => ({ fuso, expediente, diasDeTrabalho }),
     },
     { mudou: (m) => avisos.push(m), calendarios: (c) => listas.push(c) },
     { agora: () => relogio.agora },
@@ -289,6 +299,22 @@ describe("horário livre e dia cheio", () => {
     // A atrasada conta hoje e ganha o encaixe.
     expect(hoje?.planejadoMin).toBe(60);
     expect(hoje?.sugestoes).toEqual([{ tarefaId: "ontem", inicio: sp(DIA, "13:10"), fim: sp(DIA, "14:10") }]);
+  });
+
+  test("fora dos dias de trabalho não há expediente: sem livre nem encaixe, e a tarefa estimada enche o dia", () => {
+    // De segunda a sexta; sexta 23/10 até segunda 26/10.
+    const m = montar(sp("2026-10-23", "07:00"), { diasDeTrabalho: [1, 2, 3, 4, 5] });
+    tarefa(m.db, { id: "sabado", venceEm: "2026-10-24", duracao: 60 });
+    const [sexta, sabado, domingo, segunda] = m.agenda.consultar({
+      de: "2026-10-23",
+      ate: "2026-10-26",
+    }).dias;
+    expect(sexta?.livreMin).toBe(540);
+    expect(sabado).toMatchObject({ livres: [], livreMin: 0, planejadoMin: 60, cheio: true, sugestoes: [] });
+    expect(domingo).toMatchObject({ livres: [], livreMin: 0 });
+    expect(segunda?.livres).toEqual([
+      { inicio: sp("2026-10-26", "09:00"), fim: sp("2026-10-26", "18:00"), minutos: 540 },
+    ]);
   });
 
   test("calendário que a Alba não lê e evento na lixeira ficam de fora", () => {

@@ -27,6 +27,7 @@ import {
   type MotivoAtividade,
 } from "./areas/dia/atividade.ts";
 import { ServicoBriefing } from "./areas/dia/briefing.ts";
+import { RepositorioRotinas, ServicoRotinas } from "./areas/dia/horarios.ts";
 import { RelogioDoDia } from "./areas/dia/relogio.ts";
 import { RepositorioRegistroRotinas } from "./areas/dia/rotinas.ts";
 import { TempoDoDia } from "./areas/dia/tempo.ts";
@@ -127,14 +128,18 @@ let reagirACotacao: () => void = () => {};
 const cotacaoMudou = vigiarCotacao(repositorioConfig.ler().cambio, () => reagirACotacao());
 // As contagens das áreas (F3-20) nascem depois das áreas que contam; até lá, recontar não faz nada.
 let recontarAreas: () => void = () => {};
+// O relógio do dia (F3-17) nasce mais adiante; o fuso que muda antes disso não tem o que rearmar.
+let rearmarRelogio: () => void = () => {};
 const config = new ServicoConfig(
   repositorioConfig,
   nativo,
   (estado: EstadoConfig) => {
     servidor?.emitir("config.mudou", estado);
     cotacaoMudou(estado.config.cambio);
-    // O fuso pode ter mudado: o "hoje" das tarefas muda junto.
+    // O fuso pode ter mudado: o "hoje" das tarefas muda junto, e as horas das rotinas e dos
+    // lembretes caem em outro instante.
     recontarAreas();
+    rearmarRelogio();
   },
   portable(),
 );
@@ -295,6 +300,9 @@ const provedores = registrarProvedores(
     : undefined,
 );
 const repositorioExecucoes = new RepositorioExecucoes(banco);
+// As horas e os dias do briefing e do fechamento (F3-45, Configurações › O dia); os dias delas são
+// os dias de trabalho, fora dos quais a agenda não tem expediente.
+const repositorioRotinas = new RepositorioRotinas(banco);
 // Agenda (F3-16): o local e o cache do Google, o livre no expediente de `config` e o encaixe da
 // Alba, que só o clique aplica e o histórico desfaz.
 const agenda = new ServicoAgenda(
@@ -302,7 +310,7 @@ const agenda = new ServicoAgenda(
     repo: new RepositorioAgenda(banco),
     tarefas: new RepositorioTarefasDoDia(banco),
     chamadas: repositorioExecucoes,
-    lerDia: () => repositorioConfig.ler().dia,
+    lerDia: () => ({ ...repositorioConfig.ler().dia, diasDeTrabalho: repositorioRotinas.diasDeTrabalho() }),
   },
   {
     mudou: (mudanca) => {
@@ -474,6 +482,13 @@ const notas = new ServicoNotas(new RepositorioNotas(banco), {
 });
 // Relógio do dia (F3-17, ADR-0032): lembretes disparam por um timer próprio, sem modelo e sem rede.
 const relogio = new RelogioDoDia();
+rearmarRelogio = () => relogio.mudou();
+// Mudar a hora do briefing ou a de parar rearma o relógio: vale já hoje (F3-45).
+const rotinas = new ServicoRotinas({
+  repo: repositorioRotinas,
+  emitir: (lista) => servidor?.emitir("rotinas.mudou", lista),
+  relogio,
+});
 const lembretes = new ServicoLembretes(
   new RepositorioLembretes(banco),
   {
@@ -735,7 +750,9 @@ servidor = await abrirServidorWs(token, {
   ...atendentesDaCaptura(captura),
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
-  ...semAtendente(["rotinas.listar", "rotinas.definir", "rotinas.hoje", "rotinas.agir"]),
+  "rotinas.listar": () => rotinas.listar(),
+  "rotinas.definir": (mudanca) => rotinas.definir(mudanca),
+  ...semAtendente(["rotinas.hoje", "rotinas.agir"]),
   "areas.contagens": () => contagens.obter(),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);

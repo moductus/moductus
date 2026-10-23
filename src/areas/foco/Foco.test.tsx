@@ -3,6 +3,7 @@ import type { EstadoFoco, EtapaFoco, HistoricoFoco, Tarefa } from "@moductus/con
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AcoesSistemaContexto } from "../../janelas/sistema/primeiro-uso/estado.ts";
 import { auditar } from "../../teste/acessibilidade.ts";
 import { Foco } from "./Foco.tsx";
 
@@ -137,11 +138,22 @@ const tarefa = (id: string, titulo: string, extra: Partial<Tarefa> = {}): Tarefa
 let raiz: Root | null = null;
 let recipiente: HTMLElement;
 
+/** Para onde o Sistema foi levado (`ir`), como a janela faria. */
+const destinos: unknown[] = [];
+
 async function montar() {
   recipiente = document.createElement("div");
   document.body.appendChild(recipiente);
   raiz = createRoot(recipiente);
-  await act(async () => raiz!.render(<Foco />));
+  await act(async () =>
+    raiz!.render(
+      <AcoesSistemaContexto.Provider
+        value={{ ir: (d) => destinos.push(d), aoMudarPrimeiroUso: () => undefined }}
+      >
+        <Foco />
+      </AcoesSistemaContexto.Provider>,
+    ),
+  );
   await act(async () => {
     await vi.advanceTimersByTimeAsync(0);
   });
@@ -161,6 +173,7 @@ beforeEach(() => {
   ];
   falso.falhar.clear();
   falso.pedidos.length = 0;
+  destinos.length = 0;
 });
 afterEach(() => {
   act(() => raiz?.unmount());
@@ -181,6 +194,12 @@ const clicar = async (rotulo: string) => {
 const pediu = (metodo: string) => falso.pedidos.filter((p) => p.metodo === metodo).map((p) => p.dados);
 
 describe("Foco: vazio", () => {
+  it("Ajustar ciclos leva a Configurações › O dia", async () => {
+    await montar();
+    await clicar("Ajustar ciclos");
+    expect(destinos).toEqual([{ area: "configuracoes", secao: "dia" }]);
+  });
+
   it("sem ciclo hoje, explica como funciona e começa ligado à primeira tarefa de hoje", async () => {
     await montar();
     expect(texto(".area-foco-cartao .area-foco-rotulo")).toBe("Nenhum ciclo hoje");

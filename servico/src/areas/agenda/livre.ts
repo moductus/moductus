@@ -8,6 +8,7 @@ import {
 import {
   PRIMEIRO_NUMERO,
   ULTIMO_NUMERO,
+  diaDaSemana,
   diaDoNumero,
   diasEntre,
   inicioDoDia,
@@ -265,13 +266,19 @@ export interface EntradaDias {
   agora: Date;
   fuso: string;
   expediente: Expediente;
+  /**
+   * Os dias de trabalho, de 1 (segunda) a 7 (domingo): fora deles não há expediente, nem livre
+   * nem encaixe. Sem a lista, todo dia tem expediente.
+   */
+  diasDeTrabalho?: readonly number[];
   ocorrencias: readonly Ocorrencia[];
   tarefas: readonly TarefaDoDia[];
 }
 
 /**
- * Cada dia de `de` a `ate`: os blocos livres do expediente que ainda não passaram, o planejado das
- * tarefas do dia e se ele passa do livre ("7h planejadas para 5h livres"), e os encaixes.
+ * Cada dia de `de` a `ate`: os blocos livres do expediente que ainda não passaram (fora dos dias de
+ * trabalho, nenhum), o planejado das tarefas do dia e se ele passa do livre ("7h planejadas para
+ * 5h livres"), e os encaixes.
  *
  * O planejado é a duração estimada das tarefas abertas que vencem no dia; hoje leva também as
  * atrasadas (as abertas de ontem passam para hoje), e o dia que passou fica sem planejado. Tarefa
@@ -287,11 +294,12 @@ export function montarDias(e: EntradaDias): DiaDaAgenda[] {
   // Por número: o dia seguinte a 9999-12-31 não existe.
   for (let n = numeroDoDia(e.de); n <= numeroDoDia(e.ate); n++) {
     const dia = diaDoNumero(n);
+    const trabalha = e.diasDeTrabalho?.includes(diaDaSemana(dia) || 7) ?? true;
     const janela = {
       inicio: Math.max(instanteNoFuso(dia, e.expediente.inicio, e.fuso).getTime(), daqui),
       fim: Math.min(instanteNoFuso(dia, e.expediente.fim, e.fuso).getTime(), ULTIMO_INSTANTE_MS),
     };
-    const livres = janela.inicio < janela.fim ? blocosLivres(janela, ocupadas) : [];
+    const livres = trabalha && janela.inicio < janela.fim ? blocosLivres(janela, ocupadas) : [];
     const livreMin = livres.reduce((soma, b) => soma + b.minutos, 0);
     // A aberta de um dia que passou é planejada hoje, não no dia dela: conta uma vez só.
     const planejadas =

@@ -933,4 +933,12 @@ describe("Tarefas · a coluna Agenda", () => {
     expect(horas()).toEqual(["10h", "11h", "12h", "13h", "14h", "15h", "16h", "17h", "18h"]);
     expect(pedidosDe("agenda.consultar").length).toBe(antes + 1);
   });
+
+  it("rotinas.mudou relê a agenda: os dias de trabalho decidem se hoje tem livre", async () => {
+    responder({});
+    await montar();
+    const antes = pedidosDe("agenda.consultar").length;
+    await avisar("rotinas.mudou", []);
+    expect(pedidosDe("agenda.consultar").length).toBe(antes + 1);
+  });
 });

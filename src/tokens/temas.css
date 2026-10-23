@@ -175,6 +175,12 @@
   --raio-toast: 8px;
   /* Silêncio e prévia lado a lado só com esta largura cada; abaixo, um embaixo do outro */
   --largura-min-coluna-notificacoes: 300px;
+  /* O dia (ConfigDia.dc.html): os botões dos dias da semana, o campo da hora, a lista do fuso e a
+     largura mínima de cada cartão nas duas colunas; abaixo dela, um cartão embaixo do outro */
+  --largura-dia-semana: 44px;
+  --largura-campo-hora: 84px;
+  --largura-campo-fuso: 300px;
+  --largura-min-cartao-dia: 320px;
   /* Modelos e Conexões (ConfigModelos*.dc.html, ConfigConexoes*.dc.html): colunas Estado,
      Resposta e Teto, a lista do provedor, o trilho do teste, os caminhos do vazio lado a lado só
      com esta largura cada, as colunas do resumo de uma conexão e a altura dos blocos da prévia */
