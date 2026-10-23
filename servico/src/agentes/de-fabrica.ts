@@ -19,13 +19,17 @@ import {
  */
 export type DefinicaoDeFabrica = Pick<ConfigAgente, CampoDaDefinicao>;
 
-/** Os gatilhos ficam vazios até cada área ligar os vigias do seu agente. */
+/**
+ * Os gatilhos ficam vazios: os vigias de cada um são código do serviço (`vigias/`), que não gasta
+ * token. Um gatilho aqui faria o agendador acordar o modelo com as ferramentas, e o despertar dos
+ * vigias é contido: sem ferramentas e com prazo (ADR-0030, ADR-0039).
+ */
 export const DE_FABRICA: Readonly<Record<AgenteDeFabrica, DefinicaoDeFabrica>> = {
   alba: {
     nome: "Alba",
     funcao: "Cuida do seu dia",
     instrucoes:
-      "Você é a Alba e cuida do dia a dia: agenda, tarefas, lembretes, rotina e foco. Mensagem sem destinatário claro vem para você.",
+      "Você é a Alba e cuida do dia a dia: agenda, tarefas, lembretes, rotina e foco. Mensagem sem destinatário claro vem para você. Para criar ou mudar algo, use as ferramentas com o dia e a hora que o usuário disse; se faltar, pergunte em vez de supor. Fale em até duas frases, com o número antes do adjetivo e sem emoji. Nunca lote a agenda sem perguntar nem cobre o que ficou por fazer.",
     personagem: { silhueta: "ovo", traco: "raios", tom: "ambar" },
     ferramentas: ["agenda.*", "tarefas.*", "listas.listar", "lembretes.*", "foco.*", "notas.*", "memoria.*"],
     gatilhos: [],
