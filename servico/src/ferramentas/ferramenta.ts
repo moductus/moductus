@@ -72,6 +72,12 @@ export interface DefinicaoFerramenta<E extends z.ZodObject> {
    */
   cartao?: (entrada: z.output<E>) => TextoCartao;
   /**
+   * Só em `externo`: o que a área já sabe recusar antes do cartão (o calendário que não aceita
+   * escrita, o evento que sumiu). Lança com o motivo, que volta ao modelo como texto, e nenhum
+   * cartão pede o sim de uma ação que não ia rodar.
+   */
+  conferir?: (entrada: z.output<E>) => void;
+  /**
    * A função inversa, obrigatória em `interno` e proibida no resto (AGENTS.md §4): o que o agente
    * faz dentro do Moductus aparece no histórico com desfazer.
    *
@@ -107,6 +113,8 @@ export interface Ferramenta {
   executar(entrada: unknown, ctx: ContextoFerramenta): Promise<unknown>;
   /** O texto do cartão para a entrada validada; `null` fora de `externo`. */
   cartao(entrada: unknown): TextoCartao | null;
+  /** Lança o motivo de recusar a entrada validada antes do cartão; sem `conferir`, não faz nada. */
+  conferir(entrada: unknown): void;
   /** Só `interno` tem função inversa. */
   readonly desfazivel: boolean;
   /** Fora do recorte dos agentes: só a interface faz, e o catálogo a guarda para desfazer. */
@@ -141,6 +149,9 @@ export function ferramenta<E extends z.ZodObject>(definicao: DefinicaoFerramenta
   if (efeito === "externo" && !definicao.cartao) {
     throw new Error(`ferramenta "${nome}": ação externo precisa do texto do cartão de aprovação`);
   }
+  if (efeito !== "externo" && definicao.conferir) {
+    throw new Error(`ferramenta "${nome}": só ação externo confere antes do cartão`);
+  }
   const { desfazer } = definicao;
   if (efeito === "interno" && !desfazer) {
     throw new Error(`ferramenta "${nome}": ação interno precisa da função que a desfaz`);
@@ -166,6 +177,9 @@ export function ferramenta<E extends z.ZodObject>(definicao: DefinicaoFerramenta
     },
     cartao(valor) {
       return definicao.cartao?.(valor as z.output<E>) ?? null;
+    },
+    conferir(valor) {
+      definicao.conferir?.(valor as z.output<E>);
     },
     desfazivel: desfazer !== undefined,
     soPelaInterface: definicao.soPelaInterface === true,

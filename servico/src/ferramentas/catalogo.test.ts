@@ -52,6 +52,9 @@ function montar() {
       efeito: "externo",
       executar: anotar("github.comentar"),
       cartao: ({ pr }) => ({ descricao: `Vou comentar no #${pr}.`, rotulo: `Comentar no #${pr}` }),
+      conferir: ({ pr }) => {
+        if (pr === 13) throw new Error("o #13 já foi fechado");
+      },
     }),
     ferramenta({
       nome: "tarefas.criar",
@@ -262,6 +265,20 @@ describe("execução pelo catálogo", () => {
     await expect(
       executar({ id: "c1", nome: "github__comentar", entrada: { pr: 7, texto: "Pronto" } }),
     ).rejects.toThrow("cancelada");
+    expect(pedidos).toBe(0);
+    expect(rodou).toEqual([]);
+  });
+
+  test("externo que a área já recusa volta o motivo sem pedir aprovação", async () => {
+    const { catalogo, rodou } = montar();
+    let pedidos = 0;
+    const autorizar: Autorizar = () => {
+      pedidos++;
+      return Promise.resolve({ permitida: true });
+    };
+    const executar = catalogo.doAgente(["github.*"]).executor(contexto("nuno"), autorizar);
+    const r = await executar({ id: "c1", nome: "github__comentar", entrada: { pr: 13, texto: "Pronto" } });
+    expect(r).toEqual({ ok: false, erro: "github.comentar falhou: o #13 já foi fechado" });
     expect(pedidos).toBe(0);
     expect(rodou).toEqual([]);
   });

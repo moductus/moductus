@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Credenciais } from "../../../casca/credenciais.ts";
 import type { ClienteOAuth, EnderecosGoogle } from "../cliente.ts";
+import { EscritaGoogleAgenda } from "../escrita.ts";
+import { AVISO_DESLIGADA } from "../google-agenda.ts";
 
 /**
  * Um Google de mentira em 127.0.0.1 para os testes (nenhum pedido sai da máquina): o endpoint de
@@ -21,6 +23,8 @@ export interface CalendarioFalso {
   primary?: boolean;
   backgroundColor?: string;
   description?: string;
+  /** `owner` e `writer` editam; `reader` e `freeBusyReader` só veem. */
+  accessRole?: string;
 }
 
 interface EventoGuardado {
@@ -375,7 +379,9 @@ export async function abrirGoogleFalso(
     trocarRenovacao: false,
     redirecionamentos: [],
     revogarTudoNoGoogle: () => renovacoes.clear(),
-    calendarios: [{ id: conta, summary: conta, primary: true, backgroundColor: "#9fe1e7" }],
+    calendarios: [
+      { id: conta, summary: conta, primary: true, backgroundColor: "#9fe1e7", accessRole: "owner" },
+    ],
     gravarEvento(calendarioId, evento) {
       const doCalendario = eventos.get(calendarioId) ?? new Map<string, EventoGuardado>();
       eventos.set(calendarioId, doCalendario);
@@ -454,6 +460,29 @@ export async function abrirGoogleFalso(
       }),
   };
   return falso;
+}
+
+/** A escrita nos outros calendários sem o Google conectado: tudo recusa com o aviso de desligada. */
+export function escritaSemGoogle(): EscritaGoogleAgenda {
+  const desligada = () => Promise.reject(new Error(AVISO_DESLIGADA));
+  return new EscritaGoogleAgenda({
+    google: {
+      conexao: () => ({
+        tipo: "google-agenda",
+        estado: "desligada",
+        conta: null,
+        ultimoErro: null,
+        conectadaEm: null,
+      }),
+      tokenDeAcesso: desligada,
+      acessoRecusado: () => undefined,
+      escreveNosOutros: () => false,
+      permitirEscrita: desligada,
+    },
+    repo: { calendario: () => null, evento: () => null },
+    lerFuso: () => "UTC",
+    aoEscrever: () => undefined,
+  });
 }
 
 /** O Gerenciador de Credenciais num mapa: nada vai ao Windows. */

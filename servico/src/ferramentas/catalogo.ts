@@ -132,6 +132,13 @@ export class EscopoAgente {
             erro: `${f.nome} age fora do Moductus e precisa da aprovação do usuário, que esta execução não pode pedir.`,
           };
         }
+        // O que a área já sabe recusar não vira cartão: o sim seria pedido para nada.
+        try {
+          f.conferir(validacao.valor);
+        } catch (erro) {
+          const mensagem = erro instanceof Error ? erro.message : String(erro);
+          return { ok: false, erro: `${f.nome} falhou: ${mensagem}` };
+        }
         const autorizacao = await autorizar({ ferramenta: f, entrada: validacao.valor, contexto });
         contexto.sinal.throwIfAborted();
         if (!autorizacao.permitida) return { ok: false, erro: autorizacao.motivo };

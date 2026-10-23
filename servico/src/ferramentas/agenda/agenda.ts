@@ -13,15 +13,22 @@ import {
   type CamposEvento,
   type ServicoAgenda,
 } from "../../areas/agenda/agenda.ts";
-import { somarDias, type TempoDoDia } from "../../areas/dia/tempo.ts";
+import { diaDaSemana, somarDias, type TempoDoDia } from "../../areas/dia/tempo.ts";
+import type { EscritaGoogleAgenda, QuandoNoGoogle } from "../../conexoes/google/escrita.ts";
 import { DiaDaFerramenta, resolverDia } from "../dia.ts";
-import { carimboDe, ferramenta, type Ferramenta } from "../ferramenta.ts";
+import { carimboDe, ferramenta, type Ferramenta, type TextoCartao } from "../ferramenta.ts";
 
 /** Quem chama a ferramenta do encaixe pelo nome, sem o clique, ouve isto. */
 export const MENSAGEM_SO_PELO_CLIQUE = "o encaixe da Alba só se aplica com o clique na agenda";
 
 export const MENSAGEM_SO_LOCAL_E_MODUCTUS =
-  'por aqui só se escreve no calendário local e no "Moductus"; os outros calendários são só leitura';
+  'por aqui só se escreve no calendário local e no "Moductus"; nos outros do Google, use agenda.criar_evento_em ou agenda.mudar_evento_em, que pedem a aprovação do usuário';
+
+/** A escrita nos outros calendários do Google (F3-25), como as ferramentas `externo` a usam. */
+export type EscritaNosOutros = Pick<
+  EscritaGoogleAgenda,
+  "pedePermissao" | "alvo" | "conferirNovo" | "conferirMudanca" | "criar" | "mudar"
+>;
 
 /** Uma hora de evento quando o modelo não diz quanto dura. */
 export const DURACAO_PADRAO_MIN = 60;
@@ -55,12 +62,78 @@ interface HorarioAtual {
   duracaoMin: number;
 }
 
+const DIAS_DA_SEMANA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+
+/** O que vai entre aspas no cartão: o título ou o nome, cortado se for longo demais para ler. */
+const citar = (texto: string, maximo = 80) =>
+  `"${texto.length > maximo ? `${texto.slice(0, maximo - 1)}…` : texto}"`;
+
+/** "quinta, 22/10/2026, das 15:00 às 16:00"; "quinta, 22/10/2026, o dia inteiro". */
+export function quandoLegivel(q: QuandoNoGoogle, tempo: TempoDoDia): string {
+  const data = (dia: string) =>
+    `${DIAS_DA_SEMANA[diaDaSemana(dia)]}, ${dia.slice(8, 10)}/${dia.slice(5, 7)}/${dia.slice(0, 4)}`;
+  if (q.diaInteiro) {
+    const ultimo = somarDias(q.fim, -1);
+    return ultimo === q.inicio
+      ? `${data(q.inicio)}, o dia inteiro`
+      : `de ${data(q.inicio)} a ${data(ultimo)}, o dia inteiro`;
+  }
+  const inicio = new Date(q.inicio);
+  const fim = new Date(q.fim);
+  const [diaInicio, diaFim] = [tempo.diaDe(inicio), tempo.diaDe(fim)];
+  if (diaInicio === diaFim) return `${data(diaInicio)}, das ${tempo.horaDe(inicio)} às ${tempo.horaDe(fim)}`;
+  return `de ${data(diaInicio)}, ${tempo.horaDe(inicio)}, a ${data(diaFim)}, ${tempo.horaDe(fim)}`;
+}
+
+/** "10 e 30 min antes", "na hora". */
+function alertasLegiveis(alertas: readonly number[]): string {
+  if (alertas.length === 0) return "sem aviso";
+  const minutos = [...alertas].sort((a, b) => a - b).map((m) => (m === 0 ? "na hora" : `${m} min antes`));
+  return minutos.length === 1 ? minutos[0]! : `${minutos.slice(0, -1).join(", ")} e ${minutos.at(-1)!}`;
+}
+
+const AVISO_SEM_DESFAZER = "não se desfaz por aqui";
+const AVISO_PERMISSAO = "na primeira vez, o Google pede no navegador a permissão de editar eventos";
+
+/** O fim da primeira frase do cartão: o que não volta e, se for o caso, o navegador que vai abrir. */
+const ressalvas = (pede: boolean) =>
+  pede ? `${AVISO_SEM_DESFAZER}; ${AVISO_PERMISSAO}` : AVISO_SEM_DESFAZER;
+
+/** Os detalhes que vão depois do resumo, um por linha. */
+const detalhes = (linhas: (string | null)[]) => {
+  const ditas = linhas.filter((l): l is string => l !== null);
+  return ditas.length === 0 ? "" : `\n\n${ditas.join("\n")}`;
+};
+
 const campos = {
   titulo: z.string().trim().min(1).max(500).describe("O nome do compromisso"),
   descricao: z.string().max(10_000).nullable().describe("Detalhes"),
   local: z.string().max(500).nullable().describe("Onde"),
   alertas: Alertas.describe("Minutos antes de cada aviso, até 5"),
 };
+
+/** Criar num calendário de fora do Google (F3-25): o calendário é obrigatório. */
+const EntradaCriarEm = z.object({
+  calendarioId: Id.describe('O calendário do Google, de agenda.calendarios; não o local nem o "Moductus"'),
+  titulo: campos.titulo,
+  quando: Quando,
+  descricao: campos.descricao.optional(),
+  local: campos.local.optional(),
+  recorrencia: Recorrencia.optional().describe("Regra RRULE do iCalendar, como FREQ=WEEKLY;BYDAY=MO"),
+  alertas: campos.alertas
+    .optional()
+    .describe("Minutos antes de cada aviso, até 5; sem eles, valem os do calendário"),
+});
+
+/** Mudar num calendário de fora: só o que vier muda; a regra de repetição fica como está lá. */
+const EntradaMudarEm = z.object({
+  id: Id.describe('O evento, de um calendário do Google que não é o "Moductus"'),
+  titulo: campos.titulo.optional(),
+  quando: Quando.optional(),
+  descricao: campos.descricao.optional(),
+  local: campos.local.optional(),
+  alertas: campos.alertas.optional(),
+});
 
 /** O que a inversa lê do valor gravado: o evento como a chamada o deixou e, ao mudar, como era. */
 const EventoGravado = z.object({ id: z.string(), atualizadoEm: z.string() });
@@ -82,7 +155,11 @@ const CamposGravados = z.object({
  * (`agenda.aplicar_sugestao`) existe só para o desfazer do histórico achar a inversa: nenhum agente o
  * vê, porque a Alba sugere e quem aplica é você ("Lota a agenda sem perguntar" está no "Nunca").
  */
-export function ferramentasAgenda(agenda: ServicoAgenda, tempo: TempoDoDia): Ferramenta[] {
+export function ferramentasAgenda(
+  agenda: ServicoAgenda,
+  tempo: TempoDoDia,
+  outros: EscritaNosOutros,
+): Ferramenta[] {
   /** Início e fim do evento: instantes no evento com hora, dias no de dia inteiro. */
   const pontas = (q: z.infer<typeof Quando>, atual: HorarioAtual | null = null) => {
     const dia = resolverDia(tempo, q.dia);
@@ -96,13 +173,97 @@ export function ferramentasAgenda(agenda: ServicoAgenda, tempo: TempoDoDia): Fer
   };
 
   /** A hora e a duração de agora, no fuso do usuário; o de dia inteiro não tem. */
-  const horarioDe = (e: EventoAgenda): HorarioAtual | null =>
+  const horarioDe = (e: Pick<EventoAgenda, "diaInteiro" | "inicio" | "fim">): HorarioAtual | null =>
     e.diaInteiro
       ? null
       : {
           hora: tempo.horaDe(new Date(e.inicio)),
           duracaoMin: Math.round((Date.parse(e.fim) - Date.parse(e.inicio)) / 60_000),
         };
+
+  /** O evento novo de um calendário de fora, com o quando já em instantes ou dias. */
+  const novoNoGoogle = (e: z.infer<typeof EntradaCriarEm>) => ({
+    titulo: e.titulo,
+    ...pontas(e.quando),
+    descricao: e.descricao ?? null,
+    local: e.local ?? null,
+    recorrencia: e.recorrencia?.trim() ?? null,
+    alertas: e.alertas ?? null,
+  });
+
+  /** A mudança num evento de fora; o quando pela metade completa com o horário que ele tem. */
+  const mudancaNoGoogle = (e: z.infer<typeof EntradaMudarEm>) => {
+    const { evento } = outros.alvo(e.id);
+    const atual = { diaInteiro: evento.dia_inteiro === 1, inicio: evento.inicio, fim: evento.fim };
+    return {
+      ...(e.titulo !== undefined ? { titulo: e.titulo } : {}),
+      ...(e.quando !== undefined ? { quando: pontas(e.quando, horarioDe(atual)) } : {}),
+      ...(e.descricao !== undefined ? { descricao: e.descricao } : {}),
+      ...(e.local !== undefined ? { local: e.local } : {}),
+      ...(e.alertas !== undefined ? { alertas: e.alertas } : {}),
+    };
+  };
+
+  const cartaoDeCriar = (e: z.infer<typeof EntradaCriarEm>): TextoCartao => {
+    const calendario = outros.conferirNovo(e.calendarioId, { recorrencia: e.recorrencia ?? null });
+    const novo = novoNoGoogle(e);
+    return {
+      descricao: `Vou criar ${citar(novo.titulo)} no calendário ${citar(calendario.nome, 60)} do Google, ${quandoLegivel(novo, tempo)}; ${ressalvas(outros.pedePermissao())}.${detalhes(
+        [
+          novo.local !== null ? `Local: ${novo.local}` : null,
+          novo.recorrencia !== null ? `Repete: ${novo.recorrencia}` : null,
+          novo.alertas !== null ? `Avisos: ${alertasLegiveis(novo.alertas)}` : null,
+          novo.descricao !== null ? `Descrição: ${citar(novo.descricao, 300)}` : null,
+        ],
+      )}`,
+      rotulo: `Criar em ${calendario.nome.length > 30 ? `${calendario.nome.slice(0, 29)}…` : calendario.nome}`,
+      rotuloRecusar: "Não criar",
+      desfazivel: false,
+    };
+  };
+
+  const cartaoDeMudar = (e: z.infer<typeof EntradaMudarEm>): TextoCartao => {
+    const mudanca = mudancaNoGoogle(e);
+    const { evento, calendario } = outros.conferirMudanca(e.id, mudanca);
+    const atual = { diaInteiro: evento.dia_inteiro === 1, inicio: evento.inicio, fim: evento.fim };
+    const recorrente = evento.recorrencia !== null;
+    const mudancas = [
+      mudanca.titulo !== undefined ? `o título vira ${citar(mudanca.titulo)}` : null,
+      mudanca.quando !== undefined
+        ? `passa de ${quandoLegivel(atual, tempo)} para ${quandoLegivel(mudanca.quando, tempo)}`
+        : null,
+      mudanca.local === undefined
+        ? null
+        : mudanca.local === null
+          ? "o local sai"
+          : `o local vira ${citar(mudanca.local)}`,
+      mudanca.descricao === undefined
+        ? null
+        : mudanca.descricao === null
+          ? "a descrição sai"
+          : "a descrição muda",
+      mudanca.alertas === undefined
+        ? null
+        : mudanca.alertas.length === 0
+          ? "fica sem aviso"
+          : `os avisos ficam ${alertasLegiveis(mudanca.alertas)}`,
+    ].filter((m): m is string => m !== null);
+    // Sem mudar o quando, o quando de agora diz qual é o evento; o recorrente, que repete.
+    const qual = recorrente
+      ? ", em todas as repetições,"
+      : mudanca.quando === undefined
+        ? ` (${quandoLegivel(atual, tempo)})`
+        : "";
+    const ressalva = ressalvas(outros.pedePermissao());
+    return {
+      descricao: `Vou mudar ${citar(evento.titulo)}${qual} no calendário ${citar(calendario.nome, 60)} do Google: ${mudancas.join("; ")}. ${ressalva.charAt(0).toUpperCase()}${ressalva.slice(1)}.${detalhes(
+        [mudanca.descricao ? `Descrição: ${citar(mudanca.descricao, 300)}` : null],
+      )}`,
+      rotulo: `Mudar em ${calendario.nome.length > 30 ? `${calendario.nome.slice(0, 29)}…` : calendario.nome}`,
+      rotuloRecusar: "Não mudar",
+      desfazivel: false,
+    };
+  };
 
   const exigirEditavel = (calendarioId: string) => {
     const calendario = agenda.calendarios().find((c) => c.id === calendarioId);
@@ -215,6 +376,31 @@ export function ferramentasAgenda(agenda: ServicoAgenda, tempo: TempoDoDia): Fer
           .parse(resultado);
         agenda.desfazerEvento({ eventoId: evento.id, versao: evento.atualizadoEm, antes: anterior }, ctx);
       },
+    }),
+    ferramenta({
+      nome: "agenda.criar_evento_em",
+      descricao:
+        'Cria um compromisso num calendário do Google que não é o "Moductus" (o do trabalho, o da família), só depois de o usuário aprovar no cartão. O id do calendário vem de agenda.calendarios (podeEscrever). Sem hora, é de dia inteiro; sem alertas, valem os do calendário. Não se desfaz pelo histórico.',
+      entrada: EntradaCriarEm,
+      efeito: "externo",
+      conferir: (e) => {
+        outros.conferirNovo(e.calendarioId, { recorrencia: e.recorrencia ?? null });
+        pontas(e.quando);
+      },
+      cartao: cartaoDeCriar,
+      executar: (e) => outros.criar(e.calendarioId, novoNoGoogle(e)),
+    }),
+    ferramenta({
+      nome: "agenda.mudar_evento_em",
+      descricao:
+        'Muda um compromisso de um calendário do Google que não é o "Moductus", só depois de o usuário aprovar no cartão: só o que vier muda, e o quando pela metade fica como era (como em agenda.mudar_evento). O horário de evento que se repete não muda por aqui. Devolve o evento e como ele estava; não se desfaz pelo histórico.',
+      entrada: EntradaMudarEm,
+      efeito: "externo",
+      conferir: (e) => {
+        outros.conferirMudanca(e.id, mudancaNoGoogle(e));
+      },
+      cartao: cartaoDeMudar,
+      executar: (e) => outros.mudar(e.id, mudancaNoGoogle(e)),
     }),
   ];
 }

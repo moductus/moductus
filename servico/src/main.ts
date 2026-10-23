@@ -48,6 +48,7 @@ import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
 import { ServicoGoogleAgenda } from "./conexoes/google/google-agenda.ts";
 import { EspelhoGoogleAgenda, RepositorioEspelhoGoogle } from "./conexoes/google/espelho.ts";
+import { EscritaGoogleAgenda } from "./conexoes/google/escrita.ts";
 import { LeituraGoogleAgenda, RepositorioLeituraGoogle } from "./conexoes/google/leitura.ts";
 import { ferramentasAgenda } from "./ferramentas/agenda/agenda.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
@@ -303,9 +304,10 @@ const agenda = new ServicoAgenda(
 );
 // Os calendários do Google no cache da agenda (F3-23, ADR-0035): a cada 10 min com variação, na
 // retomada, ao abrir a área e ao escolher ler um calendário. A falha vira a fala de erro da Alba.
+const repositorioLeituraGoogle = new RepositorioLeituraGoogle(banco);
 leituraGoogle = new LeituraGoogleAgenda({
   google: googleAgenda,
-  repo: new RepositorioLeituraGoogle(banco),
+  repo: repositorioLeituraGoogle,
   lerFuso: () => repositorioConfig.ler().dia.fuso,
   avisos: {
     eventos: ({ mudados, apagados }) => {
@@ -337,13 +339,21 @@ leituraGoogle = new LeituraGoogleAgenda({
 });
 // O dia das ferramentas da Alba: "hoje" e "amanhã" no fuso de config, lido a cada pergunta.
 const tempoDoDia = new TempoDoDia(() => repositorioConfig.ler().dia.fuso);
+// Criar e mudar evento nos outros calendários do Google (F3-25), só com o sim do cartão; o que foi
+// escrito volta ao cache pela leitura.
+const escritaGoogle = new EscritaGoogleAgenda({
+  google: googleAgenda,
+  repo: repositorioLeituraGoogle,
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  aoEscrever: () => leituraGoogle?.aoEscrever(),
+});
 // As ferramentas de cada área (F2-26: as do Nuno; F3-26: as da Alba); cada agente só vê as da lista
 // dele. As das áreas que nascem mais adiante entram quando elas nascem, antes do servidor abrir.
 const catalogo = new Catalogo([
   ...ferramentasSessoes(sessoes),
   ...ferramentasUso(sessoes),
   ...ferramentasGithub(github),
-  ...ferramentasAgenda(agenda, tempoDoDia),
+  ...ferramentasAgenda(agenda, tempoDoDia, escritaGoogle),
 ]);
 const repositorioAgentes = new RepositorioAgentes(banco);
 // Quem rodava essas execuções era o serviço que parou: fecham como erro e os cartões delas expiram.

@@ -25,6 +25,7 @@ import { RepositorioNotas, ServicoNotas } from "../../areas/notas/notas.ts";
 import { RepositorioTarefas } from "../../areas/tarefas/repositorio.ts";
 import { ServicoTarefas } from "../../areas/tarefas/tarefas.ts";
 import { abrirBanco } from "../../banco/conexao.ts";
+import { escritaSemGoogle } from "../../conexoes/google/fixtures/google-falso.ts";
 import { RepositorioConversas, ServicoConversas } from "../../conversas/conversas.ts";
 import { RepositorioNotificacoes, ServicoNotificacoes } from "../../notificacoes/notificacoes.ts";
 import { ProvedorFalso, roteiros, type PassoRoteiro } from "../../provedores/falso.ts";
@@ -151,7 +152,7 @@ function montar() {
   );
   const catalogo = new Catalogo([
     doNuno,
-    ...ferramentasAgenda(agenda, tempo),
+    ...ferramentasAgenda(agenda, tempo, escritaSemGoogle()),
     ...ferramentasTarefas(tarefas, tempo),
     ...ferramentasLembretes(lembretes, tempo),
     ...ferramentasFoco(foco, tempo),

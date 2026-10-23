@@ -48,6 +48,9 @@ describe("ferramenta()", () => {
         desfazer: () => null,
       }),
     ).toThrow(/só ação interno se desfaz/);
+    expect(() =>
+      ferramenta({ ...base, nome: "tarefas.listar", efeito: "leitura", conferir: () => undefined }),
+    ).toThrow('ferramenta "tarefas.listar": só ação externo confere antes do cartão');
   });
 
   test("a inversa recebe o resultado e o contexto, e precisa ser síncrona", () => {
