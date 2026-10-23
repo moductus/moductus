@@ -52,6 +52,7 @@ import { ServicoGoogleAgenda } from "./conexoes/google/google-agenda.ts";
 import { EspelhoGoogleAgenda, RepositorioEspelhoGoogle } from "./conexoes/google/espelho.ts";
 import { EscritaGoogleAgenda } from "./conexoes/google/escrita.ts";
 import { LeituraGoogleAgenda, RepositorioLeituraGoogle } from "./conexoes/google/leitura.ts";
+import { SituacaoGoogleAgenda } from "./conexoes/google/situacao.ts";
 import { ferramentasAgenda } from "./ferramentas/agenda/agenda.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
 import { ferramentasFoco } from "./ferramentas/foco/foco.ts";
@@ -228,6 +229,8 @@ let leituraGoogle: LeituraGoogleAgenda | null = null;
 // O espelho no calendário "Moductus" (F3-24) nasce depois das Tarefas e dos Lembretes, que adotam
 // o que mudou no Google; as áreas o avisam a cada mudança, e a conexão, ao conectar.
 let espelhoGoogle: EspelhoGoogleAgenda | null = null;
+// O cartão do Google (F3-44) lê a situação de novo a cada mudança; ela nasce com o espelho.
+let avisarSituacaoGoogle: () => void = () => undefined;
 // Google Agenda da Alba (F3-22): OAuth no navegador pela casca, refresh token no Gerenciador.
 const googleAgenda = new ServicoGoogleAgenda({
   conexoes: repositorioConexoes,
@@ -238,6 +241,7 @@ const googleAgenda = new ServicoGoogleAgenda({
     leituraGoogle?.aoMudarConexao(conexao);
     espelhoGoogle?.aoMudarConexao(conexao);
   },
+  situacaoMudou: () => avisarSituacaoGoogle(),
 });
 const conexoes = new ServicoConexoes(
   repositorioConexoes,
@@ -554,9 +558,10 @@ contagens.vigiar();
 // O calendário "Moductus" (F3-24, ADR-0035): tarefas com hora e lembretes com horário viram evento
 // com alerta no Google, pela fila de saída; o que você muda lá volta pelas áreas, como conexão.
 const pelaConexao = { origem: "conexao" } as const;
+const repositorioEspelhoGoogle = new RepositorioEspelhoGoogle(banco);
 espelhoGoogle = new EspelhoGoogleAgenda({
   google: googleAgenda,
-  repo: new RepositorioEspelhoGoogle(banco),
+  repo: repositorioEspelhoGoogle,
   lerFuso: () => repositorioConfig.ler().dia.fuso,
   adotar: {
     tarefa: (id, mudanca) => void tarefas.definir({ id, ...mudanca }, pelaConexao),
@@ -594,6 +599,19 @@ espelhoGoogle = new EspelhoGoogleAgenda({
     },
   },
 });
+// Configurações › Conexões › Google Agenda (F3-44): "Ler agora", a fila e o cliente próprio.
+const situacaoGoogle = new SituacaoGoogleAgenda({
+  google: googleAgenda,
+  conexoes: repositorioConexoes,
+  fila: () => repositorioEspelhoGoogle.tamanhoDaFila(),
+  ler: () => leituraGoogle?.atualizar() ?? Promise.resolve(),
+});
+avisarSituacaoGoogle = () => {
+  situacaoGoogle
+    .obter()
+    .then((situacao) => servidor?.emitir("google.mudou", situacao))
+    .catch((erro: unknown) => console.error(`google: situação do cartão não avisada: ${String(erro)}`));
+};
 // Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
 // Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
 runtime.estados.vigiar();
@@ -625,6 +643,9 @@ servidor = await abrirServidorWs(token, {
   "conexoes.previa": (pedido) => conexoes.previa(pedido),
   "conexoes.ligar": (pedido) => conexoes.ligar(pedido),
   "conexoes.desligar": (pedido) => conexoes.desligar(pedido),
+  "google.obter": () => situacaoGoogle.obter(),
+  "google.atualizar": () => situacaoGoogle.atualizar(),
+  "google.definirCliente": (pedido) => situacaoGoogle.definirCliente(pedido),
   "github.obter": () => github.obter(),
   "github.atualizar": () => github.atualizar(),
   "agentes.listar": () => agentes.listar(),

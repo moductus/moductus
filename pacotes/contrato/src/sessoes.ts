@@ -204,3 +204,44 @@ export const PreviaConexao = z.object({
   arquivos: z.array(MudancaArquivo),
 });
 export type PreviaConexao = z.infer<typeof PreviaConexao>;
+
+/**
+ * Por que o Google Agenda está em erro (Configurações › Conexões, F3-44): conectar não chegou ao
+ * fim, o Google não aceita mais a autorização (reconectar) ou a última leitura falhou.
+ */
+export const ProblemaGoogle = z.enum(["conectar", "reconectar", "leitura"]);
+export type ProblemaGoogle = z.infer<typeof ProblemaGoogle>;
+
+/** A autorização aberta no navegador enquanto o conectar espera: o endereço e quando o prazo acaba. */
+export const AutorizacaoGoogle = z.object({
+  endereco: z.url({ protocol: /^https$/ }),
+  venceEm: Instante,
+});
+export type AutorizacaoGoogle = z.infer<typeof AutorizacaoGoogle>;
+
+/** O que o cartão do Google Agenda mostra além da `Conexao`; o segredo do cliente nunca vem. */
+export const SituacaoGoogle = z.object({
+  autorizacao: AutorizacaoGoogle.nullable(),
+  /** A última leitura do Calendar que deu certo. */
+  lidaEm: Instante.nullable(),
+  /** Quantos itens esperam na fila de saída para o calendário "Moductus". */
+  fila: z.number().int().min(0),
+  /** Se o cliente OAuth é o do usuário ("Usar meu próprio cliente", ADR-0031). */
+  clienteProprio: z.boolean(),
+  problema: ProblemaGoogle.nullable(),
+});
+export type SituacaoGoogle = z.infer<typeof SituacaoGoogle>;
+
+/**
+ * O cliente OAuth do usuário; `cliente: null` volta ao do Moductus. Vai ao Gerenciador de
+ * Credenciais, nunca ao banco nem ao log.
+ */
+export const PedidoClienteGoogle = z.object({
+  cliente: z
+    .object({
+      id: z.string().trim().min(1).max(512),
+      segredo: z.string().trim().max(512).nullable().optional(),
+    })
+    .nullable(),
+});
+export type PedidoClienteGoogle = z.infer<typeof PedidoClienteGoogle>;

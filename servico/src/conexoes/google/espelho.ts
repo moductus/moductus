@@ -473,6 +473,12 @@ export class RepositorioEspelhoGoogle {
     return linha.em;
   }
 
+  /** Quantos itens esperam na fila, para o cartão do Google ("Fila para o Google"). */
+  tamanhoDaFila(): number {
+    const linha = this.db.prepare("SELECT count(*) AS n FROM agenda_saida").get() as { n: number };
+    return Number(linha.n);
+  }
+
   /** Como a agenda faz (`RepositorioAgenda.enfileirarSaida`): a nova substitui a pendente e vai já. */
   enfileirar(tipo: TipoItem, id: string, operacao: LinhaSaida["operacao"], agora: string): void {
     this.db
