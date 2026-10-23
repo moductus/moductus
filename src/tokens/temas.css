@@ -198,6 +198,13 @@
   --largura-campo-valor: 120px;
   --largura-min-caminho: 220px;
   --largura-min-dado-conexao: 160px;
+  /* Google Agenda (ConfigConexoesGoogle*.dc.html, Uso5Conexoes.dc.html): a linha de cada calendário,
+     a linha dele no primeiro uso, as duas colunas do antes de conectar lado a lado só com esta
+     largura cada, e o recuo dos calendários até o texto, depois da cabeça da Alba */
+  --altura-linha-calendario: 40px;
+  --altura-linha-calendario-uso: 30px;
+  --largura-min-coluna-google: 260px;
+  --recuo-calendarios-uso: 46px;
   --altura-bloco-hooks: 216px;
   /* A lista aberta de um <select> é desenhada pelo Windows: cores de sistema, que seguem o
      color-scheme do tema */

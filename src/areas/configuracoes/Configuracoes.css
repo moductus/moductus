@@ -1152,6 +1152,248 @@
   color: var(--sucesso);
 }
 
+/* ---------- Google Agenda (ConfigConexoesGoogle*.dc.html) ---------- */
+.config-conexao[data-destacado] {
+  border-color: var(--borda-forte);
+}
+
+/* O "Desconectar" com a confirmação aberta embaixo fica marcado. */
+.config-conexao-acoes .botao[data-ativo] {
+  background: var(--fundo-ativo);
+  color: var(--texto);
+}
+
+/* Link de texto miúdo: "Usar meu próprio cliente", "Copiar o endereço", "Passo a passo". */
+.config-link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--texto-3);
+  font: inherit;
+  font-size: var(--tipo-12);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.config-link:hover {
+  color: var(--texto);
+}
+
+.config-google-espaco {
+  flex: 1;
+}
+
+.config-google-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+}
+
+.config-google-lista-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-12);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-google-lista-pe {
+  margin: 0;
+  padding-top: var(--esp-4);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-google-calendarios {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.config-google-calendario {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  min-width: 0;
+  min-height: var(--altura-linha-calendario);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.config-google-caixa {
+  flex: none;
+  gap: var(--esp-12);
+  font-weight: var(--peso-forte);
+}
+
+.config-google-calendario:not([data-lido]) .config-google-caixa {
+  color: var(--texto-2);
+}
+
+.config-google-sobre {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-google-papel {
+  flex: none;
+  padding: var(--esp-1) var(--esp-7);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-selo);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
+.config-google-papel[data-escreve] {
+  color: var(--agente-alba);
+}
+
+/* No primeiro uso: duas colunas, linhas baixas e sem borda (Uso5Conexoes.dc.html). */
+.config-google-calendarios[data-compacta] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--largura-min-dado-conexao)), 1fr));
+  gap: var(--esp-2) var(--esp-20);
+}
+
+.config-google-calendarios[data-compacta] .config-google-calendario {
+  min-height: var(--altura-linha-calendario-uso);
+  border-top: 0;
+}
+
+.config-google-calendarios[data-compacta] .config-google-caixa {
+  font-weight: var(--peso-normal);
+}
+
+.config-google-dados {
+  padding-top: var(--esp-12);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.config-google-autorizar,
+.config-google-cliente,
+.config-google-mensagem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-14);
+}
+
+.config-google-mensagem {
+  gap: var(--esp-4);
+}
+
+.config-google-erro,
+.config-google-fila {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.config-google-colunas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--largura-min-coluna-google)), 1fr));
+  gap: var(--esp-24);
+}
+
+.config-google-coluna {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-10);
+  min-width: 0;
+}
+
+.config-google-rotulo {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-google-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+}
+
+.config-google-item-titulo {
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-forte);
+}
+
+.config-google-item-titulo[data-tom="sucesso"] {
+  color: var(--sucesso);
+}
+
+.config-google-item-titulo[data-tom="aviso"] {
+  color: var(--aviso);
+}
+
+.config-google-item-titulo[data-tom="perigo"] {
+  color: var(--perigo);
+}
+
+.config-google-item-texto {
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+  text-wrap: pretty;
+}
+
+.config-google-aviso {
+  padding: var(--esp-10) var(--esp-12);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-chip);
+}
+
+.config-google-aviso b {
+  font-weight: var(--peso-forte);
+}
+
+.config-google-rodape,
+.config-google-esperando {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.config-google-rodape > .config-link,
+.config-google-esperando > .config-link {
+  align-self: center;
+}
+
+.config-google-prazo {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.config-google-confirmar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-12);
+  padding: var(--esp-14);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-elevado);
+}
+
+.config-google-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--largura-min-coluna-google)), 1fr));
+  gap: var(--esp-12);
+}
+
+.config-google-campo .campo-entrada {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+}
+
 /* ---------- O dia (ConfigDia.dc.html) ---------- */
 
 .config-dia-rotulo {
