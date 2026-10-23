@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { ApresentacaoRotina, LINHAS_DO_BRIEFING } from "@moductus/contrato";
+import { ApresentacaoRotina, LINHAS_DO_BRIEFING, type EstadoAgente } from "@moductus/contrato";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { RepositorioAgentes } from "../../agentes/agentes.ts";
 import { RepositorioExecucoes } from "../../agentes/execucoes.ts";
@@ -18,7 +18,8 @@ import { RepositorioAgenda, ServicoAgenda } from "../agenda/agenda.ts";
 import { RepositorioTarefasDoDia } from "../agenda/tarefas-do-dia.ts";
 import { RepositorioTarefas } from "../tarefas/repositorio.ts";
 import { ServicoTarefas } from "../tarefas/tarefas.ts";
-import type { InicioDoDia } from "./atividade.ts";
+import { PrimeiraAtividade, RepositorioAtividade, type InicioDoDia } from "./atividade.ts";
+import { TempoDoDia } from "./tempo.ts";
 import {
   ESPERA_DO_AVISO_MS,
   PEDIDO_DA_ABERTURA,
@@ -77,7 +78,16 @@ function redacao(db: DatabaseSync, comProvedor: boolean) {
  * quando o teste roda o provedor; com `relogio`, os timers também, e o relógio do dia é ligado.
  */
 async function montar(
-  opcoes: { comProvedor?: boolean; redigir?: Redigir; resumos?: ResumoDoAgente[]; relogio?: boolean } = {},
+  opcoes: {
+    comProvedor?: boolean;
+    redigir?: Redigir;
+    resumos?: ResumoDoAgente[];
+    relogio?: boolean;
+    /** O estado de cada agente; quem não está aqui está ativo. */
+    estados?: Record<string, EstadoAgente>;
+    /** Quantas leituras da agenda falham antes de ela voltar. */
+    agendaFalha?: number;
+  } = {},
 ) {
   vi.useFakeTimers(opcoes.relogio ? undefined : { toFake: ["Date"] });
   vi.setSystemTime(sp(DIA, "08:00"));
@@ -108,11 +118,21 @@ async function montar(
   const apareceram: ApresentacaoRotina[] = [];
   const relogio = new RelogioDoDia();
   relogios.push(relogio);
+  let falhas = opcoes.agendaFalha ?? 0;
   const briefing = new ServicoBriefing({
     lerFuso,
-    agenda,
+    agenda: {
+      consultar: (pedido) => {
+        if (falhas > 0) {
+          falhas -= 1;
+          throw new Error("agenda fora");
+        }
+        return agenda.consultar(pedido);
+      },
+    },
     tarefas,
     resumos: opcoes.resumos ?? [],
+    estadoDo: (id) => opcoes.estados?.[id] ?? "ativo",
     redigir: async (pedido) => {
       pedidos.push(pedido);
       return (opcoes.redigir ?? redigir)(pedido);
@@ -237,6 +257,34 @@ describe("briefing da manhã sem provedor", () => {
     expect(a.linhas.map((l) => l.agenteId)).toEqual(["nuno"]);
     expect(erro).toHaveBeenCalledWith(expect.stringContaining("o resumo de tula falhou"));
   });
+
+  test("agente pausado ou desligado não entra, nem com novidade; dormindo, entra", async () => {
+    const resumos = [
+      resumo("tula", "Tula", "Semana em dia."),
+      resumo("nuno", "Nuno", "1 PR espera seu review."),
+    ];
+    const pausado = await montar({ resumos, estados: { nuno: "pausado" } });
+    expect((await pausado.briefing.aparecer(INICIO)).linhas.map((l) => l.agenteId)).toEqual(["tula"]);
+    const desligado = await montar({ resumos, estados: { nuno: "desligado", tula: "dormindo" } });
+    expect((await desligado.briefing.aparecer(INICIO)).linhas.map((l) => l.agenteId)).toEqual(["tula"]);
+    const ativo = await montar({ resumos });
+    expect((await ativo.briefing.aparecer(INICIO)).linhas.map((l) => l.agenteId)).toEqual(["tula", "nuno"]);
+  });
+
+  test("o briefing que falha fora dos resumos não grava, e o próximo sinal tenta de novo", async () => {
+    const erro = vi.spyOn(console, "error").mockImplementation(() => {});
+    const m = await montar({ agendaFalha: 1 });
+    const atividade = new PrimeiraAtividade(new RepositorioAtividade(m.db), new TempoDoDia(() => FUSO), (i) =>
+      m.briefing.aparecer(i),
+    );
+    expect(atividade.sinal("subida")).not.toBeNull();
+    await vi.waitFor(() => expect(erro).toHaveBeenCalledWith(expect.stringContaining("agenda fora")));
+    expect(new RepositorioRegistroRotinas(m.db).doDia("briefing", DIA)).toBeNull();
+    expect(m.apareceram).toEqual([]);
+    expect(atividade.sinal("desbloqueio")).not.toBeNull();
+    await vi.waitFor(() => expect(m.apareceram).toHaveLength(1));
+    expect(atividade.sinal("desbloqueio")).toBeNull();
+  });
 });
 
 describe("dia cheio", () => {
@@ -340,10 +388,25 @@ describe("aviso do Windows depois de 10 minutos", () => {
         titulo: "Briefing da manhã",
         corpo: a.abertura,
         referencia: referenciaDoBriefing(a.id),
+        semPainelDoTime: true,
       },
     ]);
     await m.ate(sp(DIA, "12:00"));
     expect(m.avisos).toHaveLength(1);
+  });
+
+  test("aberto na conferência, o prazo recomeça: o aviso sai 10 min depois de visto fechado", async () => {
+    const m = await montar({ relogio: true });
+    m.painel.aberto = true;
+    const a = await m.briefing.aparecer(INICIO);
+    const criado = Date.parse(a.criadoEm);
+    // Aos 10 min o painel está aberto: nada sai, e o prazo vai para os 20 min.
+    await m.ate(new Date(criado + ESPERA_DO_AVISO_MS + 1_000));
+    m.painel.aberto = false;
+    await m.ate(new Date(criado + 2 * ESPERA_DO_AVISO_MS - 1_000));
+    expect(m.avisos).toEqual([]);
+    await m.ate(new Date(criado + 2 * ESPERA_DO_AVISO_MS + 2_000));
+    expect(m.avisos.map((x) => x.referencia)).toEqual([referenciaDoBriefing(a.id)]);
   });
 
   test("com o painel aberto no Hoje, ou com a rotina respondida, não avisa", async () => {

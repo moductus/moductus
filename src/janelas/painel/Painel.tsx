@@ -68,7 +68,19 @@ export function Painel() {
 
   useEffect(() => {
     let n = 0;
-    const parar = listen<string>("painel:area", (evento) => setAbertura({ area: evento.payload, n: ++n }));
+    let ouviu = false;
+    const parar = listen<string>("painel:area", (evento) => {
+      ouviu = true;
+      setAbertura({ area: evento.payload, n: ++n });
+    });
+    // A casca pode ter aberto o painel antes de a interface ouvir (o briefing na subida): pergunta
+    // a área já aberta. Um `painel:area` que chegou nesse meio-tempo vale mais.
+    void parar
+      .then(() => invoke<string | null>("painel_area_atual"))
+      .then((area) => {
+        if (area && !ouviu) setAbertura({ area, n: ++n });
+      })
+      .catch(() => {});
     return () => {
       void parar.then((f) => f());
     };

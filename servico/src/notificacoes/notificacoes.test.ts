@@ -165,6 +165,14 @@ describe("avisar", () => {
     expect(servico.naoVistas().map((x) => x.id)).toEqual([n.id]);
   });
 
+  test("o aviso que pede sai sem o painel do time no clique; os outros, com", async () => {
+    const { servico, casca } = montar();
+    servico.definir({ agenteId: "alba", nivel: "tudo", canal: "ambos" });
+    await servico.avisar(lembrete({ referencia: "rotina:r1", tipo: "rotina", semPainelDoTime: true }));
+    await servico.avisar(lembrete({ referencia: "lembrete:2" }));
+    expect(casca.mostrados.map((a) => a.semPainelDoTime)).toEqual([true, undefined]);
+  });
+
   test('nível "nada" não avisa e registra: sem Windows, sem ponto, no histórico já visto', async () => {
     const { servico, casca, eventos, linhas } = montar();
     servico.definir({ agenteId: "alba", nivel: "nada", canal: "ambos" });

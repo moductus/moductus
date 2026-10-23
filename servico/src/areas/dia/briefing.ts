@@ -3,6 +3,7 @@ import {
   type Agenda,
   type ApresentacaoRotina,
   type DiaDaAgenda,
+  type EstadoAgente,
   type LinhaRotina,
   type Ocorrencia,
   type PedidoAgenda,
@@ -203,6 +204,8 @@ export interface DependenciasBriefing {
   agenda: { consultar(pedido: PedidoAgenda): Agenda };
   tarefas: { listar(pedido: PedidoTarefas): Tarefa[] };
   resumos: readonly ResumoDoAgente[];
+  /** O estado do agente agora: pausado ou desligado, a linha dele não entra. */
+  estadoDo: (agenteId: string) => EstadoAgente | null;
   redigir: Redigir;
   registro: Pick<RepositorioRegistroRotinas, "doDia" | "porId" | "gravar">;
   painel: PainelHoje;
@@ -303,7 +306,8 @@ export class ServicoBriefing implements FonteDoRelogio {
 
   /**
    * Passados 10 minutos: o briefing de hoje sem ação e com o painel Hoje fechado vira um aviso do
-   * Windows, uma vez. A casca que não responde conta como fechado.
+   * Windows, uma vez. Com o painel aberto, o prazo recomeça: o aviso só sai 10 minutos depois de
+   * ele ter sido visto fechado. A casca que não responde conta como fechado.
    */
   async conferir({ agora }: Conferencia): Promise<void> {
     const pendente = this.pendente;
@@ -316,17 +320,25 @@ export class ServicoBriefing implements FonteDoRelogio {
       console.error(`briefing: a casca não disse se o painel está aberto: ${String(erro)}`);
       return false;
     });
-    if (aberto) return;
+    if (aberto) {
+      this.pendente = { ...pendente, ate: agora.getTime() + ESPERA_DO_AVISO_MS };
+      return;
+    }
     await this.deps.avisar({
       agenteId: ALBA,
       tipo: "rotina",
       titulo: TITULO_DO_AVISO,
       corpo: briefing.abertura,
       referencia: referenciaDoBriefing(briefing.id),
+      // O clique abre o Hoje (aoClicarNoAviso), não o painel do time.
+      semPainelDoTime: true,
     });
   }
 
-  /** Os resumos dos agentes na ordem do AGENTS.md; o que falha fica de fora, sem levar os outros. */
+  /**
+   * Os resumos dos agentes na ordem do AGENTS.md; o de agente pausado ou desligado não entra, e o
+   * que falha fica de fora, sem levar os outros.
+   */
   private resumos(): DadosDoBriefing["resumos"] {
     const posicao = (id: string) => {
       const i = ORDEM_DOS_RESUMOS.indexOf(id);
@@ -336,6 +348,8 @@ export class ServicoBriefing implements FonteDoRelogio {
     const saida: { agenteId: string; nome: string; texto: string }[] = [];
     for (const r of ordenados) {
       try {
+        const estado = this.deps.estadoDo(r.agenteId);
+        if (estado === "pausado" || estado === "desligado") continue;
         const texto = r.resumoDoDia();
         const limpo = texto === null ? "" : umaLinha(texto, 200);
         if (limpo !== "") saida.push({ agenteId: r.agenteId, nome: r.nome, texto: limpo });

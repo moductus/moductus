@@ -92,7 +92,8 @@ export class PrimeiraAtividade {
   constructor(
     private readonly repositorio: Pick<RepositorioAtividade, "briefing" | "jaApareceu">,
     private readonly tempo: TempoDoDia,
-    private readonly aoComecar: (inicio: InicioDoDia) => void,
+    /** Quem abre o dia (o briefing); se falhar, o próximo sinal tenta de novo. */
+    private readonly aoComecar: (inicio: InicioDoDia) => unknown,
     private readonly agora: () => Date = () => new Date(),
   ) {}
 
@@ -108,7 +109,24 @@ export class PrimeiraAtividade {
     if (this.comecou === dia || this.repositorio.jaApareceu(dia)) return null;
     this.comecou = dia;
     const inicio: InicioDoDia = { dia, motivo, em: this.agora().toISOString() };
-    this.aoComecar(inicio);
+    let feito: unknown;
+    try {
+      feito = this.aoComecar(inicio);
+    } catch (erro) {
+      this.liberar(dia);
+      throw erro;
+    }
+    if (feito instanceof Promise) {
+      feito.catch((erro: unknown) => {
+        console.error(`dia: o começo de ${dia} falhou; o próximo sinal tenta de novo: ${String(erro)}`);
+        this.liberar(dia);
+      });
+    }
     return inicio;
+  }
+
+  /** O começo do dia falhou (o briefing não apareceu): o dia volta a poder começar. */
+  private liberar(dia: string): void {
+    if (this.comecou === dia) this.comecou = null;
   }
 }

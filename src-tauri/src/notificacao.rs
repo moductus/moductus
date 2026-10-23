@@ -3,7 +3,8 @@
 //! Quem decide se o aviso sai é o serviço (preferência por agente e tipo, silêncio); a casca só
 //! mostra, retira e diz se há tela cheia. O id da notificação vira a tag do aviso. O clique num
 //! botão (ou no corpo) volta ao serviço como `{"tipo":"notificacao-clique",…}` pelo canal do
-//! sidecar; o clique no corpo também abre o painel do time.
+//! sidecar; o clique no corpo também abre o painel do time, menos no aviso que o serviço marca
+//! `sem_painel_do_time` (o do briefing, que o serviço leva ao Hoje).
 //!
 //! App sem pacote só mostra aviso com um AppUserModelID registrado: instalado, o atalho do Menu
 //! Iniciar leva o identificador do app; rodando de `target\debug` ou `target\release`, o aviso sai
@@ -39,7 +40,8 @@ const MAXIMO_GUARDADOS: usize = 50;
 
 static APP: OnceLock<AppHandle> = OnceLock::new();
 static AUMID: OnceLock<String> = OnceLock::new();
-static GUARDADOS: Mutex<Vec<(String, ToastNotification)>> = Mutex::new(Vec::new());
+/// O aviso guardado: a tag, o objeto e se o clique no corpo deixa o painel do time de lado.
+static GUARDADOS: Mutex<Vec<(String, ToastNotification, bool)>> = Mutex::new(Vec::new());
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Botao {
@@ -60,6 +62,9 @@ pub enum Pedido {
         corpo: Option<String>,
         #[serde(default)]
         botoes: Vec<Botao>,
+        /// O clique no corpo não abre o painel do time: o serviço abre o que é do aviso (o Hoje).
+        #[serde(default)]
+        sem_painel_do_time: bool,
     },
     Retirar {
         notificacao: String,
@@ -140,32 +145,46 @@ pub fn botao_dos_argumentos(argumentos: &str) -> Option<String> {
     argumentos.strip_prefix(PREFIXO_BOTAO).filter(|b| !b.is_empty()).map(str::to_string)
 }
 
-fn guardar(tag: &str, aviso: ToastNotification) {
+fn guardar(tag: &str, aviso: ToastNotification, sem_painel_do_time: bool) {
     let mut guardados = GUARDADOS.lock().unwrap();
-    guardados.retain(|(t, _)| t != tag);
-    guardados.push((tag.to_string(), aviso));
+    guardados.retain(|(t, _, _)| t != tag);
+    guardados.push((tag.to_string(), aviso, sem_painel_do_time));
     let excesso = guardados.len().saturating_sub(MAXIMO_GUARDADOS);
     guardados.drain(..excesso);
 }
 
-fn esquecer(tag: &str) -> Option<ToastNotification> {
+fn esquecer(tag: &str) -> Option<(ToastNotification, bool)> {
     let mut guardados = GUARDADOS.lock().unwrap();
-    let posicao = guardados.iter().position(|(t, _)| t == tag)?;
-    Some(guardados.remove(posicao).1)
+    let posicao = guardados.iter().position(|(t, _, _)| t == tag)?;
+    let (_, aviso, sem_painel_do_time) = guardados.remove(posicao);
+    Some((aviso, sem_painel_do_time))
+}
+
+/// O clique no corpo abre o painel do time, menos no aviso que o serviço marcou (o do briefing
+/// abre o Hoje pelo serviço). Aviso que a casca já esqueceu volta ao padrão.
+pub fn abre_o_time(botao: Option<&str>, sem_painel_do_time: Option<bool>) -> bool {
+    botao.is_none() && !sem_painel_do_time.unwrap_or(false)
 }
 
 fn ao_clicar(tag: &str, argumentos: &str) {
     let botao = botao_dos_argumentos(argumentos);
+    let guardado = esquecer(tag);
     crate::servico::avisar(serde_json::json!({ "tipo": "notificacao-clique", "notificacao": tag, "botao": botao }));
-    if botao.is_none() {
+    if abre_o_time(botao.as_deref(), guardado.map(|(_, sem)| sem)) {
         if let Some(app) = APP.get() {
             crate::janelas::painel_mostrar(app.clone(), "agentes".to_string());
         }
     }
-    esquecer(tag);
 }
 
-fn mostrar(tag: &str, agente: Option<&str>, titulo: &str, corpo: Option<&str>, botoes: &[Botao]) -> windows::core::Result<()> {
+fn mostrar(
+    tag: &str,
+    agente: Option<&str>,
+    titulo: &str,
+    corpo: Option<&str>,
+    botoes: &[Botao],
+    sem_painel_do_time: bool,
+) -> windows::core::Result<()> {
     unsafe {
         let _ = RoInitialize(RO_INIT_MULTITHREADED);
     }
@@ -187,7 +206,7 @@ fn mostrar(tag: &str, agente: Option<&str>, titulo: &str, corpo: Option<&str>, b
         Ok(())
     }))?;
     ToastNotificationManager::CreateToastNotifierWithId(&aumid())?.Show(&aviso)?;
-    guardar(tag, aviso);
+    guardar(tag, aviso, sem_painel_do_time);
     Ok(())
 }
 
@@ -195,7 +214,7 @@ fn retirar(tag: &str) {
     unsafe {
         let _ = RoInitialize(RO_INIT_MULTITHREADED);
     }
-    if let Some(aviso) = esquecer(tag) {
+    if let Some((aviso, _)) = esquecer(tag) {
         if let Ok(notificador) = ToastNotificationManager::CreateToastNotifierWithId(&aumid()) {
             let _ = notificador.Hide(&aviso);
         }
@@ -208,8 +227,8 @@ fn retirar(tag: &str) {
 
 pub fn atender(pedido: Pedido) -> Resposta {
     match pedido {
-        Pedido::Mostrar { notificacao, agente, titulo, corpo, botoes } => {
-            match mostrar(&notificacao, agente.as_deref(), &titulo, corpo.as_deref(), &botoes) {
+        Pedido::Mostrar { notificacao, agente, titulo, corpo, botoes, sem_painel_do_time } => {
+            match mostrar(&notificacao, agente.as_deref(), &titulo, corpo.as_deref(), &botoes, sem_painel_do_time) {
                 Ok(()) => {
                     crate::registro::info(&format!("aviso do Windows: {notificacao}"));
                     Resposta::Ok { ok: true }
@@ -280,6 +299,14 @@ mod testes {
     }
 
     #[test]
+    fn so_o_corpo_do_aviso_comum_abre_o_time() {
+        assert!(abre_o_time(None, Some(false)));
+        assert!(abre_o_time(None, None));
+        assert!(!abre_o_time(None, Some(true)));
+        assert!(!abre_o_time(Some("permitir"), Some(false)));
+    }
+
+    #[test]
     fn argumentos_dizem_o_botao_ou_o_corpo() {
         assert_eq!(botao_dos_argumentos("botao=permitir"), Some("permitir".into()));
         assert_eq!(botao_dos_argumentos("corpo"), None);
@@ -293,7 +320,15 @@ mod testes {
             r#"{"tipo":"notificacao","id":3,"op":"mostrar","notificacao":"n1","agente":null,"titulo":"t","corpo":null,"botoes":[{"id":"permitir","rotulo":"Permitir"}]}"#,
         )
         .unwrap();
-        assert!(matches!(mostrar, Pedido::Mostrar { ref botoes, .. } if botoes == &vec![botao("permitir", "Permitir")]));
+        assert!(matches!(
+            mostrar,
+            Pedido::Mostrar { ref botoes, sem_painel_do_time: false, .. } if botoes == &vec![botao("permitir", "Permitir")]
+        ));
+        let do_briefing: Pedido = serde_json::from_str(
+            r#"{"op":"mostrar","notificacao":"n2","titulo":"Briefing da manhã","sem_painel_do_time":true}"#,
+        )
+        .unwrap();
+        assert!(matches!(do_briefing, Pedido::Mostrar { sem_painel_do_time: true, .. }));
         assert!(matches!(serde_json::from_str::<Pedido>(r#"{"tipo":"notificacao","id":4,"op":"tela-cheia"}"#).unwrap(), Pedido::TelaCheia));
         assert!(matches!(
             serde_json::from_str::<Pedido>(r#"{"op":"retirar","notificacao":"n1"}"#).unwrap(),

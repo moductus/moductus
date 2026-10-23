@@ -762,6 +762,8 @@ const briefing = new ServicoBriefing({
       resumoDoDia: () => resumoDoDiaDoNuno(github.obter()),
     },
   ],
+  // Pausado ou desligado, o agente não fala no briefing.
+  estadoDo: (agenteId) => agentes.procurar(agenteId)?.situacao.estado ?? null,
   redigir: redacaoPelaAlba(runtime, repositorioAgentes),
   registro: new RepositorioRegistroRotinas(banco),
   painel: { mostrar: () => painelDoDock.mostrar("hoje"), aberto: () => painelDoDock.aberto("hoje") },
@@ -778,11 +780,10 @@ canal.aoAvisar(CLIQUE_NO_AVISO, (aviso) => {
 const primeiraAtividade = new PrimeiraAtividade(
   repositorioAtividade,
   new TempoDoDia(() => repositorioConfig.ler().dia.fuso),
+  // O briefing que falha (agenda, tarefas, banco) libera o dia: o próximo sinal tenta de novo.
   (inicio) => {
     console.error(`dia: ${inicio.dia} começou (${inicio.motivo})`);
-    briefing
-      .aparecer(inicio)
-      .catch((erro: unknown) => console.error(`briefing: não apareceu: ${String(erro)}`));
+    return briefing.aparecer(inicio);
   },
 );
 // Os vigias da Alba (F3-28, AGENTS.md §6): a virada do dia, os alertas dos compromissos e as horas
