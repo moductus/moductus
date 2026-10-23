@@ -3,6 +3,7 @@ import type {
   EstadoSessao,
   ItemGithub,
   MudancaSessao,
+  SessaoIa,
   SituacaoGithub,
   TipoItemGithub,
 } from "@moductus/contrato";
@@ -453,6 +454,44 @@ export function resumoDoDiaDoNuno(situacao: SituacaoGithub): string | null {
   if (mudancas > 0) partes.push(`mudanças pedidas em ${quantos(mudancas, "PR seu", "PRs seus")}`);
   if (prsAtribuidos > 0) partes.push(`${quantos(prsAtribuidos, "PR atribuído", "PRs atribuídos")} a você`);
   if (issues > 0) partes.push(`${quantos(issues, "issue atribuída", "issues atribuídas")} a você`);
+  if (partes.length === 0) return null;
+  const linha = partes.join(" · ");
+  return `${linha.charAt(0).toUpperCase()}${linha.slice(1)}.`;
+}
+
+/**
+ * A linha do Nuno no fechamento do dia (AGENTS.md §2: sessões ainda abertas, PRs e CI a observar),
+ * só com contagens: o nome do projeto e o texto do GitHub ficam de fora, como no briefing. Aberta
+ * é a sessão sem fim que está trabalhando ou esperando você; a parada há muito tempo não conta. O
+ * GitHub só entra lido. O uso do limite fica de fora enquanto não houver fonte (AGENTS.md §5).
+ * Sem nada a observar, `null`: o Nuno não aparece.
+ */
+export function resumoDoFechamentoDoNuno(
+  sessoes: readonly SessaoIa[],
+  situacao: SituacaoGithub,
+): string | null {
+  const abertas = sessoes.filter(
+    (s) => s.encerradaEm === null && (s.estado === "trabalhando" || s.estado === "esperando"),
+  );
+  const esperando = abertas.filter((s) => s.estado === "esperando").length;
+  const partes: string[] = [];
+  if (abertas.length > 0) {
+    const sessoesAbertas = quantos(abertas.length, "sessão aberta", "sessões abertas");
+    partes.push(esperando > 0 ? `${sessoesAbertas}, ${esperando} esperando você` : sessoesAbertas);
+  }
+  if (situacao.atualizadoEm !== null) {
+    const meus = situacao.itens.filter(
+      (i) => i.estado === "aberto" && i.tipo === "pr" && i.meuPapel === "autor",
+    );
+    const rodando = meus.filter((i) => i.ciEstado === "rodando").length;
+    const quebrado = meus.filter((i) => i.ciEstado === "falhou").length;
+    const reviews = situacao.itens.filter(
+      (i) => i.estado === "aberto" && i.tipo === "pr" && i.meuPapel === "revisor" && i.precisaDeMim,
+    ).length;
+    if (rodando > 0) partes.push(`CI rodando em ${quantos(rodando, "PR seu", "PRs seus")}`);
+    if (quebrado > 0) partes.push(`CI quebrado em ${quantos(quebrado, "PR seu", "PRs seus")}`);
+    if (reviews > 0) partes.push(`${quantos(reviews, "PR espera", "PRs esperam")} seu review`);
+  }
   if (partes.length === 0) return null;
   const linha = partes.join(" · ");
   return `${linha.charAt(0).toUpperCase()}${linha.slice(1)}.`;

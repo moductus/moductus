@@ -10,7 +10,7 @@ import { classificadorPeloRuntime, Roteador } from "./agentes/roteador.ts";
 import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
 import { redacaoPelaAlba, VigiaAlba } from "./agentes/vigias/alba.ts";
 import { RepositorioMarcasDosVigias } from "./agentes/vigias/marcas.ts";
-import { resumoDoDiaDoNuno, VigiaNuno } from "./agentes/vigias/nuno.ts";
+import { resumoDoDiaDoNuno, resumoDoFechamentoDoNuno, VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
@@ -552,14 +552,25 @@ const repositorioAtividade = new RepositorioAtividade(banco);
 const registroRotinas = new RepositorioRegistroRotinas(banco);
 const painelDoDock = painelPelaCasca(canal);
 const painelHoje = { mostrar: () => painelDoDock.mostrar("hoje"), aberto: () => painelDoDock.aberto("hoje") };
-// O resumo de cada agente nas rotinas (ADR-0039); Tula e Faina chegam nas fases 4 e 5.
+// O resumo de cada agente nas rotinas (ADR-0039); Tula e Faina chegam nas fases 4 e 5. No briefing,
+// o Nuno conta o que espera você no GitHub; no fechamento, as sessões ainda abertas, PRs e CI.
+const nomeDoNuno = () => agentesDoTime.agente("nuno")?.nome ?? "Nuno";
 const resumosDoTime: ResumoDoAgente[] = [
   {
     agenteId: "nuno",
     get nome() {
-      return agentesDoTime.agente("nuno")?.nome ?? "Nuno";
+      return nomeDoNuno();
     },
     resumoDoDia: () => resumoDoDiaDoNuno(github.obter()),
+  },
+];
+const resumosDoFechamento: ResumoDoAgente[] = [
+  {
+    agenteId: "nuno",
+    get nome() {
+      return nomeDoNuno();
+    },
+    resumoDoDia: () => resumoDoFechamentoDoNuno(sessoes.listar().sessoes, github.obter()),
   },
 ];
 // Pausado ou desligado, o agente não fala nas rotinas.
@@ -572,7 +583,7 @@ const fechamento = new ServicoFechamento({
   agenda,
   tarefas,
   foco: servicoFoco,
-  resumos: resumosDoTime,
+  resumos: resumosDoFechamento,
   estadoDo: estadoDoAgente,
   redigir: redacaoPelaAlba(runtime, repositorioAgentes),
   registro: registroRotinas,

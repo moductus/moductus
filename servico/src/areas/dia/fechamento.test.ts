@@ -2,12 +2,18 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { ApresentacaoRotina, CONFIG_PADRAO, DIA_ENCERRADO, type Notificacao } from "@moductus/contrato";
+import {
+  ApresentacaoRotina,
+  CONFIG_PADRAO,
+  DIA_ENCERRADO,
+  type Notificacao,
+  type SessaoIa,
+} from "@moductus/contrato";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { RepositorioAgentes } from "../../agentes/agentes.ts";
 import { RepositorioExecucoes } from "../../agentes/execucoes.ts";
 import { Runtime } from "../../agentes/runtime.ts";
-import { INICIO_DADO } from "../../agentes/vigias/nuno.ts";
+import { INICIO_DADO, resumoDoFechamentoDoNuno } from "../../agentes/vigias/nuno.ts";
 import { redacaoPelaAlba, VigiaAlba, type PedidoRedacao } from "../../agentes/vigias/alba.ts";
 import { RepositorioMarcasDosVigias } from "../../agentes/vigias/marcas.ts";
 import { abrirBanco } from "../../banco/conexao.ts";
@@ -135,6 +141,8 @@ async function montar(
   const { agenda, tarefas, foco } = areas(db);
   const { alba, redigir } = redacao(db, opcoes.comProvedor ?? false);
   const pedidos: PedidoRedacao[] = [];
+  /** O que acontece enquanto a Alba redige (uma ação chegando no meio), com o número da redação. */
+  const ganchos: { aoRedigir: ((vez: number) => void) | null } = { aoRedigir: null };
   const painel = { aberto: false, mostradas: 0 };
   const avisos: NovoAviso[] = [];
   const apareceram: ApresentacaoRotina[] = [];
@@ -164,7 +172,9 @@ async function montar(
     foco,
     redigir: async (pedido) => {
       pedidos.push(pedido);
-      return redigir(pedido);
+      const redacao = await redigir(pedido);
+      ganchos.aoRedigir?.(pedidos.length);
+      return redacao;
     },
     registro,
     rotinas: atividade,
@@ -223,6 +233,7 @@ async function montar(
     briefing,
     relogio,
     pedidos,
+    ganchos,
     painel,
     avisos,
     apareceram,
@@ -314,6 +325,44 @@ describe("fechamento na hora de parar", () => {
   });
 });
 
+describe("a linha do Nuno no fechamento", () => {
+  test("sessões abertas sem PR nenhum: só as sessões, sem o uso do limite", async () => {
+    const sessao = (id: string, mudanca: Partial<SessaoIa>): SessaoIa => ({
+      id,
+      projetoId: "p1",
+      ferramenta: "claude-code",
+      idExterno: `ext-${id}`,
+      modelo: null,
+      estado: "trabalhando",
+      iniciadaEm: sp(DIA, "14:00").toISOString(),
+      ultimoEventoEm: sp(DIA, "17:55").toISOString(),
+      encerradaEm: null,
+      contexto: null,
+      ultimoEvento: null,
+      ...mudanca,
+    });
+    const sessoes = [
+      sessao("s1", {}),
+      sessao("s2", { estado: "esperando" }),
+      sessao("s3", { estado: "terminou", encerradaEm: sp(DIA, "16:00").toISOString() }),
+      sessao("s4", { estado: "parada" }),
+    ];
+    const github = { itens: [], atualizadoEm: sp(DIA, "17:50").toISOString() };
+    const m = await montar({
+      resumos: [
+        { agenteId: "nuno", nome: "Nuno", resumoDoDia: () => resumoDoFechamentoDoNuno(sessoes, github) },
+      ],
+    });
+    await m.ate(sp(DIA, "18:00"));
+    expect(m.apareceram[0]!.linhas.at(-1)).toEqual({
+      agenteId: "nuno",
+      rotulo: null,
+      texto: "2 sessões abertas, 1 esperando você.",
+      tarefaIds: [],
+    });
+  });
+});
+
 describe("fechamento com o provedor falso", () => {
   test("a Alba redige a abertura sem ferramentas; título do usuário só vai como dado", async () => {
     const m = await montar({ comProvedor: true, em: sp(DIA, "18:00") });
@@ -375,6 +424,31 @@ describe("adiar 30 min", () => {
     await outro.ate(sp(DIA, "18:30"));
     expect(outro.apareceram).toHaveLength(1);
     expect(outro.apareceram[0]).toMatchObject({ id: m.apareceram[0]!.id, acao: null });
+  });
+
+  test("um novo Adiar enquanto a Alba redige a volta vale: a volta fica para 30 min depois dele", async () => {
+    const m = await montar();
+    await m.ate(sp(DIA, "18:00"));
+    const { id } = m.apareceram[0]!;
+    await m.ate(sp(DIA, "18:01"));
+    m.fechamento.agir({ id, acao: "adiar" });
+    // A segunda redação é a da volta, às 18:31: o painel ainda mostra o adiado e você adia de novo.
+    m.ganchos.aoRedigir = (vez) => {
+      if (vez === 2) m.fechamento.agir({ id, acao: "adiar" });
+    };
+
+    await m.ate(sp(DIA, "18:31"));
+    expect(m.apareceram).toHaveLength(1);
+    expect(m.fechamento.hoje().fechamento).toMatchObject({
+      acao: "adiar",
+      acaoEm: sp(DIA, "18:31").toISOString(),
+    });
+
+    await m.ate(sp(DIA, "19:00"));
+    expect(m.apareceram).toHaveLength(1);
+    await m.ate(sp(DIA, "19:01"));
+    expect(m.apareceram).toHaveLength(2);
+    expect(m.apareceram[1]).toMatchObject({ id, acao: null });
   });
 
   test("encerrar antes da volta cancela a volta", async () => {
@@ -461,9 +535,15 @@ describe("encerrar o dia", () => {
     // Depois da meia-noite ainda vale; às 05:00 o Windows volta.
     vi.setSystemTime(sp(AMANHA, "04:59"));
     expect(m.fechamento.diaEncerrado()).toBe(true);
-    expect(m.fechamento.hoje()).toMatchObject({ fechamento: null, diaEncerrado: true });
+    // O painel de antes da manhã ainda é o fechamento de ontem.
+    expect(m.fechamento.hoje()).toMatchObject({
+      briefing: null,
+      fechamento: { id: a.id, dia: DIA, acao: "encerrar" },
+      diaEncerrado: true,
+    });
     vi.setSystemTime(sp(AMANHA, "05:00"));
     expect(m.fechamento.diaEncerrado()).toBe(false);
+    expect(m.fechamento.hoje()).toEqual({ briefing: null, fechamento: null, diaEncerrado: false });
     await notificacoes.avisar({ agenteId: "nuno", tipo: "aviso", titulo: "Bom dia" });
     expect(mostrados.map((x) => x.titulo)).toContain("Bom dia");
   });

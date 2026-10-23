@@ -278,12 +278,24 @@ export class ServicoFechamento implements FonteDoRelogio {
     return apresentacao;
   }
 
-  /** O briefing e o fechamento de hoje, se já apareceram, e se o dia está encerrado. */
+  /**
+   * O briefing e o fechamento de hoje, se já apareceram, e se o dia está encerrado. Depois da
+   * meia-noite e antes da manhã, sem fechamento de hoje, vale o de ontem: é ele que ainda está no
+   * painel (adiado, ou encerrado com o silêncio valendo).
+   */
   hoje(): RotinasDeHoje {
-    const dia = diaNoFuso(this.agora(), this.deps.lerFuso());
+    const agora = this.agora();
+    const fuso = this.deps.lerFuso();
+    const dia = diaNoFuso(agora, fuso);
+    let fechamento = this.deps.registro.doDia(FECHAMENTO, dia);
+    if (fechamento === null) {
+      const ontem = somarDias(dia, -1);
+      const deOntem = this.deps.registro.doDia(FECHAMENTO, ontem);
+      if (deOntem !== null && agora.getTime() < this.manhaDepois(ontem, fuso)) fechamento = deOntem;
+    }
     return {
       briefing: this.deps.registro.doDia(BRIEFING, dia),
-      fechamento: this.deps.registro.doDia(FECHAMENTO, dia),
+      fechamento,
       diaEncerrado: this.diaEncerrado(),
     };
   }
@@ -389,9 +401,11 @@ export class ServicoFechamento implements FonteDoRelogio {
     }
     const montagem = this.montar(atual.dia);
     const redacao = await this.redigir(montagem);
-    // A ação pode ter mudado enquanto a Alba redigia ("Encerrar o dia" no painel).
-    if (this.deps.registro.porId(adiado.id)?.acao !== "adiar") {
-      this.adiado = null;
+    // Outra ação pode ter chegado enquanto a Alba redigia: "Encerrar o dia" ou um novo "Adiar",
+    // com outra hora. Vale a dela, e a volta que ela programou (`agir`) fica.
+    const depois = this.deps.registro.porId(adiado.id);
+    if (depois?.acao !== "adiar" || depois.acaoEm !== atual.acaoEm) {
+      if (this.adiado === adiado) this.adiado = null;
       return;
     }
     const reaberta = this.deps.registro.reabrir(adiado.id, {
@@ -400,7 +414,7 @@ export class ServicoFechamento implements FonteDoRelogio {
       abertas: montagem.abertas,
       daExecucaoId: redacao.execucaoId,
     });
-    this.adiado = null;
+    if (this.adiado === adiado) this.adiado = null;
     if (reaberta) await this.mostrar(reaberta);
   }
 
