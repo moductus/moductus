@@ -26,7 +26,9 @@ import {
   RepositorioAtividade,
   type MotivoAtividade,
 } from "./areas/dia/atividade.ts";
-import { ServicoBriefing } from "./areas/dia/briefing.ts";
+import { ServicoBriefing, type ResumoDoAgente } from "./areas/dia/briefing.ts";
+import { atendentesDasRotinas } from "./areas/dia/canal.ts";
+import { ServicoFechamento } from "./areas/dia/fechamento.ts";
 import { RelogioDoDia } from "./areas/dia/relogio.ts";
 import { RepositorioRegistroRotinas } from "./areas/dia/rotinas.ts";
 import { TempoDoDia } from "./areas/dia/tempo.ts";
@@ -119,6 +121,8 @@ let vigiaNuno: VigiaNuno | null = null;
 let vigiaAlba: VigiaAlba | null = null;
 // O foco (F3-18) nasce com o relógio do dia, mais adiante; até lá, ninguém está em foco.
 let foco: ServicoFoco | null = null;
+// O fechamento do dia (F3-30) também; até lá, o dia não está encerrado.
+let fechamentoDoDia: ServicoFechamento | null = null;
 const repositorioConfig = new RepositorioConfig(banco);
 // A cotação nova vale já (F3-08), venha de config.definir ou de config.importar: os dois passam
 // pelo aviso abaixo. A reação (acordar quem saiu do teto) nasce com o runtime, mais adiante.
@@ -155,6 +159,8 @@ const notificacoes = new ServicoNotificacoes(
     windows: avisosPelaCasca(canal),
     // Com um foco correndo, o Windows só mostra aprovações e lembretes; na pausa, tudo volta.
     emFoco: () => foco?.emFoco() ?? false,
+    // Com o dia encerrado, o mesmo até a manhã, venha o silêncio ligado ou não.
+    diaEncerrado: () => fechamentoDoDia?.diaEncerrado() ?? false,
   },
   {
     estado: (estado) => servidor?.emitir("notificacoes.mudou", estado),
@@ -537,6 +543,43 @@ const captura = new ServicoCaptura({
   interpretar: interpretePeloRuntime(runtime, repositorioAgentes),
   pediuLembrete: () => primeiroUso.lembretePedido(),
 });
+// O briefing e o fechamento leem as rotinas e o registro delas, e abrem o painel Hoje pela casca.
+const repositorioAtividade = new RepositorioAtividade(banco);
+const registroRotinas = new RepositorioRegistroRotinas(banco);
+const painelDoDock = painelPelaCasca(canal);
+const painelHoje = { mostrar: () => painelDoDock.mostrar("hoje"), aberto: () => painelDoDock.aberto("hoje") };
+// O resumo de cada agente nas rotinas (ADR-0039); Tula e Faina chegam nas fases 4 e 5.
+const resumosDoTime: ResumoDoAgente[] = [
+  {
+    agenteId: "nuno",
+    get nome() {
+      return agentesDoTime.agente("nuno")?.nome ?? "Nuno";
+    },
+    resumoDoDia: () => resumoDoDiaDoNuno(github.obter()),
+  },
+];
+// Pausado ou desligado, o agente não fala nas rotinas.
+const estadoDoAgente = (agenteId: string) => agentes.procurar(agenteId)?.situacao.estado ?? null;
+// O fechamento do dia (F3-30, ADR-0039): na hora de parar que o vigia da Alba avisa, linhas por
+// código e a abertura pela Alba (sem modelo, o molde); "Adiar 30 min" volta pelo relógio do dia e
+// "Encerrar o dia" cala o Windows até a manhã. Atende também `rotinas.hoje` e `rotinas.agir`.
+const fechamento = new ServicoFechamento({
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  agenda,
+  tarefas,
+  foco: servicoFoco,
+  resumos: resumosDoTime,
+  estadoDo: estadoDoAgente,
+  redigir: redacaoPelaAlba(runtime, repositorioAgentes),
+  registro: registroRotinas,
+  rotinas: repositorioAtividade,
+  painel: painelHoje,
+  avisar: (aviso) => notificacoes.avisar(aviso),
+  relogio,
+  apareceu: (apresentacao) => servidor?.emitir("rotinas.apareceu", apresentacao),
+});
+fechamentoDoDia = fechamento;
+relogio.registrar(fechamento);
 // Contagens das áreas (F3-20): a barra lateral do Sistema e os badges do dock leem daqui. As
 // sessões esperando são os pedidos do terminal, como o Nuno no dock.
 const leituraAprovacoes = new RepositorioAprovacoes(banco);
@@ -711,9 +754,10 @@ servidor = await abrirServidorWs(token, {
   "lembretes.concluir": (pedido) => lembretes.concluir(pedido),
   "lembretes.cancelar": (pedido) => lembretes.cancelar(pedido),
   ...atendentesDaCaptura(captura),
+  ...atendentesDasRotinas(fechamento),
   // O dia (F3-12): o contrato já tem os métodos e o serviço responde que ainda não estão disponíveis.
   // Cada tarefa que implementa uma área (F3-15 a F3-20, F3-32) tira os dela daqui.
-  ...semAtendente(["rotinas.listar", "rotinas.definir", "rotinas.hoje", "rotinas.agir"]),
+  ...semAtendente(["rotinas.listar", "rotinas.definir"]),
   "areas.contagens": () => contagens.obter(),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
@@ -743,33 +787,24 @@ agendador.vigiar();
 // A primeira atividade do dia (F3-27, ADR-0033): o desbloqueio ou o logon (a casca avisa
 // `atividade`), a retomada e a subida, depois das 05:00 no fuso de config, ou o horário fixo do
 // briefing, que o vigia da Alba confere no relógio do dia. Uma vez por dia, abre o briefing.
-const repositorioAtividade = new RepositorioAtividade(banco);
 const leituraNotificacoes = new RepositorioNotificacoes(banco);
 // O briefing da manhã (F3-29, ADR-0039): linhas por código, a abertura pela Alba sem ferramentas e
 // com prazo (sem modelo, o molde), o registro em `rotinas_registro` e o painel Hoje pela casca; se
-// ele ficar fechado 10 min sem resposta, o aviso do Windows sai pelo relógio do dia.
-const painelDoDock = painelPelaCasca(canal);
+// ele ficar fechado 10 min sem resposta, o aviso do Windows sai pelo relógio do dia. O dia que
+// ficou sem fechamento (o PC suspendeu antes da hora de parar) vira o "Ontem" no topo dele.
 const briefing = new ServicoBriefing({
   lerFuso: () => repositorioConfig.ler().dia.fuso,
   agenda,
   tarefas,
-  resumos: [
-    {
-      agenteId: "nuno",
-      get nome() {
-        return agentesDoTime.agente("nuno")?.nome ?? "Nuno";
-      },
-      resumoDoDia: () => resumoDoDiaDoNuno(github.obter()),
-    },
-  ],
-  // Pausado ou desligado, o agente não fala no briefing.
-  estadoDo: (agenteId) => agentes.procurar(agenteId)?.situacao.estado ?? null,
+  resumos: resumosDoTime,
+  estadoDo: estadoDoAgente,
   redigir: redacaoPelaAlba(runtime, repositorioAgentes),
-  registro: new RepositorioRegistroRotinas(banco),
-  painel: { mostrar: () => painelDoDock.mostrar("hoje"), aberto: () => painelDoDock.aberto("hoje") },
+  registro: registroRotinas,
+  painel: painelHoje,
   avisar: (aviso) => notificacoes.avisar(aviso),
   relogio,
   apareceu: (apresentacao) => servidor?.emitir("rotinas.apareceu", apresentacao),
+  semFechamento: (hoje) => fechamento.semFechamento(hoje),
 });
 relogio.registrar(briefing);
 canal.aoAvisar(CLIQUE_NO_AVISO, (aviso) => {
@@ -787,7 +822,7 @@ const primeiraAtividade = new PrimeiraAtividade(
   },
 );
 // Os vigias da Alba (F3-28, AGENTS.md §6): a virada do dia, os alertas dos compromissos e as horas
-// das rotinas, no relógio do dia, sem modelo. O fechamento que sai daqui é a F3-30.
+// das rotinas, no relógio do dia, sem modelo. A hora de parar abre o fechamento.
 vigiaAlba = new VigiaAlba({
   lerFuso: () => repositorioConfig.ler().dia.fuso,
   abertasEntre: (desde, ate) => tarefas.abertasQueVenciam(desde, ate),
@@ -806,8 +841,12 @@ vigiaAlba = new VigiaAlba({
       if (abertas.length > 0) servidor?.emitir("tarefas.mudou", { tarefas: abertas, apagadas: [] });
       recontarAreas();
     },
-    fechamento: ({ dia, atrasado }) =>
-      console.error(`dia: hora do fechamento de ${dia}${atrasado ? " (atrasado)" : ""}`),
+    fechamento: (hora) => {
+      console.error(`dia: hora do fechamento de ${hora.dia}${hora.atrasado ? " (atrasado)" : ""}`);
+      fechamento
+        .aparecer(hora)
+        .catch((erro: unknown) => console.error(`dia: o fechamento de ${hora.dia} falhou: ${String(erro)}`));
+    },
   },
 });
 for (const fonte of vigiaAlba.fontes) relogio.registrar(fonte);

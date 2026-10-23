@@ -297,6 +297,16 @@ export class RepositorioTarefas {
     return r.n;
   }
 
+  /** Quantas tarefas (sem as subtarefas) vivas foram feitas no intervalo de `concluida_em`. */
+  contarFeitasEntre(de: string, ate: string): number {
+    const r = this.sql(
+      `SELECT count(*) AS n FROM tarefas
+         WHERE estado = 'feita' AND apagado_em IS NULL AND tarefa_pai_id IS NULL
+           AND concluida_em >= ? AND concluida_em < ?`,
+    ).get(de, ate) as { n: number };
+    return r.n;
+  }
+
   /** As subtarefas vivas das mães dadas, em todos os estados ("subtarefas 1 de 3"). */
   subtarefas(maes: readonly string[]): LinhaTarefa[] {
     if (maes.length === 0) return [];

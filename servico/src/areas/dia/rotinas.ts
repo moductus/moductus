@@ -96,6 +96,31 @@ export class RepositorioRegistroRotinas {
     if (!gravada) throw new Error(`o registro da rotina ${novo.rotinaId} de ${novo.dia} não se lê`);
     return gravada;
   }
+
+  /** A ação escolhida (ou `ignorado`), com a hora: a última vale. */
+  agir(id: string, acao: AcaoRotina): ApresentacaoRotina | null {
+    const agora = this.agora().toISOString();
+    this.db
+      .prepare("UPDATE rotinas_registro SET acao = ?, acao_em = ?, atualizado_em = ? WHERE id = ?")
+      .run(acao, agora, agora, id);
+    return this.porId(id);
+  }
+
+  /**
+   * A rotina adiada que volta: o que se mostra é montado de novo e a ação some, como se tivesse
+   * acabado de aparecer.
+   */
+  reabrir(id: string, novo: Omit<NovoRegistroRotina, "rotinaId" | "dia">): ApresentacaoRotina | null {
+    const conteudo: Conteudo = { abertura: novo.abertura, linhas: novo.linhas, abertas: novo.abertas };
+    const agora = this.agora().toISOString();
+    this.db
+      .prepare(
+        `UPDATE rotinas_registro SET conteudo = ?, da_execucao_id = ?, acao = NULL, acao_em = NULL,
+           atualizado_em = ? WHERE id = ?`,
+      )
+      .run(JSON.stringify(conteudo), novo.daExecucaoId, agora, id);
+    return this.porId(id);
+  }
 }
 
 function paraApresentacao(l: LinhaRegistro): ApresentacaoRotina | null {

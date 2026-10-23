@@ -88,10 +88,13 @@ export function entregaPela(
   };
 }
 
-/** Durante o foco ainda chegam aprovações e lembretes; o resto espera no dock. */
+/**
+ * Durante o foco e com o dia encerrado ainda chegam aprovações e lembretes; o resto espera no
+ * dock.
+ */
 const PASSAM_NO_FOCO: readonly TipoNotificacao[] = ["aprovacao", "lembrete"];
 
-export type MotivoSilencio = "horario" | "tela-cheia" | "foco";
+export type MotivoSilencio = "horario" | "dia-encerrado" | "tela-cheia" | "foco";
 
 const minutosDe = (hora: string) => Number(hora.slice(0, 2)) * 60 + Number(hora.slice(3, 5));
 
@@ -106,15 +109,23 @@ export function dentroDoHorario(agora: Date, inicio: string, fim: string): boole
 
 /**
  * Por que o aviso do Windows fica quieto agora, ou `null`. O silêncio só cala o Windows: o ponto
- * no dock e o registro continuam. A tela cheia só é perguntada à casca quando importa.
+ * no dock e o registro continuam. A tela cheia só é perguntada à casca quando importa. O dia
+ * encerrado ("Encerrar o dia", AGENTS.md §2) não depende da configuração do silêncio: foi pedido
+ * na hora.
  */
 export async function motivoDoSilencio(
   silencio: Silencio,
   tipo: TipoNotificacao,
-  situacao: { agora: Date; telaCheia: () => Promise<boolean>; emFoco: () => boolean },
+  situacao: {
+    agora: Date;
+    telaCheia: () => Promise<boolean>;
+    emFoco: () => boolean;
+    diaEncerrado?: () => boolean;
+  },
 ): Promise<MotivoSilencio | null> {
   const { horario } = silencio;
   if (horario.ligado && dentroDoHorario(situacao.agora, horario.inicio, horario.fim)) return "horario";
+  if (!PASSAM_NO_FOCO.includes(tipo) && situacao.diaEncerrado?.() === true) return "dia-encerrado";
   if (silencio.foco && !PASSAM_NO_FOCO.includes(tipo) && situacao.emFoco()) return "foco";
   if (silencio.telaCheia && (await situacao.telaCheia())) return "tela-cheia";
   return null;
@@ -329,6 +340,8 @@ export interface FontesNotificacoes {
    * em foco.
    */
   emFoco?: () => boolean;
+  /** Se você encerrou o dia e a manhã ainda não chegou (`ServicoFechamento.diaEncerrado`). */
+  diaEncerrado?: () => boolean;
 }
 
 export interface OpcoesNotificacoes {
@@ -351,6 +364,7 @@ export type AcaoAviso = (id: string, botao: string) => Promise<boolean>;
 export class ServicoNotificacoes {
   private readonly agora: () => Date;
   private readonly emFoco: () => boolean;
+  private readonly diaEncerrado: () => boolean;
   private readonly acoes = new Map<string, AcaoAviso>();
 
   constructor(
@@ -361,6 +375,7 @@ export class ServicoNotificacoes {
   ) {
     this.agora = opcoes.agora ?? (() => new Date());
     this.emFoco = fontes.emFoco ?? (() => false);
+    this.diaEncerrado = fontes.diaEncerrado ?? (() => false);
   }
 
   obter(): EstadoNotificacoes {
@@ -512,6 +527,7 @@ export class ServicoNotificacoes {
         agora,
         telaCheia: () => this.fontes.windows.telaCheia(),
         emFoco: this.emFoco,
+        diaEncerrado: this.diaEncerrado,
       });
       // O que gerou o aviso pode ter sido resolvido enquanto a casca respondia a tela cheia.
       if (motivo || this.jaVista(n.id)) return;

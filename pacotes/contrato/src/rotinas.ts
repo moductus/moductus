@@ -104,6 +104,12 @@ export const ApresentacaoRotina = z
   });
 export type ApresentacaoRotina = z.infer<typeof ApresentacaoRotina>;
 
+/**
+ * A resposta da Alba ao "Encerrar o dia" (AGENTS.md §2): dali até a manhã, o Windows só mostra
+ * aprovações e lembretes.
+ */
+export const DIA_ENCERRADO = "Dia encerrado.";
+
 /** O briefing e o fechamento do dia, se já apareceram, e se você encerrou o dia. */
 export const RotinasDeHoje = z.object({
   briefing: ApresentacaoRotina.nullable(),

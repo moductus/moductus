@@ -3,6 +3,7 @@ import { METODOS } from "./metodos.ts";
 import {
   AcaoEscolhida,
   ApresentacaoRotina,
+  DIA_ENCERRADO,
   MudancaRotina,
   PedidoAgirRotina,
   ROTINAS_PADRAO,
@@ -62,6 +63,7 @@ describe("rotinas", () => {
     expect(AcaoEscolhida.options).not.toContain("ignorado");
     expect(PedidoAgirRotina.safeParse({ id: briefing.id, acao: "ignorado" }).success).toBe(false);
     expect(PedidoAgirRotina.safeParse({ id: briefing.id, acao: "encerrar" }).success).toBe(true);
+    expect(DIA_ENCERRADO).toBe("Dia encerrado.");
     expect(
       METODOS["rotinas.hoje"].saida.safeParse({ briefing, fechamento: null, diaEncerrado: false }).success,
     ).toBe(true);
