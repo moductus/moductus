@@ -13,8 +13,14 @@ import {
   type CamposEvento,
   type ServicoAgenda,
 } from "../../areas/agenda/agenda.ts";
+import { descreverRegra, lerRecorrencia } from "../../areas/dia/recorrencia.ts";
 import { diaDaSemana, somarDias, type TempoDoDia } from "../../areas/dia/tempo.ts";
-import type { EscritaGoogleAgenda, QuandoNoGoogle } from "../../conexoes/google/escrita.ts";
+import type {
+  EscritaGoogleAgenda,
+  MudancaNoGoogle,
+  NovoNoGoogle,
+  QuandoNoGoogle,
+} from "../../conexoes/google/escrita.ts";
 import { DiaDaFerramenta, resolverDia } from "../dia.ts";
 import { carimboDe, ferramenta, type Ferramenta, type TextoCartao } from "../ferramenta.ts";
 
@@ -23,6 +29,23 @@ export const MENSAGEM_SO_PELO_CLIQUE = "o encaixe da Alba só se aplica com o cl
 
 export const MENSAGEM_SO_LOCAL_E_MODUCTUS =
   'por aqui só se escreve no calendário local e no "Moductus"; nos outros do Google, use agenda.criar_evento_em ou agenda.mudar_evento_em, que pedem a aprovação do usuário';
+
+/** Criar e mudar nos outros calendários, resolvidos antes do cartão (`conferir`). */
+interface CriarResolvido {
+  calendarioId: string;
+  novo: NovoNoGoogle;
+}
+interface MudarResolvido {
+  id: string;
+  mudanca: MudancaNoGoogle;
+  vistos: { inicio: string; fim: string };
+}
+
+/** A regra em frase ("toda segunda e quarta, até 30/11/2026"); a que o Moductus não entende, como veio. */
+const repeticaoLegivel = (regra: string) => {
+  const leitura = lerRecorrencia(regra);
+  return leitura.entendida ? descreverRegra(leitura.regra) : regra;
+};
 
 /** A escrita nos outros calendários do Google (F3-25), como as ferramentas `externo` a usam. */
 export type EscritaNosOutros = Pick<
@@ -182,7 +205,7 @@ export function ferramentasAgenda(
         };
 
   /** O evento novo de um calendário de fora, com o quando já em instantes ou dias. */
-  const novoNoGoogle = (e: z.infer<typeof EntradaCriarEm>) => ({
+  const novoNoGoogle = (e: z.infer<typeof EntradaCriarEm>): NovoNoGoogle => ({
     titulo: e.titulo,
     ...pontas(e.quando),
     descricao: e.descricao ?? null,
@@ -191,27 +214,42 @@ export function ferramentasAgenda(
     alertas: e.alertas ?? null,
   });
 
-  /** A mudança num evento de fora; o quando pela metade completa com o horário que ele tem. */
-  const mudancaNoGoogle = (e: z.infer<typeof EntradaMudarEm>) => {
+  /**
+   * Criar resolvido antes do cartão: o calendário conferido e o quando em instantes ou dias. É o que
+   * o cartão mostra e o que roda com o sim.
+   */
+  const resolverCriar = (e: z.infer<typeof EntradaCriarEm>): CriarResolvido => {
+    const novo = novoNoGoogle(e);
+    outros.conferirNovo(e.calendarioId, novo);
+    return { calendarioId: e.calendarioId, novo };
+  };
+
+  /**
+   * Mudar resolvido antes do cartão: o quando pela metade completa com o horário que o evento tem, e
+   * o início e o fim que o cartão viu vão junto, para o sim não valer para um evento que já mudou.
+   */
+  const resolverMudar = (e: z.infer<typeof EntradaMudarEm>): MudarResolvido => {
     const { evento } = outros.alvo(e.id);
     const atual = { diaInteiro: evento.dia_inteiro === 1, inicio: evento.inicio, fim: evento.fim };
-    return {
+    const mudanca: MudancaNoGoogle = {
       ...(e.titulo !== undefined ? { titulo: e.titulo } : {}),
       ...(e.quando !== undefined ? { quando: pontas(e.quando, horarioDe(atual)) } : {}),
       ...(e.descricao !== undefined ? { descricao: e.descricao } : {}),
       ...(e.local !== undefined ? { local: e.local } : {}),
       ...(e.alertas !== undefined ? { alertas: e.alertas } : {}),
     };
+    const vistos = { inicio: evento.inicio, fim: evento.fim };
+    outros.conferirMudanca(e.id, mudanca, vistos);
+    return { id: e.id, mudanca, vistos };
   };
 
-  const cartaoDeCriar = (e: z.infer<typeof EntradaCriarEm>): TextoCartao => {
-    const calendario = outros.conferirNovo(e.calendarioId, { recorrencia: e.recorrencia ?? null });
-    const novo = novoNoGoogle(e);
+  const cartaoDeCriar = ({ calendarioId, novo }: CriarResolvido): TextoCartao => {
+    const calendario = outros.conferirNovo(calendarioId, novo);
     return {
       descricao: `Vou criar ${citar(novo.titulo)} no calendário ${citar(calendario.nome, 60)} do Google, ${quandoLegivel(novo, tempo)}; ${ressalvas(outros.pedePermissao())}.${detalhes(
         [
           novo.local !== null ? `Local: ${novo.local}` : null,
-          novo.recorrencia !== null ? `Repete: ${novo.recorrencia}` : null,
+          novo.recorrencia !== null ? `Repete: ${repeticaoLegivel(novo.recorrencia)}` : null,
           novo.alertas !== null ? `Avisos: ${alertasLegiveis(novo.alertas)}` : null,
           novo.descricao !== null ? `Descrição: ${citar(novo.descricao, 300)}` : null,
         ],
@@ -222,9 +260,8 @@ export function ferramentasAgenda(
     };
   };
 
-  const cartaoDeMudar = (e: z.infer<typeof EntradaMudarEm>): TextoCartao => {
-    const mudanca = mudancaNoGoogle(e);
-    const { evento, calendario } = outros.conferirMudanca(e.id, mudanca);
+  const cartaoDeMudar = ({ id, mudanca, vistos }: MudarResolvido): TextoCartao => {
+    const { evento, calendario } = outros.conferirMudanca(id, mudanca, vistos);
     const atual = { diaInteiro: evento.dia_inteiro === 1, inicio: evento.inicio, fim: evento.fim };
     const recorrente = evento.recorrencia !== null;
     const mudancas = [
@@ -383,12 +420,9 @@ export function ferramentasAgenda(
         'Cria um compromisso num calendário do Google que não é o "Moductus" (o do trabalho, o da família), só depois de o usuário aprovar no cartão. O id do calendário vem de agenda.calendarios (podeEscrever). Sem hora, é de dia inteiro; sem alertas, valem os do calendário. Não se desfaz pelo histórico.',
       entrada: EntradaCriarEm,
       efeito: "externo",
-      conferir: (e) => {
-        outros.conferirNovo(e.calendarioId, { recorrencia: e.recorrencia ?? null });
-        pontas(e.quando);
-      },
+      conferir: resolverCriar,
       cartao: cartaoDeCriar,
-      executar: (e) => outros.criar(e.calendarioId, novoNoGoogle(e)),
+      executar: ({ calendarioId, novo }) => outros.criar(calendarioId, novo),
     }),
     ferramenta({
       nome: "agenda.mudar_evento_em",
@@ -396,11 +430,9 @@ export function ferramentasAgenda(
         'Muda um compromisso de um calendário do Google que não é o "Moductus", só depois de o usuário aprovar no cartão: só o que vier muda, e o quando pela metade fica como era (como em agenda.mudar_evento). O horário de evento que se repete não muda por aqui. Devolve o evento e como ele estava; não se desfaz pelo histórico.',
       entrada: EntradaMudarEm,
       efeito: "externo",
-      conferir: (e) => {
-        outros.conferirMudanca(e.id, mudancaNoGoogle(e));
-      },
+      conferir: resolverMudar,
       cartao: cartaoDeMudar,
-      executar: (e) => outros.mudar(e.id, mudancaNoGoogle(e)),
+      executar: ({ id, mudanca, vistos }) => outros.mudar(id, mudanca, vistos),
     }),
   ];
 }

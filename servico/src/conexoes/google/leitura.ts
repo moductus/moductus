@@ -370,7 +370,10 @@ export interface AvisosLeitura {
 }
 
 export interface DependenciasLeitura {
-  google: Pick<ServicoGoogleAgenda, "conexao" | "tokenDeAcesso" | "acessoRecusado" | "marcarLeitura">;
+  google: Pick<
+    ServicoGoogleAgenda,
+    "conexao" | "tokenDeAcesso" | "acessoRecusado" | "marcarLeitura" | "anotarConta"
+  >;
   repo: RepositorioLeituraGoogle;
   /** O fuso de `config`, para data e hora do Google sem fuso nenhum. */
   lerFuso: () => string;
@@ -552,6 +555,9 @@ export class LeituraGoogleAgenda {
     const agora = this.agora().toISOString();
     const lista = this.deps.repo.transacao(() => this.deps.repo.gravarCalendarios(lidos, agora));
     this.avisarMudanca({ mudados: [], apagados: lista.apagados }, lista.mudou);
+    // O id do principal é o e-mail da conta: é ele que confirma a conta que o conectar não leu.
+    const principal = lidos.find((c) => c.principal);
+    if (principal) this.deps.google.anotarConta(principal.idExterno);
 
     for (const calendario of this.deps.repo.paraLer()) {
       if (geracao !== this.geracao) return;

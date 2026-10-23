@@ -192,6 +192,74 @@ export function escreverRecorrencia(regra: Regra): string {
   return partes.join(";");
 }
 
+const NOMES_DA_SEMANA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+const ORDINAIS = ["primeira", "segunda", "terceira", "quarta", "quinta"];
+
+/** "a", "a e b", "a, b e c". */
+function juntar(itens: readonly string[]): string {
+  if (itens.length <= 1) return itens.join("");
+  return `${itens.slice(0, -1).join(", ")} e ${itens.at(-1)!}`;
+}
+
+/**
+ * A regra em frase, para quem aprova ("toda segunda e quarta", "a cada 2 semanas", "todo dia 5,
+ * até 30/11/2026", "toda última sexta, 10 vezes"). É a mesma leitura da forma curta da interface,
+ * por extenso; o fuso não entra, porque a frase não diz hora.
+ */
+export function descreverRegra(regra: Regra): string {
+  const n = regra.intervalo;
+  const cada = (um: string, varios: string) => (n === 1 ? um : `a cada ${n} ${varios}`);
+  const nome = (d: DiaDaRegra) => NOMES_DA_SEMANA[SEMANA.indexOf(d.dia)]!;
+  const comOrdem = (d: DiaDaRegra) =>
+    d.ordem === null
+      ? nome(d)
+      : `${d.ordem === -1 ? "última" : d.ordem > 0 && d.ordem <= ORDINAIS.length ? ORDINAIS[d.ordem - 1] : `${d.ordem}ª`} ${nome(d)}`;
+  const dias = regra.diasDaSemana;
+  // Sábado e domingo são "todo"; os outros, "toda".
+  const artigo = dias.every((d) => d.ordem === null && (d.dia === "SA" || d.dia === "SU")) ? "todo" : "toda";
+  let frase: string;
+  switch (regra.frequencia) {
+    case "DAILY":
+      frase = cada("todo dia", "dias");
+      break;
+    case "WEEKLY":
+      frase =
+        dias.length === 0
+          ? cada("toda semana", "semanas")
+          : n === 1
+            ? `${artigo} ${juntar(dias.map(nome))}`
+            : `a cada ${n} semanas, ${juntar(dias.map(nome))}`;
+      break;
+    case "MONTHLY": {
+      const positivos = regra.diasDoMes.filter((d) => d > 0);
+      const contados = regra.diasDoMes
+        .filter((d) => d < 0)
+        .map((d) => (d === -1 ? "último dia" : `${-d}º dia antes do fim`));
+      const doMes = [...(positivos.length > 0 ? [`dia ${juntar(positivos.map(String))}`] : []), ...contados];
+      // "dia 5" se basta; o contado do fim e o dia da semana com ordem pedem "do mês".
+      const noMes =
+        doMes.length > 0
+          ? `${juntar(doMes)}${contados.length > 0 ? " do mês" : ""}`
+          : dias.length > 0
+            ? `${juntar(dias.map(comOrdem))} do mês`
+            : null;
+      const artigoDoMes = doMes.length > 0 ? "todo" : artigo;
+      if (noMes === null) frase = cada("todo mês", "meses");
+      else frase = n === 1 ? `${artigoDoMes} ${noMes}` : `a cada ${n} meses, ${noMes}`;
+      break;
+    }
+    case "YEARLY":
+      frase = cada("todo ano", "anos");
+      break;
+  }
+  if (regra.contagem !== null) frase += `, ${regra.contagem} ${regra.contagem === 1 ? "vez" : "vezes"}`;
+  if (regra.ate !== null) {
+    const [ano, mes, dia] = regra.ate.dia.split("-");
+    frase += `, até ${dia}/${mes}/${ano}`;
+  }
+  return frase;
+}
+
 // A expansão: os dias (números desde 1970-01-01) em que a regra acontece, em ordem, a partir do
 // início. O `UNTIL` fica com quem chama, que sabe se o início tem hora.
 

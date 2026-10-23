@@ -21,6 +21,7 @@ export const mensagemSoVer = (nome: string) =>
   `você só pode ver o calendário "${nome}" no Google, não editar`;
 export const MENSAGEM_REPETE_NO_GOOGLE =
   "o horário de um evento que se repete muda pelo Google Agenda, onde dá para escolher quais repetições";
+export const MENSAGEM_MUDOU_DESDE_O_CARTAO = "o evento mudou no Google desde o cartão; peça de novo";
 export const MENSAGEM_NADA_A_MUDAR =
   "nada para mudar: diga o título, o quando, a descrição, o local ou os alertas";
 export const MENSAGEM_COTA =
@@ -175,10 +176,12 @@ export class EscritaGoogleAgenda {
   alvo(eventoId: string): AlvoNoGoogle {
     if (this.deps.google.conexao().estado === "desligada") throw new Error(AVISO_DESLIGADA);
     const evento = this.deps.repo.evento(eventoId);
-    if (!evento || evento.id_externo === null) throw new Error(MENSAGEM_EVENTO_NAO_ENCONTRADO);
+    if (!evento) throw new Error(MENSAGEM_EVENTO_NAO_ENCONTRADO);
+    // Primeiro o calendário: o evento do local e o do "Moductus" têm o caminho deles, sem cartão.
     const calendario = this.deps.repo.calendario(evento.calendario_id);
     if (!calendario || calendario.espelho === 1) throw new Error(MENSAGEM_NAO_E_DE_FORA);
     if (calendario.pode_escrever !== 1) throw new Error(mensagemSoVer(calendario.nome));
+    if (evento.id_externo === null) throw new Error(MENSAGEM_EVENTO_NAO_ENCONTRADO);
     return { evento, calendario };
   }
 
@@ -192,8 +195,18 @@ export class EscritaGoogleAgenda {
     return calendario;
   }
 
-  conferirMudanca(eventoId: string, mudanca: MudancaNoGoogle): AlvoNoGoogle {
+  /**
+   * Com `vistos` (o início e o fim que o cartão mostrou), recusa o evento que mudou desde então: o
+   * sim foi dado para o evento como estava.
+   */
+  conferirMudanca(
+    eventoId: string,
+    mudanca: MudancaNoGoogle,
+    vistos?: { inicio: string; fim: string },
+  ): AlvoNoGoogle {
     const alvo = this.alvo(eventoId);
+    if (vistos && (alvo.evento.inicio !== vistos.inicio || alvo.evento.fim !== vistos.fim))
+      throw new Error(MENSAGEM_MUDOU_DESDE_O_CARTAO);
     if (vazia(mudanca)) throw new Error(MENSAGEM_NADA_A_MUDAR);
     // Mexer no início do recorrente leva a série inteira junto; pelo Google dá para escolher.
     if (mudanca.quando !== undefined && alvo.evento.recorrencia !== null)
@@ -233,13 +246,14 @@ export class EscritaGoogleAgenda {
   async mudar(
     eventoId: string,
     mudanca: MudancaNoGoogle,
+    vistos?: { inicio: string; fim: string },
   ): Promise<{
     evento: EventoNoGoogle;
     antes: Omit<EventoNoGoogle, "calendarioId" | "calendario" | "idExterno">;
   }> {
-    this.conferirMudanca(eventoId, mudanca);
+    this.conferirMudanca(eventoId, mudanca, vistos);
     await this.deps.google.permitirEscrita();
-    const { evento, calendario } = this.conferirMudanca(eventoId, mudanca);
+    const { evento, calendario } = this.conferirMudanca(eventoId, mudanca, vistos);
     const idExterno = evento.id_externo!;
     const corpo = corpoDaMudanca(mudanca, this.deps.lerFuso());
     try {

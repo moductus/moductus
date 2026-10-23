@@ -77,6 +77,8 @@ export const AVISO_ESCRITA_OUTRA_CONTA =
   "A permissão veio de outra conta do Google. Nada foi escrito; autorize com a conta conectada.";
 export const AVISO_ESCRITA_MUDOU =
   "A conexão com o Google mudou enquanto a permissão era pedida. Nada foi escrito; peça de novo.";
+export const AVISO_ESCRITA_SEM_CONTA =
+  "Não sei qual conta do Google está conectada. Nada foi escrito; reconecte em Configurações › Conexões.";
 export const AVISO_ESCRITA_CONECTANDO =
   "O Google Agenda está conectando agora. Nada foi escrito; peça de novo quando terminar.";
 export const avisoEscritaNavegador = (motivo: string) =>
@@ -348,6 +350,10 @@ export class ServicoGoogleAgenda {
     }
     if (guardada.escopos.includes(ESCOPO_ESCREVER_NOS_OUTROS)) return;
     if (this.emAndamento) throw new Error(AVISO_ESCRITA_CONECTANDO);
+    // A credencial só troca com a conta confirmada. Sem ela (o Google não a disse ao conectar), vale
+    // a do calendário principal que a leitura anotou; sem nenhuma, nem abre o navegador.
+    const contaConhecida = guardada.conta ?? this.conexao().conta;
+    if (contaConhecida === null) throw new Error(AVISO_ESCRITA_SEM_CONTA);
     const cliente = await this.cliente();
     if (!cliente) throw new Error(AVISO_SEM_CLIENTE);
     let tokens: TokensOAuth;
@@ -364,26 +370,23 @@ export class ServicoGoogleAgenda {
       await this.revogarSemFalhar(tokens.tokenDeRenovacao ?? tokens.tokenDeAcesso);
       throw new Error(AVISO_DESLIGADA);
     }
-    if (!tokens.tokenDeRenovacao) throw new Error(avisoEscritaFalhou("sem a autorização duradoura"));
-    if (ESCOPOS_PARA_ESCREVER.some((e) => !tokens.escopos.includes(e))) throw new Error(AVISO_ESCRITA_ESCOPO);
+    // A conta antes dos escopos: o token de outra conta sai mesmo com a permissão desmarcada.
     const conta = await lerConta(this.buscar, this.enderecos, tokens.tokenDeAcesso);
-    if (guardada.conta !== null && conta !== guardada.conta) {
-      // Sem a conta não dá para saber de quem é o token; o de outra conta não serve e sai.
-      if (conta === null) throw new Error(avisoEscritaFalhou("não consegui confirmar a conta"));
-      await this.revogarSemFalhar(tokens.tokenDeRenovacao);
+    // Sem a conta não dá para saber de quem é o token, e revogar poderia ser o desta conexão.
+    if (conta === null) throw new Error(avisoEscritaFalhou("não consegui confirmar a conta"));
+    if (conta !== contaConhecida) {
+      await this.revogarSemFalhar(tokens.tokenDeRenovacao ?? tokens.tokenDeAcesso);
       throw new Error(AVISO_ESCRITA_OUTRA_CONTA);
     }
+    if (!tokens.tokenDeRenovacao) throw new Error(avisoEscritaFalhou("sem a autorização duradoura"));
+    if (ESCOPOS_PARA_ESCREVER.some((e) => !tokens.escopos.includes(e))) throw new Error(AVISO_ESCRITA_ESCOPO);
     // Desconectou ou conectou de novo enquanto o navegador estava aberto: este token não é desta conexão.
     const atual = await this.guardada();
     if (geracao !== this.geracao || atual?.tokenDeRenovacao !== guardada.tokenDeRenovacao) {
       if (geracao !== this.geracao) await this.revogarSemFalhar(tokens.tokenDeRenovacao);
       throw new Error(geracao !== this.geracao ? AVISO_DESLIGADA : AVISO_ESCRITA_MUDOU);
     }
-    const nova: Guardada = {
-      tokenDeRenovacao: tokens.tokenDeRenovacao,
-      escopos: tokens.escopos,
-      conta: conta ?? guardada.conta,
-    };
+    const nova: Guardada = { tokenDeRenovacao: tokens.tokenDeRenovacao, escopos: tokens.escopos, conta };
     await this.deps.credenciais.guardar(CREDENCIAL_GOOGLE, JSON.stringify(nova));
     // Desconectou enquanto guardava: o que acabou de ser guardado ressuscitaria a credencial.
     if (geracao !== this.geracao) {
@@ -399,9 +402,30 @@ export class ServicoGoogleAgenda {
       ultimoErro: antes.ultimoErro,
       conectadaEm: antes.conectadaEm,
       credencial: linha?.credencial ?? CREDENCIAL_GOOGLE,
-      conta: antes.conta,
+      conta,
       escopos: tokens.escopos,
     });
+  }
+
+  /**
+   * A conta pelo calendário principal que a leitura achou (o id dele é o e-mail): só preenche a
+   * que o Google não disse ao conectar, nunca troca uma que já está lá.
+   */
+  anotarConta(conta: string): void {
+    const antes = this.conexao();
+    if (antes.estado === "desligada" || antes.conta !== null) return;
+    const linha = this.deps.conexoes.obter("google-agenda");
+    this.gravar(
+      antes,
+      {
+        estado: antes.estado,
+        ultimoErro: antes.ultimoErro,
+        conectadaEm: antes.conectadaEm,
+        credencial: linha?.credencial ?? null,
+        conta,
+      },
+      "conexao",
+    );
   }
 
   /**
@@ -500,12 +524,16 @@ export class ServicoGoogleAgenda {
       throw erro;
     }
     if (geracao !== this.geracao) throw new Error(AVISO_DESLIGADA);
-    // O Google às vezes troca o refresh token: o novo substitui o guardado.
+    // A credencial pode ter trocado enquanto o Google respondia (a permissão de escrever, F3-25): a
+    // mais nova vence, e este token, da autorização anterior, só serve a quem pediu.
+    const atual = await this.guardada();
+    if (atual?.tokenDeRenovacao !== guardada.tokenDeRenovacao) return tokens.tokenDeAcesso;
+    // O Google às vezes troca o refresh token: o novo substitui o guardado, com os escopos de agora.
     const trocado = tokens.tokenDeRenovacao;
     if (trocado && trocado !== guardada.tokenDeRenovacao) {
       await this.deps.credenciais.guardar(
         CREDENCIAL_GOOGLE,
-        JSON.stringify({ ...guardada, tokenDeRenovacao: trocado } satisfies Guardada),
+        JSON.stringify({ ...atual, tokenDeRenovacao: trocado } satisfies Guardada),
       );
       // Desconectou enquanto gravava: o que acabou de ser guardado ressuscitaria a credencial.
       if (geracao !== this.geracao) {

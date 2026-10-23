@@ -49,7 +49,7 @@ describe("ferramenta()", () => {
       }),
     ).toThrow(/só ação interno se desfaz/);
     expect(() =>
-      ferramenta({ ...base, nome: "tarefas.listar", efeito: "leitura", conferir: () => undefined }),
+      ferramenta({ ...base, nome: "tarefas.listar", efeito: "leitura", conferir: (e) => e }),
     ).toThrow('ferramenta "tarefas.listar": só ação externo confere antes do cartão');
   });
 

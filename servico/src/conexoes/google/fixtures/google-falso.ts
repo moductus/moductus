@@ -96,6 +96,10 @@ export interface GoogleFalso {
   falharCriarCalendario: number | null;
   /** Inserir e mudar evento respondem 400, como o Google faz com um corpo que ele não aceita. */
   recusarEventos: boolean;
+  /** A conta de quem autoriza no navegador, que o calendário principal (`/primary`) devolve. */
+  conta: string;
+  /** O calendário principal responde 500: o Moductus não fica sabendo a conta. */
+  falharConta: boolean;
   fechar(): Promise<void>;
 }
 
@@ -287,8 +291,9 @@ export async function abrirGoogleFalso(
       if (rota.startsWith("/calendar/v3/")) return calendarioApi(req, res, endereco, await lerJson(req));
       if (rota === "/primary") {
         const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
+        if (falso.falharConta) return responder(res, 500, { error: { code: 500 } });
         return token && acessos.has(token)
-          ? responder(res, 200, { id: conta, primary: true })
+          ? responder(res, 200, { id: falso.conta, primary: true })
           : responder(res, 401, { error: { code: 401 } });
       }
       const campos = await ler(req);
@@ -422,6 +427,8 @@ export async function abrirGoogleFalso(
     escritas: [],
     falharCriarCalendario: null,
     recusarEventos: false,
+    conta,
+    falharConta: false,
     abrir: {
       endereco(endereco) {
         const url = new URL(endereco);

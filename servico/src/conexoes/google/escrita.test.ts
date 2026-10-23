@@ -26,14 +26,19 @@ import {
 } from "./cliente.ts";
 import {
   EscritaGoogleAgenda,
+  MENSAGEM_MUDOU_DESDE_O_CARTAO,
   MENSAGEM_NAO_E_DE_FORA,
   MENSAGEM_REPETE_NO_GOOGLE,
   mensagemSoVer,
 } from "./escrita.ts";
 import { abrirGoogleFalso, credenciaisNaMemoria, type GoogleFalso } from "./fixtures/google-falso.ts";
 import {
+  AVISO_DESLIGADA,
   AVISO_ESCRITA_ESCOPO,
   AVISO_ESCRITA_NEGADA,
+  AVISO_ESCRITA_OUTRA_CONTA,
+  AVISO_ESCRITA_SEM_CONTA,
+  avisoEscritaFalhou,
   CREDENCIAL_GOOGLE,
   ServicoGoogleAgenda,
 } from "./google-agenda.ts";
@@ -66,8 +71,10 @@ const sp = (dia: string, hora: string) => new Date(`${dia}T${hora}:00.000-03:00`
  * Banco migrado de verdade, o Google falso em 127.0.0.1 com o principal, o "Trabalho" (que você
  * edita) e os feriados (que você só vê), a conexão feita pelo fluxo de verdade com os três escopos,
  * a leitura, a agenda, o catálogo e o runtime com a Alba num provedor falso e o cartão de verdade.
+ * `falharConta` faz o Google não dizer a conta ao conectar; `semPrincipal` tira o calendário
+ * principal da lista, e a leitura não tem como anotá-la depois.
  */
-async function montar() {
+async function montar(opcoes: { falharConta?: boolean; semPrincipal?: boolean } = {}) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-escrita-"));
   pastas.push(pasta);
   const db = abrirBanco(pasta);
@@ -95,8 +102,11 @@ async function montar() {
     start: { dateTime: "2026-10-20T14:00:00-03:00", timeZone: FUSO },
     end: { dateTime: "2026-10-20T15:00:00-03:00", timeZone: FUSO },
   });
+  google.falharConta = opcoes.falharConta ?? false;
+  if (opcoes.semPrincipal) google.calendarios = google.calendarios.filter((c) => !c.primary);
   const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
-  const agora = () => AGORA;
+  const relogio = { agora: AGORA };
+  const agora = () => relogio.agora;
   const credenciais = credenciaisNaMemoria();
   let leitura: LeituraGoogleAgenda | null = null;
   const conexao = new ServicoGoogleAgenda({
@@ -189,6 +199,10 @@ async function montar() {
   const escritasNoGoogle = () => google.escritas.filter((e) => e.rota.includes("/events"));
   return {
     db,
+    relogio,
+    agenda,
+    leitura,
+    credenciais,
     google,
     conexao,
     log,
@@ -314,7 +328,19 @@ describe("criar nos outros calendários", () => {
     expect(m.google.revogados).toEqual([]);
   });
 
-  test('calendário que você só vê, o local e o "Moductus" não viram cartão', async () => {
+  test("a repetição vai no cartão em frase, e a regra inteira no Google", async () => {
+    const m = await montar();
+    const chamada = m.alba(criarEm(m, { local: undefined, recorrencia: "FREQ=WEEKLY;BYDAY=TH;COUNT=4" }));
+    const cartao = await m.cartao();
+    expect(cartao.descricao).toMatch(/\n\nRepete: toda quinta, 4 vezes$/);
+    await m.decidir(cartao, "permitir");
+    const { idExterno } = ((await chamada).resultado as { valor: { idExterno: string } }).valor;
+    expect(m.google.eventosDe(TRABALHO).find((e) => e.id === idExterno)).toMatchObject({
+      recurrence: ["RRULE:FREQ=WEEKLY;BYDAY=TH;COUNT=4"],
+    });
+  });
+
+  test("calendário que você só vê e o local não viram cartão", async () => {
     const m = await montar();
     const feriados = await m.alba(criarEm(m, { calendarioId: m.idDaqui(FERIADOS) }));
     expect(erroDe(feriados)).toBe(`agenda.criar_evento_em falhou: ${mensagemSoVer("Feriados")}`);
@@ -383,5 +409,139 @@ describe("mudar nos outros calendários", () => {
     await m.decidir(cartao, "negar");
     expect(erroDe(await titulo)).toBe(MENSAGEM_NEGADO);
     expect(m.escritasNoGoogle()).toEqual([]);
+  });
+});
+
+describe("o sim vale para o que o cartão mostrou", () => {
+  test('aprovar depois da meia-noite um evento de "hoje" cria no dia do cartão', async () => {
+    const m = await montar();
+    m.relogio.agora = new Date(sp(HOJE, "23:50"));
+    const chamada = m.alba(criarEm(m, { quando: { dia: "hoje", hora: "15:00" } }));
+    const cartao = await m.cartao();
+    expect(cartao.descricao).toContain("segunda, 19/10/2026, das 15:00 às 16:00");
+    // A aprovação guarda o dia já resolvido, não o "hoje".
+    expect(cartao.acao.entrada).toMatchObject({
+      novo: { inicio: sp(HOJE, "15:00"), fim: sp(HOJE, "16:00"), diaInteiro: false },
+    });
+    m.relogio.agora = new Date(sp("2026-10-20", "00:10"));
+    await m.decidir(cartao, "permitir");
+    const feita = await chamada;
+    expect(feita.resultado).toMatchObject({ ok: true, valor: { inicio: sp(HOJE, "15:00") } });
+    const { idExterno } = (feita.resultado as { valor: { idExterno: string } }).valor;
+    expect(m.google.eventosDe(TRABALHO).find((e) => e.id === idExterno)).toMatchObject({
+      start: { dateTime: sp(HOJE, "15:00") },
+    });
+  });
+
+  test("o evento que a leitura moveu antes do sim não é mudado", async () => {
+    const m = await montar();
+    const revisao = m.eventoDaqui("revisao")!;
+    const chamada = m.alba({
+      tipo: "ferramenta",
+      nome: "agenda__mudar_evento_em",
+      entrada: { id: revisao.id, titulo: "Revisão final" },
+    });
+    const cartao = await m.cartao();
+    expect(cartao.acao.entrada).toMatchObject({
+      vistos: { inicio: sp("2026-10-20", "14:00"), fim: sp("2026-10-20", "15:00") },
+    });
+    m.google.mudarEvento(TRABALHO, "revisao", {
+      start: { dateTime: "2026-10-20T16:00:00-03:00", timeZone: FUSO },
+      end: { dateTime: "2026-10-20T17:00:00-03:00", timeZone: FUSO },
+    });
+    await m.leitura.atualizar();
+    expect(m.eventoDaqui("revisao")?.inicio).toBe(sp("2026-10-20", "16:00"));
+    await m.decidir(cartao, "permitir");
+    expect(erroDe(await chamada)).toBe(`agenda.mudar_evento_em falhou: ${MENSAGEM_MUDOU_DESDE_O_CARTAO}`);
+    expect(m.escritasNoGoogle()).toEqual([]);
+    // Recusado antes de pedir a permissão: o navegador não abriu.
+    expect(m.google.autorizacoes).toHaveLength(1);
+  });
+});
+
+describe('o "Moductus" tem o caminho dele', () => {
+  test("criar e mudar nele pelas ferramentas de fora são recusados sem cartão", async () => {
+    const m = await montar();
+    m.db.exec(`INSERT INTO calendarios (id, nome, fonte, id_externo, espelho, pode_escrever)
+      VALUES ('moductus', 'Moductus', 'google', 'ext-moductus', 1, 1)`);
+    const evento = m.agenda.criarEvento({
+      titulo: "Consulta",
+      inicio: sp("2026-10-21", "10:00"),
+      fim: sp("2026-10-21", "11:00"),
+      diaInteiro: false,
+      calendarioId: "moductus",
+    });
+    m.db.prepare("UPDATE eventos SET id_externo = 'md-consulta' WHERE id = ?").run(evento.id);
+    const criar = await m.alba(criarEm(m, { calendarioId: "moductus" }));
+    expect(erroDe(criar)).toBe(`agenda.criar_evento_em falhou: ${MENSAGEM_NAO_E_DE_FORA}`);
+    const mudar = await m.alba({
+      tipo: "ferramenta",
+      nome: "agenda__mudar_evento_em",
+      entrada: { id: evento.id, titulo: "Consulta médica" },
+    });
+    expect(erroDe(mudar)).toBe(`agenda.mudar_evento_em falhou: ${MENSAGEM_NAO_E_DE_FORA}`);
+    expect(m.repositorioAprovacoes.pendentes()).toEqual([]);
+    expect(m.escritasNoGoogle()).toEqual([]);
+  });
+});
+
+describe("a credencial só troca com a conta confirmada", () => {
+  test("autorizar com outra conta revoga o token novo, mantém a credencial e não escreve", async () => {
+    const m = await montar();
+    const antes = await m.credenciais.ler(CREDENCIAL_GOOGLE);
+    m.google.conta = "outra@gmail.com";
+    const chamada = m.alba(criarEm(m));
+    await m.decidir(await m.cartao(), "permitir");
+    expect(erroDe(await chamada)).toBe(`agenda.criar_evento_em falhou: ${AVISO_ESCRITA_OUTRA_CONTA}`);
+    expect(m.google.revogados).toHaveLength(1);
+    expect(antes).not.toContain(m.google.revogados[0]!);
+    expect(await m.credenciais.ler(CREDENCIAL_GOOGLE)).toBe(antes);
+    expect(m.escritasNoGoogle()).toEqual([]);
+    // A conexão segue lendo com a credencial de antes.
+    expect(await m.leitura.atualizar()).toBe("lida");
+  });
+
+  test("sem a conta guardada, vale a do calendário principal; sem nenhuma, nem abre o navegador", async () => {
+    const m = await montar({ falharConta: true });
+    // O conectar não leu a conta; a leitura a anotou pelo principal.
+    expect(m.conexao.conexao().conta).toBe(CONTA);
+    // O Google ainda não diz a conta do token novo: recusa sem revogar nada.
+    const sem = m.alba(criarEm(m));
+    await m.decidir(await m.cartao(), "permitir");
+    expect(erroDe(await sem)).toBe(
+      `agenda.criar_evento_em falhou: ${avisoEscritaFalhou("não consegui confirmar a conta")}`,
+    );
+    expect(m.google.revogados).toEqual([]);
+    expect(await m.escoposGuardados()).toEqual([...ESCOPOS_AO_CONECTAR]);
+
+    m.google.falharConta = false;
+    const com = m.alba(criarEm(m));
+    await m.decidir(await m.cartao(), "permitir");
+    expect((await com).resultado).toMatchObject({ ok: true });
+    expect(JSON.parse((await m.credenciais.ler(CREDENCIAL_GOOGLE))!)).toMatchObject({
+      conta: CONTA,
+      escopos: [...ESCOPOS_PARA_ESCREVER],
+    });
+
+    const semPrincipal = await montar({ falharConta: true, semPrincipal: true });
+    expect(semPrincipal.conexao.conexao().conta).toBeNull();
+    const recusada = semPrincipal.alba(criarEm(semPrincipal));
+    await semPrincipal.decidir(await semPrincipal.cartao(), "permitir");
+    expect(erroDe(await recusada)).toBe(`agenda.criar_evento_em falhou: ${AVISO_ESCRITA_SEM_CONTA}`);
+    expect(semPrincipal.google.autorizacoes).toHaveLength(1);
+    expect(semPrincipal.escritasNoGoogle()).toEqual([]);
+  });
+
+  test("desconectar com o navegador aberto cancela a permissão e não escreve", async () => {
+    const m = await montar();
+    m.google.navegacao = "nada";
+    const chamada = m.alba(criarEm(m));
+    await m.decidir(await m.cartao(), "permitir");
+    await vi.waitFor(() => expect(m.google.autorizacoes).toHaveLength(2));
+    await m.conexao.desligar();
+    expect(erroDe(await chamada)).toBe(`agenda.criar_evento_em falhou: ${AVISO_DESLIGADA}`);
+    expect(m.escritasNoGoogle()).toEqual([]);
+    expect(await m.credenciais.ler(CREDENCIAL_GOOGLE)).toBeNull();
+    expect(m.conexao.conexao().estado).toBe("desligada");
   });
 });

@@ -58,25 +58,31 @@ export interface TextoCartao {
   desfazivel?: boolean;
 }
 
-export interface DefinicaoFerramenta<E extends z.ZodObject> {
+/**
+ * `R` é a entrada resolvida: a que `conferir` devolve (o dia "hoje" já como data, o que o cartão
+ * mostrou) e que o cartão, a aprovação e `executar` recebem. Sem `conferir`, é a entrada validada.
+ */
+export interface DefinicaoFerramenta<E extends z.ZodObject, R = z.output<E>> {
   nome: string;
   /** Lida pelo modelo para decidir quando chamar e pelo usuário em `/capacidades`. */
   descricao: string;
   entrada: E;
   efeito: Efeito;
-  /** Chamada só com a entrada já validada; erro lançado volta ao modelo como texto. */
-  executar: (entrada: z.output<E>, ctx: ContextoFerramenta) => unknown;
+  /**
+   * Só em `externo`: confere e resolve a entrada antes do cartão. Lança o motivo do que a área já
+   * sabe recusar (o calendário que não aceita escrita, o evento que sumiu), que volta ao modelo como
+   * texto sem cartão nenhum. Devolve a entrada em termos absolutos: é ela que o cartão mostra, que
+   * fica na aprovação e que roda com o sim, para o "hoje" de um sim dado amanhã não virar outro dia.
+   * Declare antes do cartão e de `executar`: é por ele que o TypeScript sabe o tipo deles.
+   */
+  conferir?: (entrada: z.output<E>) => R;
+  /** Chamada só com a entrada já validada (e resolvida); erro lançado volta ao modelo como texto. */
+  executar: (entrada: R, ctx: ContextoFerramenta) => unknown;
   /**
    * O cartão de aprovação, obrigatório em `externo`: só a área sabe dizer o que vai acontecer e o
    * tamanho, e um texto genérico pediria o sim sem dizer isso.
    */
-  cartao?: (entrada: z.output<E>) => TextoCartao;
-  /**
-   * Só em `externo`: o que a área já sabe recusar antes do cartão (o calendário que não aceita
-   * escrita, o evento que sumiu). Lança com o motivo, que volta ao modelo como texto, e nenhum
-   * cartão pede o sim de uma ação que não ia rodar.
-   */
-  conferir?: (entrada: z.output<E>) => void;
+  cartao?: (entrada: R) => TextoCartao;
   /**
    * A função inversa, obrigatória em `interno` e proibida no resto (AGENTS.md §4): o que o agente
    * faz dentro do Moductus aparece no histórico com desfazer.
@@ -113,8 +119,8 @@ export interface Ferramenta {
   executar(entrada: unknown, ctx: ContextoFerramenta): Promise<unknown>;
   /** O texto do cartão para a entrada validada; `null` fora de `externo`. */
   cartao(entrada: unknown): TextoCartao | null;
-  /** Lança o motivo de recusar a entrada validada antes do cartão; sem `conferir`, não faz nada. */
-  conferir(entrada: unknown): void;
+  /** A entrada resolvida (ou o motivo de recusar, lançado) antes do cartão; sem `conferir`, a mesma. */
+  conferir(entrada: unknown): unknown;
   /** Só `interno` tem função inversa. */
   readonly desfazivel: boolean;
   /** Fora do recorte dos agentes: só a interface faz, e o catálogo a guarda para desfazer. */
@@ -137,7 +143,9 @@ export function nomeParaModelo(nome: string): string {
  * Declara uma ferramenta. Nome fora do padrão ou entrada que não vira JSON Schema falha aqui, na
  * montagem do catálogo, e não na primeira chamada do modelo.
  */
-export function ferramenta<E extends z.ZodObject>(definicao: DefinicaoFerramenta<E>): Ferramenta {
+export function ferramenta<E extends z.ZodObject, R = z.output<E>>(
+  definicao: DefinicaoFerramenta<E, R>,
+): Ferramenta {
   const { nome, descricao, entrada, efeito } = definicao;
   if (!NOME.test(nome) || nome.includes("__")) {
     throw new Error(`ferramenta "${nome}": use dominio.acao em minúsculas, sem "__"`);
@@ -173,13 +181,13 @@ export function ferramenta<E extends z.ZodObject>(definicao: DefinicaoFerramenta
       return r.success ? { ok: true, valor: r.data } : { ok: false, erro: errosLegiveis(nome, r.error) };
     },
     async executar(valor, ctx) {
-      return definicao.executar(valor as z.output<E>, ctx);
+      return definicao.executar(valor as R, ctx);
     },
     cartao(valor) {
-      return definicao.cartao?.(valor as z.output<E>) ?? null;
+      return definicao.cartao?.(valor as R) ?? null;
     },
     conferir(valor) {
-      definicao.conferir?.(valor as z.output<E>);
+      return definicao.conferir ? definicao.conferir(valor as z.output<E>) : valor;
     },
     desfazivel: desfazer !== undefined,
     soPelaInterface: definicao.soPelaInterface === true,
