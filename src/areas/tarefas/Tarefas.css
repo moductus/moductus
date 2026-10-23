@@ -242,3 +242,205 @@
 .tarefa-quando--larga {
   width: auto;
 }
+
+/* ---------- A vista e a coluna Agenda ---------- */
+/* A lista e a Agenda lado a lado; sem largura para as duas, a Agenda desce para baixo da lista. */
+.tarefas-corpo {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: var(--esp-20);
+}
+
+.tarefas-principal {
+  display: flex;
+  flex: 1 1 var(--largura-min-lista-tarefas-area);
+  flex-direction: column;
+  gap: var(--espaco-cabecalho);
+  min-width: 0;
+}
+
+.tarefas-agenda {
+  display: flex;
+  flex: 0 0 var(--largura-agenda-area);
+  flex-direction: column;
+  gap: var(--esp-12);
+  min-width: 0;
+}
+
+.tarefas-agenda-cabeca {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.tarefas-agenda-titulo {
+  margin: 0;
+  font-size: inherit;
+  font-weight: var(--peso-normal);
+  color: inherit;
+}
+
+.tarefas-agenda-falha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+}
+
+.tarefas-agenda-dia-todo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-4);
+  margin: 0;
+  padding: 0 0 0 var(--largura-horas-agenda-area);
+  list-style: none;
+}
+
+.tarefas-agenda-dia-todo-item {
+  max-width: 100%;
+  padding: var(--esp-2) var(--esp-8);
+  border-radius: var(--raio-bloco-agenda-area);
+  background: var(--fundo-ativo);
+  font-size: var(--tipo-12);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A régua: uma hora vale a altura do token; o CSS recebe as horas em número (--horas, --inicio). */
+.tarefas-agenda-regua {
+  position: relative;
+  height: calc(var(--altura-hora-agenda-area) * var(--horas));
+  margin-left: var(--largura-horas-agenda-area);
+  border-left: var(--espessura-borda) solid var(--borda);
+}
+
+.tarefas-agenda-hora {
+  position: absolute;
+  top: calc(var(--altura-hora-agenda-area) * var(--inicio));
+  right: 0;
+  left: 0;
+  height: var(--espessura-borda);
+  background: var(--borda);
+}
+
+.tarefas-agenda-hora-rotulo {
+  position: absolute;
+  top: 0;
+  left: calc(-1 * var(--largura-horas-agenda-area));
+  transform: translateY(-50%);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.tarefas-agenda-blocos {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Os que se sobrepõem dividem a largura que sobra depois do recuo (--coluna de --colunas). */
+.tarefas-agenda-bloco {
+  position: absolute;
+  top: calc(var(--altura-hora-agenda-area) * var(--inicio) + var(--esp-2));
+  left: calc(var(--esp-8) + (100% - var(--esp-8)) * var(--coluna) / var(--colunas));
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: calc((100% - var(--esp-8)) / var(--colunas));
+  height: calc(var(--altura-hora-agenda-area) * var(--duracao) - var(--esp-4));
+  padding: var(--esp-4) var(--esp-8);
+  border-left: var(--traco-bloco-agenda-area) solid var(--texto-3);
+  border-radius: var(--raio-bloco-agenda-area);
+  background: var(--fundo-ativo);
+  overflow: hidden;
+}
+
+/* A sugestão da Alba ainda não é compromisso: tracejada, na cor dela, sem fundo. */
+.tarefas-agenda-bloco[data-tipo="sugestao"] {
+  border: var(--espessura-borda) dashed var(--agente-alba);
+  background: transparent;
+  color: var(--agente-alba);
+}
+
+.tarefas-agenda-bloco-nome {
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-forte);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tarefas-agenda-bloco-hora {
+  font-size: var(--tipo-11);
+  opacity: var(--opacidade-hora-bloco-area);
+}
+
+.tarefas-agenda-agora {
+  position: absolute;
+  top: calc(var(--altura-hora-agenda-area) * var(--inicio));
+  right: 0;
+  left: calc(-1 * var(--esp-4));
+  height: var(--espessura-borda);
+  background: var(--perigo);
+}
+
+.tarefas-agenda-agora::before {
+  position: absolute;
+  top: calc((var(--espessura-borda) - var(--tamanho-ponto-agora-area)) / 2);
+  left: 0;
+  width: var(--tamanho-ponto-agora-area);
+  height: var(--tamanho-ponto-agora-area);
+  border-radius: 50%;
+  background: var(--perigo);
+  content: "";
+}
+
+.tarefas-agenda-convite {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.tarefas-agenda-convite p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.tarefas-agenda-sugestao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+}
+
+.tarefas-agenda-fala {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--esp-10);
+}
+
+.tarefas-agenda-fala .personagem {
+  flex: none;
+}
+
+.tarefas-agenda-fala p {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+  text-wrap: pretty;
+}
+
+.tarefas-agenda-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--esp-8);
+}

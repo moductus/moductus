@@ -1,5 +1,14 @@
 // @vitest-environment happy-dom
-import type { Lembrete, Lista, PreviaCaptura, Tarefa } from "@moductus/contrato";
+import type {
+  Agenda,
+  Calendario,
+  DiaDaAgenda,
+  Lembrete,
+  Lista,
+  Ocorrencia,
+  PreviaCaptura,
+  Tarefa,
+} from "@moductus/contrato";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -58,7 +67,30 @@ interface Mundo {
   proximas?: Tarefa[];
   lembretes?: Lembrete[];
   pendentes?: number;
+  agenda?: Agenda;
+  calendarios?: Calendario[];
 }
+
+const CALENDARIO_LOCAL: Calendario = {
+  id: "local",
+  nome: "Local",
+  fonte: "local",
+  cor: null,
+  espelho: false,
+  podeEscrever: true,
+  ler: true,
+  sincronizadoEm: null,
+};
+
+const diaDaAgenda = (extra: Partial<DiaDaAgenda> = {}): DiaDaAgenda => ({
+  dia: "2026-10-08",
+  livres: [],
+  livreMin: 0,
+  planejadoMin: 0,
+  cheio: false,
+  sugestoes: [],
+  ...extra,
+});
 
 function responder({
   hoje = [],
@@ -67,6 +99,8 @@ function responder({
   proximas = [],
   lembretes = [],
   pendentes = 0,
+  agenda = { ocorrencias: [], dias: [diaDaAgenda()] },
+  calendarios = [CALENDARIO_LOCAL],
 }: Mundo) {
   const todas = abertas ?? [...atrasadas, ...hoje.filter((t) => t.estado === "aberta"), ...proximas];
   falso.servidor = {
@@ -92,8 +126,12 @@ function responder({
     "tarefas.ordenar": [],
     "tarefas.adiar": [],
     "lembretes.concluir": { lembretes: [], removidos: [] },
+    "agenda.consultar": agenda,
+    "agenda.calendarios": calendarios,
   };
 }
+
+const ir = vi.fn();
 
 let raiz: Root | null = null;
 let recipiente: HTMLElement;
@@ -104,7 +142,7 @@ async function montar() {
   raiz = createRoot(recipiente);
   await act(async () =>
     raiz!.render(
-      <AcoesSistemaContexto.Provider value={{ ir: () => undefined, aoMudarPrimeiroUso: () => undefined }}>
+      <AcoesSistemaContexto.Provider value={{ ir, aoMudarPrimeiroUso: () => undefined }}>
         <Tarefas />
       </AcoesSistemaContexto.Provider>,
     ),
@@ -116,6 +154,7 @@ beforeEach(() => {
   vi.setSystemTime(AGORA);
   falso.pedidos.length = 0;
   falso.ouvintes.clear();
+  ir.mockClear();
 });
 afterEach(() => {
   act(() => raiz?.unmount());
@@ -645,5 +684,150 @@ describe("Tarefas · outras vistas", () => {
     await act(async () => por('[role="checkbox"]')!.click());
     expect(pedidosDe("lembretes.concluir")).toEqual([{ ids: ["l1"] }]);
     expect(auditar(recipiente)).toEqual([]);
+  });
+});
+
+describe("Tarefas · a coluna Agenda", () => {
+  /** Um instante na hora de São Paulo (UTC−3), no dia 8. */
+  const as = (hora: string) =>
+    `2026-10-08T${String(Number(hora.slice(0, 2)) + 3).padStart(2, "0")}:${hora.slice(3)}:00.000Z`;
+  const ocorrencia = (extra: Partial<Ocorrencia>): Ocorrencia => ({
+    eventoId: "e1",
+    calendarioId: "local",
+    titulo: "Daily",
+    inicio: as("09:30"),
+    fim: as("10:00"),
+    diaInteiro: false,
+    local: null,
+    recorrente: false,
+    editavel: true,
+    ...extra,
+  });
+  const comprovantes = tarefa({ id: "c1", titulo: "Separar comprovantes" });
+  const sugestao = { tarefaId: "c1", inicio: as("16:00"), fim: as("17:00") };
+  const comSugestao = (): Agenda => ({
+    ocorrencias: [ocorrencia({})],
+    dias: [
+      diaDaAgenda({
+        livres: [{ inicio: as("16:00"), fim: as("18:00"), minutos: 120 }],
+        sugestoes: [sugestao],
+      }),
+    ],
+  });
+  const blocos = () =>
+    todos(".tarefas-agenda-bloco").map((b) => [
+      b.dataset.tipo,
+      b.querySelector(".tarefas-agenda-bloco-nome")?.textContent,
+      b.querySelector(".tarefas-agenda-bloco-hora")?.textContent,
+    ]);
+
+  it("mostra o local, o Moductus e os calendários lidos, na régua do expediente, com a linha de agora", async () => {
+    responder({
+      agenda: {
+        ocorrencias: [
+          ocorrencia({
+            eventoId: "p",
+            calendarioId: "g1",
+            titulo: "Planejamento",
+            inicio: as("11:00"),
+            fim: as("12:00"),
+          }),
+          ocorrencia({}),
+        ],
+        dias: [diaDaAgenda()],
+      },
+      calendarios: [
+        CALENDARIO_LOCAL,
+        { ...CALENDARIO_LOCAL, id: "m", nome: "Moductus", fonte: "google", espelho: true },
+        { ...CALENDARIO_LOCAL, id: "g1", nome: "Trabalho", fonte: "google", podeEscrever: false },
+      ],
+    });
+    await montar();
+    expect(pedidosDe("agenda.consultar")).toEqual([{ de: HOJE, ate: HOJE }]);
+    expect(por(".tarefas-agenda-cabeca")?.textContent).toBe("AgendaGoogle · Moductus");
+    expect(blocos()).toEqual([
+      ["evento", "Daily", "9:30–10h"],
+      ["evento", "Planejamento", "11h–12h"],
+    ]);
+    expect(todos(".tarefas-agenda-hora-rotulo").map((h) => h.textContent)).toEqual([
+      "9h",
+      "10h",
+      "11h",
+      "12h",
+      "13h",
+      "14h",
+      "15h",
+      "16h",
+      "17h",
+    ]);
+    // 11:00 está a 2 h do começo da régua (9h).
+    expect(por(".tarefas-agenda-agora")?.style.getPropertyValue("--inicio")).toBe("2");
+    expect(por(".tarefas-agenda-convite")).toBeNull();
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("sem o Google, mostra só o local e convida a conectar em Conexões", async () => {
+    responder({ agenda: { ocorrencias: [ocorrencia({})], dias: [diaDaAgenda()] } });
+    await montar();
+    expect(por(".tarefas-agenda-cabeca")?.textContent).toBe("AgendaLocal");
+    expect(blocos()).toEqual([["evento", "Daily", "9:30–10h"]]);
+    expect(por(".tarefas-agenda-convite")?.textContent).toContain("Conecte o Google Agenda");
+    await act(async () => botao("Abrir Conexões")!.click());
+    expect(ir).toHaveBeenCalledWith({ area: "configuracoes", secao: "conexoes" });
+  });
+
+  it("a sugestão da Alba fica tracejada e só vira compromisso com o clique, que dá para desfazer", async () => {
+    responder({ hoje: [comprovantes], agenda: comSugestao() });
+    falso.servidor["agenda.aplicarSugestao"] = {
+      evento: {},
+      chamadaId: "01CHAMADA",
+      desfazerAte: new Date(AGORA.getTime() + 86_400_000).toISOString(),
+    };
+    falso.servidor["execucoes.desfazer"] = {};
+    await montar();
+    expect(blocos()).toContainEqual(["sugestao", "Sugestão: Separar comprovantes", "16h–17h"]);
+    expect(por(".tarefas-agenda-fala")?.textContent).toBe(
+      "O bloco das 16h está livre. Coloquei “Separar comprovantes” ali como sugestão.",
+    );
+    // Nada foi aplicado só por mostrar.
+    expect(pedidosDe("agenda.aplicarSugestao")).toEqual([]);
+    await act(async () => botao("Guardar o bloco")!.click());
+    expect(pedidosDe("agenda.aplicarSugestao")).toEqual([sugestao]);
+    expect(por(".tarefas-agenda-fala")?.textContent).toBe(
+      "Guardei das 16h às 17h para “Separar comprovantes”.",
+    );
+    expect(blocos().some(([tipo]) => tipo === "sugestao")).toBe(false);
+    await act(async () => botao("Desfazer")!.click());
+    expect(pedidosDe("execucoes.desfazer")).toEqual([{ chamadaId: "01CHAMADA" }]);
+    expect(por(".tarefas-agenda-fala")?.textContent).toContain("Coloquei");
+  });
+
+  it("Agora não esconde a sugestão sem pedir nada; a recusa do serviço aparece na coluna", async () => {
+    responder({ hoje: [comprovantes], agenda: comSugestao() });
+    const { RecusaDoServico } = await import("@moductus/contrato/cliente");
+    falso.servidor["agenda.aplicarSugestao"] = () => {
+      throw new RecusaDoServico("a tarefa já está na agenda");
+    };
+    await montar();
+    await act(async () => botao("Guardar o bloco")!.click());
+    expect(por(".tarefas-agenda [role='alert']")?.textContent).toBe("A tarefa já está na agenda");
+    await act(async () => botao("Agora não")!.click());
+    expect(por(".tarefas-agenda-sugestao")).toBeNull();
+    expect(blocos()).toEqual([["evento", "Daily", "9:30–10h"]]);
+    expect(pedidosDe("agenda.aplicarSugestao")).toHaveLength(1);
+  });
+
+  it("relê a cada agenda.mudou; a leitura que falha diz isso e tenta de novo", async () => {
+    responder({});
+    delete falso.servidor["agenda.consultar"];
+    await montar();
+    expect(por(".tarefas-agenda-falha")?.textContent).toContain("Não consegui ler a agenda agora.");
+    falso.servidor["agenda.consultar"] = { ocorrencias: [], dias: [diaDaAgenda()] };
+    await act(async () => botao("Tentar de novo")!.click());
+    expect(por(".tarefas-agenda-falha")).toBeNull();
+    expect(blocos()).toEqual([]);
+    falso.servidor["agenda.consultar"] = { ocorrencias: [ocorrencia({})], dias: [diaDaAgenda()] };
+    await avisar("agenda.mudou", { eventos: [], apagados: [] });
+    expect(blocos()).toEqual([["evento", "Daily", "9:30–10h"]]);
   });
 });

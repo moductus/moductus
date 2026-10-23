@@ -283,6 +283,17 @@
   --altura-linha-tarefa-area: 40px;
   --raio-prioridade: 2px;
   --largura-quando-tarefa: 44px;
+  /* A coluna Agenda da área: 300 de largura, a lista ao lado com pelo menos 360 (abaixo disso a
+     agenda desce), 43 por hora, a régua das horas de 38, o traço de 3 e o canto de 6 do bloco, e o
+     ponto de 7 na linha de agora */
+  --largura-agenda-area: 300px;
+  --largura-min-lista-tarefas-area: 360px;
+  --altura-hora-agenda-area: 43px;
+  --largura-horas-agenda-area: 38px;
+  --traco-bloco-agenda-area: 3px;
+  --raio-bloco-agenda-area: 6px;
+  --tamanho-ponto-agora-area: 7px;
+  --opacidade-hora-bloco-area: 0.8;
   /* Notas (AreaNotas.dc.html, PainelNotas.dc.html): a lista à esquerda, a coluna do que está
      ligado à nota à direita, a margem do texto, a linha de leitura e o entrelinha de quem escreve */
   --largura-lista-notas: 290px;
