@@ -96,6 +96,10 @@ describe("configuração", () => {
       },
       // A cotação digitada do teto diário fica na configuração, com o dia (ADR-0040).
       cambio: { cotacoes: { BRL: { milionesimos: 5_430_000, data: "2026-10-18", fonte: "digitada" } } },
+      inicio: {
+        ordem: ["briefing", "foco", "tarefas", "dev", "sessoes", "financas"],
+        escondidos: ["financas"],
+      },
     };
     // Uma chave por vez, como a interface manda.
     for (const [chave, valor] of Object.entries(escolhida))
@@ -103,6 +107,22 @@ describe("configuração", () => {
     primeiro.db.close();
     const depois = montar(aceita(), primeiro.pasta);
     expect(depois.servico.obter().config).toEqual(escolhida);
+  });
+
+  test("blocos escondidos do Início continuam escondidos depois de reiniciar, sem passar pela casca", async () => {
+    const aplicados: Aplicacao[] = [];
+    const primeiro = montar(aceita(aplicados));
+    await primeiro.servico.definir({
+      inicio: { ordem: [...CONFIG_PADRAO.inicio.ordem], escondidos: ["financas", "dev"] },
+    });
+    expect(aplicados).toEqual([]);
+    primeiro.db.close();
+    const depois = montar(aceita(), primeiro.pasta);
+    expect(depois.servico.obter().config.inicio.escondidos).toEqual(["financas", "dev"]);
+    await expect(
+      depois.servico.definir({ inicio: { ordem: ["foco", "foco"], escondidos: [] } }),
+    ).rejects.toThrow();
+    expect(depois.servico.obter().config.inicio.escondidos).toEqual(["financas", "dev"]);
   });
 
   test("config da 0.6.0, sem o atalho do foco e sem o dia, sobe com o padrão e fica com o resto", () => {

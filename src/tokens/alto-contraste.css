@@ -50,7 +50,8 @@
     outline-offset: var(--recuo-foco-interno);
   }
 
-  .uso-opcao[data-marcada="true"] {
+  .uso-opcao[data-marcada="true"],
+  .inicio-editar-bloco[data-selecionado] {
     border-color: Highlight;
     outline: var(--espessura-borda) solid Highlight;
   }

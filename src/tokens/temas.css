@@ -360,6 +360,13 @@
   --largura-ciclos-tarefa: 18px;
   --altura-vazio-foco: 150px;
   --tamanho-numero-passo: 20px;
+  /* Sistema · Início (Sistema.dc.html, InicioEditar.dc.html): o relógio do foco em 34, as
+     linhas de esboço dos blocos ao editar (8 de altura, canto de 4) e a altura mínima de um
+     bloco na grade de editar */
+  --tipo-relogio-inicio: 34px;
+  --altura-linha-esboco: 8px;
+  --raio-linha-esboco: 4px;
+  --altura-min-bloco-inicio: 150px;
 }
 
 /* Menos animação no Windows: pela mídia do WebView ou pelo "Efeitos de animação" que a casca
@@ -426,6 +433,9 @@
 
   --sombra-janela: 0 24px 64px rgba(0, 0, 0, 0.45);
   --sombra-painel: 0 24px 48px rgba(0, 0, 0, 0.45);
+  /* O bloco do Início selecionado ao editar (InicioEditar.dc.html): a segunda volta de borda no
+     destaque, por dentro (2 sem mudar o tamanho), e a sombra que o levanta */
+  --sombra-bloco-editando: inset 0 0 0 1px var(--destaque), 0 8px 24px rgba(0, 0, 0, 0.35);
   --sombra-dock: none;
   --desfoque: none;
   /* O que fica fora da parada do tour escurece (TutorialTour.dc.html) */
@@ -483,6 +493,7 @@
 
   --sombra-janela: 0 24px 64px rgba(40, 36, 28, 0.16);
   --sombra-painel: 0 16px 40px rgba(40, 36, 28, 0.12);
+  --sombra-bloco-editando: inset 0 0 0 1px var(--destaque), 0 8px 24px rgba(40, 36, 28, 0.14);
   --sombra-dock: 0 8px 24px rgba(40, 36, 28, 0.08);
   --desfoque: none;
   --veu-tour: rgba(40, 36, 28, 0.22);
@@ -538,6 +549,7 @@
 
   --sombra-janela: 0 24px 64px rgba(0, 0, 0, 0.35);
   --sombra-painel: none;
+  --sombra-bloco-editando: inset 0 0 0 1px var(--destaque), 0 8px 24px rgba(0, 0, 0, 0.35);
   --sombra-dock: none;
   /* O desfoque de verdade é o Acrylic da janela; este vale para camadas dentro dela. */
   --desfoque: blur(32px) saturate(140%);

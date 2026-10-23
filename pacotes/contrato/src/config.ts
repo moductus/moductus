@@ -86,6 +86,25 @@ export type CiclosFoco = z.infer<typeof CiclosFoco>;
 export const ConfigDia = z.object({ fuso: Fuso, expediente: Expediente, foco: CiclosFoco });
 export type ConfigDia = z.infer<typeof ConfigDia>;
 
+/** Os blocos do Início (Sistema.dc.html, InicioEditar.dc.html). */
+export const IdBlocoInicio = z.enum(["briefing", "tarefas", "foco", "financas", "dev", "sessoes"]);
+export type IdBlocoInicio = z.infer<typeof IdBlocoInicio>;
+
+/** Na ordem do quadro: o briefing no alto, depois tarefas, foco, finanças, dev e sessões. */
+export const BLOCOS_INICIO = IdBlocoInicio.options;
+
+const BlocosSemRepetir = z
+  .array(IdBlocoInicio)
+  .refine((ids) => new Set(ids).size === ids.length, "bloco repetido");
+
+/**
+ * Os blocos do Início como você deixou (InicioEditar.dc.html): a ordem de todos, escondidos
+ * incluídos (mostrar devolve o bloco ao lugar dele), e os escondidos. Bloco que falta na ordem
+ * (chegou numa versão nova) vai para o fim.
+ */
+export const ConfigInicio = z.object({ ordem: BlocosSemRepetir, escondidos: BlocosSemRepetir });
+export type ConfigInicio = z.infer<typeof ConfigInicio>;
+
 export const Config = z.object({
   tema: Tema,
   dock: ConfigDock,
@@ -95,6 +114,7 @@ export const Config = z.object({
   dia: ConfigDia,
   /** As cotações do teto diário (ADR-0040): digitadas ou buscadas e confirmadas; nenhuma de fábrica. */
   cambio: Cambio,
+  inicio: ConfigInicio,
 });
 export type Config = z.infer<typeof Config>;
 
@@ -114,6 +134,7 @@ export const CONFIG_PADRAO: Config = {
     foco: { focoMin: 25, pausaMin: 5, pausaLongaMin: 15, ciclosAtePausaLonga: 4 },
   },
   cambio: { cotacoes: {} },
+  inicio: { ordem: [...BLOCOS_INICIO], escondidos: [] },
 };
 
 /** Mudança parcial: só as chaves de primeiro nível que mudam. */

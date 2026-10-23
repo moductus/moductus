@@ -1,5 +1,14 @@
 import { describe, expect, test } from "vitest";
-import { CONFIG_PADRAO, Config, ConfigDia, Expediente, FUSO_RESERVA, Fuso, fusoDoSistema } from "./config.ts";
+import {
+  CONFIG_PADRAO,
+  Config,
+  ConfigDia,
+  ConfigInicio,
+  Expediente,
+  FUSO_RESERVA,
+  Fuso,
+  fusoDoSistema,
+} from "./config.ts";
 
 describe("config do dia", () => {
   test("padrão: expediente 09:00 às 18:00, foco 25/5 quatro vezes e pausa longa de 15, Ctrl+Alt+P", () => {
@@ -37,6 +46,20 @@ describe("config do dia", () => {
   test("atalho do foco é obrigatório na configuração inteira", () => {
     const { foco: _foco, ...antigos } = CONFIG_PADRAO.atalhos;
     expect(Config.safeParse({ ...CONFIG_PADRAO, atalhos: antigos }).success).toBe(false);
+  });
+
+  test("o Início nasce com os seis blocos na ordem do quadro e nenhum escondido", () => {
+    expect(CONFIG_PADRAO.inicio).toEqual({
+      ordem: ["briefing", "tarefas", "foco", "financas", "dev", "sessoes"],
+      escondidos: [],
+    });
+  });
+
+  test("bloco repetido ou desconhecido no Início é recusado", () => {
+    expect(ConfigInicio.safeParse({ ordem: ["foco", "dev"], escondidos: ["dev"] }).success).toBe(true);
+    expect(ConfigInicio.safeParse({ ordem: ["foco", "foco"], escondidos: [] }).success).toBe(false);
+    expect(ConfigInicio.safeParse({ ordem: ["foco"], escondidos: ["dev", "dev"] }).success).toBe(false);
+    expect(ConfigInicio.safeParse({ ordem: ["clima"], escondidos: [] }).success).toBe(false);
   });
 
   test("o foco pode ficar sem atalho (vazio); os outros, não", () => {

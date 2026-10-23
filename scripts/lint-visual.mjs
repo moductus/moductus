@@ -49,8 +49,9 @@ function proibidos(trecho) {
 export function verificarConteudo(texto, caminho) {
   const achados = [];
   if (caminho.endsWith(".css")) {
+    // O repositório é CRLF: o \r no fim da linha não pode virar valor de propriedade.
     semComentariosCss(texto)
-      .split("\n")
+      .split(/\r?\n/)
       .forEach((linha, i) => {
         for (const motivo of proibidos(linha)) achados.push({ linha: i + 1, motivo });
         for (const prop of linha.matchAll(PROPRIEDADE_CSS)) {
