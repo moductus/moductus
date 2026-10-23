@@ -50,6 +50,8 @@ export function horaNaFala(minuto: number): string {
 /** Um bloco na régua: um compromisso ou a sugestão da Alba. */
 export interface BlocoDaColuna {
   chave: string;
+  /** O evento que o bloco abre no detalhe; a sugestão não tem. */
+  eventoId: string | null;
   nome: string;
   /** "9:30–10h". */
   hora: string;
@@ -70,7 +72,7 @@ export interface ColunaDoDia {
   horas: number[];
   blocos: BlocoDaColuna[];
   /** Os compromissos de dia inteiro, que não cabem na régua. */
-  diaTodo: { chave: string; nome: string }[];
+  diaTodo: { chave: string; eventoId: string; nome: string }[];
   /** Os blocos livres em texto ("13h–15h"), para quem lê a tela. */
   livres: string[];
   /** Os minutos de agora, quando o dia é hoje e agora cai na régua. */
@@ -103,7 +105,7 @@ export function montarColuna(pedido: PedidoColuna): ColunaDoDia {
   for (const o of pedido.ocorrencias) {
     const chave = `${o.eventoId}@${o.inicio}`;
     if (o.diaInteiro) {
-      if (cobreODia(o, dia)) diaTodo.push({ chave, nome: nomeDe(o.titulo) });
+      if (cobreODia(o, dia)) diaTodo.push({ chave, eventoId: o.eventoId, nome: nomeDe(o.titulo) });
       continue;
     }
     const inicio = noDia(o.inicio);
@@ -113,13 +115,22 @@ export function montarColuna(pedido: PedidoColuna): ColunaDoDia {
     const semDuracao = Date.parse(o.fim) <= Date.parse(o.inicio);
     const encosta = semDuracao ? relogioNoFuso(new Date(o.inicio), fuso).dia !== dia : noDia(o.fim) <= 0;
     if (inicio >= MINUTOS_DIA || encosta) continue;
-    blocos.push({ chave, nome: nomeDe(o.titulo), hora: intervalo(inicio, fim), inicio, fim, tipo: "evento" });
+    blocos.push({
+      chave,
+      eventoId: o.eventoId,
+      nome: nomeDe(o.titulo),
+      hora: intervalo(inicio, fim),
+      inicio,
+      fim,
+      tipo: "evento",
+    });
   }
   if (pedido.sugestao) {
     const inicio = noDia(pedido.sugestao.inicio);
     const fim = noDia(pedido.sugestao.fim);
     blocos.push({
       chave: "sugestao",
+      eventoId: null,
       nome: `Sugestão: ${pedido.sugestao.titulo}`,
       hora: intervalo(inicio, fim),
       inicio,

@@ -71,6 +71,10 @@ const DESENHOS = {
   ),
   // Sino do lembrete (LembreteHoje.dc.html).
   sino: <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />,
+  // Calendário da faixa do "Moductus" no detalhe da tarefa (DetalheTarefa.dc.html).
+  calendario: (
+    <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+  ),
 } satisfies Record<string, ReactElement>;
 
 export type NomeIcone = keyof typeof DESENHOS;

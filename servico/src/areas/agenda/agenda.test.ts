@@ -636,6 +636,53 @@ describe("eventos e calendários", () => {
     expect(fila()).toEqual([{ item_id: f.id, operacao: "apagar" }]);
   });
 
+  test("trocar de calendário: do local ao Moductus cria lá, de volta apaga lá; para o Google de fora, não", () => {
+    const m = montar();
+    m.db
+      .prepare(
+        `INSERT INTO calendarios (id, nome, fonte, id_externo, espelho, pode_escrever)
+         VALUES ('moductus', 'Moductus', 'google', 'ext-moductus', 1, 1)`,
+      )
+      .run();
+    const { calendario: deFora } = googleComEvento(m.db, "Daily", sp(DIA, "09:30"), sp(DIA, "10:00"));
+    const fila = () =>
+      m.db
+        .prepare("SELECT item_id, operacao FROM agenda_saida WHERE item_tipo = 'evento' ORDER BY item_id")
+        .all();
+    const e = marcar(m, "Dentista", sp(DIA, "14:00"), sp(DIA, "15:00"));
+    expect(fila()).toEqual([]);
+
+    const noMoductus = m.agenda.definirEvento({ id: e.id, calendarioId: "moductus", titulo: "Dentista 2" });
+    confere("agenda.definirEvento", noMoductus);
+    expect(noMoductus).toMatchObject({ calendarioId: "moductus", titulo: "Dentista 2", editavel: true });
+    expect(fila()).toEqual([{ item_id: e.id, operacao: "criar" }]);
+
+    // Chegou ao Google: voltar ao local apaga lá e esquece o id de lá no evento.
+    m.db.prepare("UPDATE eventos SET id_externo = 'ext-e' WHERE id = ?").run(e.id);
+    m.db.prepare("DELETE FROM agenda_saida").run();
+    expect(m.agenda.definirEvento({ id: e.id, calendarioId: CALENDARIO_LOCAL }).calendarioId).toBe(
+      CALENDARIO_LOCAL,
+    );
+    expect(fila()).toEqual([{ item_id: e.id, operacao: "apagar" }]);
+    expect(m.db.prepare("SELECT id_externo FROM eventos WHERE id = ?").get(e.id)).toEqual({
+      id_externo: null,
+    });
+
+    // Mudar o local depois não manda nada ao Google.
+    m.db.prepare("DELETE FROM agenda_saida").run();
+    m.agenda.definirEvento({ id: e.id, titulo: "Dentista 3" });
+    expect(fila()).toEqual([]);
+
+    expect(() => m.agenda.definirEvento({ id: e.id, calendarioId: deFora })).toThrow(MENSAGEM_SO_LEITURA);
+    expect(() => m.agenda.definirEvento({ id: e.id, calendarioId: "nao-existe" })).toThrow(
+      "calendário não encontrado",
+    );
+    expect(m.agenda.obterEvento({ id: e.id })).toMatchObject({
+      calendarioId: CALENDARIO_LOCAL,
+      titulo: "Dentista 3",
+    });
+  });
+
   test("calendários: o local primeiro; ler muda em todos, nome e cor só no local", () => {
     const m = montar();
     const { calendario } = googleComEvento(m.db, "Daily", sp(DIA, "09:30"), sp(DIA, "10:00"));

@@ -292,6 +292,18 @@ export class RepositorioAgenda {
       );
   }
 
+  /**
+   * Passa o evento para outro calendário. O id de lá sai junto: o que já foi ao Google continua no
+   * mapa do espelho (`agenda_espelho`), que o apaga; e a leitura de volta não o acha mais por ele.
+   */
+  mudarCalendarioDoEvento(id: string, calendarioId: string): void {
+    this.db
+      .prepare(
+        "UPDATE eventos SET calendario_id = ?, id_externo = NULL, etag_externo = NULL WHERE id = ? AND apagado_em IS NULL",
+      )
+      .run(calendarioId, id);
+  }
+
   /** Manda à lixeira. */
   apagarEvento(id: string, agora: string, carimbo: Carimbo): void {
     const origem = colunasDeOrigem(carimbo);
@@ -474,10 +486,21 @@ export class ServicoAgenda {
     return this.avisar(this.exigir(id));
   }
 
-  /** Mudança parcial; o evento que não é do local nem do "Moductus" não muda por aqui. */
+  /**
+   * Mudança parcial; o evento que não é do local nem do "Moductus" não muda por aqui. Trocar de
+   * calendário só vale entre esses dois: ir ao "Moductus" é criar lá, sair dele é apagar lá.
+   */
   definirEvento(mudanca: MudancaEvento, carimbo: Carimbo = DO_USUARIO): EventoAgenda {
     const atual = this.exigir(mudanca.id);
     if (atual.editavel !== 1) throw new Error(MENSAGEM_SO_LEITURA);
+    const destino =
+      mudanca.calendarioId === undefined || mudanca.calendarioId === atual.calendario_id
+        ? null
+        : this.deps.repo.calendario(mudanca.calendarioId);
+    if (mudanca.calendarioId !== undefined && mudanca.calendarioId !== atual.calendario_id) {
+      if (!destino) throw new Error(MENSAGEM_CALENDARIO_NAO_ENCONTRADO);
+      if (!ehEditavel(destino)) throw new Error(MENSAGEM_SO_LEITURA);
+    }
     const campos: CamposEvento = {
       titulo: mudanca.titulo ?? atual.titulo,
       descricao: mudanca.descricao === undefined ? atual.descricao : mudanca.descricao,
@@ -496,8 +519,14 @@ export class ServicoAgenda {
     const agora = this.agora().toISOString();
     this.deps.repo.transacao(() => {
       this.deps.repo.mudarEvento(atual.id, campos, agora, carimbo);
-      if (atual.espelho === 1)
+      if (destino) {
+        this.deps.repo.mudarCalendarioDoEvento(atual.id, destino.id);
+        if (atual.espelho === 1)
+          this.deps.repo.enfileirarSaida(atual.id, "apagar", atual.id_externo !== null, agora);
+        if (destino.espelho === 1) this.deps.repo.enfileirarSaida(atual.id, "criar", false, agora);
+      } else if (atual.espelho === 1) {
         this.deps.repo.enfileirarSaida(atual.id, "mudar", atual.id_externo !== null, agora);
+      }
     });
     return this.avisar(this.exigir(atual.id));
   }

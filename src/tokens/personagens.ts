@@ -24,6 +24,8 @@ export const TAMANHO_PERSONAGEM = {
   ligado: 20,
   /** Cabeça da fala da Alba no ciclo do foco (AreaFoco.dc.html). */
   ciclo: 28,
+  /** Cabeça na origem do detalhe da tarefa (DetalheTarefa.dc.html, "Criada pela Alba"). */
+  detalhe: 18,
   /** Corpo inteiro no time das boas-vindas (Uso1Boas.dc.html). */
   boasVindas: 116,
   /** Corpo inteiro na apresentação do time (Uso4Time.dc.html). */

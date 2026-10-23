@@ -296,6 +296,25 @@
   --opacidade-hora-bloco-area: 0.8;
   /* O bloco de poucos minutos não fica menor que uma linha de 12 */
   --altura-min-bloco-agenda-area: 18px;
+  /* O detalhe da tarefa e do evento (DetalheTarefa.dc.html, DetalheEvento.dc.html): a coluna de
+     440 (que encolhe até 320 na janela estreita), o título de 18 com o traçado de -0,01em, o chip
+     de 24 com canto de 12, a linha da subtarefa de 28, as notas a 1,5, a coluna "Começa" de 52 e
+     a hora de 84, e a coluna do rótulo de 92 no só leitura */
+  --largura-detalhe-area: 440px;
+  --largura-min-detalhe-area: 320px;
+  --tracado-titulo-detalhe-area: -0.01em;
+  --altura-chip-area: 24px;
+  --raio-chip-area: 12px;
+  --altura-linha-subtarefa-area: 28px;
+  --entrelinha-texto-area: 1.5;
+  --largura-etiqueta-nova-area: 120px;
+  --largura-rotulo-quando-area: 52px;
+  --largura-hora-evento-area: 84px;
+  --largura-rotulo-leitura-area: 92px;
+  /* O que está aberto no detalhe: a linha da tarefa com o traço de 3 à esquerda, o bloco da
+     agenda com o anel de 2 (a cor vem junto, o destaque) */
+  --sombra-linha-aberta-area: inset 3px 0 0;
+  --sombra-bloco-aberto-area: 0 0 0 2px;
   /* Notas (AreaNotas.dc.html, PainelNotas.dc.html): a lista à esquerda, a coluna do que está
      ligado à nota à direita, a margem do texto, a linha de leitura e o entrelinha de quem escreve */
   --largura-lista-notas: 290px;
