@@ -1,4 +1,4 @@
-import type { Calendario, Ocorrencia } from "@moductus/contrato";
+import type { Calendario, Conexao, Ocorrencia } from "@moductus/contrato";
 import { describe, expect, it } from "vitest";
 import {
   emColunas,
@@ -8,6 +8,7 @@ import {
   horaNaRegua,
   minutoNoDia,
   montarColuna,
+  ocorrenciasDaFonte,
   reguaDoDia,
 } from "./agenda.ts";
 
@@ -100,6 +101,15 @@ describe("montarColuna", () => {
     expect(c.blocos.map((b) => [b.nome, b.hora])).toEqual([["Sem título", "15h–15:15"]]);
   });
 
+  it("o sem duração à meia-noite do dia fica; o da meia-noite de ontem ou de amanhã, não", () => {
+    const c = coluna([
+      ocorrencia({ eventoId: "hoje", inicio: as("00:00"), fim: as("00:00") }),
+      ocorrencia({ eventoId: "ontem", inicio: as("23:59", "2026-10-07"), fim: as("23:59", "2026-10-07") }),
+      ocorrencia({ eventoId: "amanha", inicio: as("00:00", "2026-10-09"), fim: as("00:00", "2026-10-09") }),
+    ]);
+    expect(c.blocos.map((b) => [b.chave.split("@")[0], b.hora])).toEqual([["hoje", "0h–0:15"]]);
+  });
+
   it("a sugestão entra tracejada; os livres viram texto; agora fora do dia não risca", () => {
     const c = coluna([], {
       sugestao: { inicio: as("16:00"), fim: as("17:00"), titulo: "Separar comprovantes" },
@@ -151,15 +161,33 @@ describe("fonteDaAgenda", () => {
     ...extra,
   });
 
-  it("sem o Google, só o local; com ele, o Google e o Moductus", () => {
-    expect(fonteDaAgenda([cal({})])).toEqual({ rotulo: "Local", temGoogle: false });
-    expect(fonteDaAgenda([cal({}), cal({ id: "g", fonte: "google" })])).toEqual({
+  const google = (estado: Conexao["estado"]): Conexao => ({
+    tipo: "google-agenda",
+    estado,
+    conta: "voce@exemplo.com",
+    ultimoErro: null,
+    conectadaEm: "2026-10-01T12:00:00.000Z",
+  });
+  const espelho = cal({ id: "m", fonte: "google", espelho: true, nome: "Moductus" });
+
+  it("quem diz se há Google é a conexão; os calendários só escolhem o rótulo", () => {
+    expect(fonteDaAgenda(null, [cal({})])).toEqual({ rotulo: "Local", temGoogle: false });
+    // O espelho ainda no banco não conta com a conexão desligada.
+    expect(fonteDaAgenda(google("desligada"), [cal({}), espelho])).toEqual({
+      rotulo: "Local",
+      temGoogle: false,
+    });
+    expect(fonteDaAgenda(google("ligada"), [cal({}), cal({ id: "g", fonte: "google" })])).toEqual({
       rotulo: "Google",
       temGoogle: true,
     });
-    expect(
-      fonteDaAgenda([cal({}), cal({ id: "m", fonte: "google", espelho: true, nome: "Moductus" })]).rotulo,
-    ).toBe("Google · Moductus");
+    expect(fonteDaAgenda(google("erro"), [cal({}), espelho]).rotulo).toBe("Google · Moductus");
+  });
+
+  it("sem o Google, só as ocorrências do calendário local", () => {
+    const lidas = [ocorrencia({}), ocorrencia({ eventoId: "e2", calendarioId: "m" })];
+    expect(ocorrenciasDaFonte(lidas, [cal({}), espelho], false).map((o) => o.eventoId)).toEqual(["e1"]);
+    expect(ocorrenciasDaFonte(lidas, [cal({}), espelho], true)).toHaveLength(2);
   });
 });
 

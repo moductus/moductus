@@ -1,6 +1,6 @@
-import type { Agenda, BlocoLivre, Calendario, Expediente, Ocorrencia } from "@moductus/contrato";
+import type { Agenda, BlocoLivre, Calendario, Conexao, Expediente, Ocorrencia } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Encaixe } from "../../janelas/painel/foco.ts";
 import { servico } from "../../servico/conexao.ts";
 import type { Leitura } from "../leitura.ts";
@@ -108,8 +108,11 @@ export function montarColuna(pedido: PedidoColuna): ColunaDoDia {
     }
     const inicio = noDia(o.inicio);
     const fim = Math.min(MINUTOS_DIA, Math.max(noDia(o.fim), inicio + MINUTOS_MINIMOS));
-    // A ocorrência que só encosta no dia (termina à meia-noite em que ele começa) fica de fora.
-    if (inicio >= MINUTOS_DIA || noDia(o.fim) <= 0) continue;
+    // A que só encosta no dia (termina à meia-noite em que ele começa) fica de fora; a sem duração
+    // fica se acontece nele, inclusive à meia-noite.
+    const semDuracao = Date.parse(o.fim) <= Date.parse(o.inicio);
+    const encosta = semDuracao ? relogioNoFuso(new Date(o.inicio), fuso).dia !== dia : noDia(o.fim) <= 0;
+    if (inicio >= MINUTOS_DIA || encosta) continue;
     blocos.push({ chave, nome: nomeDe(o.titulo), hora: intervalo(inicio, fim), inicio, fim, tipo: "evento" });
   }
   if (pedido.sugestao) {
@@ -188,11 +191,29 @@ export function emColunas<T extends { inicio: number; fim: number }>(
   return saida;
 }
 
-/** De onde vem a agenda: com o Google conectado, ele e o "Moductus"; sem ele, só o local. */
-export function fonteDaAgenda(calendarios: readonly Calendario[]): { rotulo: string; temGoogle: boolean } {
-  const google = calendarios.filter((c) => c.fonte === "google");
-  if (google.length === 0) return { rotulo: "Local", temGoogle: false };
-  return { rotulo: google.some((c) => c.espelho) ? "Google · Moductus" : "Google", temGoogle: true };
+/**
+ * De onde vem a agenda. Quem diz se o Google está conectado é a conexão `google-agenda` (desligada
+ * ou ausente, não está, mesmo com calendários dele ainda no banco); os calendários só escolhem o
+ * rótulo: com o espelho, "Google · Moductus".
+ */
+export function fonteDaAgenda(
+  conexao: Conexao | null,
+  calendarios: readonly Calendario[],
+): { rotulo: string; temGoogle: boolean } {
+  if (!conexao || conexao.estado === "desligada") return { rotulo: "Local", temGoogle: false };
+  const espelho = calendarios.some((c) => c.fonte === "google" && c.espelho);
+  return { rotulo: espelho ? "Google · Moductus" : "Google", temGoogle: true };
+}
+
+/** Sem o Google, a coluna mostra só o que é do calendário local. */
+export function ocorrenciasDaFonte(
+  ocorrencias: readonly Ocorrencia[],
+  calendarios: readonly Calendario[],
+  temGoogle: boolean,
+): Ocorrencia[] {
+  if (temGoogle) return [...ocorrencias];
+  const locais = new Set(calendarios.filter((c) => c.fonte === "local").map((c) => c.id));
+  return ocorrencias.filter((o) => locais.has(o.calendarioId));
 }
 
 /**
@@ -215,20 +236,32 @@ export function falaDoGuardado({ sugestao, titulo }: Encaixe, dia: string, fuso:
 export interface DadosAgenda {
   agenda: Agenda;
   calendarios: Calendario[];
+  /** A conexão `google-agenda`, ou `null` quando o serviço não a lista. */
+  google: Conexao | null;
   /** O dia para o qual a agenda foi pedida. */
   dia: string;
+  /** Conta as releituras que chegaram: muda a cada uma, mesmo com a mesma agenda. */
+  carga: number;
 }
 
+type Lidos = Omit<DadosAgenda, "google">;
+
 /**
- * A agenda de hoje e os calendários, pelo canal: ao conectar, quando o dia muda e de novo a cada
- * `agenda.mudou`, `agenda.calendarios` e `tarefas.mudou` (a tarefa nova ou feita muda o encaixe que
- * o serviço sugere). Avisos do mesmo instante viram uma recarga só; a recarga que falha com dados
- * na tela mantém o que já estava.
+ * A agenda de hoje, os calendários e a conexão do Google, pelo canal: ao conectar, quando o dia
+ * muda e de novo a cada `agenda.mudou`, `agenda.calendarios`, `tarefas.mudou` (a tarefa nova ou
+ * feita muda o encaixe que o serviço sugere) e `config.mudou` (fuso e expediente mudam os blocos
+ * livres). A conexão segue também o `conexoes.mudou`; o aviso que chega com a carga a caminho é
+ * mais novo que ela. Avisos do mesmo instante viram uma recarga só; a recarga que falha com dados
+ * do mesmo dia na tela mantém o que já estava. Dados de outro dia nunca valem: na virada, até a
+ * agenda nova chegar a leitura espera, e se ela falhar, falhou.
  */
 export function useAgendaDoDia(canal: EstadoConexao, dia: string): Leitura<DadosAgenda> {
-  const [dados, setDados] = useState<DadosAgenda | null>(null);
+  const [lidos, setLidos] = useState<Lidos | null>(null);
+  // `undefined` é "ainda não sei"; `null`, o serviço não lista a conexão.
+  const [google, setGoogle] = useState<Conexao | null | undefined>(undefined);
   const [falhou, setFalhou] = useState(false);
   const [versao, setVersao] = useState(0);
+  const chegouConexao = useRef(false);
   const tentarDeNovo = useCallback(() => {
     setFalhou(false);
     setVersao((v) => v + 1);
@@ -247,6 +280,13 @@ export function useAgendaDoDia(canal: EstadoConexao, dia: string): Leitura<Dados
       servico.ouvir("agenda.mudou", recarregar),
       servico.ouvir("agenda.calendarios", recarregar),
       servico.ouvir("tarefas.mudou", recarregar),
+      servico.ouvir("config.mudou", recarregar),
+      servico.ouvir("conexoes.mudou", (c) => {
+        if (c.tipo !== "google-agenda") return;
+        // Os calendários que a conexão traz ou leva chegam pelo `agenda.calendarios`.
+        chegouConexao.current = true;
+        setGoogle(c);
+      }),
     ];
     return () => {
       paradas.forEach((parar) => parar());
@@ -257,14 +297,17 @@ export function useAgendaDoDia(canal: EstadoConexao, dia: string): Leitura<Dados
   useEffect(() => {
     if (canal !== "conectado") return;
     let vivo = true;
+    chegouConexao.current = false;
     Promise.all([
       servico.pedir("agenda.consultar", { de: dia, ate: dia }),
       servico.pedir("agenda.calendarios"),
+      servico.pedir("conexoes.listar"),
     ])
-      .then(([agenda, calendarios]) => {
+      .then(([agenda, calendarios, conexoes]) => {
         if (!vivo) return;
         setFalhou(false);
-        setDados({ agenda, calendarios, dia });
+        setLidos((antes) => ({ agenda, calendarios, dia, carga: (antes?.carga ?? 0) + 1 }));
+        if (!chegouConexao.current) setGoogle(conexoes.find((c) => c.tipo === "google-agenda") ?? null);
       })
       .catch(() => {
         if (vivo) setFalhou(true);
@@ -275,6 +318,8 @@ export function useAgendaDoDia(canal: EstadoConexao, dia: string): Leitura<Dados
   }, [canal, versao, dia]);
 
   if (canal !== "conectado") return { estado: "esperando" };
-  if (dados) return { estado: "pronta", dados };
+  if (lidos && lidos.dia === dia && google !== undefined) {
+    return { estado: "pronta", dados: { ...lidos, google } };
+  }
   return falhou ? { estado: "falhou", tentarDeNovo } : { estado: "esperando" };
 }

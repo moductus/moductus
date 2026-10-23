@@ -294,6 +294,8 @@
   --raio-bloco-agenda-area: 6px;
   --tamanho-ponto-agora-area: 7px;
   --opacidade-hora-bloco-area: 0.8;
+  /* O bloco de poucos minutos não fica menor que uma linha de 12 */
+  --altura-min-bloco-agenda-area: 18px;
   /* Notas (AreaNotas.dc.html, PainelNotas.dc.html): a lista à esquerda, a coluna do que está
      ligado à nota à direita, a margem do texto, a linha de leitura e o entrelinha de quem escreve */
   --largura-lista-notas: 290px;

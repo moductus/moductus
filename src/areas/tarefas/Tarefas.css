@@ -369,6 +369,25 @@
   color: var(--agente-alba);
 }
 
+/* Abaixo de uma hora, nome e hora numa linha só, sem o respiro de cima e de baixo; o de poucos
+   minutos ganha a altura de uma linha. */
+.tarefas-agenda-bloco[data-curto] {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--esp-6);
+  min-height: var(--altura-min-bloco-agenda-area);
+  padding-block: 0;
+}
+
+.tarefas-agenda-bloco[data-curto] .tarefas-agenda-bloco-nome {
+  flex: 1;
+  min-width: 0;
+}
+
+.tarefas-agenda-bloco[data-curto] .tarefas-agenda-bloco-hora {
+  flex: none;
+}
+
 .tarefas-agenda-bloco-nome {
   font-size: var(--tipo-12);
   font-weight: var(--peso-forte);
@@ -416,27 +435,10 @@
   text-wrap: pretty;
 }
 
-.tarefas-agenda-sugestao {
-  display: flex;
-  flex-direction: column;
-  gap: var(--esp-8);
-}
-
-.tarefas-agenda-fala {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--esp-10);
-}
-
-.tarefas-agenda-fala .personagem {
-  flex: none;
-}
-
-.tarefas-agenda-fala p {
-  margin: 0;
+/* A fala da Alba na coluna: o texto em 12, como no quadro. */
+.tarefas-agenda-sugestao .fala-texto {
   font-size: var(--tipo-12);
   color: var(--texto-2);
-  text-wrap: pretty;
 }
 
 .tarefas-agenda-acoes {
