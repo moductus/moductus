@@ -657,3 +657,45 @@ describe("eventos e calendários", () => {
     expect(m.listas).toHaveLength(2);
   });
 });
+
+describe("alertas dos compromissos", () => {
+  test("cada ocorrência que ainda vai começar, com cada alerta que toca na janela, em ordem", () => {
+    const m = montar(sp(DIA, "07:00"));
+    const diario = marcar(m, "Daily", sp(DIA, "09:00"), sp(DIA, "09:15"), {
+      recorrencia: "FREQ=DAILY",
+      alertas: [15],
+    });
+    const aniversario = m.agenda.criarEvento({
+      titulo: "Aniversário da Bia",
+      inicio: "2026-10-20",
+      fim: "2026-10-21",
+      diaInteiro: true,
+      alertas: [60],
+    });
+    // Sem alerta não entra; o que já começou antes da janela também não.
+    marcar(m, "Sem alerta", sp(DIA, "10:00"), sp(DIA, "11:00"));
+    marcar(m, "Começou", sp(DIA, "06:30"), sp(DIA, "08:00"), { alertas: [10] });
+
+    const alertas = m.agenda.alertasDeCompromissos({
+      comecamDepoisDe: new Date(sp(DIA, "07:00")),
+      tocamAte: new Date(sp("2026-10-20", "12:00")),
+    });
+    expect(alertas.map((a) => [a.eventoId, a.inicio, a.minutos, a.toca.toISOString()])).toEqual([
+      [diario.id, sp(DIA, "09:00"), 15, sp(DIA, "08:45")],
+      // O de dia inteiro começa à meia-noite de São Paulo.
+      [aniversario.id, "2026-10-20", 60, sp(DIA, "23:00")],
+      [diario.id, sp("2026-10-20", "09:00"), 15, sp("2026-10-20", "08:45")],
+    ]);
+  });
+
+  test("alerta que o contrato não aceita (veio de outro PC) não conta, e o repetido conta uma vez", () => {
+    const m = montar(sp(DIA, "07:00"));
+    const evento = marcar(m, "Reunião", sp(DIA, "10:00"), sp(DIA, "11:00"), { alertas: [10] });
+    m.db.prepare("UPDATE eventos SET alertas = ? WHERE id = ?").run('[-5, "x", 10, 10, 99999]', evento.id);
+    const alertas = m.agenda.alertasDeCompromissos({
+      comecamDepoisDe: new Date(sp(DIA, "07:00")),
+      tocamAte: new Date(sp(DIA, "12:00")),
+    });
+    expect(alertas.map((a) => a.minutos)).toEqual([10]);
+  });
+});

@@ -6,8 +6,8 @@ import type { TempoDoDia } from "./tempo.ts";
  * o briefing. Conta o primeiro sinal depois das 05:00 do dia civil no fuso de `config`: o
  * desbloqueio ou o logon da sessão (a casca avisa `atividade`), a volta da suspensão (`retomou`)
  * ou a subida do serviço. Quem escolheu horário fixo para o briefing (a `hora` da rotina, em
- * Configurações › O dia) tem o dia começando nessa hora, venha o sinal do relógio ou de uma
- * atividade depois dela (o PC dormiu na hora marcada).
+ * Configurações › O dia) tem o dia começando nessa hora, venha o sinal do relógio do dia (o vigia
+ * da Alba, `agentes/vigias/alba.ts`) ou de uma atividade depois dela (o PC dormiu na hora marcada).
  *
  * Uma vez por dia: a segunda atividade não repete, nem a que vem depois de o briefing de hoje já
  * ter aparecido (`rotinas_registro`, que sobrevive ao serviço reiniciando). O briefing desligado ou
@@ -17,11 +17,9 @@ import type { TempoDoDia } from "./tempo.ts";
 /** Antes disso, desbloquear o PC é madrugada, não o começo do dia. */
 export const HORA_DA_MANHA = "05:00";
 
-/** De quanto em quanto o horário fixo é conferido. O briefing sai com no máximo isso de atraso. */
-export const INTERVALO_ATIVIDADE_MS = 30_000;
-
-/** O id da rotina do briefing, igual em todo PC (migração 014). */
-const BRIEFING = "briefing";
+/** Os ids das duas rotinas, iguais em todo PC (migração 014). */
+export const BRIEFING = "briefing";
+export const FECHAMENTO = "fechamento";
 
 /**
  * O que acordou o dia: o que a casca avisou (`desbloqueio`, `logon`), a volta da suspensão, a
@@ -37,9 +35,9 @@ export function motivoDaCasca(aviso: Record<string, unknown>): MotivoAtividade {
   return MOTIVOS_DA_CASCA.has(motivo) ? motivo : "desbloqueio";
 }
 
-/** O que a rotina do briefing diz sobre quando ele sai. */
-export interface QuandoBriefing {
-  /** `HH:MM` no horário fixo; `null` é a primeira atividade. */
+/** O que uma rotina diz sobre quando ela sai. */
+export interface QuandoRotina {
+  /** `HH:MM` no horário fixo; `null` é a primeira atividade (só o briefing; o fechamento tem hora). */
   hora: string | null;
   /** De 1 (segunda) a 7 (domingo), como a ISO 8601. */
   diasSemana: number[];
@@ -57,24 +55,33 @@ export class RepositorioAtividade {
   constructor(private readonly db: DatabaseSync) {}
 
   /** A rotina do briefing; `null` se foi para a lixeira. */
-  briefing(): QuandoBriefing | null {
+  briefing(): QuandoRotina | null {
+    return this.rotina(BRIEFING);
+  }
+
+  /** A rotina do fechamento; `null` se foi para a lixeira. */
+  fechamento(): QuandoRotina | null {
+    return this.rotina(FECHAMENTO);
+  }
+
+  /** Se a rotina (o briefing, sem dizer qual) do dia já apareceu. */
+  jaApareceu(dia: string, rotina: string = BRIEFING): boolean {
+    return (
+      this.db.prepare("SELECT 1 FROM rotinas_registro WHERE rotina_id = ? AND dia = ?").get(rotina, dia) !==
+      undefined
+    );
+  }
+
+  private rotina(id: string): QuandoRotina | null {
     const linha = this.db
       .prepare("SELECT hora, dias_semana, ativa FROM rotinas WHERE id = ? AND apagado_em IS NULL")
-      .get(BRIEFING) as { hora: string | null; dias_semana: string; ativa: number } | undefined;
+      .get(id) as { hora: string | null; dias_semana: string; ativa: number } | undefined;
     if (linha === undefined) return null;
     return {
       hora: linha.hora,
       diasSemana: JSON.parse(linha.dias_semana) as number[],
       ativa: linha.ativa === 1,
     };
-  }
-
-  /** Se o briefing do dia já apareceu. */
-  jaApareceu(dia: string): boolean {
-    return (
-      this.db.prepare("SELECT 1 FROM rotinas_registro WHERE rotina_id = ? AND dia = ?").get(BRIEFING, dia) !==
-      undefined
-    );
   }
 }
 
@@ -103,18 +110,5 @@ export class PrimeiraAtividade {
     const inicio: InicioDoDia = { dia, motivo, em: this.agora().toISOString() };
     this.aoComecar(inicio);
     return inicio;
-  }
-
-  /** Confere o horário fixo a cada {@link INTERVALO_ATIVIDADE_MS}. Não segura o processo; devolve como parar. */
-  vigiar(intervaloMs = INTERVALO_ATIVIDADE_MS): () => void {
-    const relogio = setInterval(() => {
-      try {
-        this.sinal("horario");
-      } catch (erro) {
-        console.error(`dia: conferência do horário do briefing falhou: ${String(erro)}`);
-      }
-    }, intervaloMs);
-    relogio.unref();
-    return () => clearInterval(relogio);
   }
 }
