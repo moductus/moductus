@@ -9,6 +9,7 @@ import { RepositorioAtividade } from "./atividade.ts";
 import {
   MENSAGEM_FECHAMENTO_SEM_HORA,
   MENSAGEM_ROTINA_NAO_ENCONTRADA,
+  MENSAGEM_SO_BRIEFING_CURTO,
   RepositorioRotinas,
   ServicoRotinas,
 } from "./horarios.ts";
@@ -47,8 +48,8 @@ describe("rotinas do dia", () => {
     const lista = m.rotinas.listar();
     expect(METODOS["rotinas.listar"].saida.safeParse(lista).success).toBe(true);
     expect(lista).toEqual([
-      { id: "briefing", tipo: "briefing", hora: null, diasSemana: TODOS, ativa: true },
-      { id: "fechamento", tipo: "fechamento", hora: "18:00", diasSemana: TODOS, ativa: true },
+      { id: "briefing", tipo: "briefing", hora: null, diasSemana: TODOS, ativa: true, curta: false },
+      { id: "fechamento", tipo: "fechamento", hora: "18:00", diasSemana: TODOS, ativa: true, curta: false },
     ]);
     expect(m.repo.diasDeTrabalho()).toEqual(TODOS);
   });
@@ -62,6 +63,7 @@ describe("rotinas do dia", () => {
       hora: "18:30",
       diasSemana: TODOS,
       ativa: true,
+      curta: false,
     });
     // Quem confere a hora (o vigia da Alba) lê a nova.
     expect(m.atividade.fechamento()?.hora).toBe("18:30");
@@ -80,6 +82,17 @@ describe("rotinas do dia", () => {
     expect(m.rotinas.definir({ id: "briefing", ativa: false }).ativa).toBe(false);
     expect(m.atividade.briefing()).toEqual({ hora: null, diasSemana: TODOS, ativa: false });
     expect(m.rearmes()).toBe(3);
+  });
+
+  test("o briefing fica curto e volta; o fechamento não tem versão curta", () => {
+    const m = montar();
+    expect(m.rotinas.definir({ id: "briefing", curta: true }).curta).toBe(true);
+    expect(m.rotinas.listar().map((r) => r.curta)).toEqual([true, false]);
+    expect(m.avisos).toHaveLength(1);
+    expect(m.rotinas.definir({ id: "briefing", curta: false }).curta).toBe(false);
+    expect(() => m.rotinas.definir({ id: "fechamento", curta: true })).toThrow(MENSAGEM_SO_BRIEFING_CURTO);
+    expect(m.rotinas.listar().map((r) => r.curta)).toEqual([false, false]);
+    expect(m.avisos).toHaveLength(2);
   });
 
   test("os dias de trabalho valem para as duas rotinas e para a agenda, em ordem e sem repetir", () => {

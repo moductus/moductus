@@ -14,6 +14,7 @@ import { colunasDeOrigem, DO_USUARIO, type Carimbo } from "../../banco/tabela.ts
 
 export const MENSAGEM_ROTINA_NAO_ENCONTRADA = "Essa rotina não existe mais.";
 export const MENSAGEM_FECHAMENTO_SEM_HORA = "O fechamento precisa de uma hora de parar.";
+export const MENSAGEM_SO_BRIEFING_CURTO = "Só o briefing tem a versão curta.";
 
 /** De 1 (segunda) a 7 (domingo): sem dias de trabalho conhecidos, todos contam. */
 export const TODOS_OS_DIAS: readonly number[] = [1, 2, 3, 4, 5, 6, 7];
@@ -24,6 +25,7 @@ interface LinhaRotina {
   hora: string | null;
   dias_semana: string;
   ativa: number;
+  curta: number;
 }
 
 /** Os dias como ficam gravados: sem repetição, de segunda a domingo. */
@@ -39,7 +41,7 @@ export class RepositorioRotinas {
   listar(): Rotina[] {
     const linhas = this.db
       .prepare(
-        `SELECT id, tipo, hora, dias_semana, ativa FROM rotinas WHERE apagado_em IS NULL
+        `SELECT id, tipo, hora, dias_semana, ativa, curta FROM rotinas WHERE apagado_em IS NULL
           ORDER BY CASE tipo WHEN 'briefing' THEN 0 ELSE 1 END, id`,
       )
       .all() as unknown as LinhaRotina[];
@@ -63,12 +65,12 @@ export class RepositorioRotinas {
   }
 
   /**
-   * Grava a hora e o ligado de uma rotina e, se vierem, os dias em todas, numa transação: os dias
-   * de trabalho nunca ficam pela metade.
+   * Grava a hora, o ligado e o curto de uma rotina e, se vierem, os dias em todas, numa transação:
+   * os dias de trabalho nunca ficam pela metade.
    */
   gravar(
     id: string,
-    campos: { hora: string | null; ativa: boolean },
+    campos: { hora: string | null; ativa: boolean; curta: boolean },
     dias: number[] | null,
     carimbo: Carimbo,
   ) {
@@ -78,12 +80,14 @@ export class RepositorioRotinas {
     try {
       this.db
         .prepare(
-          `UPDATE rotinas SET hora = ?, ativa = ?, atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
+          `UPDATE rotinas SET hora = ?, ativa = ?, curta = ?, atualizado_em = ?, origem = ?, agente_id = ?,
+             execucao_id = ?
             WHERE id = ? AND apagado_em IS NULL`,
         )
         .run(
           campos.hora,
           campos.ativa ? 1 : 0,
+          campos.curta ? 1 : 0,
           agora,
           origem.origem,
           origem.agente_id,
@@ -126,6 +130,7 @@ function paraRotina(l: LinhaRotina): Rotina | null {
     hora: l.hora,
     diasSemana: Array.isArray(dias) ? emOrdem(dias as number[]) : dias,
     ativa: l.ativa === 1,
+    curta: l.curta === 1,
   });
   if (!rotina.success) {
     console.error(`rotinas: a rotina ${l.id} não se lê; fica de fora`);
@@ -150,9 +155,9 @@ export class ServicoRotinas {
   }
 
   /**
-   * Muda a hora (vazia no briefing é a primeira atividade), os dias de trabalho ou o ligado. Os
-   * dias que vierem valem para as duas rotinas. Sem nada diferente do gravado, nada se grava nem
-   * se avisa.
+   * Muda a hora (vazia no briefing é a primeira atividade), os dias de trabalho, o ligado ou o
+   * briefing curto. Os dias que vierem valem para as duas rotinas. Sem nada diferente do gravado,
+   * nada se grava nem se avisa.
    */
   definir(entrada: Mudanca, carimbo: Carimbo = DO_USUARIO): Rotina {
     const mudanca = MudancaRotina.parse(entrada);
@@ -161,13 +166,15 @@ export class ServicoRotinas {
     const hora = mudanca.hora === undefined ? atual.hora : mudanca.hora;
     if (atual.tipo === "fechamento" && hora === null) throw new Error(MENSAGEM_FECHAMENTO_SEM_HORA);
     const ativa = mudanca.ativa ?? atual.ativa;
+    const curta = mudanca.curta ?? atual.curta;
+    if (atual.tipo !== "briefing" && curta) throw new Error(MENSAGEM_SO_BRIEFING_CURTO);
     const dias = mudanca.diasSemana === undefined ? null : emOrdem(mudanca.diasSemana);
     const todas = this.deps.repo.listar();
     const mudaDias =
       dias !== null && todas.some((r) => JSON.stringify(r.diasSemana) !== JSON.stringify(dias));
-    if (hora === atual.hora && ativa === atual.ativa && !mudaDias) return atual;
+    if (hora === atual.hora && ativa === atual.ativa && curta === atual.curta && !mudaDias) return atual;
 
-    this.deps.repo.gravar(atual.id, { hora, ativa }, mudaDias ? dias : null, carimbo);
+    this.deps.repo.gravar(atual.id, { hora, ativa, curta }, mudaDias ? dias : null, carimbo);
     const rotinas = this.deps.repo.listar();
     this.deps.emitir(rotinas);
     this.deps.relogio.mudou();

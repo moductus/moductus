@@ -1,5 +1,6 @@
 import {
   LINHAS_DO_BRIEFING,
+  LINHAS_DO_BRIEFING_CURTO,
   type Agenda,
   type ApresentacaoRotina,
   type DiaDaAgenda,
@@ -12,7 +13,7 @@ import {
 } from "@moductus/contrato";
 import type { Redigir } from "../../agentes/vigias/alba.ts";
 import type { NovoAviso } from "../../notificacoes/notificacoes.ts";
-import { BRIEFING, type InicioDoDia } from "./atividade.ts";
+import { BRIEFING, FECHAMENTO, type InicioDoDia } from "./atividade.ts";
 import type { Conferencia, FonteDoRelogio } from "./relogio.ts";
 import type { RepositorioRegistroRotinas } from "./rotinas.ts";
 import { diaNoFuso, horaNoFuso } from "./tempo.ts";
@@ -86,6 +87,8 @@ export interface DadosDoBriefing {
   resumos: readonly { agenteId: string; nome: string; texto: string }[];
   /** O fechamento que não apareceu no último dia dele, se houve o que contar. */
   semFechamento?: DiaSemFechamento | null;
+  /** O briefing mais curto que você escolheu: só as primeiras linhas, na mesma ordem. */
+  curto?: boolean;
 }
 
 /** As linhas prontas, o que delas vai ao modelo e a frase que sai sem ele. */
@@ -228,9 +231,10 @@ export function montarBriefing(d: DadosDoBriefing): Montagem {
     molde = hoje.length > 0 ? `Bom dia. Hoje: ${hoje.join(", ")}.` : "Bom dia. Nada marcado para hoje.";
   }
 
+  const limite = d.curto ? LINHAS_DO_BRIEFING_CURTO : LINHAS_DO_BRIEFING;
   return {
-    linhas: linhas.slice(0, LINHAS_DO_BRIEFING),
-    paraModelo: paraModelo.slice(0, LINHAS_DO_BRIEFING),
+    linhas: linhas.slice(0, limite),
+    paraModelo: paraModelo.slice(0, limite),
     dados,
     molde,
   };
@@ -250,7 +254,7 @@ export interface DependenciasBriefing {
   /** O estado do agente agora: pausado ou desligado, a linha dele não entra. */
   estadoDo: (agenteId: string) => EstadoAgente | null;
   redigir: Redigir;
-  registro: Pick<RepositorioRegistroRotinas, "doDia" | "porId" | "gravar">;
+  registro: Pick<RepositorioRegistroRotinas, "doDia" | "porId" | "gravar" | "fecharSozinhas">;
   painel: PainelHoje;
   avisar: (aviso: NovoAviso) => Promise<unknown>;
   /** O relógio do dia, para se rearmar pelo aviso dos 10 minutos. */
@@ -259,6 +263,10 @@ export interface DependenciasBriefing {
   apareceu: (apresentacao: ApresentacaoRotina) => void;
   /** O fechamento que não apareceu no último dia dele (`ServicoFechamento.semFechamento`). */
   semFechamento?: (hoje: string) => DiaSemFechamento | null;
+  /** Se você escolheu o briefing mais curto (a rotina `curta`). */
+  curto?: () => boolean;
+  /** A pergunta dos 3 ignorados seguidos, que sai junto do briefing (`ServicoIgnorados`). */
+  ignorados?: { conferir(dia: string): unknown };
 }
 
 export interface OpcoesBriefing {
@@ -296,6 +304,7 @@ export class ServicoBriefing implements FonteDoRelogio {
       atrasadas: this.deps.tarefas.listar({ vista: "atrasadas" }).filter(abertas),
       resumos: resumosDosAgentes(this.deps.resumos, this.deps.estadoDo),
       semFechamento: this.semFechamento(dia),
+      curto: this.deps.curto?.() ?? false,
     });
   }
 
@@ -310,12 +319,16 @@ export class ServicoBriefing implements FonteDoRelogio {
   }
 
   /**
-   * O dia começou: monta, pede a abertura à Alba (até 15 s; sem modelo, o molde), grava, avisa as
-   * janelas e abre o painel Hoje. O briefing do dia que já apareceu não repete: volta o gravado.
+   * O dia começou: os briefings e fechamentos de antes que ficaram sem resposta fecham sozinhos (o
+   * fechamento ignorado volta resumido no "Ontem"), monta, pede a abertura à Alba (até 15 s; sem
+   * modelo, o molde), grava, confere a pergunta dos ignorados, avisa as janelas e abre o painel
+   * Hoje. O briefing do dia que já apareceu não repete: volta o gravado.
    */
   async aparecer(inicio: InicioDoDia): Promise<ApresentacaoRotina> {
     const ja = this.deps.registro.doDia(BRIEFING, inicio.dia);
     if (ja) return ja;
+    this.deps.registro.fecharSozinhas(BRIEFING, inicio.dia);
+    this.deps.registro.fecharSozinhas(FECHAMENTO, inicio.dia);
     const montagem = this.montar(inicio.dia);
     const redacao = await this.deps.redigir({
       gatilho: inicio.motivo === "horario" ? "horario" : "evento",
@@ -332,6 +345,13 @@ export class ServicoBriefing implements FonteDoRelogio {
       abertas: [],
       daExecucaoId: redacao.execucaoId,
     });
+    // Antes de avisar as janelas: quem lê `rotinas.hoje` pelo aviso já vê a pergunta. Se a conta
+    // falhar, o briefing sai sem ela.
+    try {
+      this.deps.ignorados?.conferir(inicio.dia);
+    } catch (erro) {
+      console.error(`briefing: a pergunta dos ignorados não se conferiu: ${String(erro)}`);
+    }
     this.deps.apareceu(apresentacao);
     try {
       await this.deps.painel.mostrar();

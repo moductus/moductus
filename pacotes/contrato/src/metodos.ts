@@ -103,7 +103,14 @@ import {
   ProvedorDetectado,
   ResultadoTesteProvedor,
 } from "./provedores.ts";
-import { ApresentacaoRotina, MudancaRotina, PedidoAgirRotina, Rotina, RotinasDeHoje } from "./rotinas.ts";
+import {
+  ApresentacaoRotina,
+  MudancaRotina,
+  PedidoAgirRotina,
+  PedidoResponderPergunta,
+  Rotina,
+  RotinasDeHoje,
+} from "./rotinas.ts";
 import {
   Conexao,
   EventoSessao,
@@ -286,6 +293,7 @@ export const METODOS = {
   "rotinas.definir": metodo(MudancaRotina, Rotina),
   "rotinas.hoje": metodo(z.undefined(), RotinasDeHoje),
   "rotinas.agir": metodo(PedidoAgirRotina, ApresentacaoRotina),
+  "rotinas.responder": metodo(PedidoResponderPergunta, Rotina),
 
   "captura.entender": metodo(PedidoEntender, PreviaCaptura),
   "captura.lancar": metodo(PedidoLancar, LancamentoCaptura),

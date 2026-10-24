@@ -243,6 +243,14 @@ async function montar(
   };
 }
 
+/** A pergunta dos ignorados fica de fora destes testes (ignorados.test.ts): nada esperando. */
+const SEM_PERGUNTA = {
+  pergunta: () => null,
+  responder: () => {
+    throw new Error("sem pergunta neste teste");
+  },
+};
+
 const resumo = (agenteId: string, nome: string, texto: string | null): ResumoDoAgente => ({
   agenteId,
   nome,
@@ -565,7 +573,7 @@ describe("rotinas.agir", () => {
       motivo: "desbloqueio",
       em: sp(DIA, "08:00").toISOString(),
     });
-    const atendentes = atendentesDasRotinas(m.fechamento);
+    const atendentes = atendentesDasRotinas(m.fechamento, SEM_PERGUNTA);
     expect(() => atendentes["rotinas.agir"]({ id: briefing.id, acao: "encerrar" })).toThrow(
       MENSAGEM_ACAO_DE_OUTRA_ROTINA,
     );
@@ -585,7 +593,7 @@ describe("rotinas.agir", () => {
     const m = await montar();
     vi.spyOn(console, "error").mockImplementation(() => {});
     m.db.close();
-    const atendentes = atendentesDasRotinas(m.fechamento);
+    const atendentes = atendentesDasRotinas(m.fechamento, SEM_PERGUNTA);
     expect(() => atendentes["rotinas.hoje"](undefined)).toThrow(MENSAGEM_ERRO_INTERNO);
   });
 });
