@@ -9,7 +9,7 @@ import {
 } from "@moductus/contrato";
 import { RecusaDoServico } from "@moductus/contrato/cliente";
 import { invoke } from "@tauri-apps/api/core";
-import { useId, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { somarDias } from "../../areas/dia.ts";
 import { Botao } from "../../componentes/Botao.tsx";
 import { Campo } from "../../componentes/Campo.tsx";
@@ -318,6 +318,18 @@ function TarefaAberta({ tarefa, hoje, aoResolver }: PropsAberta) {
   const amanha = somarDias(hoje, 1);
   const [escolhendo, setEscolhendo] = useState(false);
   const [dia, setDia] = useState(amanha);
+  // Fechado o campo (Esc ou Cancelar), o foco volta ao "Outra data" que o abriu.
+  const botaoOutraData = useRef<HTMLButtonElement>(null);
+  const voltarFoco = useRef(false);
+  const fecharCampo = () => {
+    voltarFoco.current = true;
+    setEscolhendo(false);
+  };
+  useEffect(() => {
+    if (escolhendo || !voltarFoco.current) return;
+    voltarFoco.current = false;
+    botaoOutraData.current?.focus();
+  }, [escolhendo]);
 
   const adiar = (para: string) =>
     acao.fazer(async () => {
@@ -349,13 +361,13 @@ function TarefaAberta({ tarefa, hoje, aoResolver }: PropsAberta) {
       // Esc fecha o campo, não o painel.
       e.preventDefault();
       e.stopPropagation();
-      setEscolhendo(false);
+      fecharCampo();
     }
   };
   const teclado = (quer: boolean) => () => void invoke("painel_foco", { quer });
 
   return (
-    <li className="rotina-aberta">
+    <li className="rotina-aberta" data-tarefa={tarefa.id}>
       <span id={idTitulo} className="rotina-aberta-titulo" title={tarefa.titulo}>
         {tarefa.titulo}
       </span>
@@ -383,12 +395,7 @@ function TarefaAberta({ tarefa, hoje, aoResolver }: PropsAberta) {
           >
             Mover
           </Botao>
-          <Botao
-            variante="fantasma"
-            tamanho="pequeno"
-            disabled={acao.ocupado}
-            onClick={() => setEscolhendo(false)}
-          >
+          <Botao variante="fantasma" tamanho="pequeno" disabled={acao.ocupado} onClick={fecharCampo}>
             Cancelar
           </Botao>
         </div>
@@ -402,7 +409,12 @@ function TarefaAberta({ tarefa, hoje, aoResolver }: PropsAberta) {
           >
             Amanhã
           </Botao>
-          <Botao tamanho="pequeno" disabled={acao.ocupado} onClick={() => setEscolhendo(true)}>
+          <Botao
+            ref={botaoOutraData}
+            tamanho="pequeno"
+            disabled={acao.ocupado}
+            onClick={() => setEscolhendo(true)}
+          >
             Outra data
           </Botao>
           <Botao tamanho="pequeno" disabled={acao.ocupado} onClick={descartar}>
@@ -452,6 +464,28 @@ export function FechamentoDoDia({
   const { linhas } = apresentacao;
   const feito = linhaDoFeito(linhas);
   const abertas = aindaAbertas(apresentacao.abertas, resolvidas, doDia);
+  // Pelo teclado, o foco não se perde com a linha que sai: vai ao Desfazer; desfeito, à tarefa que
+  // voltou; sumido o Desfazer no prazo, à primeira tarefa do "Ficou aberto" (ou ao Encerrar o dia).
+  const corpo = useRef<HTMLDivElement>(null);
+  const focar = useRef<"desfazer" | { tarefaId: string } | null>(null);
+  const tinhaAviso = useRef(false);
+  useEffect(() => {
+    const raiz = corpo.current;
+    const alvo = focar.current;
+    focar.current = null;
+    const primeiro = () =>
+      raiz?.querySelector<HTMLElement>(".rotina-aberta button") ??
+      raiz?.querySelector<HTMLElement>(".rotina-encerrar") ??
+      null;
+    if (alvo === "desfazer") raiz?.querySelector<HTMLElement>(".dia-desfazer button")?.focus();
+    else if (alvo) {
+      const linha = [...(raiz?.querySelectorAll<HTMLElement>(".rotina-aberta") ?? [])].find(
+        (li) => li.dataset.tarefa === alvo.tarefaId,
+      );
+      (linha?.querySelector<HTMLElement>("button") ?? primeiro())?.focus();
+    } else if (!aviso && tinhaAviso.current && document.activeElement === document.body) primeiro()?.focus();
+    tinhaAviso.current = aviso !== null;
+  }, [aviso, resolvidas]);
 
   const fazer = (escolhida: AcaoEscolhida, depois: () => void) =>
     acao.fazer(async () => {
@@ -459,18 +493,20 @@ export function FechamentoDoDia({
       depois();
     }, MENSAGEM_DA_ROTINA);
   const resolver = (tarefa: Tarefa, novo: AvisoDesfazer) => {
+    focar.current = "desfazer";
     setResolvidas((atual) => new Set(atual).add(tarefa.id));
     setAviso({
       ...novo,
       // Desfeito, a tarefa volta ao "Ficou aberto".
       desfazer: () =>
-        novo.desfazer().then(() =>
+        novo.desfazer().then(() => {
+          focar.current = { tarefaId: tarefa.id };
           setResolvidas((atual) => {
             const sem = new Set(atual);
             sem.delete(tarefa.id);
             return sem;
-          }),
-        ),
+          });
+        }),
     });
   };
 
@@ -485,7 +521,7 @@ export function FechamentoDoDia({
           aoClicar: () => fazer("adiar", fecharPainel),
         }}
       />
-      <div className="painel-corpo rotina-corpo">
+      <div ref={corpo} className="painel-corpo rotina-corpo">
         <div className="rotina-alba">
           <div className="rotina-alba-topo">
             <span className="rotina-cabeca" data-tamanho="lista">

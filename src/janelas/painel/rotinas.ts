@@ -19,19 +19,35 @@ import { servico } from "../../servico/conexao.ts";
  * painel; respondida (ou fechada sozinha, `ignorado`), o painel volta a ser o Hoje.
  */
 
-/** A rotina que ocupa o painel agora: o fechamento sem ação vem antes do briefing sem ação. */
+/**
+ * A rotina que ocupa o painel agora. Depois que o fechamento apareceu (com ação ou sem) ou com o
+ * dia encerrado, o briefing já passou: só o fechamento sem ação ocupa o painel, e adiado ou
+ * encerrado o painel é o Hoje. Antes disso, o briefing sem ação.
+ */
 export function rotinaDaVez(hoje: RotinasDeHoje | null): ApresentacaoRotina | null {
   if (!hoje) return null;
-  if (hoje.fechamento && hoje.fechamento.acao === null) return hoje.fechamento;
+  if (hoje.fechamento) return hoje.fechamento.acao === null ? hoje.fechamento : null;
+  if (hoje.diaEncerrado) return null;
   if (hoje.briefing && hoje.briefing.acao === null) return hoje.briefing;
   return null;
 }
 
-/** As rotinas com uma vez nova (a que apareceu, a que voltou do adiar, a que você respondeu). */
+/**
+ * As rotinas com uma vez nova (a que apareceu, a que voltou do adiar, a que você respondeu). A
+ * outra rotina de outro dia já não vale ao lado dela: o briefing de hoje tira o fechamento de
+ * ontem (e o dia encerrado que vinha dele).
+ */
 export function comApresentacao(hoje: RotinasDeHoje, apresentacao: ApresentacaoRotina): RotinasDeHoje {
-  if (apresentacao.tipo === "briefing") return { ...hoje, briefing: apresentacao };
+  if (apresentacao.tipo === "briefing") {
+    const outroDia = hoje.fechamento !== null && hoje.fechamento.dia !== apresentacao.dia;
+    return outroDia
+      ? { ...hoje, briefing: apresentacao, fechamento: null, diaEncerrado: false }
+      : { ...hoje, briefing: apresentacao };
+  }
+  const briefing = hoje.briefing !== null && hoje.briefing.dia !== apresentacao.dia ? null : hoje.briefing;
   return {
     ...hoje,
+    briefing,
     fechamento: apresentacao,
     diaEncerrado: apresentacao.acao === "encerrar" ? true : hoje.diaEncerrado,
   };

@@ -57,7 +57,10 @@ describe("rotinaDaVez", () => {
     expect(rotinaDaVez(NADA)).toBeNull();
     expect(rotinaDaVez({ ...NADA, briefing })).toBe(briefing);
     expect(rotinaDaVez({ ...NADA, briefing, fechamento })).toBe(fechamento);
-    expect(rotinaDaVez({ ...NADA, briefing, fechamento: agida(fechamento, "adiar") })).toBe(briefing);
+    // Depois do fechamento (adiado, encerrado ou fechado) ou com o dia encerrado, o briefing já passou.
+    expect(rotinaDaVez({ ...NADA, briefing, fechamento: agida(fechamento, "adiar") })).toBeNull();
+    expect(rotinaDaVez({ ...NADA, briefing, fechamento: agida(fechamento, "encerrar") })).toBeNull();
+    expect(rotinaDaVez({ ...NADA, briefing, diaEncerrado: true })).toBeNull();
     expect(rotinaDaVez({ ...NADA, briefing: agida(briefing, "comecar") })).toBeNull();
     expect(rotinaDaVez({ ...NADA, briefing: agida(briefing, "ignorado") })).toBeNull();
   });
@@ -75,6 +78,29 @@ describe("comApresentacao", () => {
       diaEncerrado: true,
       fechamento: { acao: "encerrar" },
     });
+  });
+
+  it("a rotina nova de outro dia tira a outra: o briefing de hoje tira o fechamento de ontem", () => {
+    const deOntem = rotina("fechamento", {
+      dia: "2026-10-07",
+      acao: "encerrar",
+      acaoEm: "2026-10-07T21:00:00.000Z",
+    });
+    const briefing = rotina("briefing");
+    expect(comApresentacao({ ...NADA, fechamento: deOntem, diaEncerrado: true }, briefing)).toEqual({
+      ...NADA,
+      briefing,
+    });
+    // Do mesmo dia, as duas ficam.
+    const fechamento = rotina("fechamento");
+    expect(comApresentacao({ ...NADA, fechamento }, briefing)).toEqual({ ...NADA, briefing, fechamento });
+    expect(
+      comApresentacao({ ...NADA, briefing: rotina("briefing", { dia: "2026-10-07" }) }, fechamento),
+    ).toEqual({
+      ...NADA,
+      fechamento,
+    });
+    expect(comApresentacao({ ...NADA, briefing }, fechamento)).toEqual({ ...NADA, briefing, fechamento });
   });
 });
 

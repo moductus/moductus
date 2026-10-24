@@ -365,6 +365,18 @@ describe("briefing da manhã", () => {
     expect(titulo()).toBe("Bom dia");
   });
 
+  it("rotinas.mudou relê as rotinas de hoje, e a pergunta que já não vale some", async () => {
+    servidor.rotinas = { briefing: BRIEFING, fechamento: null, diaEncerrado: false, pergunta: PERGUNTA };
+    await abrir();
+    expect(recipiente.textContent).toContain(PERGUNTA_DOS_IGNORADOS);
+    const lidas = chamou("rotinas.hoje").length;
+    servidor.rotinas = { briefing: BRIEFING, fechamento: null, diaEncerrado: false, pergunta: null };
+    await avisar("rotinas.mudou", []);
+    expect(chamou("rotinas.hoje")).toHaveLength(lidas + 1);
+    expect(recipiente.textContent).not.toContain(PERGUNTA_DOS_IGNORADOS);
+    expect(titulo()).toBe("Bom dia");
+  });
+
   it("o briefing que aparece com o Hoje aberto toma o painel", async () => {
     servidor.rotinas = { briefing: null, fechamento: null, diaEncerrado: false, pergunta: null };
     await abrir();
@@ -468,6 +480,30 @@ describe("fechamento do dia", () => {
     expect(abertas()).toEqual(["Ligar para o contador"]);
   });
 
+  it("pelo teclado: fechar o Outra data devolve o foco ao botão que o abriu", async () => {
+    await abrir();
+    const item = aberta("Separar comprovantes do mês");
+    await clicar("Outra data", item);
+    expect(document.activeElement).toBe(item.querySelector('input[type="date"]'));
+    await tecla(item.querySelector<HTMLInputElement>('input[type="date"]')!, "Escape");
+    expect(document.activeElement).toBe(botao("Outra data", item));
+    await clicar("Outra data", item);
+    await clicar("Cancelar", item);
+    expect(document.activeElement).toBe(botao("Outra data", item));
+  });
+
+  it("pelo teclado: a tarefa resolvida leva o foco ao Desfazer, e desfeita, de volta à tarefa", async () => {
+    await abrir();
+    botao("Amanhã", aberta("Ligar para o contador"))!.focus();
+    await clicar("Amanhã", aberta("Ligar para o contador"));
+    expect(document.activeElement).toBe(botao("Desfazer"));
+    await clicar("Desfazer");
+    expect(document.activeElement).toBe(botao("Amanhã", aberta("Ligar para o contador")));
+
+    await clicar("Descartar", aberta("Separar comprovantes do mês"));
+    expect(document.activeElement).toBe(botao("Desfazer"));
+  });
+
   it("Descartar cancela a tarefa, e o Desfazer reabre", async () => {
     await abrir();
     await clicar("Descartar", aberta("Separar comprovantes do mês"));
@@ -512,10 +548,29 @@ describe("fechamento do dia", () => {
     expect(titulo()).toBe("Hoje");
   });
 
+  it("Encerrar o dia com o briefing ainda sem resposta: o briefing não volta ao painel", async () => {
+    await abrir();
+    await clicar("Encerrar o dia");
+    expect(recipiente.querySelector(".fala-texto")?.textContent).toBe(DIA_ENCERRADO);
+    servidor.rotinas = {
+      briefing: BRIEFING,
+      fechamento: { ...FECHAMENTO, acao: "encerrar", acaoEm: ACAO_EM },
+      diaEncerrado: true,
+      pergunta: null,
+    };
+    await abrirHoje();
+    expect(titulo()).toBe("Hoje");
+    // Também só com o dia encerrado, sem o fechamento na leitura.
+    servidor.rotinas = { briefing: BRIEFING, fechamento: null, diaEncerrado: true, pergunta: null };
+    await abrirHoje();
+    expect(titulo()).toBe("Hoje");
+  });
+
   it("o fechamento que volta do adiar toma o painel de novo", async () => {
     await abrir();
     await clicar("Adiar 30 min");
-    expect(titulo()).toBe("Bom dia");
+    // Adiado, o painel é o Hoje: o briefing sem resposta da manhã já passou.
+    expect(titulo()).toBe("Hoje");
     await avisar("rotinas.apareceu", FECHAMENTO);
     expect(titulo()).toBe("Fechamento do dia");
   });
