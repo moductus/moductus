@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useId, type CSSProperties } from "react";
 import {
   TAMANHO_PERSONAGEM,
   TAMANHO_PERSONAGEM_MAX,
@@ -53,6 +53,21 @@ const FORMA: Record<Agente, { bracoE: number; bracoD: number; dy: number; topo: 
     faina: { bracoE: 21, bracoD: 79, dy: 6, topo: 14, esquerda: 19 },
     nuno: { bracoE: 27, bracoD: 73, dy: -2, topo: 16, esquerda: 16 },
   };
+
+/** Lado do quadrado que o modo cabeça recorta do desenho. */
+const RECORTE = 68;
+
+/**
+ * Com o anel, o corpo que desce até a base do recorte vazava pelos cantos de baixo e o anel
+ * parecia torto em volta da cabeça. O recorte é o quadrado em cima e meio círculo embaixo, com o
+ * centro no centro do quadrado, o mesmo do anel: o corpo termina rente ao lado de dentro dele, e
+ * os traços do alto (raios, coque, nó da bandana) seguem inteiros. Unidades do desenho.
+ */
+export function recorteDoAnel(esquerda: number, topo: number): string {
+  const raio = RECORTE / 2;
+  const meio = topo + raio;
+  return `M${esquerda} ${topo}H${esquerda + RECORTE}V${meio}A${raio} ${raio} 0 0 1 ${esquerda} ${meio}Z`;
+}
 
 interface Expressao {
   olhos: "abertos" | "fechados";
@@ -259,9 +274,11 @@ export function Personagem({
   const forma = FORMA[agente];
   const e = EXPRESSAO[estado];
 
+  const idRecorte = useId();
   const altura = alturaEmPx(tamanho, modo);
   const largura = modo === "cabeca" ? altura : Math.round((altura * 100) / 120);
-  const caixa = modo === "cabeca" ? `${forma.esquerda} ${forma.topo} 68 68` : "0 0 100 120";
+  const caixa = modo === "cabeca" ? `${forma.esquerda} ${forma.topo} ${RECORTE} ${RECORTE}` : "0 0 100 120";
+  const comAnel = modo === "cabeca" && moldura !== false;
   // Tamanho vem da prop (já preso à faixa dos tokens); o CSS lê as variáveis.
   const medidas = {
     "--personagem-largura": `${largura}px`,
@@ -279,16 +296,24 @@ export function Personagem({
       role="img"
       aria-label={rotulo ?? `${DADOS_AGENTES[agente].nome}, ${ROTULO_ESTADO[estado]}`}
     >
-      <g className="personagem-corpo">
-        <ellipse className="personagem-cor-acessorio" cx="40" cy="108" rx="9" ry="5" />
-        <ellipse className="personagem-cor-acessorio" cx="60" cy="108" rx="9" ry="5" />
-        <ellipse className="personagem-cor-sombra" cx={forma.bracoE} cy="78" rx="6" ry="10" />
-        <ellipse className="personagem-cor-sombra" cx={forma.bracoD} cy="78" rx="6" ry="10" />
-        {/* O coque da Tula fica atrás da cabeça; os outros traços vão por cima do corpo. */}
-        {agente === "tula" && <Traco agente={agente} />}
-        <Corpo agente={agente} />
-        {agente !== "tula" && <Traco agente={agente} />}
-        <Rosto agente={agente} e={e} />
+      {comAnel && (
+        <clipPath id={idRecorte}>
+          <path data-recorte="" d={recorteDoAnel(forma.esquerda, forma.topo)} />
+        </clipPath>
+      )}
+      {/* O recorte fica fora do grupo que respira: o anel não se mexe, o corpo sim. */}
+      <g clipPath={comAnel ? `url(#${idRecorte})` : undefined}>
+        <g className="personagem-corpo">
+          <ellipse className="personagem-cor-acessorio" cx="40" cy="108" rx="9" ry="5" />
+          <ellipse className="personagem-cor-acessorio" cx="60" cy="108" rx="9" ry="5" />
+          <ellipse className="personagem-cor-sombra" cx={forma.bracoE} cy="78" rx="6" ry="10" />
+          <ellipse className="personagem-cor-sombra" cx={forma.bracoD} cy="78" rx="6" ry="10" />
+          {/* O coque da Tula fica atrás da cabeça; os outros traços vão por cima do corpo. */}
+          {agente === "tula" && <Traco agente={agente} />}
+          <Corpo agente={agente} />
+          {agente !== "tula" && <Traco agente={agente} />}
+          <Rosto agente={agente} e={e} />
+        </g>
       </g>
       {e.zz && (
         <path

@@ -59,8 +59,8 @@
   --tamanho-ponto-estado: 6px;
   /* Ponto do status nas linhas de sessão e de PR (Agentes.dc.html) */
   --tamanho-ponto-status: 8px;
-  /* O painel desenha o cartão afastado do dock, como no Main.dc.html; a janela tem o cartão
-     mais esta margem (MARGEM_PAINEL em src-tauri/src/janelas.rs) */
+  /* O cartão do painel encosta no dock; a janela tem o cartão mais esta folga do lado de fora,
+     onde a sombra cabe (MARGEM_PAINEL em src-tauri/src/janelas.rs) */
   --margem-painel: 12px;
 
   /* Traços: elevação por borda de 1 px, ícones de 1,6 px, foco de 2 px */
