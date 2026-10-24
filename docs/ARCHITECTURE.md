@@ -2,7 +2,7 @@
 
 > O que o produto é e por que existe está em [PRODUCT.md](PRODUCT.md); os agentes estão em [AGENTS.md](AGENTS.md). Aqui está **como o app funciona por dentro**.
 
-**Status:** fases 1 (a casca) e 2 (os agentes) implementadas. A fase 1 entregou a casca Tauri com o dock, o painel, o Sistema e a captura, o serviço Node como sidecar supervisionado, o canal WebSocket com token, as configurações de ponta a ponta, os temas, a acessibilidade e o release. A fase 2 ligou o motor dos agentes ao serviço: banco com agentes, sessões e conversas; provedores (Claude Code CLI e APIs compatíveis com a da OpenAI); catálogo de ferramentas e servidor MCP; aprovações com desfazer; runtime com estados, agendador e os vigias do Nuno; receptor dos hooks do Claude Code; GitHub pelo `gh`; notificações. Alba, Tula e Faina conversam, mas só ganham áreas e ferramentas nas fases 3 a 5. Onde o texto descreve algo ainda não feito, ele diz "previsto". A arquitetura do v0 (.NET + WPF) está em [v0/ARCHITECTURE.md](v0/ARCHITECTURE.md).
+**Status:** fases 1 (a casca), 2 (os agentes) e 3 (o dia) implementadas. A fase 1 entregou a casca Tauri com o dock, o painel, o Sistema e a captura, o serviço Node como sidecar supervisionado, o canal WebSocket com token, as configurações de ponta a ponta, os temas, a acessibilidade e o release. A fase 2 ligou o motor dos agentes ao serviço: banco com agentes, sessões e conversas; provedores (Claude Code CLI e APIs compatíveis com a da OpenAI); catálogo de ferramentas e servidor MCP; aprovações com desfazer; runtime com estados, agendador e os vigias do Nuno; receptor dos hooks do Claude Code; GitHub pelo `gh`; notificações. A fase 3 acrescentou ao serviço as áreas do dia (`areas/`: tarefas, agenda, lembretes, foco, notas e captura), o relógio do dia que dispara lembretes sem modelo e sem rede, os vigias, o briefing e o fechamento da Alba, a conexão com o Google Agenda (leitura, o calendário "Moductus" com fila de saída e escrita com aprovação), o protocolo 3 e as migrações 013 a 025; à casca, abrir endereço e arquivo autorizados, o desbloqueio da sessão e o atalho do foco; e fez cada janela carregar só o próprio código. Tula e Faina conversam, mas só ganham áreas e ferramentas nas fases 4 e 5. Onde o texto descreve algo ainda não feito, ele diz "previsto". A arquitetura do v0 (.NET + WPF) está em [v0/ARCHITECTURE.md](v0/ARCHITECTURE.md).
 
 ---
 
@@ -35,7 +35,7 @@ São três processos, cada um com um papel:
        (subprocesso CLI)           compatível, local)           de arquivos
 ```
 
-Na fase 2 só há adaptador para o `claude` (CLI) e para APIs compatíveis com a da OpenAI; `codex` e `gemini` são previstos. O `gh` é o do usuário, com a autenticação dele.
+Só há adaptador para o `claude` (CLI) e para APIs compatíveis com a da OpenAI; `codex` e `gemini` são previstos. O `gh` é o do usuário, com a autenticação dele. O Google Agenda é lido e escrito pela API REST do Google, com OAuth de app instalado (ADR-0031), sem SDK.
 
 ### Por que três processos
 
@@ -58,7 +58,10 @@ Na fase 2 só há adaptador para o `claude` (CLI) e para APIs compatíveis com a
 | Animação | Transições CSS com as durações dos tokens | Curta: nada acima de 200 ms. Motion fica para quando uma animação pedir |
 | Estado na UI | Hooks do React | Zustand e TanStack Query ficam para quando as áreas tiverem dados |
 | Serviço | Node 24 LTS empacotado como sidecar (`node.exe` + um `servico.mjs` do esbuild) | Escolhido no teste de viabilidade (seção 9) |
-| Banco | SQLite pelo `node:sqlite` do Node 24, FTS5 para busca (previsto) | Migrações versionadas no repositório |
+| Banco | SQLite pelo `node:sqlite` do Node 24, FTS5 na busca das notas | Migrações versionadas no repositório |
+| Google Agenda | Calendar API v3 e OAuth 2.0 de app instalado (receptor em `127.0.0.1`, PKCE S256), por `fetch` | Sem SDK do Google. Tokens no Gerenciador de Credenciais (ADR-0031, ADR-0035) |
+| Datas e recorrência | Código próprio no serviço: `Intl.DateTimeFormat` para o fuso, subconjunto de RRULE e frases em pt-BR | Sem biblioteca de fuso, `rrule` nem `chrono-node` (ADR-0034) |
+| Notas | `markdown-it` com `html: false` para ler; edição num `<textarea>` | Única dependência nova da interface na fase 3 (ADR-0036) |
 | Modelos | Claude Code CLI (`claude -p`) e APIs compatíveis com a da OpenAI, atrás da interface `Provedor` | Anthropic, Gemini e Codex CLI são previstos. Ver [AGENTS.md](AGENTS.md#3-provedores-de-modelo) |
 | Ferramentas e MCP | Catálogo com schema Zod; servidor MCP HTTP escrito no próprio serviço, sem SDK | Um catálogo só serve as APIs, o MCP e a lista de capacidades |
 | GitHub | `gh`, o do usuário | A autenticação é a dele: o Moductus nunca vê o token do GitHub |
@@ -87,11 +90,13 @@ Expõe comandos Tauri pequenos e eventos. Tudo o que ela sabe fazer:
 | Tela, OCR | Captura de tela + `Windows.Media.Ocr` | Ferramentas, Arquivos, Finanças |
 | Notificação | Toast do Windows (`ToastNotification`, esquema ToastGeneric), com os botões do cartão | Avisos dos agentes (fase 2) |
 | Variável do usuário | `HKCU\Environment` + `WM_SETTINGCHANGE` | Token dos hooks do Claude Code (fase 2) |
-| Retomada da suspensão | `WM_POWERBROADCAST` (`PBT_APMRESUMEAUTOMATIC`) | Agendador e GitHub (fase 2) |
+| Retomada da suspensão | `WM_POWERBROADCAST` (`PBT_APMRESUMEAUTOMATIC`) | Agendador, GitHub, relógio do dia e Google (fases 2 e 3) |
+| Desbloqueio e logon da sessão | `WTSRegisterSessionNotification` (`WM_WTSSESSION_CHANGE`) | Primeira atividade do dia, que abre o briefing (fase 3) |
+| Abrir endereço, arquivo e terminal | `ShellExecuteExW`, `AssocIsDangerous`, `CreateProcessW` | Autorização do Google, "Entrar" no CLI, "Abrir arquivo" e "Abrir no GitHub" (fase 3) |
 
 Os módulos nativos do v0 (`Power.cs`, `DwmThumbnail.cs`, `MicrophoneMute.cs`, `TcpListeners.cs`, `ScreenCapture.cs`, `TextRecognizer.cs`) são a especificação do port: mesmas chamadas, agora pela crate `windows`.
 
-Na fase 1 entraram o dock que reserva espaço (com os modos esconder e inteligente), tela cheia, mídia, microfone, manter acordado e credenciais. Na fase 2 entraram o aviso do Windows com botões, a variável de ambiente do usuário, a retomada da suspensão e o menu do time na bandeja. Janelas abertas, prévia de janela, ocultar a barra do Windows e tela/OCR ficam para as fases que os usam.
+Na fase 1 entraram o dock que reserva espaço (com os modos esconder e inteligente), tela cheia, mídia, microfone, manter acordado e credenciais. Na fase 2 entraram o aviso do Windows com botões, a variável de ambiente do usuário, a retomada da suspensão e o menu do time na bandeja. Na fase 3, abrir endereço, arquivo e terminal, o desbloqueio da sessão, o atalho do foco, o menu Ajuda da bandeja e os pedidos do serviço ao painel. Janelas abertas, prévia de janela, ocultar a barra do Windows e tela/OCR ficam para as fases que os usam.
 
 ### Módulos (`src-tauri/src`)
 
@@ -103,12 +108,14 @@ Na fase 1 entraram o dock que reserva espaço (com os modos esconder e inteligen
 | `appbar.rs` | O dock como AppBar (`SHAppBarMessage`): reserva, `ABN_POSCHANGED`, DPI, `TaskbarCreated`; grava o identificador em `appbar.hwnd` e chama `ABM_REMOVE` com ele ao iniciar e ao sair (seção 9) |
 | `dock.rs` | Lado, modo (fixo, esconder, inteligente) e forma (colada, flutuante) do dock; `WS_EX_NOACTIVATE` + `WS_EX_TOOLWINDOW`; modo teclado (Ctrl+Alt+D) |
 | `tela_cheia.rs` | `SHQueryUserNotificationState` a cada 500 ms: no modo inteligente o dock some, no fixo só perde o "sempre no topo" |
-| `janelas.rs` | Painel ao lado do dock (com a medição de abertura; `painel_mostrar` abre sem alternar, para o clique no aviso do Windows), Sistema (lembra posição em `sistema.json`, 12 áreas, preso à área útil do monitor onde está) e captura |
-| `atalhos.rs` | Atalhos globais: Ctrl+Alt+N (Sistema), Ctrl+Alt+D (dock), Ctrl+Alt+Espaço (captura); recusa com motivo o que outro programa já usa |
-| `bandeja.rs`, `inicio.rs` | Ícone na bandeja, com o menu do time que o serviço manda pronto (pausar todos ou um agente, o estado de cada um; sem serviço, só os itens fixos); instância única (a segunda execução foca a primeira); autostart, inclusive `--autostart ligar\|desligar` |
+| `janelas.rs` | Painel ao lado do dock (com a medição de abertura; `painel_mostrar` abre sem alternar, para o clique no aviso do Windows; `painel_foco` dá o teclado ao painel enquanto um campo o pede), Sistema (lembra posição em `sistema.json`, 12 áreas, preso à área útil do monitor onde está) e captura (`captura_altura` ajusta a altura ao cartão). Também atende o serviço: `painel mostrar` abre o painel Hoje, onde o briefing e o fechamento aparecem (em tela cheia não abre e responde `ok: false`), e `painel aberto` diz se ele está à vista, o que só vale depois de a interface confirmar que desenhou a área (`painel_pronto`) |
+| `atalhos.rs` | Atalhos globais: Ctrl+Alt+N (Sistema), Ctrl+Alt+D (dock), Ctrl+Alt+Espaço (captura) e Ctrl+Alt+P (iniciar ou pausar o foco: a casca só avisa o serviço com `foco-alternar`, e a regra é dele); recusa com motivo o que outro programa já usa. O atalho do foco pode ficar vazio, e o motivo vem do serviço |
+| `bandeja.rs`, `inicio.rs` | Ícone na bandeja, com o menu do time que o serviço manda pronto (pausar todos ou um agente, o estado de cada um; sem serviço, só os itens fixos) e o submenu Ajuda ("Ver o tour" e "Primeiros passos"), que a casca só passa à interface por evento; instância única (a segunda execução foca a primeira); autostart, inclusive `--autostart ligar\|desligar` |
 | `midia.rs` | Sessão de mídia do Windows por evento, com capa |
 | `controles.rs` | Microfone mudo (`IAudioEndpointVolume` com callback) e manter acordado (`PowerSetRequest`) |
-| `servico.rs` | Sobe e supervisiona o serviço (seção 4) |
+| `servico.rs` | Sobe e supervisiona o serviço (seção 4) e roteia as linhas do canal stdio: credencial, ambiente, notificação, abrir, painel e bandeja |
+| `abrir.rs` | O que a casca abre fora dela (ADR-0038). **Endereço:** só `https://`, no navegador padrão, e o registro leva o endereço sem a query. **Arquivo ou pasta:** só caminho absoluto existente numa unidade local, dentro das raízes autorizadas (a pasta de dados; o `settings.json` do Claude Code e as cópias de segurança dele; as pastas de projeto que o serviço informa, desde que não sejam do sistema, do Claude Code nem a pasta do usuário), e arquivo só se a extensão estiver na lista do que o Moductus abre (`txt`, `md`, `json`, `jsonl`, `log`, `csv`, `moductus`, imagens e PDF; qualquer outra é recusada, e o Windows ainda pode vetar por `AssocIsDangerous`). **Terminal:** `cmd.exe`, pelo caminho do sistema, num console novo com a linha fixa do login do Claude Code, escolhida por chave de `LOGINS_CLI`. Chegam o serviço (linha `abrir`) e a interface (`abrir_endereco`, `abrir_arquivo`, `abrir_settings_claude`, `abrir_terminal`); o terminal só pela interface, num clique. Entra uma vez no MTA do COM (`CoIncrementMTAUsage`) para a consulta ao Shell não depender de uma thread que pode acabar |
+| `sessao_windows.rs` | Registra a janela do dock em `WTSRegisterSessionNotification` e avisa o serviço do desbloqueio e do logon da sessão (`{"tipo":"atividade"}`); bloquear e desconectar não contam. Se o registro falhar, valem a retomada, a subida e o horário fixo (ADR-0033) |
 | `config_nativa.rs` | Aplica o que o serviço manda sobre dock, atalhos e autostart, desfazendo tudo se uma parte falhar |
 | `credenciais.rs` | Gerenciador de Credenciais (`Cred*`, alvo `Moductus/<nome>`), atendendo pedidos do serviço pelo canal stdio: chaves dos provedores e o token dos hooks |
 | `ambiente.rs` | Variáveis do usuário em `HKCU\Environment`: só nomes que começam com `MODUCTUS_`, e o registro leva o nome, nunca o valor. Avisa o Windows depois de gravar, mas terminal já aberto não relê |
@@ -154,53 +161,53 @@ servico/src/
   main.ts         entrada: monta os serviços, abre o banco, liga o canal com a casca, o WebSocket, o MCP e o receptor dos hooks
   api/            servidor WebSocket para a interface (servidor.ts)
   banco/          conexão (WAL, foreign_keys, busy_timeout), executor de migrações, ULID, carimbo de origem e lixeira de 30 dias
-  migracoes/      uma migração por arquivo, de 001-config a 012-execucoes-falha-do-provedor
-  casca/          canal stdio com a casca: credenciais, variáveis do usuário (ambiente) e avisos do Windows
+  migracoes/      uma migração por arquivo, de 001-config a 025-rotinas-curta
+  casca/          canal stdio com a casca: credenciais, variáveis do usuário (ambiente), avisos do Windows, abrir endereço ou arquivo e o painel
   config/         preferências: valida, manda à casca o que é nativo, grava, avisa quem ouve
   primeiro-uso/   os cinco passos do primeiro uso e o tutorial
   outro-pc/       exportar e importar as configurações num arquivo .moductus (zip, até 4 MB)
   provedores/     interface Provedor, registro, provedor falso, claude-cli/, openai-compativel/, detecção do que há no PC, preços
-  ferramentas/    catálogo (schema Zod, efeito, desfazer) e as ferramentas de sessoes/, uso/ e github/
+  ferramentas/    catálogo (schema Zod, efeito, desfazer) e as ferramentas de sessoes/, uso/, github/, tarefas/, lembretes/, agenda/, foco/ e notas/
   mcp/            servidor MCP HTTP sobre o catálogo, que também atende o PreToolUse do CLI
-  agentes/        repositório, runtime, fila por agente, estado (dormir, pausar), execuções e desfazer, roteador, autorizar e vigias/nuno.ts
+  agentes/        repositório, runtime, fila por agente, estado (dormir, pausar, tentar agora, teto), execuções e desfazer, roteador, autorizar e vigias/ (nuno.ts, alba.ts e as marcas de até onde cada vigia olhou)
   agendador/      gatilhos por horário, por intervalo e por evento
   aprovacoes/     cartões de aprovação e regras de permissão
   conversas/      conversa com o time e com cada agente
   notificacoes/   preferências, histórico, aviso do Windows e ponto no dock
   bandeja/        o menu do time que a casca desenha
   sessoes/        receptor HTTP dos hooks, ligação do Claude Code, transcript, contexto e uso, plugin do OpenCode
-  conexoes/       as conexões ligadas; github/ lê PRs, issues e CI pelo gh
+  conexoes/       as conexões ligadas; github/ lê PRs, issues e CI pelo gh; google/ é o Google Agenda
+  areas/          a regra de cada área do dia, que a interface e as ferramentas chamam: tarefas/ (com listas e etiquetas), agenda/ (calendários, eventos e horário livre), lembretes/, foco/, notas/, captura/ e dia/ (o tempo no fuso, a recorrência, o entendedor de frases, o relógio do dia, a primeira atividade, o briefing, o fechamento e os rituais ignorados), mais as contagens do dock
+  cambio/         a cotação do teto de gasto, digitada ou buscada
 ```
 
-Previstos a partir da fase 3, no mesmo serviço:
+Previstos nas fases 4 e 5, no mesmo serviço: `areas/` de finanças, arquivos e memória, e os vigias da Tula e da Faina em `agentes/vigias/`.
 
-```
-  areas/          regras de cada área: tarefas, foco, financas, notas, arquivos, memoria
-  agentes/vigias/ os vigias da Alba, da Tula e da Faina (só os do Nuno existem)
-  conexoes/       Google Agenda e as demais
-```
+O Google fica em `conexoes/google/`: `oauth.ts` (receptor, PKCE, troca, renovação e revogação), `calendario.ts` (a Calendar API v3), `google-agenda.ts` (a conexão e os tokens), `leitura.ts` (os calendários lidos, em cache), `espelho.ts` (o calendário "Moductus" e a fila de saída), `escrita.ts` (os outros calendários, com aprovação), `situacao.ts` (o que a tela de Conexões mostra) e `cliente.ts` (o cliente OAuth do autor, ainda vazio, e os escopos).
 
 Os quatro agentes de fábrica não têm arquivo: são linhas semeadas pela migração `003-agentes`, com instruções, ferramentas e personagem. O serviço é empacotado pelo esbuild num arquivo só (`servico/dist/servico.mjs`); as dependências de execução são `ws`, `fflate`, `zod` e o pacote `@moductus/contrato`. O banco é o `node:sqlite` do próprio Node 24.
 
 ### Regras
 
-- **A regra de negócio mora na área, não no prompt.** A interface e as ferramentas dos agentes chamam a mesma função: hoje `sessoes/`, `conexoes/github` e `aprovacoes/`, e `areas/tarefas` e as demais quando chegarem (fase 3). Assim agente e tela nunca divergem, nada que importa depende de o modelo acertar uma conta ou um formato, e as ferramentas são testáveis sem modelo.
+- **A regra de negócio mora na área, não no prompt.** A interface e as ferramentas dos agentes chamam a mesma função: `sessoes/`, `conexoes/github`, `aprovacoes/` e, desde a fase 3, `areas/tarefas`, `areas/lembretes`, `areas/agenda`, `areas/foco`, `areas/notas` e `areas/captura`; as de finanças, arquivos e memória chegam com as áreas. Assim agente e tela nunca divergem, nada que importa depende de o modelo acertar uma conta ou um formato, e as ferramentas são testáveis sem modelo.
 - **Ferramenta é uma área exposta.** Cada ferramenta é um schema Zod, uma função de área e um nível de efeito (`leitura`, `interno`, `externo`). `externo` sempre gera cartão de aprovação e declara o texto dele; `interno` declara como se desfaz (a inversa roda numa transação, só dentro de 24 horas e nunca com a execução ainda rodando); `leitura` executa direto.
 - **Um único catálogo** alimenta o tool calling das APIs, o servidor MCP e a lista de capacidades de cada agente (`agentes.capacidades`). O agente só enxerga as ferramentas da lista dele; no MCP elas se chamam `dominio__acao` (`github__comentar`), porque o ponto não vale no nome de uma ferramenta de modelo.
 
 ### Comunicação
 
-- **Interface ↔ serviço:** WebSocket em `127.0.0.1`, porta escolhida pelo sistema (o serviço escuta na porta 0 e informa a real) e token gerado pela casca a cada subida do serviço: 32 bytes do `BCryptGenRandom`, em hexadecimal. A casca entrega porta e token às janelas pelo evento `servico` e pelo comando `servico_estado`. A conexão leva o token no parâmetro `token` da URL; o serviço compara em tempo constante e recusa com 401 antes do upgrade. Cada mensagem é validada pelo contrato: requisições e respostas por grupo (`config.*`, `primeiroUso.*`, `agentes.*`, `execucoes.*`, `provedores.*`, `conversas.*`, `aprovacoes.*`, `regras.*`, `sessoes.*`, `github.*`, `conexoes.*`, `notificacoes.*` e, do dia, `listas.*`, `tarefas.*`, `lembretes.*`, `agenda.*`, `foco.*`, `notas.*`, `rotinas.*`, `captura.*` e `areas.contagens`) e eventos (`sistema.ola`, `config.mudou`, `agentes.mudou`, `conversas.parcial` e os demais `*.mudou`).
+- **Interface ↔ serviço:** WebSocket em `127.0.0.1`, porta escolhida pelo sistema (o serviço escuta na porta 0 e informa a real) e token gerado pela casca a cada subida do serviço: 32 bytes do `BCryptGenRandom`, em hexadecimal. A casca entrega porta e token às janelas pelo evento `servico` e pelo comando `servico_estado`. A conexão leva o token no parâmetro `token` da URL; o serviço compara em tempo constante e recusa com 401 antes do upgrade. Cada mensagem é validada pelo contrato: requisições e respostas por grupo (`config.*`, `primeiroUso.*`, `agentes.*`, `execucoes.*`, `provedores.*`, `conversas.*`, `aprovacoes.*`, `regras.*`, `sessoes.*`, `github.*`, `conexoes.*`, `google.*`, `cambio.*`, `notificacoes.*` e, do dia, `listas.*`, `tarefas.*`, `lembretes.*`, `agenda.*`, `foco.*`, `notas.*`, `rotinas.*`, `captura.*` e `areas.contagens`) e eventos (`sistema.ola`, `config.mudou`, `agentes.mudou`, `conversas.parcial` e os demais `*.mudou`).
 - **Versão do protocolo:** o cliente manda a que fala no parâmetro `protocolo` da URL (hoje 3). Sem o parâmetro, o serviço entende que é uma janela da versão 1: aceita a conexão, mas cada pedido dela recebe um erro legível pedindo para abrir o Moductus de novo; só `sistema.ping` continua respondendo (ADR-0020).
-- **Interface ↔ casca:** comandos Tauri, só para o que é nativo (dock, painel, Sistema, captura, mídia, microfone, manter acordado, material, atalhos, autostart).
-- **Serviço ↔ casca:** linhas JSON pelo stdin e stdout do serviço, cada pedido com um `id` e a resposta com o mesmo `id`. O serviço manda `pronto` (com a porta), `aplicar` (configuração nativa), `credencial` (guardar, ler, apagar), `ambiente` (definir ou apagar uma variável `MODUCTUS_*` do usuário) e `notificacao` (mostrar ou retirar um aviso do Windows, ou perguntar se há tela cheia); o menu do time na bandeja (`bandeja`) vai sem `id`. A casca avisa sem `id` a retomada da suspensão (`retomou`) e os cliques num aviso (`notificacao-clique`) e num item da bandeja (`bandeja-clique`). O stderr vai para o log como `servico: …`. Chave nunca fica em variável persistente nem em log.
+- **Interface ↔ casca:** comandos Tauri, só para o que é nativo (dock, painel, Sistema, captura, mídia, microfone, manter acordado, material, atalhos, autostart, abrir endereço, arquivo e terminal).
+- **Serviço ↔ casca:** linhas JSON pelo stdin e stdout do serviço, cada pedido com um `id` e a resposta com o mesmo `id`. O serviço manda `pronto` (com a porta), `aplicar` (configuração nativa), `credencial` (guardar, ler, apagar), `ambiente` (definir ou apagar uma variável `MODUCTUS_*` do usuário), `notificacao` (mostrar ou retirar um aviso do Windows, ou perguntar se há tela cheia), `abrir` (um endereço `https://`, um arquivo ou uma pasta, ou a lista de pastas de projeto que a casca aceita abrir; a casca valida e recusa o resto) e `painel` (`mostrar` o painel Hoje ou perguntar se está `aberto`); o menu do time na bandeja (`bandeja`) vai sem `id`. A casca avisa sem `id` a retomada da suspensão (`retomou`), o desbloqueio ou o logon da sessão (`atividade`), o atalho do foco (`foco-alternar`) e os cliques num aviso (`notificacao-clique`) e num item da bandeja (`bandeja-clique`). O stderr vai para o log como `servico: …`. Chave nunca fica em variável persistente nem em log.
 - **Agentes em CLI → serviço (MCP):** servidor MCP HTTP em `127.0.0.1`, porta escolhida pelo sistema. Cada execução abre o próprio acesso: um token sorteado (o serviço guarda só o hash) que enxerga apenas as ferramentas daquele agente e deixa de valer quando a execução termina. O CLI recebe o token na variável `MODUCTUS_MCP_ACESSO`, referenciada no `--mcp-config`, e o manda em `Authorization: Bearer`; sem ele, 401 antes de ler o corpo. O mesmo servidor atende `/hooks/pre-tool-use` (ADR-0017). Não depende do SDK de MCP (ADR-0014).
 - **Sessões de IA externas → serviço:** receptor HTTP separado do WebSocket e do MCP, em `127.0.0.1:47821` (`MODUCTUS_HOOKS_PORTA` troca), com as rotas `/hooks/claude-code` e `/hooks/opencode`. O token é próprio e estável: fica no Gerenciador de Credenciais e a casca o publica como variável do usuário `MODUCTUS_HOOKS_TOKEN` (ADR-0015), porque o `settings.json` do Claude Code o lê do ambiente. Variável só vale para processo novo; enquanto isso o receptor responde 401 pedindo "abra um terminal novo". O `PermissionRequest` fica segurado até a decisão no dock (no máximo 600 s). Detalhe em [AGENTS.md](AGENTS.md#5-sessões-de-ia-externas).
 - **Serviço → GitHub:** pelo `gh` do usuário, sem shell e sem janela, a cada 15 minutos e na retomada da suspensão (GraphQL; o GitHub não devolve ETag nessas buscas).
+- **Serviço → Google:** HTTPS para `accounts.google.com`, `oauth2.googleapis.com` e `www.googleapis.com/calendar/v3`, só com o Google conectado. O OAuth abre um receptor HTTP em `127.0.0.1`, numa porta aleatória, por no máximo 5 minutos, e pede à casca para abrir o navegador. A leitura corre a cada 10 minutos (com variação), ao abrir a área e na retomada, por `nextSyncToken` por calendário; a escrita no calendário "Moductus" sai por uma fila com espera crescente. Pedido que não responde em 30 s desiste, e página acima de 16 MB é erro. Tokens ficam no Gerenciador de Credenciais; o de acesso, só na memória.
+- **Serviço → cotação:** só sob pedido do usuário ("Buscar cotação", em Configurações › Modelos), `GET https://api.frankfurter.dev/v2/rate/USD/<moeda>`, com cache de 24 horas; o valor só vira cotação depois de confirmado (ADR-0040).
 
 ### O contrato (`pacotes/contrato`)
 
-Um pacote só de schemas Zod e tipos, usado pela interface e pelo serviço: `canal.ts` (envelope de pedido, resposta e evento), `metodos.ts` (cada método com o schema da entrada e da saída, e os eventos), `config.ts` (a configuração e o padrão), `primeiro-uso.ts`, `outro-pc.ts`, um arquivo por domínio da fase 2 (`agentes.ts`, `provedores.ts`, `conversas.ts`, `aprovacoes.ts`, `sessoes.ts`, que também traz GitHub e conexões, e `notificacoes.ts`) e da fase 3 (`tarefas.ts`, com listas e etiquetas, `lembretes.ts`, `agenda.ts`, `foco.ts`, `notas.ts`, `rotinas.ts`, `captura.ts` e `areas.ts`), `comum.ts` (Id, Instante, Dia, carimbo de origem) e `cliente.ts`, o cliente WebSocket da interface, que reconecta sozinho (250 ms dobrando até 5 s) e troca de endereço quando a casca sobe um serviço novo. `VERSAO_PROTOCOLO` marca mudanças incompatíveis e vale 3 desde a fase 3. Método que o contrato tem e o serviço ainda não atende responde com erro claro (`semAtendente`).
+Um pacote só de schemas Zod e tipos, usado pela interface e pelo serviço: `canal.ts` (envelope de pedido, resposta e evento), `metodos.ts` (cada método com o schema da entrada e da saída, e os eventos), `config.ts` (a configuração e o padrão), `primeiro-uso.ts`, `outro-pc.ts`, um arquivo por domínio da fase 2 (`agentes.ts`, `provedores.ts`, `conversas.ts`, `aprovacoes.ts`, `sessoes.ts`, que também traz GitHub, conexões e o Google, e `notificacoes.ts`) e da fase 3 (`tarefas.ts`, com listas e etiquetas, `lembretes.ts`, `agenda.ts`, `foco.ts`, `notas.ts`, `rotinas.ts`, `captura.ts`, `areas.ts` e `cambio.ts`, a cotação do teto), `comum.ts` (Id, Instante, Dia, carimbo de origem) e `cliente.ts`, o cliente WebSocket da interface, que reconecta sozinho (250 ms dobrando até 5 s) e troca de endereço quando a casca sobe um serviço novo. `VERSAO_PROTOCOLO` marca mudanças incompatíveis e vale 3 desde a fase 3. Método que o contrato tem e o serviço ainda não atende responde com erro claro (`semAtendente`). Os métodos do Google são `google.obter` e `google.atualizar` (a situação da conexão: a autorização aberta, a última leitura, a fila de saída, o cliente próprio e o problema, se houver), `google.cancelar` (encerra a espera do navegador sem desconectar) e `google.definirCliente`, e o evento `google.mudou`; os do dia, o pedido `agenda.definirEvento` com `calendarioId` (passa o evento entre o calendário local e o "Moductus") e os pares `captura.entender` e `captura.lancar` (a janela pede o modelo com `comModelo`, e só depois de uma pausa na digitação).
 
 ### Supervisor do serviço
 
@@ -231,6 +238,10 @@ A regra mora no serviço, inclusive para o que é nativo:
 | `004-sessoes-dev` | 2 | `projetos`, `sessoes_ia`, `eventos_sessao`, `uso_ia`, `github_itens`, `conexoes` |
 | `005-notificacoes` | 2 | `notificacoes_preferencias`, `notificacoes` |
 | `006` a `012` | 2 | `lida_em` nas conexões; leitura incremental do transcript; `uso_ia_mensagens`; `cobranca` nas execuções; `agendador_disparos`; motivo do sono e fim da pausa nos agentes; motivo da falha do provedor na execução |
+| `013-tarefas` | 3 | `listas` (com as três padrão), `tarefas`, `etiquetas`, `tarefa_etiquetas`, `lembretes` |
+| `014-agenda-foco` | 3 | `calendarios` (com o local), `eventos`, `agenda_saida`, `sessoes_foco`, `rotinas` (com o briefing e o fechamento), `rotinas_registro` |
+| `015-notas` | 3 | `notas` (com o bloco rápido) e o índice `notas_fts` |
+| `016` a `025` | 3 | `caminho` do CLI nos provedores (016); moeda e "Liberar" do teto (017); `fechada_em` e `gerada_por` nas tarefas (018); `inicio_recorrencia` nos lembretes (019); `excecoes` e `fuso` nos eventos (020); as etapas do foco (021); `agenda_espelho` (022); as ferramentas e as instruções da Alba de fábrica (023 e 024, esta com `vigias_marcas`); `curta` nas rotinas (025) |
 
 Cada tabela nova nasce com o carimbo de origem e, se for cadastro ou configuração, com lixeira ([DATA.md](DATA.md#1-regras-que-valem-para-tudo)). Nenhuma chave estrangeira aponta para tabela com lixeira, e os quatro agentes de fábrica são protegidos por gatilho no banco (ADR-0019).
 
@@ -238,9 +249,9 @@ Cada tabela nova nasce com o carimbo de origem e, se for cadastro ou configuraç
 
 1. O Windows inicia `moductus.exe` (autostart).
 2. A casca garante instância única, limpa a reserva órfã do dock, cria as janelas escondidas (o dock visível), registra a AppBar e sobe o serviço como sidecar.
-3. O serviço abre o banco e aplica as migrações (a limpeza da lixeira roda aí), abre o servidor MCP, monta o runtime (execuções que ficaram "rodando" fecham como erro e os cartões do terminal que esperavam expiram), liga o WebSocket, avisa `pronto` e reaplica a configuração nativa. Depois sobem, cada um isolado dos outros: os vigias do Nuno, o GitHub (lê agora e a cada 15 minutos), o agendador e o receptor dos hooks (sem token ou com a porta ocupada, o resto do serviço segue).
+3. O serviço abre o banco e aplica as migrações (a limpeza da lixeira roda aí), abre o servidor MCP, monta o runtime (execuções que ficaram "rodando" fecham como erro e os cartões do terminal que esperavam expiram), liga o WebSocket, avisa `pronto` e reaplica a configuração nativa. Depois sobem, cada um isolado dos outros: os vigias do Nuno, o GitHub (lê agora e a cada 15 minutos), o Google (lê e espelha, se estiver conectado), o agendador, o receptor dos hooks (sem token ou com a porta ocupada, o resto do serviço segue) e o relógio do dia, que registra as fontes (lembretes, foco, briefing, fechamento, virada do dia e compromissos) e confere já o que venceu com o serviço parado.
 4. As janelas recebem porta e token e se conectam.
-5. Se o serviço cair, a casca reinicia com espera crescente e o dock mostra o estado. Na volta da suspensão, a casca avisa e o agendador dispara, uma vez só, o que venceu enquanto o PC dormia.
+5. Se o serviço cair, a casca reinicia com espera crescente e o dock mostra o estado. Na volta da suspensão, a casca avisa; o agendador dispara, uma vez só, o que venceu enquanto o PC dormia, e o relógio do dia confere lembretes, foco e rotinas (o que venceu vira atrasado, sem tocar um por um). O desbloqueio da sessão também é avisado pela casca e abre o briefing, quando é a primeira atividade do dia.
 
 ### Uma execução de agente
 
@@ -259,7 +270,7 @@ Um arquivo `moductus.db` em `%APPDATA%\Moductus` (ou ao lado do executável com 
 
 Na mesma pasta ficam também `ligacao-claude-code.json` (como o `settings.json` do Claude Code estava antes de ligar, para desligar devolvê-lo como era), `claude-cli/` (a pasta em que o CLI dos agentes roda, para não herdar o `CLAUDE.md` nem o `.claude/` de um projeto) e `copias/claude-code/` (as cópias de segurança do `settings.json` quando a pasta dele é um link para um repositório de configuração; nos demais casos as cópias ficam ao lado do próprio arquivo).
 
-O banco está na migração 12. A fase 1 criou `config` (preferências, uma linha JSON por chave) e `onboarding` (passos do primeiro uso); a fase 2 criou as tabelas de agentes, sessões de IA, GitHub, conexões e notificações. As demais entram com as áreas.
+O banco está na migração 25. A fase 1 criou `config` (preferências, uma linha JSON por chave) e `onboarding` (passos do primeiro uso); a fase 2 criou as tabelas de agentes, sessões de IA, GitHub, conexões e notificações; a fase 3 criou as do dia (tarefas, lembretes, agenda, foco, rotinas e notas). As demais entram com as áreas.
 
 | Tabela (agrupada) | Conteúdo | Situação |
 |---|---|---|
@@ -270,9 +281,13 @@ O banco está na migração 12. A fase 1 criou `config` (preferências, uma linh
 | `github_itens`, `conexoes` | Cache do GitHub e as conexões ligadas | fase 2 |
 | `notificacoes_preferencias`, `notificacoes` | O que cada agente avisa e o que já avisou | fase 2 |
 | `agendador_disparos` | Até onde o agendador já contou cada gatilho | fase 2 |
-| `tarefas`, `listas`, `recorrencias`, `sessoes_foco` | Tarefas, repetição e cada pomodoro | previsto (fase 3) |
+| `listas`, `tarefas`, `etiquetas`, `tarefa_etiquetas`, `lembretes` | Tarefas, listas e o que dispara; a recorrência é coluna, não tabela | fase 3 |
+| `calendarios`, `eventos`, `agenda_saida`, `agenda_espelho` | A agenda local, o cache do Google, o que falta mandar ao Google e o que já foi | fase 3 |
+| `sessoes_foco` | Cada etapa do ciclo de foco | fase 3 |
+| `rotinas`, `rotinas_registro`, `vigias_marcas` | Briefing e fechamento, o que apareceu e até onde os vigias olharam | fase 3 |
+| `notas` (e o índice `notas_fts`) | Notas com busca FTS5 | fase 3 |
 | `contas`, `lancamentos`, `categorias`, `orcamentos` | Finanças | previsto (fase 4) |
-| `notas`, `arquivos`, `memorias` | Notas com FTS5, caixa de entrada, fatos com origem | previsto (fases 3 e 5) |
+| `arquivos`, `memorias` | Caixa de entrada, fatos com origem | previsto (fase 5) |
 
 Todo registro criado por agente guarda qual agente e qual execução, para o histórico e o desfazer. O modelo completo, campo a campo, está em [DATA.md](DATA.md).
 
@@ -285,7 +300,7 @@ moductus/
 ├─ src-tauri/          casca em Rust (src/, tauri.conf.json, capabilities/, examples/)
 │  └─ binaries/        node.exe do sidecar, copiado no build (fora do Git)
 ├─ src/                interface React
-│  ├─ janelas/         dock, painel, sistema, captura (uma rota por janela)
+│  ├─ janelas/         dock, painel, sistema, captura (uma rota por janela, cada uma num chunk) e o tour do tutorial, que desenha uma camada por cima delas
 │  ├─ areas/           uma pasta por área do Sistema
 │  ├─ componentes/     base visual: cartão de aprovação, fala do agente, selo e o personagem com a leitura do estado
 │  ├─ nativo/          hooks e comandos da casca (eventos.ts, acessibilidade.ts, arquivos.ts)
@@ -313,7 +328,7 @@ O código .NET do v0 saiu da árvore na fase 1; a tag `v0.4.0` preserva a versã
 - **Sidecar:** o `pnpm build` (que o Tauri roda antes de empacotar) gera o `servico.mjs` e copia o `node.exe` que está rodando para `src-tauri/binaries/node-x86_64-pc-windows-msvc.exe` (`scripts/preparar-sidecar.mjs`). O instalador leva os dois.
 - **Release (`release.yml`):** numa tag `v*` (que tem de bater com a versão do `tauri.conf.json`), gera o instalador NSIS (`moductus-<versão>-win-x64-setup.exe`, dados em `%APPDATA%\Moductus`) e o zip portable (`moductus-<versão>-win-x64-portable.zip`, montado por `scripts/empacotar-portable.ps1`, com `portable.txt` e dados ao lado do exe), atesta os dois com `actions/attest-build-provenance` e cria a release como rascunho, pré-release quando a tag tem `-`. No `0.5.0-alpha`, o instalador tem 23,6 MB e o zip 35,6 MB; o `node.exe` é a maior parte dos dois.
 - **Atualização:** ainda não entrou. Quando entrar (plugin updater do Tauri, manifesto assinado no GitHub Releases), chega desligada, com opt-in nas configurações.
-- **Orçamentos medidos a cada release:** memória privada em repouso abaixo de 200 MB somando casca, WebView2 e serviço (o teste de viabilidade mediu cerca de 150 MB em build de debug); dock visível em menos de 1 s após o login; painel abre em menos de 100 ms. Desde a fase 2, o `node.exe` do serviço tem meta própria: até 40 MB a mais que os 32,1 MB da fase 1.
+- **Orçamentos medidos a cada release:** memória privada em repouso abaixo de 200 MB somando casca, WebView2 e serviço (o teste de viabilidade mediu cerca de 150 MB em build de debug); dock visível em menos de 1 s após o login; painel abre em menos de 100 ms. Desde a fase 2, o `node.exe` do serviço tem meta própria: até 40 MB a mais que os 32,1 MB da fase 1; na fase 3, até 10 MB a mais que os 34,6 MB da fase 2, e o total do app não passar dos 346,9 MB da fase 2.
 
 ### Medições da fase 1
 
@@ -412,7 +427,7 @@ Feitas em 24/10/2026 no build de release (`pnpm tauri build --no-bundle`) de `fe
 **Leitura.**
 
 - **Serviço.** O relógio, os vigias da Alba, as áreas do dia, a captura e o briefing custam 8,4 MB em repouso (8,1 a 9,1 nas três rodadas), dentro dos 10 MB da meta. Foi medido o conjunto da fase; não houve rodada só com o relógio e os vigias.
-- **Orçamento total.** Passou: 372,6 MB contra os 346,9 MB da fase 2. Do aumento sobre o `main` do mesmo dia, 8,4 MB são do `node.exe`, cerca de 1 MB da casca e o resto, uns 25 MB, do WebView2 (de 290,0 para 315,7 MB nas médias das três rodadas, com o processo de GPU indo de uns 100 para 109 a 125 MB). Causa provável: o JavaScript da interface cresceu de 523 KB para 773 KB (mais 96 KB do `markdown-it`, só no Sistema) e as quatro janelas carregam o mesmo bundle; os valores oscilam 16 MB entre rodadas, sobretudo na GPU. Não foi investigado nem otimizado, como a tarefa pede: segue na etapa dedicada à memória do WebView2 (ADR-0013), agora com ponto de partida maior.
+- **Orçamento total.** Não cumprido: 372,6 MB contra os 346,9 MB da fase 2. Do aumento sobre o `main` do mesmo dia, 8,4 MB são do `node.exe`, cerca de 1 MB da casca e o resto, uns 25 MB, do WebView2 (de 290,0 para 315,7 MB nas médias das três rodadas, com o processo de GPU indo de uns 100 para 109 a 125 MB). Causa provável: o JavaScript da interface cresceu de 523 KB para 773 KB (mais 96 KB do `markdown-it`, só no Sistema) e as quatro janelas carregam o mesmo bundle; os valores oscilam 16 MB entre rodadas, sobretudo na GPU. Não foi investigado nem otimizado, como a tarefa pede: segue na etapa dedicada à memória do WebView2 (ADR-0013), agora com ponto de partida maior.
 - **Cada janela com o próprio código (F3-49).** Desde então cada janela importa só a própria tela e o Sistema baixa cada área na primeira vez que ela abre (seção 3, "Janelas"). O JavaScript que cada janela carrega na subida caiu de 773 KB para 405 KB no dock, 402 KB na captura, 514 KB no painel e 562 KB no Sistema (com a configuração inicial aberta), e o CSS, de 1.364 regras em todas para 105, 119, 367 e 569. Medido em 24/10/2026, mesma máquina e mesmo método (três rodadas de 60 s, `APPDATA` vazio, release `pnpm tauri build --no-bundle`), contra o commit `90221ef` compilado e medido no mesmo dia: o ganho que dá para medir é o dos quatro renderizadores, que foram de **140,4 MB** para **133,8 MB** juntos (−6,6 MB). O total foi de 359,0 MB (355,7 / 357,9 / 363,4) para 353,5 MB (354,2 / 356,5 / 349,8): os −5,5 MB ficam dentro da variação entre rodadas, porque a GPU, o processo principal do WebView2 e o `node.exe` oscilam alguns MB de uma para outra. Continua acima dos 346,9 MB da fase 2. O heap de JavaScript de cada janela é de uns 3,5 MB antes e depois: o peso dos renderizadores é do próprio WebView2, não do bundle, e o que falta cortar está nas alavancas da etapa dedicada (ADR-0013). Uma rodada indicativa com `--renderer-process-limit=1` deu 272,9 e 305,2 MB.
 - **Lembrete.** O disparo sai 11 ms depois da hora marcada e a interface o recebe 12 ms depois disso. Sem modelo e sem rede, por construção. Não cobre o PC suspenso: a retomada é roteiro do humano.
 - **Captura.** Do Enter à resposta são 13,4 ms, dos quais 1 ms é da janela montando o pedido e o resto é o serviço gravando. A janela de captura estava oculta na medição (o atalho `Ctrl+Alt+Espaço` é de outro programa nesta máquina e o `ShowWindow` do roteiro não a mostrou), mas o WebView2 a considera visível e o caminho de código é o mesmo.
@@ -425,7 +440,8 @@ Feitas em 24/10/2026 no build de release (`pnpm tauri build --no-bundle`) de `fe
 - **Prévia de janela** com `DwmRegisterThumbnail` exige uma janela nativa por cima da WebView; validar no spike da fase 6 antes de prometer.
 - **Translucidez (Acrylic)** no tema Vidro: implementada na fase 1 com fallback sólido ([seção 3](#temas-e-material)); o Windows 10 fica sempre no sólido.
 - **Vários monitores:** dock em todos ou só no principal — a fase 1 usa só o principal.
-- **Memória em release:** 341,7 MB na fase 1 e 346,9 MB na fase 2, acima do orçamento de 200 MB ([seção 7](#medições-da-fase-2)); o serviço custa só 2,5 MB a mais, então reduzir o total continua sendo uma etapa própria, sobre o WebView2.
+- **Memória em release:** 341,7 MB na fase 1, 346,9 MB na fase 2 e 353,5 MB na fase 3 depois da F3-49 (372,6 MB antes dela), acima do orçamento de 200 MB e, na fase 3, 6,6 MB acima da meta de 346,9 MB ([seção 7](#medições-da-fase-3)). O serviço custa 8,4 MB a mais na fase 3, dentro da meta; o resto está no WebView2, e reduzir o total continua sendo uma etapa própria. **Pendente de decisão do humano**, junto com o ADR-0013: aceitar os 353,5 MB ou escolher uma das alavancas medidas na F3-49 (`--renderer-process-limit=1`, que deu 272,9 e 305,2 MB numa rodada indicativa; `--disable-gpu`, que custa o Acrylic e as animações; criar painel, Sistema e captura só na primeira abertura; ou `IsVisible` e `MemoryUsageTargetLevel` do WebView2 nas janelas escondidas, que pedem `webview2-com` como dependência direta da casca).
+- **Roteiros com conta real e no app real:** o Google Agenda, o desbloqueio da sessão, `Ctrl+Alt+P`, o "Entrar" no terminal e a conferência visual das telas da fase 3 dependem do cliente OAuth do autor (F3-21) e do roteiro de teste manual do PR da fase; a lista está em [AGENTS.md](AGENTS.md#o-que-foi-validado).
 - **Agentes em outros modelos:** Codex CLI, Gemini CLI e as APIs da Anthropic e do Gemini não têm adaptador; o Codex só entra pela varredura de processos, porque os hooks dele não falam HTTP ([AGENTS.md](AGENTS.md#5-sessões-de-ia-externas)).
 - **Varredura de processos** (`claude`, `codex`, `gemini`) para sessões sem hook: descrita, não implementada.
 - **Sessão do Claude Code sem ligação por hooks:** o estado depende de a conexão estar ligada e de a variável `MODUCTUS_HOOKS_TOKEN` existir no terminal que abriu a sessão.
