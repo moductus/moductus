@@ -231,6 +231,32 @@
   overflow-wrap: anywhere;
 }
 
+/* Código da resposta em mono, como na prévia de arquivo (DESIGN.md §5); linha longa rola de lado. */
+.fala-codigo {
+  display: block;
+  margin-block: var(--esp-6);
+  padding: var(--esp-8) var(--esp-10);
+  overflow-x: auto;
+  border-radius: var(--raio-caixa);
+  background: var(--fundo-chip);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.fala-codigo[hidden] {
+  display: none;
+}
+
+/* "Ver tudo" e "Mostrar N linhas de código": linha própria, no começo dela. */
+.fala-texto .fala-alternar {
+  display: flex;
+  width: fit-content;
+  margin-block: var(--esp-4);
+  margin-inline-start: calc(-1 * var(--esp-10));
+}
+
 .conversa-pensando {
   color: var(--texto-3);
 }
@@ -308,8 +334,13 @@
   color: var(--texto);
 }
 
-.escrever-enviar {
+.escrever-enviar,
+.escrever-parar {
   margin-left: auto;
+}
+
+.escrever-parar + .escrever-enviar {
+  margin-left: 0;
 }
 
 /* ---------- Página do agente ---------- */

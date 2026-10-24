@@ -15,7 +15,7 @@ import { RegistroProvedores } from "../provedores/registro.ts";
 import { RepositorioAgentes, ServicoAgentes } from "./agentes.ts";
 import { autorizarPorAprovacao, MENSAGEM_EXPIRADA, MENSAGEM_REGRA_NEGA } from "./autorizar.ts";
 import { RepositorioExecucoes, ServicoExecucoes } from "./execucoes.ts";
-import { HISTORICO_CURTO, VOZ_DA_FAMILIA } from "./pedido.ts";
+import { HISTORICO_CURTO, linhaDeHoje, VOZ_DA_FAMILIA } from "./pedido.ts";
 import {
   encerrarInterrompidas,
   MENSAGEM_CANCELADA,
@@ -352,7 +352,10 @@ describe("runtime: pedido ao modelo", () => {
     const enviado = falsos["p-alba"]!.pedidos[0]!;
     expect(enviado.agenteId).toBe("alba");
     expect(enviado.execucaoId).toBe(r.execucao.id);
-    expect(enviado.instrucoes).toBe(`Você é a Alba e cuida do dia.\n\n${VOZ_DA_FAMILIA}`);
+    // A voz do agente fecha com o dia da execução; o prompt do CLI, que trazia a data, não vai.
+    expect(enviado.instrucoes).toBe(
+      `Você é a Alba e cuida do dia.\n\n${VOZ_DA_FAMILIA}\n\n${linhaDeHoje(new Date(r.execucao.inicio!))}`,
+    );
     expect(enviado.ferramentas.map((f) => f.nome)).toEqual([
       "teste__anotar",
       "teste__demorar",

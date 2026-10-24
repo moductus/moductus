@@ -4,7 +4,7 @@ import {
   type SpawnOptionsWithoutStdio,
 } from "node:child_process";
 import { createInterface } from "node:readline";
-import { alvoDoCli, arquivoExiste, noPath, type AlvoCli } from "../executavel.ts";
+import { alvoDoCli, arquivoExiste, derrubarArvore, noPath, type AlvoCli } from "../executavel.ts";
 import type { ConfigProvedor, EventoAgente, PedidoDoAgente, Provedor } from "../provedor.ts";
 import type { FabricaProvedor } from "../registro.ts";
 import { LeitorStreamJson } from "./leitor.ts";
@@ -148,7 +148,7 @@ const VARIAVEIS_DE_COBRANCA_POR_TOKEN = new RegExp(
  * das janelas, pasta de dados, token dos hooks...), sem plugins herdados e sem o que faria o CLI
  * cobrar por token em vez de usar a assinatura. Os `CLAUDE.md` e a
  * memória automática do usuário ficam fora: o agente recebe as instruções dele pelo
- * `--append-system-prompt` e mais nada. Só entra o acesso ao MCP desta execução, quando houver.
+ * `--system-prompt` e mais nada. Só entra o acesso ao MCP desta execução, quando houver.
  */
 export function ambienteDoCli(base: NodeJS.ProcessEnv, acessoMcp: string | null): NodeJS.ProcessEnv {
   const ambiente = Object.fromEntries(
@@ -160,6 +160,19 @@ export function ambienteDoCli(base: NodeJS.ProcessEnv, acessoMcp: string | null)
   ambiente.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
   if (acessoMcp !== null) ambiente[VARIAVEL_ACESSO_MCP] = acessoMcp;
   return ambiente;
+}
+
+/** O prompt de quem não mandou instrução: nunca o padrão do CLI, que é de agente de código. */
+export const PROMPT_SEM_INSTRUCOES = "Você é um agente do Moductus. Responda em português do Brasil.";
+
+/**
+ * O prompt de sistema inteiro (`--system-prompt`, ADR-0017, revisão de 24/10/2026): as instruções
+ * do pedido, no lugar do prompt de agente de código do Claude Code, que levava o modelo a responder
+ * ação com script. A voz do agente já traz o dia de hoje (`montarInstrucoes`); o trabalho curto
+ * (classificador, captura, teste do provedor) traz o que precisa.
+ */
+export function promptDeSistema(instrucoes: string | undefined): string {
+  return instrucoes?.trim() || PROMPT_SEM_INSTRUCOES;
 }
 
 /** `mcpUrl` é o endereço do acesso aberto para esta execução; sem ele, nenhuma ferramenta. */
@@ -186,8 +199,10 @@ export function argumentosDoClaude(
     // instruções editadas do agente só valeriam depois de compactar a conversa (2.1.257+).
     "--system-prompt-snapshot",
     "off",
+    // O prompt inteiro é o do agente: nada do prompt de agente de código do Claude Code.
+    "--system-prompt",
+    promptDeSistema(pedido.instrucoes),
   ];
-  if (pedido.instrucoes) argumentos.push("--append-system-prompt", pedido.instrucoes);
   if (config.modelo) argumentos.push("--model", config.modelo);
   if (pedido.continuarDe) argumentos.push("--resume", pedido.continuarDe);
   if (mcpUrl && pedido.ferramentas.length > 0) {
@@ -304,8 +319,9 @@ export class ProvedorClaudeCli implements Provedor {
     let erros = "";
     processo.stderr.setEncoding("utf8");
     processo.stderr.on("data", (pedaco: string) => (erros = (erros + pedaco).slice(-2000)));
-    const aoAbortar = () => processo.kill();
-    sinal.addEventListener("abort", aoAbortar, { once: true });
+    // A árvore inteira: um hook do CLI em andamento não sobra rodando depois de parar.
+    const encerrar = () => derrubarArvore(processo.pid, () => processo.kill());
+    sinal.addEventListener("abort", encerrar, { once: true });
     // CLI que não sobe (ou sai antes de ler) fecha a entrada; o erro de verdade vem da saída.
     processo.stdin.on("error", () => {});
     processo.stdin.end(montarPrompt(pedido), "utf8");
@@ -356,12 +372,12 @@ export class ProvedorClaudeCli implements Provedor {
         if (vivo(processo)) {
           if (leitor.terminou && !sinal.aborted) await Promise.race([saida, pausa(ESPERA_SAIDA_MS)]);
           if (vivo(processo)) {
-            processo.kill();
+            encerrar();
             await Promise.race([saida, pausa(ESPERA_ENCERRAR_MS)]);
           }
         }
       } finally {
-        sinal.removeEventListener("abort", aoAbortar);
+        sinal.removeEventListener("abort", encerrar);
       }
     }
   }

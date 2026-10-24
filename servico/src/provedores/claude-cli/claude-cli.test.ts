@@ -18,6 +18,8 @@ import {
   ProvedorClaudeCli,
   type OpcoesClaudeCli,
   PRAZO_CHAMADA_MCP_MS,
+  PROMPT_SEM_INSTRUCOES,
+  promptDeSistema,
   VARIAVEL_ACESSO_MCP,
 } from "./claude-cli.ts";
 import type { AlvoCli } from "../executavel.ts";
@@ -199,9 +201,10 @@ describe("adaptador Claude Code CLI", () => {
       "--verbose",
       "--include-partial-messages",
     ]);
-    expect(argumentos).toContain("Você é o Nuno, agente de dev do Moductus.");
-    expect(argumentos[argumentos.indexOf("--append-system-prompt") + 1]).toBe(
-      "Você é o Nuno, agente de dev do Moductus.",
+    // O prompt inteiro é o do agente, com a data de hoje: nada do prompt de agente de código.
+    expect(argumentos).not.toContain("--append-system-prompt");
+    expect(argumentos[argumentos.indexOf("--system-prompt") + 1]).toMatch(
+      /^Você é o Nuno, agente de dev do Moductus\.$/,
     );
     expect(argumentos[argumentos.indexOf("--model") + 1]).toBe("haiku");
     // O argumento vazio sobrevive à linha de comando do Windows: nenhuma ferramenta nativa.
@@ -403,7 +406,6 @@ describe("adaptador Claude Code CLI", () => {
     controle.abort(new Error("pausado pela bandeja"));
     await expect(drenar(eventos)).rejects.toThrow("pausado pela bandeja");
     // A execução só termina depois que o processo saiu.
-    expect(processos[0]?.killed).toBe(true);
     expect(vivo(processos[0])).toBe(false);
     // Já cancelado, nem sobe outro processo.
     await expect(coletar(provedor.executar(pedido(), controle.signal))).rejects.toThrow(
@@ -433,9 +435,38 @@ describe("adaptador Claude Code CLI", () => {
     controle.abort(new Error("pausado pela bandeja"));
     expect((await depoisDoFim).done).toBe(true);
     expect(Date.now() - inicio).toBeLessThan(2000);
-    expect(processos[0]?.killed).toBe(true);
     expect(vivo(processos[0])).toBe(false);
   });
+
+  // Parar a resposta (F3-53) derruba a árvore do CLI, como a detecção: matar só o processo deixaria
+  // vivo o que ele abriu, como um hook ainda rodando. O teste só acaba com o neto morto.
+  test.runIf(process.platform === "win32")(
+    "cancelar derruba também o que o CLI abriu, não só o processo dele",
+    async () => {
+      const { provedor } = comCliFalso([gravadaSemResult()], "neto");
+      const controle = new AbortController();
+      const eventos = provedor.executar(pedido(), controle.signal)[Symbol.asyncIterator]();
+      expect((await eventos.next()).value).toMatchObject({ tipo: "ferramenta" });
+      const arquivoDoNeto = join(pasta, "anotacao-0.json.neto");
+      const neto = await vi.waitFor(
+        () => {
+          const pid = Number(readFileSync(arquivoDoNeto, "utf8"));
+          if (!(pid > 0)) throw new Error("o neto ainda não gravou o pid");
+          return pid;
+        },
+        { timeout: 10_000, interval: 20 },
+      );
+      try {
+        controle.abort(new Error("você parou a resposta"));
+        await expect(drenar(eventos)).rejects.toThrow("você parou a resposta");
+        expect(vivo(processos[0])).toBe(false);
+        await vi.waitFor(() => expect(pidVivo(neto)).toBe(false), { timeout: 10_000, interval: 50 });
+      } finally {
+        if (pidVivo(neto)) process.kill(neto);
+      }
+    },
+    30_000,
+  );
 
   test("CLI que não está instalado vira erro `ausente`", async () => {
     const provedor = new ProvedorClaudeCli(config(), { comando: "claude-que-nao-existe-moductus", pasta });
@@ -472,7 +503,8 @@ describe("adaptador Claude Code CLI", () => {
         expect(eventos.at(-1)).toEqual({ tipo: "fim", continuacao: "78e523d4-fecc-4ec2-9fd7-87a2c33372d6" });
         const { argumentos, entrada } = JSON.parse(readFileSync(anotacao, "utf8")) as Anotacao;
         expect(entrada).toBe("Quais sessões de IA estão abertas agora?");
-        expect(argumentos[argumentos.indexOf("--append-system-prompt") + 1]).toBe(instrucoes);
+        // As instruções passam inteiras, sem shell.
+        expect(argumentos[argumentos.indexOf("--system-prompt") + 1]).toBe(instrucoes);
         expect(argumentos[argumentos.indexOf("--tools") + 1]).toBe("");
       } finally {
         vi.unstubAllEnvs();
@@ -641,6 +673,25 @@ describe("adaptador Claude Code CLI", () => {
 });
 
 describe("argumentos e prompt", () => {
+  test("o prompt de sistema é só o do pedido e substitui o do Claude Code", () => {
+    const instrucoes =
+      "Você é a Faina.\n\nComo você age:\n- Você age só pelas ferramentas que recebeu.\n\nHoje é sábado, 24/10/2026.";
+    const argumentos = argumentosDoClaude(pedido({ instrucoes }), config(), null);
+    expect(argumentos.filter((a) => a.includes("system-prompt") && a !== "--system-prompt-snapshot")).toEqual(
+      ["--system-prompt"],
+    );
+    // Como veio: a data, quando há, é da voz do agente; o adaptador não põe outra.
+    expect(argumentos[argumentos.indexOf("--system-prompt") + 1]).toBe(instrucoes);
+    expect(argumentos.join(" ").match(/Hoje é/g)).toHaveLength(1);
+    // Sem instrução, ainda assim não sobra o prompt de agente de código.
+    expect(promptDeSistema("  ")).toBe(PROMPT_SEM_INSTRUCOES);
+    expect(promptDeSistema(undefined)).toBe(PROMPT_SEM_INSTRUCOES);
+    // O resto do modo -p continua: nenhuma ferramenta nativa e o prompt refeito a cada pedido.
+    expect(argumentos[argumentos.indexOf("--tools") + 1]).toBe("");
+    expect(argumentos[argumentos.indexOf("--system-prompt-snapshot") + 1]).toBe("off");
+    expect(argumentos[0]).toBe("-p");
+  });
+
   test("MCP do Moductus: token por variável, nunca literal, e só as ferramentas do agente", () => {
     const argumentos = argumentosDoClaude(pedido(), config(), "http://127.0.0.1:47822/mcp");
     const mcp = JSON.parse(argumentos[argumentos.indexOf("--mcp-config") + 1] ?? "{}");
@@ -748,6 +799,16 @@ async function drenar(eventos: AsyncIterator<EventoAgente>): Promise<void> {
 
 function vivo(processo: ChildProcessWithoutNullStreams | undefined): boolean {
   return processo !== undefined && processo.exitCode === null && processo.signalCode === null;
+}
+
+/** Se o processo do pid ainda existe (sinal 0 só pergunta). */
+function pidVivo(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function esperarSaida(processo: ChildProcessWithoutNullStreams | undefined): Promise<void> {

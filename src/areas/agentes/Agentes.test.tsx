@@ -11,6 +11,7 @@ import { RecusaDoServico } from "@moductus/contrato/cliente";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LIMITE_FALA } from "../../servico/conversas.ts";
 import { auditar } from "../../teste/acessibilidade.ts";
 import type { Destino } from "../areas.ts";
 import { Agentes, escreverLugar, lerLugar } from "./Agentes.tsx";
@@ -129,6 +130,8 @@ function servicoDeConversas(rotear: string[] = ["tula", "alba"]) {
       }
       case "conversas.apagar":
         return Promise.resolve([DA_TULA]);
+      case "conversas.parar":
+        return Promise.resolve(1);
       case "aprovacoes.decidir":
         return new Promise(() => undefined);
       default:
@@ -348,6 +351,133 @@ describe("conversa com um agente", () => {
     expect(pedidosDe("conversas.apagar")).toEqual([{ id: DA_TULA.id }]);
     expect(pedidosDe("conversas.abrir")).toEqual([{ agenteId: "tula" }, { agenteId: "tula" }]);
     expect(botao("Apagar conversa")).toBeUndefined();
+  });
+});
+
+describe("parar e resposta enxuta", () => {
+  const daTula = { conversaId: DA_TULA.id, agenteId: "tula" };
+
+  it("Parar aparece só enquanto responde; Esc no campo e o botão param, e o foco fica no campo", async () => {
+    servicoDeConversas(["tula"]);
+    await montar("tula");
+    expect(botao("Parar")).toBeUndefined();
+
+    await escrever("limpa o cache do PC");
+    await teclarEnter();
+    // Na vez da Tula, antes do primeiro pedaço, já dá para parar.
+    expect(botao("Parar").getAttribute("aria-keyshortcuts")).toBe("Escape");
+    await emitir("conversas.parcial", { ...daTula, execucaoId: "01E5", texto: "Primeiro abra o terminal" });
+
+    await act(async () => {
+      por("textarea")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(pedidosDe("conversas.parar")).toEqual([{ id: DA_TULA.id }]);
+    expect(auditar(recipiente)).toEqual([]);
+
+    // O serviço grava o que ela disse, com o aviso: a fala em andamento sai e o Parar some.
+    await emitir(
+      "conversas.mensagem",
+      mensagem({
+        ...daTula,
+        execucaoId: "01E5",
+        conteudo: "Primeiro abra o terminal\n\nVocê parou a resposta aqui.",
+      }),
+    );
+    expect(botao("Parar")).toBeUndefined();
+    expect(document.activeElement).toBe(por("textarea"));
+
+    await escrever("e agora?");
+    await teclarEnter();
+    await act(async () => botao("Parar").click());
+    expect(pedidosDe("conversas.parar")).toEqual([{ id: DA_TULA.id }, { id: DA_TULA.id }]);
+
+    // Sem nada respondendo, Esc no campo não pede nada.
+    await emitir(
+      "conversas.mensagem",
+      mensagem({ ...daTula, execucaoId: null, conteudo: "Você parou a resposta aqui." }),
+    );
+    await act(async () => {
+      por("textarea")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(pedidosDe("conversas.parar")).toHaveLength(2);
+  });
+
+  it("Esc em qualquer ponto da área de escrever para, menos compondo um caractere", async () => {
+    servicoDeConversas(["tula"]);
+    await montar("tula");
+    await escrever("limpa o cache do PC");
+    await teclarEnter();
+    const esc = (alvo: Element, isComposing = false) =>
+      act(async () => {
+        alvo.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, isComposing }));
+      });
+
+    // Compondo (acento, IME), o Esc é do teclado.
+    await esc(por("textarea")!, true);
+    expect(pedidosDe("conversas.parar")).toEqual([]);
+    // No próprio botão, como o aria-keyshortcuts promete.
+    await esc(botao("Parar"));
+    expect(pedidosDe("conversas.parar")).toEqual([{ id: DA_TULA.id }]);
+  });
+
+  it("se o Parar some com o foco nele, o foco volta ao campo", async () => {
+    servicoDeConversas(["tula"]);
+    await montar("tula");
+    await escrever("limpa o cache do PC");
+    await teclarEnter();
+    await emitir("conversas.parcial", { ...daTula, execucaoId: "01E9", texto: "Vendo" });
+    await act(async () => botao("Parar").focus());
+    expect(document.activeElement).toBe(botao("Parar"));
+
+    // A resposta terminou sozinha, sem ninguém clicar: o botão sai com o foco nele.
+    await emitir("conversas.mensagem", mensagem({ ...daTula, execucaoId: "01E9", conteudo: "Vendo." }));
+    expect(botao("Parar")).toBeUndefined();
+    expect(document.activeElement).toBe(por("textarea"));
+  });
+
+  it("bloco de código longo vem recolhido e resposta longa vem cortada, com Ver tudo", async () => {
+    servicoDeConversas(["tula"]);
+    await montar("tula");
+    const script = Array.from({ length: 40 }, (_, i) => `Remove-Item C:\\temp\\${i}`).join("\n");
+    await emitir(
+      "conversas.mensagem",
+      mensagem({
+        ...daTula,
+        execucaoId: "01E6",
+        conteudo: `Rode isto:\n\`\`\`powershell\n${script}\n\`\`\``,
+      }),
+    );
+    const codigo = por<HTMLElement>(".fala-codigo")!;
+    expect(codigo.hidden).toBe(true);
+    const mostrar = botao("Mostrar 40 linhas de código");
+    expect(mostrar.getAttribute("aria-expanded")).toBe("false");
+    expect(mostrar.getAttribute("aria-controls")).toBe(codigo.id);
+    await act(async () => mostrar.click());
+    expect(codigo.hidden).toBe(false);
+    expect(codigo.textContent).toBe(script);
+    expect(botao("Recolher o código").getAttribute("aria-expanded")).toBe("true");
+
+    const longa = "Achei 12 pastas de cache. ".repeat(80).trim();
+    await emitir("conversas.mensagem", mensagem({ ...daTula, execucaoId: "01E7", conteudo: longa }));
+    const ultima = () => [...recipiente.querySelectorAll(".fala-texto")].at(-1)!;
+    expect(ultima().textContent!.length).toBeLessThanOrEqual(LIMITE_FALA + "…Ver tudo".length);
+    expect(ultima().textContent!.endsWith("…Ver tudo")).toBe(true);
+    await act(async () => botao("Ver tudo").click());
+    expect(ultima().textContent).toBe(`${longa}Ver menos`);
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("a resposta que chega com um script longo já aparece recolhida", async () => {
+    servicoDeConversas(["tula"]);
+    await montar("tula");
+    const linhas = Array.from({ length: 20 }, (_, i) => `del /q %TEMP%\\${i}`).join("\n");
+    await emitir("conversas.parcial", {
+      ...daTula,
+      execucaoId: "01E8",
+      texto: `Assim:\n\`\`\`bat\n${linhas}`,
+    });
+    expect(por<HTMLElement>(".fala-codigo")!.hidden).toBe(true);
+    expect(botao("Mostrar 20 linhas de código")).toBeDefined();
   });
 });
 

@@ -174,6 +174,7 @@ Baseada em guias de escrita de interface (Microsoft, Google Conversation Design,
 - Má notícia: primeiro o impacto, depois o motivo, depois a saída. Nunca insinua que a culpa é sua.
 - Desculpa só quando o erro foi do próprio agente, e uma vez.
 - Pedido de aprovação diz o que vai acontecer, o tamanho (quantos, quanto) e se dá para desfazer; o botão é um verbo com o objeto ("Mover 38 arquivos"), nunca "OK".
+- Pedido que é ação vai pelas ferramentas do agente; sem ferramenta para isso, ou fora da área dele, ele diz numa frase que não faz. Nunca responde uma ação com script, comando ou código para você rodar, nem com passo a passo, a não ser que você peça.
 
 | | Traços | Nunca |
 |---|---|---|
@@ -267,7 +268,7 @@ O serviço inicia o CLI como subprocesso, envia o pedido e lê a saída estrutur
 
 | Provedor | Situação | Comando base | Ferramentas | Observação |
 |---|---|---|---|---|
-| Claude Code | Implementado e validado na 2.1.287 (mínima: 2.1.257) | `claude -p --output-format stream-json --verbose --include-partial-messages` | `--mcp-config` apontando para o MCP do Moductus, `--allowedTools` só com as ferramentas do agente, `--tools ""` e `--strict-mcp-config` | Instruções via `--append-system-prompt`; continuidade com `--resume`; aprovação pelo hook `PreToolUse` do serviço, porque no `-p` o `PermissionRequest` não dispara (seção 5.1) |
+| Claude Code | Implementado e validado na 2.1.287 (mínima: 2.1.257) | `claude -p --output-format stream-json --verbose --include-partial-messages` | `--mcp-config` apontando para o MCP do Moductus, `--allowedTools` só com as ferramentas do agente, `--tools ""` e `--strict-mcp-config` | Instruções via `--system-prompt`, que substitui o prompt de agente de código do CLI (ADR-0017, revisão de 24/10/2026); continuidade com `--resume`; aprovação pelo hook `PreToolUse` do serviço, porque no `-p` o `PermissionRequest` não dispara (seção 5.1) |
 | Codex | Previsto | `codex exec --json` | Servidor MCP na configuração do Codex **(validar formato por flag)** | Sem adaptador |
 | Gemini CLI | Previsto | `gemini -p` com saída JSON **(validar flag)** | MCP na configuração do Gemini | Sem adaptador |
 | Antigravity | Previsto | **(validar)** o que ele expõe fora do editor | | Se não houver CLI, entra só como sessão acompanhada (seção 5) |
