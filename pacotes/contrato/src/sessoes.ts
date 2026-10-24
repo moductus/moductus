@@ -46,11 +46,20 @@ export const ContextoSessao = z.object({
 });
 export type ContextoSessao = z.infer<typeof ContextoSessao>;
 
+/**
+ * Onde a sessão do Claude Code roda: no terminal (o CLI) ou no app Claude Desktop (a aba Code).
+ * Vem do `entrypoint` que o Claude Code anota no transcript.
+ */
+export const OndeRoda = z.enum(["terminal", "desktop"]);
+export type OndeRoda = z.infer<typeof OndeRoda>;
+
 export const SessaoIa = z.object({
   id: Id,
   /** Vazio enquanto o `cwd` ainda não virou projeto (a 004 aceita). */
   projetoId: Id.nullable(),
   ferramenta: FerramentaSessao,
+  /** `null` enquanto o transcript não disse, e em toda ferramenta que não o Claude Code. */
+  ondeRoda: OndeRoda.nullable(),
   /** Session id da própria ferramenta. */
   idExterno: z.string().min(1),
   modelo: z.string().nullable(),

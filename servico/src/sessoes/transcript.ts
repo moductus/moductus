@@ -7,8 +7,9 @@ import { caminhoSettingsClaude } from "./ligacao.ts";
 /**
  * Leitor do transcript do Claude Code (`transcript_path` dos hooks): um JSONL que a ferramenta
  * vai acrescentando, uma linha por mensagem ou bloco. Do arquivo só sai o que a própria
- * ferramenta registrou de uso (`message.usage` de cada resposta), as compactações e, se um dia
- * vier, a janela que ela informa; o conteúdo da conversa nunca é guardado. Tolerante por desenho
+ * ferramenta registrou de uso (`message.usage` de cada resposta), as compactações, onde a sessão
+ * roda (`entrypoint`) e, se um dia vier, a janela que ela informa; o conteúdo da conversa nunca é
+ * guardado. Tolerante por desenho
  * (spec §7): linha que não é JSON, tipo desconhecido e campo novo são ignorados. Formato
  * conferido no Claude Code 2.1.287 e 2.1.293.
  */
@@ -32,6 +33,8 @@ export interface UsoNaLinha {
   saida: number;
   cacheCriado: number;
   cacheLido: number;
+  /** `entrypoint` da linha: `cli` no terminal, `claude-desktop` no app Desktop; vazio sem o campo. */
+  pontoDeEntrada: string | null;
 }
 
 /** A conversa foi compactada: o contexto recomeça com o resumo. */
@@ -39,6 +42,7 @@ export interface CompactacaoNaLinha {
   tipo: "compactacao";
   /** `compactMetadata.postTokens`: o tamanho do contexto logo depois; vazio quando não veio. */
   tokensDepois: number | null;
+  pontoDeEntrada: string | null;
 }
 
 /**
@@ -95,6 +99,7 @@ export function lerLinhaTranscript(linha: string): LinhaTranscript | null {
     return {
       tipo: "compactacao",
       tokensDepois: typeof depois === "number" && Number.isFinite(depois) && depois >= 0 ? depois : null,
+      pontoDeEntrada: texto(corpo.entrypoint),
     };
   }
   if (corpo.type === "cost-state") return janelasDaFerramenta(corpo);
@@ -115,6 +120,7 @@ export function lerLinhaTranscript(linha: string): LinhaTranscript | null {
     saida: numero(uso.output_tokens),
     cacheCriado: numero(uso.cache_creation_input_tokens),
     cacheLido: numero(uso.cache_read_input_tokens),
+    pontoDeEntrada: texto(corpo.entrypoint),
   };
 }
 
