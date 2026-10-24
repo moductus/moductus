@@ -415,6 +415,13 @@
       "w": 1440,
       "x": 4560,
       "y": 27080
+    },
+    "Icones.dc.html": {
+      "h": 700,
+      "title": "Marca · ícone da bandeja e do app",
+      "w": 1440,
+      "x": 3040,
+      "y": 4120
     }
   },
   "createdOnFiles": {
@@ -605,7 +612,8 @@
     "ConfigConexoesGoogle.dc.html",
     "ConfigConexoesGoogleAutorizar.dc.html",
     "ConfigConexoesGoogleEstados.dc.html",
-    "TutorialTour.dc.html"
+    "TutorialTour.dc.html",
+    "Icones.dc.html"
   ],
   "pages": [],
   "title": "Moductus — identidade visual"

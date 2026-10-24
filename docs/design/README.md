@@ -12,6 +12,7 @@ Fontes dos desenhos do canvas [Moductus — identidade visual](https://claude.ai
 | `canvas/Midia.dc.html` | Painel Mídia, controles (microfone, manter acordado, volume) e apps abertos |
 | `canvas/Captura.dc.html` | Captura rápida transformando uma frase num gasto |
 | `canvas/Marca.dc.html` | Quatro opções de marca em fundo escuro e claro, de 104 a 16 px |
+| `canvas/Icones.dc.html` | Ícone do app (quadrado Grafite, de 128 a 16 px, e na barra de tarefas) e da bandeja (branco na barra escura, preto na clara, no alto contraste de fundo preto e claro, um desenho por escala de 16 a 32 px) |
 | `canvas/Dock.dc.html` | Componente do dock, com tema e item ativo, usado pelos painéis |
 | `canvas/Time.dc.html` | Os quatro agentes (Alba, Tula, Faina, Nuno) como personagens, com as expressões de cada estado e o esboço de criar um agente |
 | `canvas/Personagem.dc.html` | Componente do personagem: agente, expressão, corpo inteiro ou só a cabeça, tamanho; na cabeça, o recorte da Faina começa 3 unidades à direita para o nó da bandana caber inteiro |
@@ -36,6 +37,6 @@ Fontes dos desenhos do canvas [Moductus — identidade visual](https://claude.ai
 | `canvas/DetalheTarefa.dc.html`, `DetalheEvento`, `DetalheEventoLeitura` | Detalhe de tarefa (todos os campos, origem, espelho no "Moductus", apagar) e de evento ao lado da agenda do dia; evento de outro calendário só leitura, com "Pedir à Alba para mudar" e o cartão de aprovação |
 | `canvas/InicioEditar.dc.html` | Início no modo de editar blocos: ordenar por arraste ou teclado, esconder e mostrar |
 | `canvas/canvas.json` | Disposição dos quadros no canvas |
-| `marca/` | Ícone do app (`.ico` e PNG), ícones da bandeja e a marca em SVG |
+| `marca/` | Ícone do app (`.ico` e PNG), ícones da bandeja claro e escuro (16, 20, 24 e 32 px) e a marca em SVG; saem do `kit/icones.py` da orquestra, que grava os mesmos arquivos em `src-tauri/icons` |
 
 Os arquivos `.dc.html` usam o formato do Claude Design e dependem do runtime do canvas (`support.js`), então não abrem sozinhos no navegador. Para ver e editar, use o link do canvas; para mudar o desenho, edite lá e atualize estas cópias.
