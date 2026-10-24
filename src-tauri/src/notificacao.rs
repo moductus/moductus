@@ -172,7 +172,7 @@ fn ao_clicar(tag: &str, argumentos: &str) {
     crate::servico::avisar(serde_json::json!({ "tipo": "notificacao-clique", "notificacao": tag, "botao": botao }));
     if abre_o_time(botao.as_deref(), guardado.map(|(_, sem)| sem)) {
         if let Some(app) = APP.get() {
-            crate::janelas::painel_mostrar(app.clone(), "agentes".to_string());
+            crate::janelas::painel_mostrar(app.clone(), "agentes".to_string(), crate::clique_fora::Origem::Usuario);
         }
     }
 }

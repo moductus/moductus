@@ -24,14 +24,19 @@ use windows::Win32::{
     },
 };
 
-use crate::{appbar, dock};
+use crate::{
+    appbar,
+    clique_fora::{self, Origem},
+    dock,
+};
 
 /// Largura do cartão do painel lateral em pixels lógicos (DESIGN §3: 400 px, como nos quadros).
 pub const LARGURA_PAINEL: f64 = 400.0;
-/// Afastamento do cartão para o dock (`--margem-painel`): fica dentro da janela, do lado do dock.
+/// Folga transparente do lado de fora do cartão (`--margem-painel`), onde a sombra dele cabe. Do
+/// lado do dock não há folga: o cartão encosta no dock.
 pub const MARGEM_PAINEL: f64 = 12.0;
 
-/// Largura física da janela do painel: o cartão mais o afastamento, na escala do monitor.
+/// Largura física da janela do painel: o cartão mais a folga, na escala do monitor.
 pub fn largura_janela_painel(escala: f64) -> i32 {
     ((LARGURA_PAINEL + MARGEM_PAINEL) * escala).round() as i32
 }
@@ -84,27 +89,36 @@ fn esconder(janela: &WebviewWindow) {
 
 // ---------- painel ----------
 
-/// Retângulo do painel encostado no dock, do lado de dentro da tela.
-pub fn retangulo_painel(dock: RECT, lado: appbar::Lado, largura: i32) -> RECT {
+/// Retângulo do painel encostado no dock desenhado, do lado de dentro da tela. `recuo` é a margem
+/// transparente da janela do dock flutuante (física; zero no colado): a janela do painel entra
+/// nela para o cartão encostar no dock, não na borda da janela dele.
+pub fn retangulo_painel(dock: RECT, lado: appbar::Lado, largura: i32, recuo: i32) -> RECT {
     match lado {
-        appbar::Lado::Esquerda => RECT { left: dock.right, top: dock.top, right: dock.right + largura, bottom: dock.bottom },
-        appbar::Lado::Direita => RECT { left: dock.left - largura, top: dock.top, right: dock.left, bottom: dock.bottom },
+        appbar::Lado::Esquerda => {
+            let left = dock.right - recuo;
+            RECT { left, top: dock.top, right: left + largura, bottom: dock.bottom }
+        }
+        appbar::Lado::Direita => {
+            let right = dock.left + recuo;
+            RECT { left: right - largura, top: dock.top, right, bottom: dock.bottom }
+        }
     }
 }
 
 /// Abre o painel de uma área ao lado do dock; a mesma área de novo fecha.
 #[tauri::command]
 pub fn painel_abrir(app: AppHandle, area: String) {
-    abrir_painel(app, area, true);
+    abrir_painel(app, area, true, Origem::Usuario);
 }
 
 /// Abre o painel de uma área sem alternar: já aberto nela, fica aberto (o clique no aviso do
-/// Windows leva ao time, nunca o esconde).
-pub fn painel_mostrar(app: AppHandle, area: String) {
-    abrir_painel(app, area, false);
+/// Windows leva ao time, nunca o esconde). Já aberto na área, quem abriu antes continua valendo
+/// para o clique fora.
+pub fn painel_mostrar(app: AppHandle, area: String, origem: Origem) {
+    abrir_painel(app, area, false, origem);
 }
 
-fn abrir_painel(app: AppHandle, area: String, alternar: bool) {
+fn abrir_painel(app: AppHandle, area: String, alternar: bool, origem: Origem) {
     let (Some(painel), Some(janela_dock)) = (janela(&app, "painel"), janela(&app, "dock")) else { return };
     let aberta = PAINEL.lock().unwrap().as_ref().map(|(a, _)| a.clone());
     if aberta.as_deref() == Some(area.as_str()) && unsafe { IsWindowVisible(hwnd(&painel)) }.as_bool() {
@@ -120,14 +134,17 @@ fn abrir_painel(app: AppHandle, area: String, alternar: bool) {
     unsafe {
         let _ = GetWindowRect(hwnd(&janela_dock), &mut rd);
     }
-    let largura = largura_janela_painel(appbar::escala(dock::hwnd_de(&janela_dock)));
-    let rc = retangulo_painel(rd, dock::configuracao().lado, largura);
+    let escala = appbar::escala(dock::hwnd_de(&janela_dock));
+    let config = dock::configuracao();
+    let recuo = (dock::margem_janela(config.forma) * escala).round() as i32;
+    let rc = retangulo_painel(rd, config.lado, largura_janela_painel(escala), recuo);
     let _ = painel.emit("painel:area", &area);
     unsafe {
         let h = hwnd(&painel);
         let _ = SetWindowPos(h, Some(HWND_TOPMOST), rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, SWP_NOACTIVATE);
         let _ = ShowWindow(h, SW_SHOWNOACTIVATE);
     }
+    clique_fora::vigiar(origem);
 }
 
 #[tauri::command]
@@ -140,6 +157,7 @@ pub fn painel_fechar(app: AppHandle) {
         }
         dock::sem_ativar(dock::hwnd_de(&painel));
     }
+    clique_fora::desligar();
     *PAINEL.lock().unwrap() = None;
     *CONFIRMADA.lock().unwrap() = None;
     // O dock tira a marca da área aberta.
@@ -178,7 +196,7 @@ pub fn atender_servico(app: &AppHandle, linha: &str) -> serde_json::Value {
             if crate::tela_cheia::agora() {
                 return serde_json::json!({ "ok": false, "tela_cheia": true });
             }
-            painel_mostrar(app.clone(), area);
+            painel_mostrar(app.clone(), area, Origem::Servico);
             serde_json::json!({ "ok": true })
         }
         Ok(PedidoPainel::Aberto { area }) => {
@@ -225,6 +243,7 @@ pub fn painel_pronto(area: String) -> Option<f64> {
 pub fn painel_foco(app: AppHandle, quer: bool) {
     let Some(painel) = janela(&app, "painel") else { return };
     let h = hwnd(&painel);
+    clique_fora::teclado(quer);
     if quer {
         dock::com_ativar(dock::hwnd_de(&painel));
         unsafe {
@@ -448,11 +467,26 @@ mod testes {
     #[test]
     fn painel_encosta_no_dock_pelo_lado_de_dentro() {
         let dock = RECT { left: 0, top: 48, right: 64, bottom: 1440 };
-        let e = retangulo_painel(dock, appbar::Lado::Esquerda, 412);
+        let e = retangulo_painel(dock, appbar::Lado::Esquerda, 412, 0);
         assert_eq!((e.left, e.right, e.top, e.bottom), (64, 476, 48, 1440));
         let dock_d = RECT { left: 2496, top: 48, right: 2560, bottom: 1440 };
-        let d = retangulo_painel(dock_d, appbar::Lado::Direita, 412);
+        let d = retangulo_painel(dock_d, appbar::Lado::Direita, 412, 0);
         assert_eq!((d.left, d.right), (2084, 2496));
+    }
+
+    /// O dock flutuante tem 8 px transparentes em volta do que desenha: a janela do painel entra
+    /// neles e o cartão encosta no dock, sem o vão de 8 px (mais os 12 da folga) que sobrava.
+    #[test]
+    fn painel_encosta_no_dock_flutuante_e_nao_na_janela_dele() {
+        let recuo = (dock::margem_janela(dock::Forma::Flutuante) * 1.25).round() as i32;
+        assert_eq!(recuo, 10);
+        // Janela do dock de 80 lógicos a 125%: 100 físicos, o dock desenhado vai de 10 a 90.
+        let janela = RECT { left: 0, top: 0, right: 100, bottom: 1440 };
+        let e = retangulo_painel(janela, appbar::Lado::Esquerda, largura_janela_painel(1.25), recuo);
+        assert_eq!((e.left, e.right), (90, 605));
+        let janela_d = RECT { left: 2460, top: 0, right: 2560, bottom: 1440 };
+        let d = retangulo_painel(janela_d, appbar::Lado::Direita, largura_janela_painel(1.25), recuo);
+        assert_eq!((d.left, d.right), (1955, 2470));
     }
 
     #[test]
