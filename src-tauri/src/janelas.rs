@@ -24,7 +24,11 @@ use windows::Win32::{
     },
 };
 
-use crate::{appbar, dock};
+use crate::{
+    appbar,
+    clique_fora::{self, Origem},
+    dock,
+};
 
 /// Largura do cartão do painel lateral em pixels lógicos (DESIGN §3: 400 px, como nos quadros).
 pub const LARGURA_PAINEL: f64 = 400.0;
@@ -104,16 +108,17 @@ pub fn retangulo_painel(dock: RECT, lado: appbar::Lado, largura: i32, recuo: i32
 /// Abre o painel de uma área ao lado do dock; a mesma área de novo fecha.
 #[tauri::command]
 pub fn painel_abrir(app: AppHandle, area: String) {
-    abrir_painel(app, area, true);
+    abrir_painel(app, area, true, Origem::Usuario);
 }
 
 /// Abre o painel de uma área sem alternar: já aberto nela, fica aberto (o clique no aviso do
-/// Windows leva ao time, nunca o esconde).
-pub fn painel_mostrar(app: AppHandle, area: String) {
-    abrir_painel(app, area, false);
+/// Windows leva ao time, nunca o esconde). Já aberto na área, quem abriu antes continua valendo
+/// para o clique fora.
+pub fn painel_mostrar(app: AppHandle, area: String, origem: Origem) {
+    abrir_painel(app, area, false, origem);
 }
 
-fn abrir_painel(app: AppHandle, area: String, alternar: bool) {
+fn abrir_painel(app: AppHandle, area: String, alternar: bool, origem: Origem) {
     let (Some(painel), Some(janela_dock)) = (janela(&app, "painel"), janela(&app, "dock")) else { return };
     let aberta = PAINEL.lock().unwrap().as_ref().map(|(a, _)| a.clone());
     if aberta.as_deref() == Some(area.as_str()) && unsafe { IsWindowVisible(hwnd(&painel)) }.as_bool() {
@@ -139,7 +144,7 @@ fn abrir_painel(app: AppHandle, area: String, alternar: bool) {
         let _ = SetWindowPos(h, Some(HWND_TOPMOST), rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, SWP_NOACTIVATE);
         let _ = ShowWindow(h, SW_SHOWNOACTIVATE);
     }
-    crate::clique_fora::ligar();
+    clique_fora::vigiar(origem);
 }
 
 #[tauri::command]
@@ -152,7 +157,7 @@ pub fn painel_fechar(app: AppHandle) {
         }
         dock::sem_ativar(dock::hwnd_de(&painel));
     }
-    crate::clique_fora::desligar();
+    clique_fora::desligar();
     *PAINEL.lock().unwrap() = None;
     *CONFIRMADA.lock().unwrap() = None;
     // O dock tira a marca da área aberta.
@@ -191,7 +196,7 @@ pub fn atender_servico(app: &AppHandle, linha: &str) -> serde_json::Value {
             if crate::tela_cheia::agora() {
                 return serde_json::json!({ "ok": false, "tela_cheia": true });
             }
-            painel_mostrar(app.clone(), area);
+            painel_mostrar(app.clone(), area, Origem::Servico);
             serde_json::json!({ "ok": true })
         }
         Ok(PedidoPainel::Aberto { area }) => {
@@ -238,6 +243,7 @@ pub fn painel_pronto(area: String) -> Option<f64> {
 pub fn painel_foco(app: AppHandle, quer: bool) {
     let Some(painel) = janela(&app, "painel") else { return };
     let h = hwnd(&painel);
+    clique_fora::teclado(quer);
     if quer {
         dock::com_ativar(dock::hwnd_de(&painel));
         unsafe {
