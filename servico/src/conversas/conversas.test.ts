@@ -817,6 +817,31 @@ describe("parar a resposta", () => {
     expect(() => servico.parar({ id: "nada" })).toThrow("não encontrada");
   });
 
+  test("mandar logo depois de parar: a fala nova fica depois do aviso de quem parou", async () => {
+    const { servico, falsos, eventos } = montar();
+    falsos.tula.roteirizar(
+      [
+        { tipo: "texto", texto: "Vou listar" },
+        { tipo: "pausa", ms: 5_000 },
+      ],
+      roteiros.resposta("Oi."),
+    );
+    const tula = servico.abrir({ agenteId: "tula" });
+    await servico.enviar({ conversaId: tula.id, conteudo: "limpa o cache" });
+    await vi.waitFor(() => expect(eventos.parciais.length).toBeGreaterThan(0), { interval: 1 });
+
+    expect(servico.parar({ id: tula.id })).toBe(1);
+    // Sem esperar nada: como a janela faz quando você para e já escreve outra coisa.
+    await servico.enviar({ conversaId: tula.id, conteudo: "deixa, só oi" });
+    await servico.ocioso();
+    expect(conversaInteira(servico, tula.id).map((m) => [m.agenteId, m.conteudo])).toEqual([
+      [null, "limpa o cache"],
+      ["tula", `Vou listar\n\n${AVISO_PARADA}`],
+      [null, "deixa, só oi"],
+      ["tula", "Oi."],
+    ]);
+  });
+
   test("no time, parar para todos que iam responder", async () => {
     const { servico, falsos, eventos } = montar({
       roteador: () =>

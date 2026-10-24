@@ -1,5 +1,6 @@
-import { describe, expect, test } from "vitest";
-import { alvoDoCli, type Arquivos } from "./executavel.ts";
+import { spawn } from "node:child_process";
+import { describe, expect, test, vi } from "vitest";
+import { alvoDoCli, derrubarArvore, type Arquivos } from "./executavel.ts";
 
 // Os dois formatos do cmd-shim, copiados dos shims que o npm grava em %APPDATA%\npm.
 const SHIM_NODE = [
@@ -135,4 +136,32 @@ describe("alvo do CLI sem shell", () => {
       expect(alvoDoCli(shim, ambiente, disco({ [shim]: texto }, existentes))).toBeNull();
     }
   });
+});
+
+describe("derrubar a árvore", () => {
+  /** O pid de um processo que já saiu: o `taskkill` não acha ninguém e sai com erro. */
+  async function pidQueJaSaiu(): Promise<number> {
+    const processo = spawn(process.execPath, ["-e", ""], { stdio: "ignore", windowsHide: true });
+    await new Promise((resolve) => processo.once("exit", resolve));
+    return processo.pid!;
+  }
+
+  test("sem pid, só o processo, uma vez e na hora", () => {
+    const soOProcesso = vi.fn();
+    derrubarArvore(undefined, soOProcesso);
+    expect(soOProcesso).toHaveBeenCalledTimes(1);
+  });
+
+  test.runIf(process.platform === "win32")(
+    "pid que não existe mais: o taskkill falha e o kill de reserva roda uma vez só",
+    async () => {
+      const soOProcesso = vi.fn();
+      derrubarArvore(await pidQueJaSaiu(), soOProcesso);
+      await vi.waitFor(() => expect(soOProcesso).toHaveBeenCalled(), { timeout: 10_000, interval: 20 });
+      // O `exit` e um eventual `error` do taskkill não chamam a reserva de novo.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(soOProcesso).toHaveBeenCalledTimes(1);
+    },
+    20_000,
+  );
 });

@@ -363,6 +363,11 @@ export class ServicoConversas {
    * que espera a vez (o agente dormindo ou pausado) e a que já roda.
    */
   private readonly cancelamentos = new Map<string, AbortController>();
+  /**
+   * As respostas paradas de cada conversa, até gravarem a fala do aviso: a próxima fala do usuário
+   * espera, para ficar depois do "Você parou" e não antes dele.
+   */
+  private readonly paradas = new Map<string, Promise<void>>();
 
   constructor(
     private readonly deps: DependenciasConversas,
@@ -430,15 +435,19 @@ export class ServicoConversas {
     this.exigir(pedido.id);
     const cancelamento = this.cancelamentos.get(pedido.id);
     if (!cancelamento) return 0;
-    const agentes = new Set(
-      [...this.vezes.keys()]
-        .filter((k) => k.startsWith(`${pedido.id}:`))
-        .map((k) => k.slice(pedido.id.length + 1)),
-    );
+    const daConversa = [...this.vezes].filter(([k]) => k.startsWith(`${pedido.id}:`));
     cancelamento.abort(new RespostaParada());
     // A próxima fala da conversa ganha outro cancelamento: esta não nasce parada.
     this.cancelamentos.delete(pedido.id);
-    return agentes.size;
+    // As vezes não rejeitam (o erro fica no log de `responder`).
+    const paradas = Promise.all([this.paradas.get(pedido.id), ...daConversa.map(([, vez]) => vez)]).then(
+      () => undefined,
+    );
+    this.paradas.set(pedido.id, paradas);
+    void paradas.then(() => {
+      if (this.paradas.get(pedido.id) === paradas) this.paradas.delete(pedido.id);
+    });
+    return daConversa.length;
   }
 
   /**
@@ -447,6 +456,8 @@ export class ServicoConversas {
    * (conversa arquivada, ninguém ligado para responder) recusa antes de gravar a fala.
    */
   async enviar(pedido: PedidoEnviar): Promise<ResultadoEnviar> {
+    // Logo depois de parar: a fala espera o aviso de quem parou ser gravado.
+    await this.paradas.get(pedido.conversaId);
     const conversa = this.exigir(pedido.conversaId);
     if (conversa.arquivada) throw new Error("a conversa está arquivada");
     const disponiveis = this.disponiveis(conversa);

@@ -281,12 +281,13 @@ export class Runtime {
   ): Promise<{ resultado: ResultadoExecucao; agiu: boolean }> {
     const sinal = pedido.sinal ?? new AbortController().signal;
     const id = this.gerarId();
+    const inicio = this.agora();
     this.deps.execucoes.iniciar({
       id,
       agenteId: agente.id,
       gatilho: pedido.gatilho,
       provedorId: config?.id ?? null,
-      inicio: this.agora().toISOString(),
+      inicio: inicio.toISOString(),
     });
 
     const escopo = this.deps.catalogo.doAgente(agente.ferramentas);
@@ -328,7 +329,9 @@ export class Runtime {
           {
             agenteId: agente.id,
             execucaoId: id,
-            instrucoes: pedido.instrucoes ?? montarInstrucoes(agente),
+            // O dia de hoje vai só na voz do agente: o trabalho curto que traz as próprias
+            // instruções (classificador, captura, teste do provedor) diz a data se precisar.
+            instrucoes: pedido.instrucoes ?? montarInstrucoes(agente, inicio),
             mensagens: historicoCurto(
               semSessao ? (pedido.mensagensSemSessao ?? pedido.mensagens) : pedido.mensagens,
             ),

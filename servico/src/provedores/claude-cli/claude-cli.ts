@@ -162,23 +162,17 @@ export function ambienteDoCli(base: NodeJS.ProcessEnv, acessoMcp: string | null)
   return ambiente;
 }
 
-const DATA_DE_HOJE = new Intl.DateTimeFormat("pt-BR", {
-  weekday: "long",
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
+/** O prompt de quem não mandou instrução: nunca o padrão do CLI, que é de agente de código. */
+export const PROMPT_SEM_INSTRUCOES = "Você é um agente do Moductus. Responda em português do Brasil.";
 
 /**
- * O prompt de sistema inteiro do agente (`--system-prompt`, ADR-0017, revisão de 24/10/2026): a
- * instrução dele com a voz da família, no lugar do prompt de agente de código do Claude Code, que
- * levava o modelo a responder ação com script. Aquele prompt trazia a data de hoje, e ela continua
- * vindo, no fim, no fuso do PC: sem ela, "amanhã" não teria dia.
+ * O prompt de sistema inteiro (`--system-prompt`, ADR-0017, revisão de 24/10/2026): as instruções
+ * do pedido, no lugar do prompt de agente de código do Claude Code, que levava o modelo a responder
+ * ação com script. A voz do agente já traz o dia de hoje (`montarInstrucoes`); o trabalho curto
+ * (classificador, captura, teste do provedor) traz o que precisa.
  */
-export function promptDeSistema(instrucoes: string | undefined, agora: Date): string {
-  const hoje = `Hoje é ${DATA_DE_HOJE.format(agora)}.`;
-  const proprias = instrucoes?.trim();
-  return proprias ? `${proprias}\n\n${hoje}` : hoje;
+export function promptDeSistema(instrucoes: string | undefined): string {
+  return instrucoes?.trim() || PROMPT_SEM_INSTRUCOES;
 }
 
 /** `mcpUrl` é o endereço do acesso aberto para esta execução; sem ele, nenhuma ferramenta. */
@@ -186,7 +180,6 @@ export function argumentosDoClaude(
   pedido: PedidoDoAgente,
   config: ConfigProvedor,
   mcpUrl: string | null = null,
-  agora: Date = new Date(),
 ): string[] {
   const argumentos = [
     "-p",
@@ -208,7 +201,7 @@ export function argumentosDoClaude(
     "off",
     // O prompt inteiro é o do agente: nada do prompt de agente de código do Claude Code.
     "--system-prompt",
-    promptDeSistema(pedido.instrucoes, agora),
+    promptDeSistema(pedido.instrucoes),
   ];
   if (config.modelo) argumentos.push("--model", config.modelo);
   if (pedido.continuarDe) argumentos.push("--resume", pedido.continuarDe);
@@ -310,9 +303,8 @@ export class ProvedorClaudeCli implements Provedor {
     }
     const iniciar: IniciarProcesso =
       this.opcoes.iniciar ?? ((args, o, a) => spawn(a.executavel, [...a.antes, ...args], o));
-    const agora = this.opcoes.agora ?? (() => new Date());
     const processo = iniciar(
-      argumentosDoClaude(pedido, this.config, acesso?.url ?? null, agora()),
+      argumentosDoClaude(pedido, this.config, acesso?.url ?? null),
       {
         cwd: this.opcoes.pasta,
         env: ambienteDoCli(process.env, acesso?.token ?? null),
@@ -336,7 +328,7 @@ export class ProvedorClaudeCli implements Provedor {
 
     const leitor = new LeitorStreamJson({
       nomeDaFerramenta: (nome) => this.nomeNoCatalogo(nome, pedido),
-      agora,
+      agora: this.opcoes.agora ?? (() => new Date()),
     });
     // Sessão perdida só é reconhecida antes de qualquer evento: depois disso, recomeçar repetiria a fala.
     let emitiu = false;

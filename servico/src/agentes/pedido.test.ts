@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { MensagemModelo } from "../provedores/provedor.ts";
 import { DE_FABRICA } from "./de-fabrica.ts";
-import { historicoCurto, montarInstrucoes, resumir, VOZ_DA_FAMILIA } from "./pedido.ts";
+import { historicoCurto, linhaDeHoje, montarInstrucoes, resumir, VOZ_DA_FAMILIA } from "./pedido.ts";
 
 const fala = (texto: string, papel: MensagemModelo["papel"] = "usuario"): MensagemModelo => ({
   papel,
@@ -15,6 +15,15 @@ describe("pedido ao modelo", () => {
     ).toBe(`Você é o Nuno.\n\n${VOZ_DA_FAMILIA}`);
     expect(montarInstrucoes({ nome: "Nuno", funcao: "Cuida do código", instrucoes: "" })).toBe(
       `Você é Nuno. Cuida do código.\n\n${VOZ_DA_FAMILIA}`,
+    );
+  });
+
+  test("com a hora da execução, o dia de hoje fecha o prompt", () => {
+    // 15:00 em UTC: 24/10 em qualquer fuso do Brasil (UTC−2 a UTC−5).
+    const agora = new Date("2026-10-24T15:00:00.000Z");
+    expect(linhaDeHoje(agora)).toBe("Hoje é sábado, 24/10/2026.");
+    expect(montarInstrucoes(DE_FABRICA.alba, agora)).toBe(
+      `${DE_FABRICA.alba.instrucoes}\n\n${VOZ_DA_FAMILIA}\n\nHoje é sábado, 24/10/2026.`,
     );
   });
 

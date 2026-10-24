@@ -18,6 +18,7 @@ import {
   ProvedorClaudeCli,
   type OpcoesClaudeCli,
   PRAZO_CHAMADA_MCP_MS,
+  PROMPT_SEM_INSTRUCOES,
   promptDeSistema,
   VARIAVEL_ACESSO_MCP,
 } from "./claude-cli.ts";
@@ -203,7 +204,7 @@ describe("adaptador Claude Code CLI", () => {
     // O prompt inteiro é o do agente, com a data de hoje: nada do prompt de agente de código.
     expect(argumentos).not.toContain("--append-system-prompt");
     expect(argumentos[argumentos.indexOf("--system-prompt") + 1]).toMatch(
-      /^Você é o Nuno, agente de dev do Moductus\.\n\nHoje é .+\.$/,
+      /^Você é o Nuno, agente de dev do Moductus\.$/,
     );
     expect(argumentos[argumentos.indexOf("--model") + 1]).toBe("haiku");
     // O argumento vazio sobrevive à linha de comando do Windows: nenhuma ferramenta nativa.
@@ -502,10 +503,8 @@ describe("adaptador Claude Code CLI", () => {
         expect(eventos.at(-1)).toEqual({ tipo: "fim", continuacao: "78e523d4-fecc-4ec2-9fd7-87a2c33372d6" });
         const { argumentos, entrada } = JSON.parse(readFileSync(anotacao, "utf8")) as Anotacao;
         expect(entrada).toBe("Quais sessões de IA estão abertas agora?");
-        // As instruções passam inteiras, sem shell, à frente da data.
-        expect(
-          argumentos[argumentos.indexOf("--system-prompt") + 1]?.startsWith(`${instrucoes}\n\nHoje é `),
-        ).toBe(true);
+        // As instruções passam inteiras, sem shell.
+        expect(argumentos[argumentos.indexOf("--system-prompt") + 1]).toBe(instrucoes);
         expect(argumentos[argumentos.indexOf("--tools") + 1]).toBe("");
       } finally {
         vi.unstubAllEnvs();
@@ -674,20 +673,19 @@ describe("adaptador Claude Code CLI", () => {
 });
 
 describe("argumentos e prompt", () => {
-  test("o prompt de sistema é só o do agente, com a data de hoje, e substitui o do Claude Code", () => {
-    // Meio-dia em UTC: 24/10 em qualquer fuso do Brasil.
-    const agora = new Date("2026-10-24T15:00:00.000Z");
-    const instrucoes = "Você é a Faina.\n\nComo você age:\n- Você age só pelas ferramentas que recebeu.";
-    const argumentos = argumentosDoClaude(pedido({ instrucoes }), config(), null, agora);
+  test("o prompt de sistema é só o do pedido e substitui o do Claude Code", () => {
+    const instrucoes =
+      "Você é a Faina.\n\nComo você age:\n- Você age só pelas ferramentas que recebeu.\n\nHoje é sábado, 24/10/2026.";
+    const argumentos = argumentosDoClaude(pedido({ instrucoes }), config(), null);
     expect(argumentos.filter((a) => a.includes("system-prompt") && a !== "--system-prompt-snapshot")).toEqual(
       ["--system-prompt"],
     );
-    const prompt = argumentos[argumentos.indexOf("--system-prompt") + 1]!;
-    expect(prompt).toBe(promptDeSistema(instrucoes, agora));
-    expect(prompt.startsWith(`${instrucoes}\n\nHoje é `)).toBe(true);
-    expect(prompt).toMatch(/sábado, 24\/10\/2026\.$/);
-    // Sem instrução, ainda assim não sobra o prompt de agente de código: fica só a data.
-    expect(promptDeSistema("  ", agora)).toMatch(/^Hoje é sábado, 24\/10\/2026\.$/);
+    // Como veio: a data, quando há, é da voz do agente; o adaptador não põe outra.
+    expect(argumentos[argumentos.indexOf("--system-prompt") + 1]).toBe(instrucoes);
+    expect(argumentos.join(" ").match(/Hoje é/g)).toHaveLength(1);
+    // Sem instrução, ainda assim não sobra o prompt de agente de código.
+    expect(promptDeSistema("  ")).toBe(PROMPT_SEM_INSTRUCOES);
+    expect(promptDeSistema(undefined)).toBe(PROMPT_SEM_INSTRUCOES);
     // O resto do modo -p continua: nenhuma ferramenta nativa e o prompt refeito a cada pedido.
     expect(argumentos[argumentos.indexOf("--tools") + 1]).toBe("");
     expect(argumentos[argumentos.indexOf("--system-prompt-snapshot") + 1]).toBe("off");
