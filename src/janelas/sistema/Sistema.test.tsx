@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AREAS, areaDoAtalho, IDS_AREAS, lerDestino } from "../../areas/areas.ts";
 import { SECOES } from "../../areas/configuracoes/secoes.ts";
 import { auditar, marcos, nomeAcessivel, ordemDoTab } from "../../teste/acessibilidade.ts";
-import { CHAVE_DESTINO, EVENTO_IR, Sistema } from "./Sistema.tsx";
+import { CHAVE_DESTINO, carregarAreas, EVENTO_IR, Sistema } from "./Sistema.tsx";
 
 // A casca não existe no teste: eventos guardados para disparar à mão, janela e comandos falsos.
 const ouvintes = new Map<string, (e: { payload: unknown }) => void>();
@@ -47,6 +47,8 @@ function desmontar() {
   recipiente?.remove();
 }
 
+// As áreas vêm sob demanda; já baixadas, cada troca desenha no mesmo quadro, como o teste lê.
+beforeAll(carregarAreas);
 beforeEach(() => localStorage.clear());
 afterEach(desmontar);
 

@@ -1,15 +1,20 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { StrictMode } from "react";
+import { StrictMode, type ComponentType } from "react";
 import { createRoot } from "react-dom/client";
-import { Aplicacao } from "./janelas/Aplicacao.tsx";
-import { janelaDoRotulo, type Janela } from "./janelas/rotas.ts";
+import { carregarJanela } from "./janelas/Aplicacao.tsx";
+import { janelaDoRotulo } from "./janelas/rotas.ts";
 import { useAcessibilidade } from "./nativo/acessibilidade.ts";
-import "./tokens/fontes.css";
-import "./tokens/temas.css";
-import "./tokens/base.css";
-// Por último: no alto contraste do Windows, as regras dele ganham das de cada componente.
-import "./tokens/alto-contraste.css";
+import altoContraste from "./tokens/alto-contraste.css?inline";
+import base from "./tokens/base.css?inline";
+import fontes from "./tokens/fontes.css?inline";
+import temas from "./tokens/temas.css?inline";
 import { aplicarTema, useTema } from "./tokens/tema.ts";
+
+// Os tokens vêm depois do CSS de cada tela, que chega com o chunk dela no <head>: no <body>, ficam
+// sempre por último, e a base e o alto contraste do Windows ganham das regras de cada componente.
+const tokens = document.createElement("style");
+tokens.textContent = [fontes, temas, base, altoContraste].join("\n");
+document.body.append(tokens);
 
 // Antes do primeiro quadro: a janela já nasce com o tema do Windows, sem piscar.
 aplicarTema("automatico");
@@ -20,10 +25,10 @@ const parametros = new URLSearchParams(window.location.search);
  * Toda janela segue o tema da configuração e a animação do Windows; os componentes só leem
  * os tokens.
  */
-function ComTema({ janela }: { janela: Janela }) {
+function ComTema({ Tela }: { Tela: ComponentType }) {
   useTema();
   useAcessibilidade();
-  return <Aplicacao janela={janela} />;
+  return <Tela />;
 }
 
 if (parametros.has("personagens")) {
@@ -49,9 +54,11 @@ if (parametros.has("personagens")) {
 } else {
   const janela = janelaDoRotulo(getCurrentWindow().label) ?? "sistema";
   document.documentElement.dataset.janela = janela;
-  raiz.render(
-    <StrictMode>
-      <ComTema janela={janela} />
-    </StrictMode>,
+  void carregarJanela(janela).then((Tela) =>
+    raiz.render(
+      <StrictMode>
+        <ComTema Tela={Tela} />
+      </StrictMode>,
+    ),
   );
 }

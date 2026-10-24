@@ -9,10 +9,10 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { auditar, marcos } from "../../../teste/acessibilidade.ts";
 import { SEGURA_FIM_MS } from "../../../areas/inicio/PrimeirosPassos.tsx";
-import { Sistema } from "../Sistema.tsx";
+import { carregarAreas, Sistema } from "../Sistema.tsx";
 
 // A casca não existe no teste: eventos, janela e comandos falsos. O evento emitido chega a quem ouve,
 // como entre as janelas de verdade.
@@ -260,6 +260,8 @@ function desmontar() {
   recipiente?.remove();
 }
 
+// As áreas e a configuração inicial vêm sob demanda: já baixadas, desenham no mesmo quadro.
+beforeAll(carregarAreas);
 beforeEach(() => {
   localStorage.clear();
   tauri.emitidos = [];

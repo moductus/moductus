@@ -1,21 +1,9 @@
 import type { EstadoPrimeiroUso } from "@moductus/contrato";
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Agentes } from "../../areas/agentes/Agentes.tsx";
+import { startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AREA_INICIAL, areaDoAtalho, escreverDestino, lerDestino, type Destino } from "../../areas/areas.ts";
-import { Arquivos } from "../../areas/arquivos/Arquivos.tsx";
-import { Configuracoes } from "../../areas/configuracoes/Configuracoes.tsx";
 import { useConfig } from "../../areas/configuracoes/useConfig.ts";
-import { Dev } from "../../areas/dev/Dev.tsx";
-import { Ferramentas } from "../../areas/ferramentas/Ferramentas.tsx";
-import { Financas } from "../../areas/financas/Financas.tsx";
-import { Foco } from "../../areas/foco/Foco.tsx";
-import { Inicio } from "../../areas/inicio/Inicio.tsx";
 import { PrimeirosPassos, useMostrarPrimeirosPassos } from "../../areas/inicio/PrimeirosPassos.tsx";
-import { Memoria } from "../../areas/memoria/Memoria.tsx";
-import { Notas } from "../../areas/notas/Notas.tsx";
-import { Sessoes } from "../../areas/sessoes/Sessoes.tsx";
-import { Tarefas } from "../../areas/tarefas/Tarefas.tsx";
 import { registrar } from "../../nativo/eventos.ts";
 import { servico } from "../../servico/conexao.ts";
 import { CamadaTour } from "../tour/CamadaTour.tsx";
@@ -23,8 +11,48 @@ import { EVENTO_REVER_TUTORIAL, EVENTO_VER_TOUR, useTour, type Tour } from "../t
 import { BarraLateral } from "./BarraLateral.tsx";
 import { BarraTitulo } from "./BarraTitulo.tsx";
 import { AcoesSistemaContexto, useAcoesSistema, usePrimeiroUso } from "./primeiro-uso/estado.ts";
-import { PrimeiroUso } from "./primeiro-uso/PrimeiroUso.tsx";
+import { sobDemanda } from "./sobDemanda.tsx";
 import "./Sistema.css";
+
+// Cada área (e a configuração inicial) vem num chunk à parte, na primeira vez que abre.
+const Inicio = sobDemanda(() => import("../../areas/inicio/Inicio.tsx").then((m) => m.Inicio));
+const Agentes = sobDemanda(() => import("../../areas/agentes/Agentes.tsx").then((m) => m.Agentes));
+const Sessoes = sobDemanda(() => import("../../areas/sessoes/Sessoes.tsx").then((m) => m.Sessoes));
+const Tarefas = sobDemanda(() => import("../../areas/tarefas/Tarefas.tsx").then((m) => m.Tarefas));
+const Foco = sobDemanda(() => import("../../areas/foco/Foco.tsx").then((m) => m.Foco));
+const Financas = sobDemanda(() => import("../../areas/financas/Financas.tsx").then((m) => m.Financas));
+const Dev = sobDemanda(() => import("../../areas/dev/Dev.tsx").then((m) => m.Dev));
+const Notas = sobDemanda(() => import("../../areas/notas/Notas.tsx").then((m) => m.Notas));
+const Arquivos = sobDemanda(() => import("../../areas/arquivos/Arquivos.tsx").then((m) => m.Arquivos));
+const Memoria = sobDemanda(() => import("../../areas/memoria/Memoria.tsx").then((m) => m.Memoria));
+const Ferramentas = sobDemanda(() =>
+  import("../../areas/ferramentas/Ferramentas.tsx").then((m) => m.Ferramentas),
+);
+const Configuracoes = sobDemanda(() =>
+  import("../../areas/configuracoes/Configuracoes.tsx").then((m) => m.Configuracoes),
+);
+const PrimeiroUso = sobDemanda(() => import("./primeiro-uso/PrimeiroUso.tsx").then((m) => m.PrimeiroUso));
+
+const TELAS = [
+  Inicio,
+  Agentes,
+  Sessoes,
+  Tarefas,
+  Foco,
+  Financas,
+  Dev,
+  Notas,
+  Arquivos,
+  Memoria,
+  Ferramentas,
+  Configuracoes,
+  PrimeiroUso,
+];
+
+/** Baixa todas as áreas de uma vez: o teste troca de área e lê a tela no mesmo quadro. */
+export function carregarAreas(): Promise<unknown> {
+  return Promise.all(TELAS.map((t) => t.carregar()));
+}
 
 /** Evento que o dock (ou a casca) manda para abrir uma área: "dev", "configuracoes/modelos". */
 export const EVENTO_IR = "sistema:ir";
@@ -66,8 +94,9 @@ export function Sistema() {
   const tour = useTour();
   const emTour = tour.parada !== null;
 
+  // Em transição: a área que ainda não veio deixa a atual na tela até chegar, sem piscar vazio.
   const ir = useCallback((novo: Destino) => {
-    setDestino(novo);
+    startTransition(() => setDestino(novo));
     guardar(novo);
   }, []);
 
@@ -143,23 +172,25 @@ export function Sistema() {
       {/* Durante o tour, a janela fica escurecida e fora do teclado; só a camada responde. */}
       <div className="sistema" inert={emTour || undefined}>
         <BarraTitulo />
-        {configurando ? (
-          <PrimeiroUso
-            aoConcluir={(estado, depois) => {
-              setPrimeiroUso(estado);
-              ir(depois);
-              // O tour começa logo depois da configuração; quem vai importar de outro PC segue lá.
-              if (depois.area === "inicio") andar(1);
-            }}
-          />
-        ) : (
-          <div className="sistema-corpo">
-            <BarraLateral ativa={destino.area} aoEscolher={(area) => ir({ area })} refBusca={busca} />
-            <main className="sistema-conteudo" key={destino.area} data-area={destino.area}>
-              <ConteudoArea destino={destino} ir={ir} primeiroUso={primeiroUso} />
-            </main>
-          </div>
-        )}
+        <Suspense fallback={null}>
+          {configurando ? (
+            <PrimeiroUso
+              aoConcluir={(estado, depois) => {
+                startTransition(() => setPrimeiroUso(estado));
+                ir(depois);
+                // O tour começa logo depois da configuração; quem vai importar de outro PC segue lá.
+                if (depois.area === "inicio") andar(1);
+              }}
+            />
+          ) : (
+            <div className="sistema-corpo">
+              <BarraLateral ativa={destino.area} aoEscolher={(area) => ir({ area })} refBusca={busca} />
+              <main className="sistema-conteudo" key={destino.area} data-area={destino.area}>
+                <ConteudoArea destino={destino} ir={ir} primeiroUso={primeiroUso} />
+              </main>
+            </div>
+          )}
+        </Suspense>
       </div>
       {emTour && <TourNoSistema tour={tour} />}
     </AcoesSistemaContexto.Provider>
