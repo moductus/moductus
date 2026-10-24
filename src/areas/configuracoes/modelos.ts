@@ -5,6 +5,7 @@ import {
   type FalhaProvedor,
   type MoedaTeto,
   type MudancaAgente,
+  type MudancaProvedor,
   type Provedor,
   type ProvedorDetectado,
 } from "@moductus/contrato";
@@ -27,8 +28,17 @@ import { haQuanto } from "../tempo.ts";
 /** O teste que o usuário pediu nesta tela: rodando, ou o que voltou dele. */
 export type TesteProvedor =
   | { fase: "testando" }
-  | { fase: "ok"; latenciaMs: number; testadoEm: string }
+  /** `ferramentas: false`: o modelo respondeu, mas não chamou a ferramenta do teste. */
+  | { fase: "ok"; latenciaMs: number; testadoEm: string; ferramentas?: boolean | null }
   | { fase: "falhou"; falha: FalhaProvedor; testadoEm: string };
+
+/** O aviso de um modelo que passou no teste sem chamar a ferramenta. */
+export const AVISO_SEM_FERRAMENTAS =
+  "O modelo respondeu, mas não chamou a ferramenta do teste. Com ele, os agentes só conversam: não consultam nem fazem nada. Escolha um modelo com suporte a ferramentas (function calling).";
+
+/** O mesmo aviso, curto, para um modelo que o endereço diz não ter ferramentas. */
+export const AVISO_MODELO_SEM_FERRAMENTAS =
+  "O endereço diz que este modelo não usa ferramentas (function calling): com ele, os agentes só conversam.";
 
 /** Uma linha da tabela de provedores: o selo do estado, a resposta e o erro, quando há. */
 export interface EstadoProvedor {
@@ -43,6 +53,8 @@ export interface EstadoProvedor {
   erro: string | null;
   /** O comando para rodar no terminal (o login do CLI), mostrado como código depois do erro. */
   comando?: string;
+  /** Funciona, mas com um porém que o usuário precisa saber (o modelo só conversa). */
+  aviso?: string;
 }
 
 const ehCli = (tipo: Provedor["tipo"]) => (TIPOS_PROVEDOR_CLI as readonly string[]).includes(tipo);
@@ -105,12 +117,14 @@ export function estadoDoProvedor(
     };
   }
   if (teste?.fase === "ok") {
+    const soConversa = teste.ferramentas === false;
     return {
-      texto: "funcionando",
-      tom: "sucesso",
+      texto: soConversa ? "só conversa" : "funcionando",
+      tom: soConversa ? "aviso" : "sucesso",
       resposta: formatarLatencia(teste.latenciaMs),
       quando: `testado ${haQuanto(teste.testadoEm, agora)}`,
       erro: null,
+      ...(soConversa ? { aviso: AVISO_SEM_FERRAMENTAS } : {}),
     };
   }
   const caiu = agentes.find(
@@ -161,6 +175,97 @@ export function descreverProvedor(provedor: Provedor, detectado?: ProvedorDetect
   if (provedor.modelo) partes.push(provedor.modelo);
   if (provedor.temChave) partes.push("chave no Gerenciador de Credenciais");
   return partes.join(" · ");
+}
+
+/** O que o formulário de edição de um provedor tem escrito. A chave começa vazia: nunca volta. */
+export interface EdicaoProvedor {
+  nome: string;
+  baseUrl: string;
+  modelo: string;
+  chave: string;
+}
+
+export const edicaoInicial = (provedor: Provedor): EdicaoProvedor => ({
+  nome: provedor.nome,
+  baseUrl: provedor.baseUrl ?? "",
+  modelo: provedor.modelo ?? "",
+  chave: "",
+});
+
+/**
+ * Trocar o endereço de quem tem chave pede a chave de novo (o serviço não manda a guardada a um
+ * servidor que o usuário não confirmou junto com ela): com o campo vazio, ela sai.
+ */
+export const trocaApagaChave = (provedor: Provedor, edicao: EdicaoProvedor) =>
+  provedor.temChave &&
+  provedor.tipo === "openai-compativel" &&
+  edicao.baseUrl.trim() !== (provedor.baseUrl ?? "") &&
+  !edicao.chave.trim();
+
+/**
+ * O pedido de gravar a edição: só o que mudou; `null` quando nada mudou. CLI só muda o nome (o
+ * resto é do login dele); a OpenAI não tem endereço. Campo de modelo vazio tira o modelo.
+ */
+export function mudancaDaEdicao(provedor: Provedor, edicao: EdicaoProvedor): MudancaProvedor | null {
+  const mudanca: MudancaProvedor = { id: provedor.id };
+  const nome = edicao.nome.trim();
+  if (nome && nome !== provedor.nome) mudanca.nome = nome;
+  if (!ehCli(provedor.tipo)) {
+    const baseUrl = edicao.baseUrl.trim();
+    if (provedor.tipo === "openai-compativel" && baseUrl !== (provedor.baseUrl ?? "")) {
+      mudanca.baseUrl = baseUrl || null;
+    }
+    const modelo = edicao.modelo.trim();
+    if (modelo !== (provedor.modelo ?? "")) mudanca.modelo = modelo || null;
+    const chave = edicao.chave.trim();
+    if (chave) mudanca.chave = chave;
+    else if (trocaApagaChave(provedor, edicao)) mudanca.chave = null;
+  }
+  return Object.keys(mudanca).length > 1 ? mudanca : null;
+}
+
+/** Endereço, modelo ou chave novos: o teste de antes não vale, e a tela testa de novo. */
+export const mudancaPedeTeste = (mudanca: MudancaProvedor) =>
+  mudanca.baseUrl !== undefined || mudanca.modelo !== undefined || mudanca.chave !== undefined;
+
+/** Quem usa um provedor, e como. */
+export interface UsoDoProvedor {
+  agente: Agente;
+  papel: "principal" | "reserva";
+}
+
+export function usosDoProvedor(id: string, agentes: readonly Agente[]): UsoDoProvedor[] {
+  return agentes.flatMap((agente): UsoDoProvedor[] => {
+    if (agente.provedorId === id) return [{ agente, papel: "principal" }];
+    if (agente.provedorReservaId === id) return [{ agente, papel: "reserva" }];
+    return [];
+  });
+}
+
+/** "Alba", "Alba e Nuno", "Alba, Tula e Nuno". */
+function emLista(nomes: readonly string[]): string {
+  return nomes.length < 2 ? (nomes[0] ?? "") : `${nomes.slice(0, -1).join(", ")} e ${nomes.at(-1)}`;
+}
+
+/**
+ * O que remover faz, antes do sim: quem perde o provedor e como fica, e a chave que sai do
+ * Gerenciador de Credenciais.
+ */
+export function textoDaRemocao(provedor: Provedor, usos: readonly UsoDoProvedor[]): string {
+  const partes: string[] = [];
+  if (usos.length === 0) {
+    partes.push(`Nenhum agente usa o ${provedor.nome}.`);
+  } else {
+    const quem = emLista(usos.map((u) => `${u.agente.nome} (${u.papel})`));
+    partes.push(`${quem} ${usos.length === 1 ? "usa" : "usam"} o ${provedor.nome}.`);
+    partes.push(
+      usos.some((u) => u.papel === "principal")
+        ? "Sem ele, quem o tem como principal fica sem modelo e dorme até ganhar outro; troque antes, se quiser."
+        : "Sem ele, a reserva fica vazia; troque antes, se quiser.",
+    );
+  }
+  if (provedor.temChave) partes.push("A chave sai do Gerenciador de Credenciais.");
+  return partes.join(" ");
 }
 
 /** O que o usuário escolheu numa lista da tabela, antes de confirmar no painel do agente. */

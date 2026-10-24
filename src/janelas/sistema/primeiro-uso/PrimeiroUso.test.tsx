@@ -652,7 +652,7 @@ describe("primeiro uso: modelo", () => {
       {
         nome: "Chave de API",
         selo: null,
-        texto: "OpenAI ou compatível com OpenAI (Ollama, OpenRouter, LM Studio) · paga por uso",
+        texto: "OpenAI ou compatível com OpenAI (roteador local, Ollama, LM Studio) · paga por uso",
         marcado: false,
         desativado: false,
       },
@@ -796,7 +796,7 @@ describe("primeiro uso: modelo", () => {
     expect(pedidosDe("provedores.remover")).toEqual([]);
     expect(pedidosDe("provedores.criar").at(-1)).toEqual({
       tipo: "openai-compativel",
-      nome: "localhost:11434",
+      nome: "Modelo local",
       baseUrl: "http://localhost:11434/v1",
       modelo: "qwen3:8b",
       chave: "sk-local",

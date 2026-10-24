@@ -2,9 +2,11 @@ import { describe, expect, test } from "vitest";
 import {
   MudancaProvedor,
   NovoProvedor,
+  PedidoModelosProvedor,
   PedidoTesteProvedor,
   Provedor,
   ProvedorDetectado,
+  ResultadoModelosProvedor,
   ResultadoTesteProvedor,
   TIPOS_PROVEDOR,
 } from "./provedores.ts";
@@ -101,5 +103,30 @@ describe("provedor", () => {
       }).success,
     ).toBe(false);
     expect(ResultadoTesteProvedor.safeParse({ ...base, ok: true }).success).toBe(false);
+  });
+
+  test("teste que passou pode dizer se o modelo usa ferramentas", () => {
+    const base = { ok: true, provedorId: ollama.id, latenciaMs: 840, testadoEm: "2026-10-09T12:00:00.000Z" };
+    expect(ResultadoTesteProvedor.parse({ ...base, ferramentas: false })).toMatchObject({
+      ferramentas: false,
+    });
+    expect(ResultadoTesteProvedor.safeParse({ ...base, ferramentas: null }).success).toBe(true);
+    expect(ResultadoTesteProvedor.safeParse({ ...base, ferramentas: "não" }).success).toBe(false);
+  });
+
+  test("lista de modelos: só de quem fala a API; endereço ou provedor gravado", () => {
+    expect(
+      PedidoModelosProvedor.safeParse({ tipo: "openai-compativel", baseUrl: ollama.baseUrl }).success,
+    ).toBe(true);
+    expect(PedidoModelosProvedor.safeParse({ tipo: "openai", id: ollama.id }).success).toBe(true);
+    expect(PedidoModelosProvedor.safeParse({ tipo: "claude-cli" }).success).toBe(false);
+    expect(PedidoModelosProvedor.safeParse({ tipo: "openai", chave: "" }).success).toBe(false);
+    expect(
+      ResultadoModelosProvedor.safeParse({ ok: true, modelos: [{ id: "qwen3:8b", ferramentas: null }] })
+        .success,
+    ).toBe(true);
+    expect(
+      ResultadoModelosProvedor.safeParse({ ok: true, modelos: [{ id: "", ferramentas: null }] }).success,
+    ).toBe(false);
   });
 });

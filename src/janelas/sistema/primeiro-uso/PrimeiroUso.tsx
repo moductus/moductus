@@ -659,7 +659,7 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
           desativada={testando}
           aoMarcar={() => escolher("api")}
           titulo="Chave de API"
-          texto="OpenAI ou compatível com OpenAI (Ollama, OpenRouter, LM Studio) · paga por uso"
+          texto="OpenAI ou compatível com OpenAI (roteador local, Ollama, LM Studio) · paga por uso"
         />
       </fieldset>
       {erroDeteccao && (

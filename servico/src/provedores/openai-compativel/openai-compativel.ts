@@ -452,7 +452,7 @@ function ausente(mensagem: string): { falha: FalhaProvedor } {
 }
 
 /** O erro do corpo de uma recusa; corpo que não é JSON (proxy, página de erro) vale como texto. */
-function lerRecusa(corpo: string, status: number): ErroDaApi {
+export function lerRecusa(corpo: string, status: number): ErroDaApi {
   try {
     const erro = erroDoCorpo(JSON.parse(corpo), status);
     if (erro) return erro;
@@ -462,6 +462,6 @@ function lerRecusa(corpo: string, status: number): ErroDaApi {
   return { status, mensagem: corpo, codigo: null, tipo: null, moderacao: false };
 }
 
-function maiuscula(texto: string): string {
+export function maiuscula(texto: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }

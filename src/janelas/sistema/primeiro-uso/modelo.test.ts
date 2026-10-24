@@ -116,4 +116,16 @@ describe("chave de API", () => {
       "Compatível com OpenAI",
     );
   });
+
+  it("endereço neste PC vira Modelo local; o nome digitado vale mais que o sugerido", () => {
+    const local = { ...FORMULARIO_API_VAZIO, tipo: "openai-compativel" as const };
+    expect(novoDaApi({ ...local, baseUrl: "http://localhost:20128/v1" }).nome).toBe("Modelo local");
+    expect(novoDaApi({ ...local, baseUrl: "http://127.0.0.1:11434/v1" }).nome).toBe("Modelo local");
+    expect(novoDaApi({ ...local, baseUrl: "http://localhost:20128/v1", nome: "  Roteador  " }).nome).toBe(
+      "Roteador",
+    );
+    expect(novoDaApi({ ...local, baseUrl: "http://localhost:20128/v1", nome: "  " }).nome).toBe(
+      "Modelo local",
+    );
+  });
 });

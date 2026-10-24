@@ -131,7 +131,44 @@ export const ResultadoTesteProvedor = z.discriminatedUnion("ok", [
     provedorId: Id,
     latenciaMs: z.number().int().nonnegative(),
     testadoEm: Instante,
+    /**
+     * O modelo chamou a ferramenta do teste (F3-52). `false`: ele só conversa, e os agentes não
+     * consultam nem fazem nada com ele. `null` (ou ausente): não se testa, como no CLI, que usa as
+     * ferramentas pelo MCP do Moductus.
+     */
+    ferramentas: z.boolean().nullable().optional(),
   }),
   z.object({ ok: z.literal(false), provedorId: Id, falha: FalhaProvedor, testadoEm: Instante }),
 ]);
 export type ResultadoTesteProvedor = z.infer<typeof ResultadoTesteProvedor>;
+
+/** Os tipos que falam a API da OpenAI e têm a lista de modelos em `GET {base_url}/models`. */
+export const TIPOS_PROVEDOR_API = ["openai", "openai-compativel"] as const;
+export const TipoProvedorApi = z.enum(TIPOS_PROVEDOR_API);
+export type TipoProvedorApi = z.infer<typeof TipoProvedorApi>;
+
+/**
+ * Os modelos que um endereço oferece (F3-52), para escolher em vez de digitar. Serve o formulário
+ * antes de gravar (endereço e chave vêm no pedido) e a edição de um provedor gravado (`id`): a
+ * chave guardada só vai junto quando o endereço é o mesmo dela.
+ */
+export const PedidoModelosProvedor = z.object({
+  id: Id.optional(),
+  tipo: TipoProvedorApi,
+  baseUrl: baseUrl.nullable().optional(),
+  chave: z.string().min(1).optional(),
+});
+export type PedidoModelosProvedor = z.infer<typeof PedidoModelosProvedor>;
+
+/**
+ * Um modelo da lista. `ferramentas` é o que o endereço diz dele (`supported_parameters` ou
+ * `capabilities`); `null` quando não diz, e só o teste responde.
+ */
+export const ModeloDoProvedor = z.object({ id: z.string().min(1), ferramentas: z.boolean().nullable() });
+export type ModeloDoProvedor = z.infer<typeof ModeloDoProvedor>;
+
+export const ResultadoModelosProvedor = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), modelos: z.array(ModeloDoProvedor) }),
+  z.object({ ok: z.literal(false), falha: FalhaProvedor }),
+]);
+export type ResultadoModelosProvedor = z.infer<typeof ResultadoModelosProvedor>;

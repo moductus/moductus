@@ -6,12 +6,16 @@ import { Provedor, ResultadoTesteProvedor, type ProvedorDetectado } from "@moduc
 import { afterEach, describe, expect, test } from "vitest";
 import { abrirBanco } from "../banco/conexao.ts";
 import { ProvedorFalso } from "./falso.ts";
+import type { DestinoModelos } from "./openai-compativel/modelos.ts";
 import type { ConfigProvedor } from "./provedor.ts";
 import {
   credencialDoProvedor,
+  FERRAMENTA_TESTE,
   INSTRUCOES_TESTE,
+  INSTRUCOES_TESTE_FERRAMENTA,
   RepositorioProvedores,
   ServicoProvedores,
+  type DependenciasProvedores,
 } from "./provedores.ts";
 import { RegistroProvedores } from "./registro.ts";
 
@@ -40,8 +44,10 @@ function montar(
   opcoes: {
     detectados?: ProvedorDetectado[];
     detectar?: () => Promise<ProvedorDetectado[]>;
+    listarModelos?: DependenciasProvedores["listarModelos"];
     prazoTesteMs?: number;
     prazoDeteccaoMs?: number;
+    prazoModelosMs?: number;
   } = {},
 ) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-provedores-"));
@@ -61,6 +67,8 @@ function montar(
     });
   const avisos = { provedores: [] as Provedor[][], agentes: [] as string[][], voltou: [] as string[][] };
   let deteccoes = 0;
+  /** Para onde a lista de modelos foi pedida, com a chave que foi junto. */
+  const listas: DestinoModelos[] = [];
   const tempos = [1000, 3100];
   const servico = new ServicoProvedores(
     new RepositorioProvedores(db),
@@ -74,16 +82,24 @@ function montar(
           cofre.delete(nome);
           return Promise.resolve();
         },
+        ler: (nome) => Promise.resolve(cofre.get(nome) ?? null),
       },
       registro,
       detectar: () => {
         deteccoes++;
         return opcoes.detectar ? opcoes.detectar() : Promise.resolve(opcoes.detectados ?? [CLAUDE]);
       },
+      listarModelos: (destino, sinal) => {
+        listas.push(destino);
+        return opcoes.listarModelos
+          ? opcoes.listarModelos(destino, sinal)
+          : Promise.resolve({ ok: true, modelos: [{ id: "qwen3:8b", ferramentas: null }] });
+      },
       agora: () => new Date("2026-10-10T12:00:00.000Z"),
       cronometro: () => tempos.shift() ?? 0,
       ...(opcoes.prazoTesteMs ? { prazoTesteMs: opcoes.prazoTesteMs } : {}),
       ...(opcoes.prazoDeteccaoMs ? { prazoDeteccaoMs: opcoes.prazoDeteccaoMs } : {}),
+      ...(opcoes.prazoModelosMs ? { prazoModelosMs: opcoes.prazoModelosMs } : {}),
     },
     {
       provedores: (lista) => avisos.provedores.push(lista),
@@ -99,7 +115,18 @@ function montar(
     };
   const linha = (id: string) =>
     db.prepare("SELECT * FROM provedores WHERE id = ?").get(id) as Record<string, unknown>;
-  return { db, servico, cofre, falso, avisos, agente, linha, configsDoCli, deteccoes: () => deteccoes };
+  return {
+    db,
+    servico,
+    cofre,
+    falso,
+    avisos,
+    agente,
+    linha,
+    configsDoCli,
+    listas,
+    deteccoes: () => deteccoes,
+  };
 }
 
 const ollama = { tipo: "openai-compativel", nome: "Ollama", modelo: "qwen3:8b" } as const;
@@ -194,10 +221,66 @@ describe("configurar provedores", () => {
   });
 });
 
+describe("modelos do endereço", () => {
+  test("do formulário: endereço e chave do pedido, sem gravar nada", async () => {
+    const { servico, listas, cofre } = montar();
+    await expect(
+      servico.modelos({ tipo: "openai-compativel", baseUrl: "http://localhost:20128/v1", chave: CHAVE }),
+    ).resolves.toEqual({ ok: true, modelos: [{ id: "qwen3:8b", ferramentas: null }] });
+    expect(listas).toEqual([
+      { tipo: "openai-compativel", baseUrl: "http://localhost:20128/v1", chave: CHAVE },
+    ]);
+    expect(servico.listar()).toEqual([]);
+    expect(cofre.size).toBe(0);
+    await expect(servico.modelos({ tipo: "openai-compativel" })).rejects.toThrow("Falta o endereço");
+  });
+
+  test("de um provedor gravado: a chave guardada vai só para o endereço dela", async () => {
+    const { servico, listas } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:20128/v1", chave: CHAVE });
+
+    await servico.modelos({ id: criado.id, tipo: "openai-compativel" });
+    await servico.modelos({ id: criado.id, tipo: "openai-compativel", baseUrl: "http://localhost:20128/v1" });
+    await servico.modelos({ id: criado.id, tipo: "openai-compativel", baseUrl: "https://outro.exemplo/v1" });
+    await servico.modelos({
+      id: criado.id,
+      tipo: "openai-compativel",
+      baseUrl: "https://outro.exemplo/v1",
+      chave: "sk-2",
+    });
+
+    expect(listas.map((l) => [l.baseUrl, l.chave])).toEqual([
+      ["http://localhost:20128/v1", CHAVE],
+      ["http://localhost:20128/v1", CHAVE],
+      ["https://outro.exemplo/v1", null],
+      ["https://outro.exemplo/v1", "sk-2"],
+    ]);
+    await expect(servico.modelos({ id: criado.id, tipo: "openai" })).rejects.toThrow("tipo do pedido");
+  });
+
+  test("endereço que não manda a lista no prazo é fora do ar", async () => {
+    const { servico } = montar({
+      prazoModelosMs: 20,
+      listarModelos: (_destino, sinal) =>
+        new Promise((_resolve, rejeitar) => sinal.addEventListener("abort", () => rejeitar(sinal.reason))),
+    });
+    await expect(
+      servico.modelos({ tipo: "openai-compativel", baseUrl: "http://localhost:20128/v1" }),
+    ).resolves.toEqual({
+      ok: false,
+      falha: {
+        motivo: "fora_do_ar",
+        mensagem: "O endereço não mandou a lista de modelos em 1 s.",
+        voltaEm: null,
+      },
+    });
+  });
+});
+
 describe("testar provedor", () => {
-  test("chamada curta sem ferramentas, latência medida e testado_em gravado", async () => {
+  test("CLI: chamada curta sem ferramentas, latência medida e testado_em gravado", async () => {
     const { servico, falso, linha } = montar();
-    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    const criado = await servico.criar({ tipo: "claude-cli", nome: "Claude Code" });
     falso.roteirizar([{ tipo: "texto", texto: "ok" }, { tipo: "fim" }]);
 
     const resultado = await servico.testar({ id: criado.id });
@@ -207,6 +290,7 @@ describe("testar provedor", () => {
       provedorId: criado.id,
       latenciaMs: 2100,
       testadoEm: "2026-10-10T12:00:00.000Z",
+      ferramentas: null,
     });
     expect(linha(criado.id).testado_em).toBe("2026-10-10T12:00:00.000Z");
     const pedido = falso.pedidos[0]!;
@@ -214,6 +298,80 @@ describe("testar provedor", () => {
     expect(pedido.mensagens).toHaveLength(1);
     // Fila própria: o teste não espera nem segura a fila de um agente no adaptador de CLI.
     expect(pedido.fila).toBe(`teste-${criado.id}`);
+  });
+
+  test("API: o modelo chama a ferramenta do teste, que para ali sem rodar nada", async () => {
+    const { servico, falso, linha } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    let rodou = false;
+    falso.roteirizar((pedido) => {
+      // O falso roda a ferramenta depois de relatar a chamada, como o adaptador de API.
+      const rodar = pedido.executarFerramenta;
+      Object.assign(pedido, {
+        executarFerramenta: (c: Parameters<typeof rodar>[0]) => ((rodou = true), rodar(c)),
+      });
+      return [
+        { tipo: "ferramenta", nome: "moductus_teste", entrada: {} },
+        { tipo: "texto", texto: "ok" },
+      ];
+    });
+
+    const resultado = await servico.testar({ id: criado.id });
+
+    expect(resultado).toEqual({
+      ok: true,
+      provedorId: criado.id,
+      latenciaMs: 2100,
+      testadoEm: "2026-10-10T12:00:00.000Z",
+      ferramentas: true,
+    });
+    expect(linha(criado.id).testado_em).toBe("2026-10-10T12:00:00.000Z");
+    expect(falso.pedidos[0]).toMatchObject({
+      instrucoes: INSTRUCOES_TESTE_FERRAMENTA,
+      ferramentas: [FERRAMENTA_TESTE],
+    });
+    expect(falso.pedidos).toHaveLength(1);
+    expect(rodou).toBe(false);
+  });
+
+  test("API: o modelo que só responde texto passa, avisando que não usa ferramentas", async () => {
+    const { servico, falso } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    falso.roteirizar([{ tipo: "texto", texto: "ok" }, { tipo: "fim" }]);
+
+    await expect(servico.testar({ id: criado.id })).resolves.toMatchObject({ ok: true, ferramentas: false });
+    expect(falso.pedidos).toHaveLength(1);
+  });
+
+  test("API: servidor que recusa o pedido com ferramenta repete sem ela e diz que o modelo só conversa", async () => {
+    const { servico, falso, linha } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    falso.roteirizar(
+      [
+        {
+          tipo: "excecao",
+          erro: new Error("O provedor recusou o pedido (HTTP 400): does not support tools"),
+        },
+      ],
+      [{ tipo: "texto", texto: "ok" }, { tipo: "fim" }],
+    );
+
+    await expect(servico.testar({ id: criado.id })).resolves.toMatchObject({ ok: true, ferramentas: false });
+    expect(falso.pedidos.map((p) => p.ferramentas)).toEqual([[FERRAMENTA_TESTE], []]);
+    expect(linha(criado.id).testado_em).toBe("2026-10-10T12:00:00.000Z");
+  });
+
+  test("API: falha tipada com a ferramenta não repete; sem ela também falhando, vale a segunda falha", async () => {
+    const { servico, falso } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    const recusa = { motivo: "credencial" as const, mensagem: "O provedor recusou a chave.", voltaEm: null };
+    falso.roteirizar([{ tipo: "erro", falha: recusa }]);
+    await expect(servico.testar({ id: criado.id })).resolves.toMatchObject({ ok: false, falha: recusa });
+    expect(falso.pedidos).toHaveLength(1);
+
+    falso.roteirizar([{ tipo: "excecao", erro: new Error("HTTP 400") }], [{ tipo: "erro", falha: recusa }]);
+    await expect(servico.testar({ id: criado.id })).resolves.toMatchObject({ ok: false, falha: recusa });
+    expect(falso.pedidos).toHaveLength(3);
   });
 
   test("o primeiro que passa vai para os quatro agentes sem modelo; o segundo não toma o lugar", async () => {
@@ -353,7 +511,7 @@ describe("testar provedor", () => {
 
   test("adaptador que quebra vira falha com o motivo, sem derrubar o canal", async () => {
     const { servico, falso } = montar();
-    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    const criado = await servico.criar({ tipo: "claude-cli", nome: "Claude Code" });
     falso.roteirizar([{ tipo: "excecao", erro: new Error("O Claude Code saiu sem resposta (código 1)") }]);
 
     await expect(servico.testar({ id: criado.id })).resolves.toMatchObject({

@@ -5,17 +5,20 @@ import {
   type FalhaProvedor,
   type MudancaProvedor,
   type NovoProvedor,
+  type PedidoModelosProvedor,
   type PedidoProvedor,
   type PedidoTesteProvedor,
   type Provedor,
   type ProvedorDetectado,
+  type ResultadoModelosProvedor,
   type ResultadoTesteProvedor,
   type TipoProvedor,
 } from "@moductus/contrato";
 import { colunasDeOrigem, DO_USUARIO } from "../banco/tabela.ts";
 import { novoId } from "../banco/ulid.ts";
 import type { Credenciais } from "../casca/credenciais.ts";
-import type { ConfigProvedor } from "./provedor.ts";
+import type { DestinoModelos } from "./openai-compativel/modelos.ts";
+import type { ConfigProvedor, FerramentaOferecida } from "./provedor.ts";
 import type { RegistroProvedores } from "./registro.ts";
 
 /**
@@ -50,6 +53,22 @@ export const PRAZO_DETECCAO_MS = 20_000;
 /** A chamada curta do teste: uma palavra de volta, para gastar o mínimo da assinatura ou da conta. */
 export const INSTRUCOES_TESTE = "Teste de conexão do Moductus. Responda só com a palavra ok, sem mais nada.";
 export const PERGUNTA_TESTE = "ok?";
+
+/**
+ * Na API, o teste oferece uma ferramenta e pede que o modelo a chame (F3-52): é o que diz se os
+ * agentes vão poder consultar e fazer, ou só conversar. A chamada encerra o teste ali; a
+ * ferramenta não roda nem volta ao modelo.
+ */
+export const FERRAMENTA_TESTE: FerramentaOferecida = {
+  nome: "moductus_teste",
+  descricao: "Confirma o teste de conexão do Moductus. Não recebe argumentos.",
+  esquema: { type: "object", properties: {}, additionalProperties: false },
+};
+export const INSTRUCOES_TESTE_FERRAMENTA =
+  "Teste de conexão do Moductus. Chame a ferramenta moductus_teste uma vez, sem argumentos, e não escreva mais nada.";
+
+/** Quanto a lista de modelos de um endereço espera a resposta. */
+export const PRAZO_MODELOS_MS = 15_000;
 
 /** Quanto do texto de um erro inesperado entra na falha que a tela mostra. */
 const TAMANHO_DETALHE = 300;
@@ -290,17 +309,23 @@ function mesmaConfig(a: LinhaProvedor, b: LinhaProvedor): boolean {
 
 export interface DependenciasProvedores {
   /** O Gerenciador de Credenciais pela casca; a chave só passa pela memória. */
-  credenciais: Pick<Credenciais, "guardar" | "apagar">;
+  credenciais: Pick<Credenciais, "guardar" | "apagar" | "ler">;
   /** O mesmo registro do runtime: o teste chama o adaptador que os agentes vão usar. */
   registro: Pick<RegistroProvedores, "obter" | "esquecer">;
   /** Os CLIs no PC (`deteccao.ts`). */
   detectar: () => Promise<ProvedorDetectado[]>;
+  /** A lista de modelos de um endereço (`openai-compativel/modelos.ts`); os testes trocam pela falsa. */
+  listarModelos: (destino: DestinoModelos, sinal: AbortSignal) => Promise<ResultadoModelosProvedor>;
   agora?: () => Date;
   /** Relógio da latência, em ms; os testes trocam pelo falso. */
   cronometro?: () => number;
   prazoTesteMs?: number;
   prazoDeteccaoMs?: number;
+  prazoModelosMs?: number;
 }
+
+/** Uma chamada do teste: respondeu (e se chamou a ferramenta), falhou tipado, ou o adaptador quebrou. */
+type Chamada = { latenciaMs: number; chamouFerramenta: boolean } | { falha: FalhaProvedor; quebrou: boolean };
 
 export interface AvisosProvedores {
   provedores: (lista: Provedor[]) => void;
@@ -431,6 +456,7 @@ export class ServicoProvedores {
     const medido = cli && "falha" in cli ? cli : await this.chamar(linha);
     const testadoEm = this.agora().toISOString();
     if ("falha" in medido) return { ok: false, provedorId: linha.id, falha: medido.falha, testadoEm };
+    const ferramentas = medido.ferramentas;
 
     const efeito = this.repositorio.depoisDePassar(linha, pedido.substitui ?? [], testadoEm);
     if (efeito) {
@@ -448,7 +474,44 @@ export class ServicoProvedores {
       const dormindo = this.repositorio.dormindoPeloProvedor(linha.id);
       if (dormindo.length > 0) this.avisos.provedorVoltou(dormindo);
     }
-    return { ok: true, provedorId: linha.id, latenciaMs: medido.latenciaMs, testadoEm };
+    return { ok: true, provedorId: linha.id, latenciaMs: medido.latenciaMs, testadoEm, ferramentas };
+  }
+
+  /**
+   * Os modelos que o endereço oferece (F3-52), para o usuário escolher. Do formulário, endereço e
+   * chave vêm no pedido; de um provedor gravado, a chave guardada vai junto só para o endereço
+   * dela: endereço novo pede a chave de novo, como no `definir`. Não grava nada.
+   */
+  async modelos(pedido: PedidoModelosProvedor): Promise<ResultadoModelosProvedor> {
+    const gravado = pedido.id ? this.obter(pedido.id) : null;
+    if (gravado && gravado.tipo !== pedido.tipo) {
+      throw new Error("O tipo do pedido não é o do provedor gravado.");
+    }
+    const baseUrl = pedido.baseUrl === undefined ? (gravado?.base_url ?? null) : pedido.baseUrl;
+    validar(pedido.tipo, baseUrl, pedido.chave);
+    let chave = pedido.chave ?? null;
+    if (chave === null && gravado?.credencial && baseUrl === gravado.base_url) {
+      chave = await this.deps.credenciais.ler(gravado.credencial);
+    }
+    const prazoMs = this.deps.prazoModelosMs ?? PRAZO_MODELOS_MS;
+    const controle = new AbortController();
+    const prazo = setTimeout(() => controle.abort(new Error("prazo da lista de modelos")), prazoMs);
+    try {
+      return await this.deps.listarModelos({ tipo: pedido.tipo, baseUrl, chave }, controle.signal);
+    } catch (erro) {
+      if (controle.signal.aborted) {
+        return {
+          ok: false,
+          falha: falha(
+            "fora_do_ar",
+            `O endereço não mandou a lista de modelos em ${Math.ceil(prazoMs / 1000)} s.`,
+          ),
+        };
+      }
+      throw erro;
+    } finally {
+      clearTimeout(prazo);
+    }
   }
 
   private obter(id: string): LinhaProvedor {
@@ -496,8 +559,34 @@ export class ServicoProvedores {
     return impedimento ? { falha: impedimento } : { caminho: achado.caminho };
   }
 
-  /** A chamada curta, pelo adaptador do registro, com prazo; o cancelamento por prazo é falha. */
-  private async chamar(linha: LinhaProvedor): Promise<{ latenciaMs: number } | { falha: FalhaProvedor }> {
+  /**
+   * O teste em si. CLI: a chamada curta, sem ferramenta (ele usa as do MCP do Moductus). API: com
+   * a ferramenta do teste; se o servidor recusa o pedido com ferramenta (modelo sem function
+   * calling costuma responder 400), repete sem ela para dizer ao menos se o modelo conversa.
+   */
+  private async chamar(
+    linha: LinhaProvedor,
+  ): Promise<{ latenciaMs: number; ferramentas: boolean | null } | { falha: FalhaProvedor }> {
+    if (ehCli(linha.tipo)) {
+      const r = await this.umaChamada(linha, false);
+      return "falha" in r ? { falha: r.falha } : { latenciaMs: r.latenciaMs, ferramentas: null };
+    }
+    const comFerramenta = await this.umaChamada(linha, true);
+    if (!("falha" in comFerramenta)) {
+      return { latenciaMs: comFerramenta.latenciaMs, ferramentas: comFerramenta.chamouFerramenta };
+    }
+    if (!comFerramenta.quebrou) return { falha: comFerramenta.falha };
+    const semFerramenta = await this.umaChamada(linha, false);
+    return "falha" in semFerramenta
+      ? { falha: semFerramenta.falha }
+      : { latenciaMs: semFerramenta.latenciaMs, ferramentas: false };
+  }
+
+  /**
+   * Uma chamada curta, pelo adaptador do registro, com prazo; o cancelamento por prazo é falha.
+   * Com a ferramenta, o teste para quando o modelo a chama: a latência é a da resposta inteira.
+   */
+  private async umaChamada(linha: LinhaProvedor, comFerramenta: boolean): Promise<Chamada> {
     const config: ConfigProvedor = {
       id: linha.id,
       tipo: linha.tipo,
@@ -515,29 +604,39 @@ export class ServicoProvedores {
         {
           agenteId: "teste",
           execucaoId: novoId(),
-          instrucoes: INSTRUCOES_TESTE,
+          instrucoes: comFerramenta ? INSTRUCOES_TESTE_FERRAMENTA : INSTRUCOES_TESTE,
           mensagens: [{ papel: "usuario", texto: PERGUNTA_TESTE }],
-          ferramentas: [],
-          executarFerramenta: () => Promise.resolve({ ok: false, erro: "O teste não usa ferramentas." }),
+          ferramentas: comFerramenta ? [FERRAMENTA_TESTE] : [],
+          executarFerramenta: () =>
+            Promise.resolve(
+              comFerramenta ? { ok: true, valor: "ok" } : { ok: false, erro: "O teste não usa ferramentas." },
+            ),
           continuarDe: null,
           // Fila própria: o teste não espera nem segura a fila de nenhum agente.
           fila: `teste-${linha.id}`,
         },
         controle.signal,
       );
+      const latencia = () => Math.max(0, Math.round(this.cronometro() - inicio));
       for await (const evento of eventos) {
-        if (evento.tipo === "erro") return { falha: evento.falha };
-        if (evento.tipo === "fim") return { latenciaMs: Math.max(0, Math.round(this.cronometro() - inicio)) };
+        if (evento.tipo === "erro") return { falha: evento.falha, quebrou: false };
+        if (evento.tipo === "ferramenta" && comFerramenta)
+          return { latenciaMs: latencia(), chamouFerramenta: true };
+        if (evento.tipo === "fim") return { latenciaMs: latencia(), chamouFerramenta: false };
       }
-      return { falha: falha("fora_do_ar", `${linha.nome} parou sem responder.`) };
+      return { falha: falha("fora_do_ar", `${linha.nome} parou sem responder.`), quebrou: false };
     } catch (erro) {
       if (controle.signal.aborted) {
         return {
           falha: falha("fora_do_ar", `${linha.nome} não respondeu em ${Math.ceil(prazoMs / 1000)} s.`),
+          quebrou: false,
         };
       }
       const detalhe = (erro instanceof Error ? erro.message : String(erro)).trim().slice(0, TAMANHO_DETALHE);
-      return { falha: falha("fora_do_ar", detalhe || `${linha.nome} falhou sem dizer por quê.`) };
+      return {
+        falha: falha("fora_do_ar", detalhe || `${linha.nome} falhou sem dizer por quê.`),
+        quebrou: true,
+      };
     } finally {
       clearTimeout(prazo);
     }
