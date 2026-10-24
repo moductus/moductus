@@ -10,6 +10,7 @@ import type {
   PedidoArquivarConversa,
   PedidoEnviar,
   PedidoMensagens,
+  PedidoPararConversa,
   ResultadoEnviar,
   TipoConversa,
 } from "@moductus/contrato";
@@ -19,7 +20,7 @@ import type { RepositorioAgentes } from "../agentes/agentes.ts";
 import { AgenteDesligado } from "../agentes/estado.ts";
 import { HISTORICO_CURTO } from "../agentes/pedido.ts";
 import { AGENTE_PADRAO, type AgenteRoteavel, type Destino, type Roteador } from "../agentes/roteador.ts";
-import type { ResultadoExecucao, Runtime } from "../agentes/runtime.ts";
+import { MENSAGEM_CANCELADA, type ResultadoExecucao, type Runtime } from "../agentes/runtime.ts";
 import type { MensagemModelo } from "../provedores/provedor.ts";
 
 /**
@@ -249,19 +250,22 @@ export class RepositorioConversas {
 
   /**
    * As últimas `limite` mensagens até a dada (inclusive), na ordem da conversa, cada uma dizendo se
-   * é a fala de uma execução que falhou.
+   * é a fala de uma execução que falhou. A resposta que você parou não falhou: o que ela disse,
+   * com o aviso, é a resposta (e a pergunta dela não volta a pedir resposta).
    */
   historico(conversaId: string, ateId: string, limite: number): MensagemDoHistorico[] {
     const linhas = this.db
       .prepare(
         `SELECT ${COLUNAS_MENSAGEM},
-                CASE WHEN m.do_agente_id IS NOT NULL AND m.da_execucao_id IS NULL THEN 1
-                     ELSE COALESCE(e.estado = 'erro', 0) END AS falhou
+                CASE WHEN m.do_agente_id IS NOT NULL AND m.da_execucao_id IS NULL THEN m.conteudo IS NOT ?
+                     ELSE COALESCE(e.estado = 'erro' AND e.erro IS NOT ?, 0) END AS falhou
            FROM ${DE_MENSAGENS}
           WHERE m.conversa_id = ? AND m.apagado_em IS NULL AND m.id <= ?
           ORDER BY m.id DESC LIMIT ?`,
       )
-      .all(conversaId, ateId, limite) as unknown as (LinhaMensagem & { falhou: number })[];
+      .all(AVISO_PARADA, MENSAGEM_CANCELADA, conversaId, ateId, limite) as unknown as (LinhaMensagem & {
+      falhou: number;
+    })[];
     return linhas.reverse().map((l) => ({ ...paraMensagem(l), falhou: l.falhou === 1 }));
   }
 
@@ -323,6 +327,18 @@ export const MENSAGEM_SEM_RESPOSTA = "Não consegui responder desta vez. Pode ma
 
 /** O aviso que segue o texto parcial de uma resposta que parou no meio. */
 export const AVISO_PAROU_NO_MEIO = (erro: string) => `A resposta parou no meio: ${erro}`;
+
+/** O que fica da resposta que você parou: depois do que ela já tinha dito, ou sozinho. */
+export const AVISO_PARADA = "Você parou a resposta aqui.";
+
+/** O motivo do cancelamento quando você para as respostas: a resposta fica, com o aviso. */
+class RespostaParada extends Error {
+  constructor() {
+    super("você parou a resposta");
+  }
+}
+
+const foiParada = (sinal: AbortSignal) => sinal.aborted && sinal.reason instanceof RespostaParada;
 
 /** A sessão do provedor a continuar, a última mensagem da conversa que ela recebeu e de quem ela é. */
 interface Sessao {
@@ -401,6 +417,28 @@ export class ServicoConversas {
       if (chave.startsWith(`${pedido.id}:`)) this.sessoes.delete(chave);
     }
     return this.listar();
+  }
+
+  /**
+   * Para as respostas pedidas na conversa: a que roda encerra a execução (e o processo do CLI do
+   * provedor), as que esperam a vez nem chegam ao modelo. Cada agente parado deixa uma fala com o
+   * que já disse e o aviso, para a pergunta não voltar a pedir resposta (nem depois de reiniciar).
+   * A sessão do provedor dele na conversa é esquecida: a próxima resposta começa do histórico
+   * curto, que mostra onde você parou, e não da sessão cortada no meio. Volta quantos pararam.
+   */
+  parar(pedido: PedidoPararConversa): number {
+    this.exigir(pedido.id);
+    const cancelamento = this.cancelamentos.get(pedido.id);
+    if (!cancelamento) return 0;
+    const agentes = new Set(
+      [...this.vezes.keys()]
+        .filter((k) => k.startsWith(`${pedido.id}:`))
+        .map((k) => k.slice(pedido.id.length + 1)),
+    );
+    cancelamento.abort(new RespostaParada());
+    // A próxima fala da conversa ganha outro cancelamento: esta não nasce parada.
+    this.cancelamentos.delete(pedido.id);
+    return agentes.size;
   }
 
   /**
@@ -525,10 +563,15 @@ export class ServicoConversas {
     todos: readonly Destino[],
     sinal: AbortSignal,
   ): Promise<void> {
-    // Apagada enquanto a resposta anterior do agente rodava: esta nem começa.
-    if (sinal.aborted || !this.deps.repo.conversa(conversaId)) return;
     const { agenteId } = destino;
     const chave = `${conversaId}:${agenteId}`;
+    // Apagada enquanto a resposta anterior do agente rodava: esta nem começa.
+    if (!this.deps.repo.conversa(conversaId)) return;
+    if (sinal.aborted) {
+      // Parada antes da vez: nem chega ao modelo.
+      if (foiParada(sinal)) this.gravarParada(conversaId, agenteId, "", null);
+      return;
+    }
     const sessao = this.sessoes.get(chave);
     const nomes = new Map(this.deps.agentes.agentes().map((a) => [a.id, a.nome]));
     const conversa = this.deps.repo
@@ -566,6 +609,11 @@ export class ServicoConversas {
         },
       });
     } catch (erro) {
+      // Parada na fila ou com o agente dormindo: não houve execução.
+      if (foiParada(sinal)) {
+        if (this.deps.repo.conversa(conversaId)) this.gravarParada(conversaId, agenteId, "", null);
+        return;
+      }
       // Desligado enquanto a fala esperava a vez: a recusa vira a fala dele, sem execução.
       if (!(erro instanceof AgenteDesligado)) throw erro;
       if (this.deps.repo.conversa(conversaId)) this.gravar(conversaId, agenteId, erro.message, null);
@@ -573,7 +621,12 @@ export class ServicoConversas {
     }
     const { execucao } = resultado;
     // Apagada no meio: nada fica, nem a sessão (a conversa nova não continua da apagada).
-    if (sinal.aborted || !this.deps.repo.conversa(conversaId)) return;
+    if (!this.deps.repo.conversa(conversaId) || (sinal.aborted && !foiParada(sinal))) return;
+    // Parada no meio: fica o que já tinha dito. Se terminou antes de parar, vale como resposta.
+    if (foiParada(sinal) && execucao.estado === "erro" && execucao.erro === MENSAGEM_CANCELADA) {
+      this.gravarParada(conversaId, agenteId, resultado.texto, execucao.id);
+      return;
+    }
     // Com erro, a sessão fica onde estava: o que esta vez mandou vai de novo na próxima.
     if (execucao.estado === "ok") {
       if (resultado.continuacao !== null && execucao.provedorId !== null) {
@@ -594,6 +647,13 @@ export class ServicoConversas {
       conteudo = parcial ? `${parcial}\n\n${AVISO_PAROU_NO_MEIO(erro)}` : erro;
     }
     this.gravar(conversaId, agenteId, conteudo, execucao.id);
+  }
+
+  /** A fala de quem você parou; a sessão cortada no meio não segue. */
+  private gravarParada(conversaId: string, agenteId: string, texto: string, execucaoId: string | null): void {
+    this.sessoes.delete(`${conversaId}:${agenteId}`);
+    const dito = texto.trim();
+    this.gravar(conversaId, agenteId, dito ? `${dito}\n\n${AVISO_PARADA}` : AVISO_PARADA, execucaoId);
   }
 
   private gravar(

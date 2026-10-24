@@ -7,6 +7,7 @@ import {
   PedidoAbrirConversa,
   PedidoApagarConversa,
   PedidoEnviar,
+  PedidoPararConversa,
   ResultadoEnviar,
 } from "./conversas.ts";
 import { METODOS } from "./metodos.ts";
@@ -47,6 +48,13 @@ describe("conversa", () => {
     expect(PedidoApagarConversa.safeParse({ id: time.id }).success).toBe(true);
     expect(PedidoApagarConversa.safeParse({}).success).toBe(false);
     expect(METODOS["conversas.apagar"].saida.safeParse([time]).success).toBe(true);
+  });
+
+  test("parar pede a conversa e devolve quantos agentes pararam", () => {
+    expect(PedidoPararConversa.safeParse({ id: time.id }).success).toBe(true);
+    expect(PedidoPararConversa.safeParse({ id: "" }).success).toBe(false);
+    expect(METODOS["conversas.parar"].saida.safeParse(2).success).toBe(true);
+    expect(METODOS["conversas.parar"].saida.safeParse(-1).success).toBe(false);
   });
 });
 

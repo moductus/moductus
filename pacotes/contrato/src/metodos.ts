@@ -51,6 +51,7 @@ import {
   PedidoArquivarConversa,
   PedidoEnviar,
   PedidoMensagens,
+  PedidoPararConversa,
   ResultadoEnviar,
 } from "./conversas.ts";
 import {
@@ -187,6 +188,7 @@ export const METODOS = {
   "conversas.enviar": metodo(PedidoEnviar, ResultadoEnviar),
   "conversas.arquivar": metodo(PedidoArquivarConversa, Conversa),
   "conversas.apagar": metodo(PedidoApagarConversa, z.array(Conversa)),
+  "conversas.parar": metodo(PedidoPararConversa, z.number().int().nonnegative()),
 
   "aprovacoes.pendentes": metodo(z.undefined(), z.array(Aprovacao)),
   "aprovacoes.decidir": metodo(PedidoDecidir, Aprovacao),

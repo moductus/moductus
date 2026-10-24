@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { MensagemModelo } from "../provedores/provedor.ts";
+import { DE_FABRICA } from "./de-fabrica.ts";
 import { historicoCurto, montarInstrucoes, resumir, VOZ_DA_FAMILIA } from "./pedido.ts";
 
 const fala = (texto: string, papel: MensagemModelo["papel"] = "usuario"): MensagemModelo => ({
@@ -15,6 +16,15 @@ describe("pedido ao modelo", () => {
     expect(montarInstrucoes({ nome: "Nuno", funcao: "Cuida do código", instrucoes: "" })).toBe(
       `Você é Nuno. Cuida do código.\n\n${VOZ_DA_FAMILIA}`,
     );
+  });
+
+  test("pedido que é ação vai pelas ferramentas ou é recusado, nunca vira script para o usuário rodar", () => {
+    const faina = montarInstrucoes(DE_FABRICA.faina);
+    expect(faina).toContain("Você age só pelas ferramentas que recebeu.");
+    expect(faina).toContain(
+      "Nunca responda uma ação com script, comando ou bloco de código para o usuário rodar",
+    );
+    expect(faina).toContain("Sem passo a passo nem lista longa");
   });
 
   test("histórico curto fica com as últimas falas que cabem, na ordem da conversa", () => {

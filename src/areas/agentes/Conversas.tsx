@@ -13,11 +13,15 @@ import { decidirPedido } from "../../servico/aprovacoes.ts";
 import {
   chaveInterlocutor,
   falhaNaConversa,
+  LINHAS_CODIGO_ABERTO,
   mencionar,
+  partesDaFala,
   previa,
   quandoCurto,
+  recortarFala,
   useConversas,
   type Interlocutor,
+  type ParteDaFala,
 } from "../../servico/conversas.ts";
 import { useTime, type ModelosDoTime, type SituacaoTime } from "../../servico/time.ts";
 import { useAgora } from "../tempo.ts";
@@ -47,6 +51,8 @@ export function Conversas({ canal, com, aoEscolher, aoAbrirPagina, aoAbrirMemori
   const conversas = useConversas(canal, com);
   const { situacoes: time, modelos } = useTime(canal);
   const { conectado, aberta } = conversas;
+  // Alguém respondendo ou na vez de responder: dá para parar.
+  const respondendo = Object.keys(conversas.andamento).length > 0 || conversas.aguardando.length > 0;
   // A frase de quem dorme diz uma hora: o relógio da tela a tira de lá quando ela chega.
   const agora = useAgora();
 
@@ -97,6 +103,8 @@ export function Conversas({ canal, com, aoEscolher, aoAbrirPagina, aoAbrirMemori
           conectado={conectado}
           erro={conversas.erro}
           enviar={conversas.enviar}
+          respondendo={respondendo}
+          parar={conversas.parar}
         />
       </section>
     </div>
@@ -427,7 +435,7 @@ function Fala({ mensagem, falha, cartoes }: PropsFala) {
           )}
         </>
       ) : (
-        conteudo
+        <TextoDaFala texto={conteudo} />
       )}
     </FalaAgente>
   );
@@ -446,9 +454,69 @@ function FalaEmAndamento({ parcial, cartoes }: { parcial: FalaParcial; cartoes: 
         estado={pediu ? "esperando" : "trabalhando"}
         acao={cartoes.length > 0 && <Cartoes cartoes={cartoes} />}
       >
-        {fala ? fala : <span className="conversa-pensando">pensando…</span>}
+        {fala ? <TextoDaFala texto={fala} /> : <span className="conversa-pensando">pensando…</span>}
       </FalaAgente>
     </div>
+  );
+}
+
+/**
+ * O texto da fala com os blocos de código em mono. Bloco longo vem recolhido e a resposta longa
+ * vem cortada, com "Ver tudo": quem pediu uma ação não precisa rolar um script para achar a conversa.
+ */
+function TextoDaFala({ texto }: { texto: string }) {
+  const [inteira, setInteira] = useState(false);
+  const partes = partesDaFala(texto);
+  const recorte = recortarFala(partes);
+  return (
+    <>
+      {(inteira ? partes : recorte.partes).map((parte, i) =>
+        parte.tipo === "texto" ? (
+          <span key={i} className="fala-trecho">
+            {parte.texto}
+          </span>
+        ) : (
+          <BlocoDeCodigo key={i} parte={parte} />
+        ),
+      )}
+      {recorte.cortada && (
+        <Botao
+          variante="fantasma"
+          tamanho="pequeno"
+          className="fala-alternar"
+          aria-expanded={inteira}
+          onClick={() => setInteira((v) => !v)}
+        >
+          {inteira ? "Ver menos" : "Ver tudo"}
+        </Botao>
+      )}
+    </>
+  );
+}
+
+function BlocoDeCodigo({ parte }: { parte: Extract<ParteDaFala, { tipo: "codigo" }> }) {
+  const id = useId();
+  const longo = parte.linhas > LINHAS_CODIGO_ABERTO;
+  const [aberto, setAberto] = useState(false);
+  const visivel = !longo || aberto;
+  return (
+    <>
+      {longo && (
+        <Botao
+          variante="fantasma"
+          tamanho="pequeno"
+          className="fala-alternar"
+          aria-expanded={aberto}
+          aria-controls={id}
+          onClick={() => setAberto((v) => !v)}
+        >
+          {aberto ? "Recolher o código" : `Mostrar ${parte.linhas} linhas de código`}
+        </Botao>
+      )}
+      <code id={id} className="fala-codigo" hidden={!visivel}>
+        {parte.codigo}
+      </code>
+    </>
   );
 }
 
@@ -459,18 +527,32 @@ interface PropsEscrever {
   conectado: boolean;
   erro: string | null;
   enviar: (texto: string) => Promise<boolean>;
+  /** Há resposta em andamento ou esperando a vez: "Parar" aparece. */
+  respondendo: boolean;
+  parar: () => Promise<boolean>;
 }
 
 /**
- * Onde se escreve: Enter manda, Shift+Enter quebra a linha. Na conversa do time, as menções
- * entram com um clique. O texto só some quando o serviço aceitou.
+ * Onde se escreve: Enter manda, Shift+Enter quebra a linha, Esc para a resposta em andamento. Na
+ * conversa do time, as menções entram com um clique. O texto só some quando o serviço aceitou.
  */
-function Escrever({ com, pronto, conectado, erro, enviar }: PropsEscrever) {
+function Escrever({ com, pronto, conectado, erro, enviar, respondendo, parar }: PropsEscrever) {
   const id = useId();
   const campo = useRef<HTMLTextAreaElement>(null);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [parando, setParando] = useState(false);
   const podeMandar = pronto && !enviando && texto.trim() !== "";
+  const podeParar = pronto && respondendo && !parando;
+
+  const pararAgora = async () => {
+    if (!podeParar) return;
+    setParando(true);
+    await parar();
+    setParando(false);
+    // O botão some quando a resposta para: o foco fica no campo, não se perde.
+    campo.current?.focus();
+  };
 
   const mandar = async () => {
     if (!podeMandar) return;
@@ -481,6 +563,12 @@ function Escrever({ com, pronto, conectado, erro, enviar }: PropsEscrever) {
   };
 
   const aoTeclar = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Escape" && respondendo) {
+      e.preventDefault();
+      e.stopPropagation();
+      void pararAgora();
+      return;
+    }
     if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
     e.preventDefault();
     void mandar();
@@ -537,6 +625,16 @@ function Escrever({ com, pronto, conectado, erro, enviar }: PropsEscrever) {
                 {DADOS_AGENTES[a].apelido}
               </button>
             ))}
+          {respondendo && (
+            <Botao
+              className="escrever-parar"
+              aria-keyshortcuts="Escape"
+              disabled={!podeParar}
+              onClick={() => void pararAgora()}
+            >
+              Parar
+            </Botao>
+          )}
           <Botao variante="primario" type="submit" className="escrever-enviar" disabled={!podeMandar}>
             Enviar
           </Botao>
