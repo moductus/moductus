@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Icone } from "../../componentes/Icone.tsx";
 import { useConfiguracaoDock, useServico } from "../../nativo/eventos.ts";
 import { useCanal } from "../../servico/conexao.ts";
@@ -32,6 +32,9 @@ function medirTopoDoCartao() {
   return { left: caixa.left, top: caixa.top, width: caixa.width, height: fim - caixa.top + folga };
 }
 
+/** Um cartão de aprovação ainda sem resposta (ou com a resposta a caminho) no painel. */
+const PEDIDO_ESPERANDO = '.aprovacao[data-estado="pendente"]';
+
 /** O estado vazio das áreas que ainda não leem o serviço. */
 function Vazio({ area }: { area: AreaPainel }) {
   const { vazio, icone } = DADOS_AREAS[area];
@@ -54,7 +57,7 @@ function Vazio({ area }: { area: AreaPainel }) {
 export function Painel() {
   // O contador muda a cada abertura, mesmo quando a área é a mesma.
   const [abertura, setAbertura] = useState<{ area: string; n: number } | null>(null);
-  const { lado } = useConfiguracaoDock();
+  const { lado, forma } = useConfiguracaoDock();
   const canal = useCanal(useServico({ silencioso: true }));
   const area = abertura && eAreaPainel(abertura.area) ? abertura.area : null;
   // O "Não" às sugestões do Foco vale enquanto a janela vive, mesmo trocando de área.
@@ -93,6 +96,23 @@ export function Painel() {
     requestAnimationFrame(() => requestAnimationFrame(() => void invoke("painel_pronto", { area })));
   }, [abertura]);
 
+  // Clique em outro app ou na área de trabalho (a casca vê pelo gancho do mouse) fecha o painel,
+  // menos com o tour passando por ele ou com um pedido de aprovação esperando a resposta: quem
+  // vai conferir o comando no terminal volta e encontra o pedido onde estava.
+  const emTour = useRef(false);
+  useEffect(() => {
+    emTour.current = tour.parada !== null;
+  }, [tour.parada]);
+  useEffect(() => {
+    const parar = listen("painel:clique-fora", () => {
+      if (emTour.current || document.querySelector(PEDIDO_ESPERANDO)) return;
+      void invoke("painel_fechar");
+    });
+    return () => {
+      void parar.then((f) => f());
+    };
+  }, []);
+
   useEffect(() => {
     const aoTeclar = (e: KeyboardEvent) => {
       if (e.key === "Escape") void invoke("painel_fechar");
@@ -103,7 +123,12 @@ export function Painel() {
 
   const dados = area ? DADOS_AREAS[area] : null;
   return (
-    <main className="painel" data-lado={lado} aria-label={`Painel ${dados?.nome ?? ""}`.trim()}>
+    <main
+      className="painel"
+      data-lado={lado}
+      data-forma={forma}
+      aria-label={`Painel ${dados?.nome ?? ""}`.trim()}
+    >
       {tour.parada !== null && (
         <CamadaTour
           parada={tour.parada}
