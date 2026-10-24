@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { Execucao, ExecucaoDetalhada, type Aprovacao } from "@moductus/contrato";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { z } from "zod";
 import { MENSAGEM_NEGADO, RepositorioAprovacoes, ServicoAprovacoes } from "../aprovacoes/aprovacoes.ts";
 import { abrirBanco } from "../banco/conexao.ts";
@@ -32,21 +32,52 @@ afterEach(() => {
   for (const p of pastas.splice(0)) rmSync(p, { recursive: true, force: true });
 });
 
-/** Uma porta que a ferramenta `teste.esperar` segura até o teste abrir. */
+/**
+ * Uma porta que a ferramenta `teste.esperar` segura até o teste abrir. `chegou` espera alguém parar
+ * na porta, já parado ou ainda por chegar: o teste segue pelo evento, não por quanto a execução
+ * demora para chegar lá (com a máquina carregada, mais que o segundo do `vi.waitFor`).
+ */
 function portoes() {
   const abertos = new Map<string, () => void>();
   const esperando = new Set<string>();
+  const chegadas = new Map<string, (() => void)[]>();
+  const entrou = (chave: string) => {
+    esperando.add(chave);
+    for (const avisar of chegadas.get(chave)?.splice(0) ?? []) avisar();
+  };
   const esperar = (chave: string) =>
     new Promise<void>((resolve) => {
-      esperando.add(chave);
       abertos.set(chave, resolve);
+      entrou(chave);
     });
   const abrir = (chave: string) => {
     const abrirPorta = abertos.get(chave);
     if (!abrirPorta) throw new Error(`ninguém esperando em ${chave}`);
     abrirPorta();
   };
-  return { esperar, abrir, esperando };
+  const chegou = (chave: string): Promise<void> =>
+    esperando.has(chave)
+      ? Promise.resolve()
+      : new Promise((avisar) => chegadas.set(chave, [...(chegadas.get(chave) ?? []), avisar]));
+  return { esperar, abrir, esperando, entrou, chegou };
+}
+
+/** Os cartões que as janelas receberiam. `pendente` espera o próximo cartão novo, já recebido ou ainda por vir. */
+function avisosDeCartao() {
+  const novos: Aprovacao[] = [];
+  const esperas: ((aprovacao: Aprovacao) => void)[] = [];
+  return {
+    aviso: (aprovacao: Aprovacao) => {
+      if (aprovacao.estado !== "pendente") return;
+      const espera = esperas.shift();
+      if (espera) espera(aprovacao);
+      else novos.push(aprovacao);
+    },
+    pendente: (): Promise<Aprovacao> => {
+      const ja = novos.shift();
+      return ja ? Promise.resolve(ja) : new Promise((resolver) => esperas.push(resolver));
+    },
+  };
 }
 
 /**
@@ -109,7 +140,7 @@ function montar(pasta = mkdtempSync(join(tmpdir(), "moductus-runtime-"))) {
       desfazer: () => {},
       executar: (_entrada, ctx) =>
         new Promise((_resolve, rejeitar) => {
-          porta.esperando.add("demorar");
+          porta.entrou("demorar");
           ctx.sinal.addEventListener("abort", () => rejeitar(new Error("parou no meio")), { once: true });
         }),
     }),
@@ -123,7 +154,11 @@ function montar(pasta = mkdtempSync(join(tmpdir(), "moductus-runtime-"))) {
   ]);
 
   const repositorioAprovacoes = new RepositorioAprovacoes(db);
-  const aprovacoes = new ServicoAprovacoes(repositorioAprovacoes, { aprovacao: () => {}, regras: () => {} });
+  const cartoes = avisosDeCartao();
+  const aprovacoes = new ServicoAprovacoes(repositorioAprovacoes, {
+    aprovacao: cartoes.aviso,
+    regras: () => {},
+  });
   const agentes = new RepositorioAgentes(db);
   const repositorioExecucoes = new RepositorioExecucoes(db);
   const avisosExecucao: Execucao[] = [];
@@ -152,6 +187,7 @@ function montar(pasta = mkdtempSync(join(tmpdir(), "moductus-runtime-"))) {
     publicados,
     aprovacoes,
     repositorioAprovacoes,
+    cartoes,
     avisosExecucao,
     avisosAgente,
     situacao,
@@ -185,7 +221,7 @@ describe("runtime: trocar o modelo (F2-32)", () => {
     falsos["p-nuno"]!.roteirizar(roteiros.resposta("pelo novo"));
 
     const rodando = runtime.executar(pedir("alba", "primeiro"));
-    await vi.waitFor(() => expect(porta.esperando.has("a")).toBe(true));
+    await porta.chegou("a");
     // Trocado no meio da execução: o pedido seguinte já entra na fila.
     agentes.definir({ id: "alba", provedorId: "p-nuno" });
     const seguinte = runtime.executar(pedir("alba", "segundo"));
@@ -232,7 +268,7 @@ describe("runtime: fila por agente", () => {
 
     const primeiro = runtime.executar(pedir("alba", "primeiro"));
     const segundo = runtime.executar(pedir("alba", "segundo"));
-    await vi.waitFor(() => expect(porta.esperando.has("a")).toBe(true));
+    await porta.chegou("a");
 
     // O segundo espera a vez: não chegou ao provedor nem virou execução.
     expect(falsos["p-alba"]!.pedidos).toHaveLength(1);
@@ -260,7 +296,8 @@ describe("runtime: fila por agente", () => {
 
     const alba = runtime.executar(pedir("alba", "oi, Alba"));
     const nuno = runtime.executar(pedir("nuno", "oi, Nuno"));
-    await vi.waitFor(() => expect([...porta.esperando].sort()).toEqual(["alba", "nuno"]));
+    await Promise.all([porta.chegou("alba"), porta.chegou("nuno")]);
+    expect([...porta.esperando].sort()).toEqual(["alba", "nuno"]);
     expect(linhasRodando(db)).toBe(2);
     expect(situacao("alba").atividade).toBe("trabalhando");
     expect(situacao("nuno").atividade).toBe("trabalhando");
@@ -283,7 +320,7 @@ describe("runtime: fila por agente", () => {
     const primeiro = runtime.executar(pedir("alba", "um"));
     const segundo = runtime.executar(pedir("alba", "dois", { sinal: cancelar.signal }));
     const terceiro = runtime.executar(pedir("alba", "três"));
-    await vi.waitFor(() => expect(porta.esperando.has("a")).toBe(true));
+    await porta.chegou("a");
 
     cancelar.abort(new Error("desisti"));
     await expect(segundo).rejects.toThrow("desisti");
@@ -334,7 +371,7 @@ describe("runtime: pedido ao modelo", () => {
       roteiros.resposta("[]"),
     );
     const ocupada = runtime.executar(pedir("alba", "uma resposta longa"));
-    await vi.waitFor(() => expect(porta.esperando.has("a")).toBe(true));
+    await porta.chegou("a");
 
     const curta = await runtime.executar(
       pedir("alba", "classifica", { instrucoes: "Só classifique.", semFerramentas: true, foraDaFila: true }),
@@ -361,7 +398,7 @@ describe("runtime: pedido ao modelo", () => {
     );
     const primeiro = runtime.executar(pedir("alba", "um"));
     const segundo = runtime.executar(pedir("alba", "dois"));
-    await vi.waitFor(() => expect(porta.esperando.has("a")).toBe(true));
+    await porta.chegou("a");
     db.prepare("UPDATE agentes SET instrucoes = 'Instrução nova.' WHERE id = 'alba'").run();
     porta.abrir("a");
     await Promise.all([primeiro, segundo]);
@@ -529,7 +566,7 @@ describe("runtime: registro em execucoes", () => {
     ]);
     const cancelar = new AbortController();
     const execucao = runtime.executar(pedir("alba", "oi", { sinal: cancelar.signal }));
-    await vi.waitFor(() => expect(porta.esperando.has("a")).toBe(true));
+    await porta.chegou("a");
     cancelar.abort();
     porta.abrir("a");
     const r = await execucao;
@@ -577,7 +614,7 @@ describe("runtime: chamadas de ferramenta", () => {
       ...roteiros.resposta("ok"),
     ]);
     const execucao = runtime.executar(pedir("alba", "oi"));
-    await vi.waitFor(() => expect(porta.esperando.has("a")).toBe(true));
+    await porta.chegou("a");
     const id = avisosExecucao[0]!.id;
 
     const executor = runtime.executorDaExecucao(id);
@@ -596,17 +633,16 @@ describe("runtime: chamadas de ferramenta", () => {
   });
 
   test("externo vira cartão do agente, deixa o agente esperando você e só roda com o sim", async () => {
-    const { runtime, falsos, publicados, aprovacoes, repositorioAprovacoes, situacao, historico } = montar();
+    const { runtime, falsos, publicados, aprovacoes, repositorioAprovacoes, cartoes, situacao, historico } =
+      montar();
     falsos["p-nuno"]!.roteirizar([
       { tipo: "ferramenta", nome: "teste__publicar", entrada: { alvo: "#142" } },
       ...roteiros.resposta("Publiquei."),
     ]);
     const execucao = runtime.executar(pedir("nuno", "publica no #142"));
-    let cartao!: Aprovacao;
-    await vi.waitFor(() => {
-      expect(repositorioAprovacoes.pendentes()).toHaveLength(1);
-      cartao = repositorioAprovacoes.pendentes()[0]!;
-    });
+    await cartoes.pendente();
+    expect(repositorioAprovacoes.pendentes()).toHaveLength(1);
+    const cartao = repositorioAprovacoes.pendentes()[0]!;
     expect(cartao).toMatchObject({
       fonte: "moductus",
       agenteId: "nuno",
@@ -632,13 +668,14 @@ describe("runtime: chamadas de ferramenta", () => {
   });
 
   test("externo negado não roda e o modelo recebe o motivo", async () => {
-    const { runtime, falsos, publicados, aprovacoes, repositorioAprovacoes, historico } = montar();
+    const { runtime, falsos, publicados, aprovacoes, repositorioAprovacoes, cartoes, historico } = montar();
     falsos["p-nuno"]!.roteirizar([
       { tipo: "ferramenta", nome: "teste__publicar", entrada: { alvo: "#9" } },
       ...roteiros.resposta("Entendido."),
     ]);
     const execucao = runtime.executar(pedir("nuno", "publica no #9"));
-    await vi.waitFor(() => expect(repositorioAprovacoes.pendentes()).toHaveLength(1));
+    await cartoes.pendente();
+    expect(repositorioAprovacoes.pendentes()).toHaveLength(1);
     await aprovacoes.decidir({ id: repositorioAprovacoes.pendentes()[0]!.id, decisao: "negar" });
     const r = await execucao;
     expect(publicados).toEqual([]);
@@ -649,14 +686,15 @@ describe("runtime: chamadas de ferramenta", () => {
   });
 
   test("execução cancelada com cartão pendente tira o cartão do dock e registra a chamada com ele", async () => {
-    const { runtime, falsos, repositorioAprovacoes, historico } = montar();
+    const { runtime, falsos, repositorioAprovacoes, cartoes, historico } = montar();
     falsos["p-nuno"]!.roteirizar([
       { tipo: "ferramenta", nome: "teste__publicar", entrada: { alvo: "#1" } },
       ...roteiros.resposta("não chega"),
     ]);
     const cancelar = new AbortController();
     const execucao = runtime.executar(pedir("nuno", "publica", { sinal: cancelar.signal }));
-    await vi.waitFor(() => expect(repositorioAprovacoes.pendentes()).toHaveLength(1));
+    await cartoes.pendente();
+    expect(repositorioAprovacoes.pendentes()).toHaveLength(1);
     const id = repositorioAprovacoes.pendentes()[0]!.id;
     cancelar.abort();
     const r = await execucao;
@@ -679,7 +717,7 @@ describe("runtime: chamadas de ferramenta", () => {
     ]);
     const cancelar = new AbortController();
     const execucao = runtime.executar(pedir("alba", "demora", { sinal: cancelar.signal }));
-    await vi.waitFor(() => expect(porta.esperando.has("demorar")).toBe(true));
+    await porta.chegou("demorar");
     cancelar.abort();
     const r = await execucao;
     const [chamada] = historico.obter({ id: r.execucao.id }).chamadas;
@@ -701,7 +739,7 @@ describe("runtime: chamadas de ferramenta", () => {
     ]);
     const cancelar = new AbortController();
     const execucao = runtime.executar(pedir("alba", "oi", { sinal: cancelar.signal }));
-    await vi.waitFor(() => expect(porta.esperando.has("a")).toBe(true));
+    await porta.chegou("a");
     const id = avisosExecucao[0]!.id;
     const executor = runtime.executorDaExecucao(id)!;
     cancelar.abort();
@@ -712,7 +750,7 @@ describe("runtime: chamadas de ferramenta", () => {
   });
 
   test("regra do usuário decide sem cartão: a que permite roda, a que nega volta o motivo", async () => {
-    const { runtime, falsos, publicados, aprovacoes, repositorioAprovacoes, historico } = montar();
+    const { runtime, falsos, publicados, aprovacoes, repositorioAprovacoes, cartoes, historico } = montar();
     const publicar = (alvo: string) => [
       { tipo: "ferramenta" as const, nome: "teste__publicar", entrada: { alvo } },
       ...roteiros.resposta("ok"),
@@ -721,7 +759,8 @@ describe("runtime: chamadas de ferramenta", () => {
 
     // "Sempre para este agente" no #1 (permitir) e no #2 (negar).
     const primeiro = runtime.executar(pedir("nuno", "publica no #1"));
-    await vi.waitFor(() => expect(repositorioAprovacoes.pendentes()).toHaveLength(1));
+    await cartoes.pendente();
+    expect(repositorioAprovacoes.pendentes()).toHaveLength(1);
     await aprovacoes.decidir({
       id: repositorioAprovacoes.pendentes()[0]!.id,
       decisao: "permitir",
@@ -729,7 +768,8 @@ describe("runtime: chamadas de ferramenta", () => {
     });
     await primeiro;
     const segundo = runtime.executar(pedir("nuno", "publica no #2"));
-    await vi.waitFor(() => expect(repositorioAprovacoes.pendentes()).toHaveLength(1));
+    await cartoes.pendente();
+    expect(repositorioAprovacoes.pendentes()).toHaveLength(1);
     await aprovacoes.decidir({
       id: repositorioAprovacoes.pendentes()[0]!.id,
       decisao: "negar",
@@ -753,13 +793,14 @@ describe("runtime: chamadas de ferramenta", () => {
   });
 
   test("cartão que expira sem decisão não roda e o modelo sabe que nada foi feito", async () => {
-    const { runtime, falsos, publicados, aprovacoes, repositorioAprovacoes, historico } = montar();
+    const { runtime, falsos, publicados, aprovacoes, repositorioAprovacoes, cartoes, historico } = montar();
     falsos["p-nuno"]!.roteirizar([
       { tipo: "ferramenta", nome: "teste__publicar", entrada: { alvo: "#3" } },
       ...roteiros.resposta("Entendido."),
     ]);
     const execucao = runtime.executar(pedir("nuno", "publica no #3"));
-    await vi.waitFor(() => expect(repositorioAprovacoes.pendentes()).toHaveLength(1));
+    await cartoes.pendente();
+    expect(repositorioAprovacoes.pendentes()).toHaveLength(1);
     aprovacoes.expirar(repositorioAprovacoes.pendentes()[0]!.id);
     const r = await execucao;
     expect(r.execucao.estado).toBe("ok");
@@ -780,7 +821,8 @@ describe("runtime: subida depois de parar no meio", () => {
     ]);
     // O serviço "cai" com a execução esperando o cartão: nada termina, o banco fecha.
     void primeiro.runtime.executar(pedir("nuno", "publica no #5"));
-    await vi.waitFor(() => expect(primeiro.repositorioAprovacoes.pendentes()).toHaveLength(1));
+    await primeiro.cartoes.pendente();
+    expect(primeiro.repositorioAprovacoes.pendentes()).toHaveLength(1);
     const cartao = primeiro.repositorioAprovacoes.pendentes()[0]!;
     primeiro.db.close();
 
