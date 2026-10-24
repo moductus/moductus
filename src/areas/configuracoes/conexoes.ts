@@ -103,7 +103,8 @@ export function resumoGithub(itens: readonly ItemGithub[]): ResumoGithub {
 
 /**
  * "há 2 min · 3 sessões hoje": o último evento que chegou das sessões do Claude Code e quantas
- * começaram hoje. Sem nenhum, o que fazer: as variáveis só valem num terminal aberto depois de ligar.
+ * começaram hoje. Sem nenhum, o que fazer: as variáveis só valem num terminal aberto depois de ligar,
+ * e no app Claude Desktop só depois de sair dele e abrir de novo.
  */
 export function ultimoEventoClaude(sessoes: readonly SessaoIa[], agora: Date): string {
   const doClaude = sessoes.filter((s) => s.ferramenta === "claude-code");
@@ -112,7 +113,7 @@ export function ultimoEventoClaude(sessoes: readonly SessaoIa[], agora: Date): s
     .filter((e): e is string => e !== null)
     .sort()
     .at(-1);
-  if (!ultimo) return "nenhum ainda: abra um terminal novo e rode o claude";
+  if (!ultimo) return "nenhum ainda: rode o claude num terminal novo ou reabra o app Claude";
   const meiaNoite = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate()).toISOString();
   const hoje = doClaude.filter((s) => (s.iniciadaEm ?? s.ultimoEventoEm ?? "") >= meiaNoite).length;
   return `${haQuanto(ultimo, agora)} · ${plural(hoje, "sessão hoje", "sessões hoje")}`;

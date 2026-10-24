@@ -24,6 +24,7 @@ const sessao = {
   id: "01K79Z6N7Q4W3J5XG2B8C1D0EM",
   projetoId: projeto.id,
   ferramenta: "claude-code",
+  ondeRoda: "desktop",
   idExterno: "4f1c2e1a-8d7b-4b8e-9a3c-2f0d1e6b7a90",
   modelo: "claude-opus-4-1",
   estado: "esperando",
@@ -63,6 +64,12 @@ describe("sessão de IA", () => {
   test("ferramenta e estado fora da lista são recusados", () => {
     expect(SessaoIa.safeParse({ ...sessao, ferramenta: "cursor" }).success).toBe(false);
     expect(SessaoIa.safeParse({ ...sessao, estado: "ocupada" }).success).toBe(false);
+  });
+
+  test("onde roda: terminal, app Desktop ou não se sabe; o entrypoint cru não passa", () => {
+    expect(SessaoIa.safeParse({ ...sessao, ondeRoda: "terminal" }).success).toBe(true);
+    expect(SessaoIa.safeParse({ ...sessao, ondeRoda: null }).success).toBe(true);
+    expect(SessaoIa.safeParse({ ...sessao, ondeRoda: "claude-desktop" }).success).toBe(false);
   });
 });
 

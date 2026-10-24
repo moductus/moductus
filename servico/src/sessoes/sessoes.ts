@@ -5,6 +5,7 @@ import {
   PedidoEventosSessao,
   PedidoUso,
   type EstadoSessao,
+  type OndeRoda,
   type EventoSessao,
   type FerramentaSessao,
   type FonteUso,
@@ -50,6 +51,7 @@ interface LinhaSessao {
   encerrada_em: string | null;
   contexto_usado_tokens: number | null;
   contexto_janela_tokens: number | null;
+  ponto_de_entrada: string | null;
   e_id: string | null;
   e_tipo: string | null;
   e_ferramenta: string | null;
@@ -69,7 +71,7 @@ interface LinhaEvento {
 const SELECT_SESSAO = `
   SELECT s.id, s.projeto_id, s.ferramenta, s.id_externo, s.modelo, s.estado, s.iniciada_em,
          s.ultimo_evento_em, s.encerrada_em, s.contexto_usado_tokens, s.contexto_janela_tokens,
-         e.id AS e_id, e.tipo AS e_tipo, e.ferramenta_usada AS e_ferramenta,
+         s.ponto_de_entrada, e.id AS e_id, e.tipo AS e_tipo, e.ferramenta_usada AS e_ferramenta,
          e.entrada_resumo AS e_resumo, e.criado_em AS e_criado_em
     FROM sessoes_ia s
     LEFT JOIN eventos_sessao e
@@ -127,6 +129,17 @@ const paraEvento = (l: LinhaEvento): EventoSessao => ({
   recebidoEm: l.criado_em,
 });
 
+/**
+ * O `entrypoint` do Claude Code como a área mostra: `cli` é o terminal (visto no 2.1.280 e no
+ * 2.1.287) e `claude-desktop` é a aba Code do app Desktop (do 2.1.284 ao 2.1.308). O resto
+ * (`sdk-cli` do `claude -p`, valor novo) fica sem rótulo: melhor não dizer do que dizer errado.
+ */
+export function ondeRodaDe(pontoDeEntrada: string | null): OndeRoda | null {
+  if (pontoDeEntrada === "cli") return "terminal";
+  if (pontoDeEntrada === "claude-desktop") return "desktop";
+  return null;
+}
+
 function paraSessao(l: LinhaSessao): SessaoIa {
   const usado = l.contexto_usado_tokens;
   const janela = l.contexto_janela_tokens;
@@ -134,6 +147,7 @@ function paraSessao(l: LinhaSessao): SessaoIa {
     id: l.id,
     projetoId: l.projeto_id,
     ferramenta: l.ferramenta,
+    ondeRoda: l.ferramenta === "claude-code" ? ondeRodaDe(l.ponto_de_entrada) : null,
     idExterno: l.id_externo,
     modelo: l.modelo,
     estado: l.estado,
@@ -368,8 +382,9 @@ export class RepositorioSessoes {
   }
 
   /**
-   * Grava o que a leitura do transcript achou; o modelo só muda quando a leitura achou um. Não
-   * grava (e devolve `false`) se a sessão passou para outro arquivo enquanto a leitura corria.
+   * Grava o que a leitura do transcript achou; o modelo e o ponto de entrada só mudam quando a
+   * leitura achou um. Não grava (e devolve `false`) se a sessão passou para outro arquivo enquanto
+   * a leitura corria.
    */
   gravarLeitura(
     id: string,
@@ -379,6 +394,7 @@ export class RepositorioSessoes {
       usado: number | null;
       janela: number | null;
       modelo: string | null;
+      pontoDeEntrada: string | null;
       avisadoEm: string | null;
       agora: string;
     },
@@ -387,10 +403,11 @@ export class RepositorioSessoes {
       .prepare(
         `UPDATE sessoes_ia
             SET transcript_lido_bytes = ?, contexto_usado_tokens = ?, contexto_janela_tokens = ?,
-                modelo = coalesce(?, modelo), contexto_avisado_em = ?, atualizado_em = ?
+                modelo = coalesce(?, modelo), ponto_de_entrada = coalesce(?, ponto_de_entrada),
+                contexto_avisado_em = ?, atualizado_em = ?
           WHERE id = ? AND transcript_caminho = ?`,
       )
-      .run(g.lidoAte, g.usado, g.janela, g.modelo, g.avisadoEm, g.agora, id, g.caminho);
+      .run(g.lidoAte, g.usado, g.janela, g.modelo, g.pontoDeEntrada, g.avisadoEm, g.agora, id, g.caminho);
     return Number(gravou.changes) > 0;
   }
 

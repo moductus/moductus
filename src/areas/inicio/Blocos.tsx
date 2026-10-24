@@ -14,7 +14,11 @@ import {
   marcarTarefa,
   useAvisoDesfazer,
 } from "../../janelas/painel/Dia.tsx";
-import { NOME_FERRAMENTA, situacaoDasSessoes } from "../../janelas/painel/PedidosSessoes.tsx";
+import {
+  NOME_FERRAMENTA,
+  nomeCompletoDaSessao,
+  situacaoDasSessoes,
+} from "../../janelas/painel/PedidosSessoes.tsx";
 import { sessoesAbertas } from "../../janelas/painel/sessoes.ts";
 import { deCima, feitasDoDia, linhasDoHoje } from "../../janelas/painel/tarefas.ts";
 import { useAcoesSistema } from "../../janelas/sistema/primeiro-uso/estado.ts";
@@ -432,7 +436,10 @@ function BlocoSessoes({ canal, agora }: { canal: EstadoConexao; agora: Date }) {
               <li key={sessao.id} className="inicio-sessao">
                 <span className="inicio-ponto" data-tom={estado.tom} aria-hidden="true" />
                 <span className="inicio-sessao-nome">
-                  {NOME_FERRAMENTA[sessao.ferramenta]}
+                  {/* Como no dock: só o nome cabe; onde roda vai no title e no nome acessível. */}
+                  <span title={nomeCompletoDaSessao(sessao)} aria-label={nomeCompletoDaSessao(sessao)}>
+                    {NOME_FERRAMENTA[sessao.ferramenta]}
+                  </span>
                   <span className="inicio-sessao-projeto">{` · ${projeto?.nome ?? "sem projeto"}`}</span>
                 </span>
                 <span className="inicio-sessao-estado" data-tom={estado.tom}>

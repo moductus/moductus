@@ -25,9 +25,14 @@ export const ROTAS_HOOKS: Record<string, FerramentaSessao> = {
   "/hooks/opencode": "opencode",
 };
 
-/** Explica no próprio Claude Code (e no log dele) por que o evento foi recusado. */
+/**
+ * Explica no próprio Claude Code (e no log dele) por que o evento foi recusado. O caso comum é o
+ * processo aberto antes da ligação, que não tem a variável: o terminal, e também o app Claude
+ * Desktop, que passa às sessões da aba Code o ambiente de quando ele abriu e segue aberto na
+ * bandeja depois de fechar a janela.
+ */
 export const RECUSA_TOKEN =
-  "Moductus: token dos hooks ausente ou diferente. Abra um terminal novo para o Claude Code ler MODUCTUS_HOOKS_TOKEN.";
+  "Moductus: token dos hooks ausente ou diferente. Este Claude Code provavelmente abriu antes da ligação: no terminal, abra um novo; no app Claude, saia pela bandeja e abra de novo.";
 
 /**
  * Atende um evento já autenticado e lido; o que devolve vai como corpo JSON da resposta (a
