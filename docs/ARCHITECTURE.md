@@ -40,7 +40,7 @@ Na fase 2 só há adaptador para o `claude` (CLI) e para APIs compatíveis com a
 ### Por que três processos
 
 - **A casca em Rust** é o que precisa falar com o Windows: posicionar o dock reservando espaço, detectar tela cheia, ler a mídia tocando, listar janelas, guardar credenciais. Fica fina de propósito: nenhuma regra de negócio mora nela.
-- **As WebViews** desenham tudo. Cada superfície é uma janela própria (dock, painel lateral, Sistema, captura), todas servindo o mesmo bundle React com rotas diferentes.
+- **As WebViews** desenham tudo. Cada superfície é uma janela própria (dock, painel lateral, Sistema, captura), todas abrindo o mesmo `index.html` e cada uma carregando só o chunk da própria tela.
 - **O serviço em Node** é onde mora o produto: dados, agentes, provedores e ferramentas. É separado da interface por três razões:
   1. Os agentes trabalham em segundo plano mesmo com todas as janelas fechadas.
   2. O ecossistema de agentes (SDK de MCP, Claude Agent SDK, SDKs de provedores) é TypeScript.
@@ -53,7 +53,7 @@ Na fase 2 só há adaptador para o `claude` (CLI) e para APIs compatíveis com a
 | Camada | Tecnologia | Observação |
 |---|---|---|
 | Casca | Tauri 2, Rust estável, crate `windows` 0.62 | Plugins: global-shortcut, single-instance, autostart, dialog. O sidecar sobe por `std::process` com Job object, não pelo plugin shell. Updater previsto, desligado por padrão |
-| Interface | React 19, TypeScript, Vite | Um bundle, uma rota por janela |
+| Interface | React 19, TypeScript, Vite | Um bundle dividido em chunks: um por janela e, no Sistema, um por área |
 | Estilo | CSS com variáveis (tokens) em `src/tokens` | Nenhum valor visual literal fora dos tokens, conferido por `scripts/lint-visual.mjs`. Tailwind não entrou |
 | Animação | Transições CSS com as durações dos tokens | Curta: nada acima de 200 ms. Motion fica para quando uma animação pedir |
 | Estado na UI | Hooks do React | Zustand e TanStack Query ficam para quando as áreas tiverem dados |
@@ -119,7 +119,7 @@ Na fase 1 entraram o dock que reserva espaço (com os modos esconder e inteligen
 
 ### Janelas
 
-As quatro são declaradas no `tauri.conf.json`, todas sem borda do sistema e transparentes, e criadas no início, escondidas, para abrirem sem atraso. Só o dock é criado pelo Tauri antes do `setup`; painel, Sistema e captura têm `"create": false` e nascem no `setup` (`janelas::criar`, com a mesma configuração) depois de o dock reservar a faixa, para que os três WebViews não atrasem o dock. Cada uma carrega o mesmo bundle; `src/main.tsx` lê o rótulo da janela e `src/janelas/Aplicacao.tsx` escolhe a rota (`src/janelas/{dock,painel,sistema,captura}`).
+As quatro são declaradas no `tauri.conf.json`, todas sem borda do sistema e transparentes, e criadas no início, escondidas, para abrirem sem atraso. Só o dock é criado pelo Tauri antes do `setup`; painel, Sistema e captura têm `"create": false` e nascem no `setup` (`janelas::criar`, com a mesma configuração) depois de o dock reservar a faixa, para que os três WebViews não atrasem o dock. Cada uma abre o mesmo `index.html`; `src/main.tsx` lê o rótulo da janela e `src/janelas/Aplicacao.tsx` importa só a tela dela (`src/janelas/{dock,painel,sistema,captura}`), com o JavaScript e o CSS que ela usa. No Sistema, cada área e a configuração inicial vêm na primeira vez que abrem (`src/janelas/sistema/sobDemanda.tsx`), e a troca de área é uma transição: a área atual fica na tela até a nova chegar. Os tokens (`src/tokens`) entram como um `<style>` no fim do `<body>`, depois do CSS de qualquer chunk, para a base e o alto contraste continuarem por último.
 
 | Janela | Rótulo e tamanho | Detalhe |
 |---|---|---|
@@ -399,7 +399,7 @@ Feitas em 24/10/2026 no build de release (`pnpm tauri build --no-bundle`) de `fe
 | Item | Fase 2 | Fase 3 | Meta |
 |---|---|---|---|
 | `node.exe` do serviço, repouso 60 s, com o relógio do dia e os vigias da Alba | 34,6 MB | **43,0 MB** (43,7 / 42,7 / 42,7), +8,4 MB; no mesmo dia, o `main` deu 34,6 MB (34,1 / 35,0 / 34,6) | até +10 MB ✅ |
-| Total do app (casca, WebView2, serviço) | 346,9 MB | **372,6 MB** (379,3 / 375,8 / 362,8); no mesmo dia, o `main` deu 337,5 MB (338,9 / 335,6 / 338,1) | 346,9 MB ❌ (+25,7 MB sobre a fase 2; +35,1 MB sobre o `main` do mesmo dia) |
+| Total do app (casca, WebView2, serviço) | 346,9 MB | **372,6 MB** (379,3 / 375,8 / 362,8); no mesmo dia, o `main` deu 337,5 MB (338,9 / 335,6 / 338,1). Depois da F3-49: 353,5 MB (354,2 / 356,5 / 349,8), contra 359,0 MB do `90221ef` medido no mesmo dia, diferença dentro da variação entre rodadas; os renderizadores foram de 140,4 para 133,8 MB | 346,9 MB ❌ (+25,7 MB sobre a fase 2; +35,1 MB sobre o `main` do mesmo dia; depois da F3-49, ainda acima) |
 | Atraso do disparo do lembrete: horário marcado até `disparadoEm` | — | mediana 11,0 ms, pior 17,0 ms (20 lembretes) | mediana < 2 s ✅ |
 | Lembrete: horário marcado até `notificacoes.nova` na interface | — | mediana 23,3 ms, pior 40,8 ms | — |
 | Lembrete: horário marcado até o pedido do aviso do Windows à casca | — | mediana 24,8 ms, pior 41,5 ms | — |
@@ -413,6 +413,7 @@ Feitas em 24/10/2026 no build de release (`pnpm tauri build --no-bundle`) de `fe
 
 - **Serviço.** O relógio, os vigias da Alba, as áreas do dia, a captura e o briefing custam 8,4 MB em repouso (8,1 a 9,1 nas três rodadas), dentro dos 10 MB da meta. Foi medido o conjunto da fase; não houve rodada só com o relógio e os vigias.
 - **Orçamento total.** Passou: 372,6 MB contra os 346,9 MB da fase 2. Do aumento sobre o `main` do mesmo dia, 8,4 MB são do `node.exe`, cerca de 1 MB da casca e o resto, uns 25 MB, do WebView2 (de 290,0 para 315,7 MB nas médias das três rodadas, com o processo de GPU indo de uns 100 para 109 a 125 MB). Causa provável: o JavaScript da interface cresceu de 523 KB para 773 KB (mais 96 KB do `markdown-it`, só no Sistema) e as quatro janelas carregam o mesmo bundle; os valores oscilam 16 MB entre rodadas, sobretudo na GPU. Não foi investigado nem otimizado, como a tarefa pede: segue na etapa dedicada à memória do WebView2 (ADR-0013), agora com ponto de partida maior.
+- **Cada janela com o próprio código (F3-49).** Desde então cada janela importa só a própria tela e o Sistema baixa cada área na primeira vez que ela abre (seção 3, "Janelas"). O JavaScript que cada janela carrega na subida caiu de 773 KB para 405 KB no dock, 402 KB na captura, 514 KB no painel e 562 KB no Sistema (com a configuração inicial aberta), e o CSS, de 1.364 regras em todas para 105, 119, 367 e 569. Medido em 24/10/2026, mesma máquina e mesmo método (três rodadas de 60 s, `APPDATA` vazio, release `pnpm tauri build --no-bundle`), contra o commit `90221ef` compilado e medido no mesmo dia: o ganho que dá para medir é o dos quatro renderizadores, que foram de **140,4 MB** para **133,8 MB** juntos (−6,6 MB). O total foi de 359,0 MB (355,7 / 357,9 / 363,4) para 353,5 MB (354,2 / 356,5 / 349,8): os −5,5 MB ficam dentro da variação entre rodadas, porque a GPU, o processo principal do WebView2 e o `node.exe` oscilam alguns MB de uma para outra. Continua acima dos 346,9 MB da fase 2. O heap de JavaScript de cada janela é de uns 3,5 MB antes e depois: o peso dos renderizadores é do próprio WebView2, não do bundle, e o que falta cortar está nas alavancas da etapa dedicada (ADR-0013). Uma rodada indicativa com `--renderer-process-limit=1` deu 272,9 e 305,2 MB.
 - **Lembrete.** O disparo sai 11 ms depois da hora marcada e a interface o recebe 12 ms depois disso. Sem modelo e sem rede, por construção. Não cobre o PC suspenso: a retomada é roteiro do humano.
 - **Captura.** Do Enter à resposta são 13,4 ms, dos quais 1 ms é da janela montando o pedido e o resto é o serviço gravando. A janela de captura estava oculta na medição (o atalho `Ctrl+Alt+Espaço` é de outro programa nesta máquina e o `ShowWindow` do roteiro não a mostrou), mas o WebView2 a considera visível e o caminho de código é o mesmo.
 - **Briefing.** Mede do aviso `atividade` da casca até o evento `rotinas.apareceu` e o pedido de abrir o painel Hoje à casca (os dois chegam com 0,2 ms de diferença). Não inclui o desenho do painel nem o desbloqueio de verdade: a casca foi simulada pelo roteiro, e o fuso da configuração foi posto em `Asia/Tokyo` para passar das 05:00, porque a medição rodou de madrugada. O briefing nunca aguardou o modelo (a Alba não tinha provedor, então a abertura saiu em molde, com `daExecucaoId` vazio).
