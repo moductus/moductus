@@ -155,7 +155,7 @@ describe("Conexões", () => {
       ["Arquivo", CAMINHO],
       ["Hooks", "8 eventos · porta 47821"],
       ["Cópia de antes", "settings.json.moductus-1.bak"],
-      ["Último evento", "nenhum ainda: abra um terminal novo e rode o claude"],
+      ["Último evento", "nenhum ainda: rode o claude num terminal novo ou reabra o app Claude"],
     ]);
   });
 

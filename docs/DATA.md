@@ -186,6 +186,7 @@ O `caminho` é único entre os projetos vivos, sem diferenciar maiúsculas (o Wi
 `id`, `projeto_id`, `ferramenta` (`claude-code`, `codex`, `opencode`, `gemini`, `antigravity`), `id_externo` (session id da ferramenta), `modelo`, `estado` (`trabalhando`, `esperando`, `terminou`, `erro`, `parada`), `iniciada_em`, `ultimo_evento_em`, `encerrada_em`, `contexto_usado_tokens`, `contexto_janela_tokens`, `transcript_caminho`.
 `ferramenta` e `id_externo` juntos são únicos: é assim que o evento de um hook acha a sessão.
 A migração `007-transcript-lido` acrescenta a leitura incremental do transcript: `transcript_lido_bytes` (até onde o arquivo foi lido; posição num arquivo deste PC, não vai para outro) e `contexto_avisado_em` (quando saiu o aviso de 80% no trecho atual; volta a vazio na compactação). `contexto_janela_tokens` vem da janela que a ferramenta informa ou da tabela por modelo do serviço; modelo fora dela fica sem janela.
+A migração `026-sessoes-ponto-de-entrada` acrescenta `ponto_de_entrada`: o `entrypoint` do transcript como veio (`cli` no terminal, `claude-desktop` no app Desktop), que a área traduz em "onde roda"; valor que ela não conhece fica sem rótulo.
 
 ### `eventos_sessao`
 `id`, `sessao_id` (a única chave estrangeira desta migração, para `sessoes_ia`), `tipo` (nome do hook), `ferramenta_usada`, `entrada_resumo`. A data do evento é o `criado_em`.

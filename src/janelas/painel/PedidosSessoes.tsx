@@ -1,4 +1,4 @@
-import type { FerramentaSessao, ListaSessoes, Projeto, SessaoIa } from "@moductus/contrato";
+import type { FerramentaSessao, ListaSessoes, OndeRoda, Projeto, SessaoIa } from "@moductus/contrato";
 import { invoke } from "@tauri-apps/api/core";
 import { useId, type ReactNode } from "react";
 import { contextoDaSessao, estadoDaSessao, ultimaAcao } from "../../areas/sessoes/sessoes.ts";
@@ -21,6 +21,21 @@ export const NOME_FERRAMENTA: Readonly<Record<FerramentaSessao, string>> = {
   antigravity: "Antigravity",
 };
 
+/** Onde roda a sessão do Claude Code, como vem depois do nome da ferramenta. */
+const ONDE_RODA: Readonly<Record<OndeRoda, string>> = {
+  terminal: "terminal",
+  desktop: "Desktop",
+};
+
+/**
+ * O nome de uma sessão: a ferramenta e, quando o transcript disse, onde ela roda ("Claude Code ·
+ * Desktop"). Sem saber, só a ferramenta.
+ */
+export function nomeDaSessao(sessao: Pick<SessaoIa, "ferramenta" | "ondeRoda">): string {
+  const ferramenta = NOME_FERRAMENTA[sessao.ferramenta];
+  return sessao.ondeRoda ? `${ferramenta} · ${ONDE_RODA[sessao.ondeRoda]}` : ferramenta;
+}
+
 /** Abre uma área do Sistema e fecha o painel. */
 export function abrirNoSistema(area: string) {
   void invoke("sistema_abrir", { area });
@@ -30,7 +45,8 @@ export function abrirNoSistema(area: string) {
 interface PropsCabeca {
   tom: TomSelo;
   projeto: string | null;
-  ferramenta: FerramentaSessao | null;
+  /** O nome da ferramenta já escrito ({@link NOME_FERRAMENTA} ou {@link nomeDaSessao}). */
+  ferramenta: string | null;
   /** O que vai à direita: o tempo, o contexto ou "esperando você". */
   direita?: ReactNode;
 }
@@ -41,7 +57,7 @@ function CabecaSessao({ tom, projeto, ferramenta, direita }: PropsCabeca) {
     <div className="sessao-cabeca">
       <span className="sessao-ponto" data-tom={tom} aria-hidden="true" />
       <span className="sessao-projeto">{projeto ?? "Sem projeto"}</span>
-      {ferramenta && <span className="sessao-ferramenta">{NOME_FERRAMENTA[ferramenta]}</span>}
+      {ferramenta && <span className="sessao-ferramenta">{ferramenta}</span>}
       {direita}
     </div>
   );
@@ -63,7 +79,7 @@ export function PedidoDaSessao({ item }: { item: Extract<ItemSessao, { tipo: "pe
         <CabecaSessao
           tom={pendente ? "aviso" : "apagado"}
           projeto={item.projeto}
-          ferramenta={item.ferramenta}
+          ferramenta={item.ferramenta && NOME_FERRAMENTA[item.ferramenta]}
           // Depois da resposta, quem diz o que valeu é o desfecho do próprio cartão.
           direita={
             pendente && (
@@ -102,7 +118,7 @@ export function CartaoSessao({ sessao, projeto, agora, comContexto = false }: Pr
       <CabecaSessao
         tom={TOM_DA_SESSAO[sessao.estado]}
         projeto={projeto?.nome ?? null}
-        ferramenta={sessao.ferramenta}
+        ferramenta={nomeDaSessao(sessao)}
         direita={
           <>
             <span className="so-leitor">{estado.texto}</span>

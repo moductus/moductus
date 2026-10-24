@@ -187,6 +187,7 @@ const SESSAO = {
   id: "s1",
   projetoId: "p1",
   ferramenta: "claude-code",
+  ondeRoda: null,
   idExterno: "x",
   modelo: null,
   estado: "esperando",
@@ -208,6 +209,7 @@ const SESSOES: ListaSessoes = {
       ...SESSAO,
       id: "s2",
       projetoId: "p2",
+      ondeRoda: "terminal",
       estado: "trabalhando",
       contexto: { usadoTokens: 168_000, janelaTokens: 200_000 },
       ultimoEvento: {
@@ -450,6 +452,7 @@ describe("painel Agentes: pedidos das sessões do terminal", () => {
     await abrir("agentes");
     const sessao = recipiente.querySelector<HTMLElement>(".sessao-cartao")!;
     expect(sessao.querySelector(".sessao-projeto")?.textContent).toBe("moductus");
+    expect(sessao.querySelector(".sessao-ferramenta")?.textContent).toBe("Claude Code · terminal");
     expect(sessao.querySelector(".sessao-acao")?.textContent).toBe("Editando src-tauri/src/appbar.rs");
     expect(sessao.textContent).toContain("trabalhando");
     expect(recipiente.querySelector(".painel-secao-cabecalho span")?.textContent).toBe("2 projetos");

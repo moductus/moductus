@@ -41,7 +41,8 @@ export function metodo<E extends z.ZodType, S extends z.ZodType>(entrada: E, sai
  * notificações (fase 2).
  * 3: o dia: listas, tarefas, lembretes, agenda, foco, notas, rotinas, captura e as contagens das
  * áreas, e o agente diz o que tem de personalizado e o gasto de hoje contra o teto, na moeda do
- * teto com a cotação da configuração (fase 3).
+ * teto com a cotação da configuração, e a sessão do Claude Code diz se roda no terminal ou no
+ * app Desktop (fase 3).
  */
 export const VERSAO_PROTOCOLO = 3;
 

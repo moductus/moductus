@@ -41,6 +41,7 @@ const sessao = (extra: Partial<SessaoIa> = {}): SessaoIa => ({
   id: "s1",
   projetoId: "p1",
   ferramenta: "claude-code",
+  ondeRoda: null,
   idExterno: "x",
   modelo: "claude-opus-4-5",
   estado: "trabalhando",
@@ -59,6 +60,7 @@ const LISTA: ListaSessoes = {
   ],
   sessoes: [
     sessao({
+      ondeRoda: "desktop",
       ultimoEvento: {
         id: "e1",
         sessaoId: "s1",
@@ -206,7 +208,8 @@ describe("Sessões de IA com dados", () => {
     expect(linhas()).toEqual([
       [
         "moductus",
-        "Claude Code",
+        // Onde roda, quando o transcript disse; a segunda ainda não disse.
+        "Claude Code · Desktop",
         "trabalhando",
         "não sei",
         "12,4 mil tokens12,4 mil tokens hoje no projeto",

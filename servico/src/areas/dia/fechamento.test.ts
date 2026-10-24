@@ -339,6 +339,7 @@ describe("a linha do Nuno no fechamento", () => {
       id,
       projetoId: "p1",
       ferramenta: "claude-code",
+      ondeRoda: null,
       idExterno: `ext-${id}`,
       modelo: null,
       estado: "trabalhando",

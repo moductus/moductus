@@ -132,6 +132,7 @@ const pedir = vi.fn(async (metodo: string, dados?: unknown): Promise<unknown> =>
             id: "s1",
             projetoId: "p1",
             ferramenta: "claude-code",
+            ondeRoda: null,
             idExterno: "x",
             modelo: null,
             estado: "esperando",
