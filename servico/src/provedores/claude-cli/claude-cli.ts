@@ -4,7 +4,7 @@ import {
   type SpawnOptionsWithoutStdio,
 } from "node:child_process";
 import { createInterface } from "node:readline";
-import { alvoDoCli, arquivoExiste, noPath, type AlvoCli } from "../executavel.ts";
+import { alvoDoCli, arquivoExiste, derrubarArvore, noPath, type AlvoCli } from "../executavel.ts";
 import type { ConfigProvedor, EventoAgente, PedidoDoAgente, Provedor } from "../provedor.ts";
 import type { FabricaProvedor } from "../registro.ts";
 import { LeitorStreamJson } from "./leitor.ts";
@@ -148,7 +148,7 @@ const VARIAVEIS_DE_COBRANCA_POR_TOKEN = new RegExp(
  * das janelas, pasta de dados, token dos hooks...), sem plugins herdados e sem o que faria o CLI
  * cobrar por token em vez de usar a assinatura. Os `CLAUDE.md` e a
  * memória automática do usuário ficam fora: o agente recebe as instruções dele pelo
- * `--append-system-prompt` e mais nada. Só entra o acesso ao MCP desta execução, quando houver.
+ * `--system-prompt` e mais nada. Só entra o acesso ao MCP desta execução, quando houver.
  */
 export function ambienteDoCli(base: NodeJS.ProcessEnv, acessoMcp: string | null): NodeJS.ProcessEnv {
   const ambiente = Object.fromEntries(
@@ -162,11 +162,31 @@ export function ambienteDoCli(base: NodeJS.ProcessEnv, acessoMcp: string | null)
   return ambiente;
 }
 
+const DATA_DE_HOJE = new Intl.DateTimeFormat("pt-BR", {
+  weekday: "long",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+/**
+ * O prompt de sistema inteiro do agente (`--system-prompt`, ADR-0017, revisão de 24/10/2026): a
+ * instrução dele com a voz da família, no lugar do prompt de agente de código do Claude Code, que
+ * levava o modelo a responder ação com script. Aquele prompt trazia a data de hoje, e ela continua
+ * vindo, no fim, no fuso do PC: sem ela, "amanhã" não teria dia.
+ */
+export function promptDeSistema(instrucoes: string | undefined, agora: Date): string {
+  const hoje = `Hoje é ${DATA_DE_HOJE.format(agora)}.`;
+  const proprias = instrucoes?.trim();
+  return proprias ? `${proprias}\n\n${hoje}` : hoje;
+}
+
 /** `mcpUrl` é o endereço do acesso aberto para esta execução; sem ele, nenhuma ferramenta. */
 export function argumentosDoClaude(
   pedido: PedidoDoAgente,
   config: ConfigProvedor,
   mcpUrl: string | null = null,
+  agora: Date = new Date(),
 ): string[] {
   const argumentos = [
     "-p",
@@ -186,8 +206,10 @@ export function argumentosDoClaude(
     // instruções editadas do agente só valeriam depois de compactar a conversa (2.1.257+).
     "--system-prompt-snapshot",
     "off",
+    // O prompt inteiro é o do agente: nada do prompt de agente de código do Claude Code.
+    "--system-prompt",
+    promptDeSistema(pedido.instrucoes, agora),
   ];
-  if (pedido.instrucoes) argumentos.push("--append-system-prompt", pedido.instrucoes);
   if (config.modelo) argumentos.push("--model", config.modelo);
   if (pedido.continuarDe) argumentos.push("--resume", pedido.continuarDe);
   if (mcpUrl && pedido.ferramentas.length > 0) {
@@ -288,8 +310,9 @@ export class ProvedorClaudeCli implements Provedor {
     }
     const iniciar: IniciarProcesso =
       this.opcoes.iniciar ?? ((args, o, a) => spawn(a.executavel, [...a.antes, ...args], o));
+    const agora = this.opcoes.agora ?? (() => new Date());
     const processo = iniciar(
-      argumentosDoClaude(pedido, this.config, acesso?.url ?? null),
+      argumentosDoClaude(pedido, this.config, acesso?.url ?? null, agora()),
       {
         cwd: this.opcoes.pasta,
         env: ambienteDoCli(process.env, acesso?.token ?? null),
@@ -304,15 +327,16 @@ export class ProvedorClaudeCli implements Provedor {
     let erros = "";
     processo.stderr.setEncoding("utf8");
     processo.stderr.on("data", (pedaco: string) => (erros = (erros + pedaco).slice(-2000)));
-    const aoAbortar = () => processo.kill();
-    sinal.addEventListener("abort", aoAbortar, { once: true });
+    // A árvore inteira: um hook do CLI em andamento não sobra rodando depois de parar.
+    const encerrar = () => derrubarArvore(processo.pid, () => processo.kill());
+    sinal.addEventListener("abort", encerrar, { once: true });
     // CLI que não sobe (ou sai antes de ler) fecha a entrada; o erro de verdade vem da saída.
     processo.stdin.on("error", () => {});
     processo.stdin.end(montarPrompt(pedido), "utf8");
 
     const leitor = new LeitorStreamJson({
       nomeDaFerramenta: (nome) => this.nomeNoCatalogo(nome, pedido),
-      agora: this.opcoes.agora ?? (() => new Date()),
+      agora,
     });
     // Sessão perdida só é reconhecida antes de qualquer evento: depois disso, recomeçar repetiria a fala.
     let emitiu = false;
@@ -356,12 +380,12 @@ export class ProvedorClaudeCli implements Provedor {
         if (vivo(processo)) {
           if (leitor.terminou && !sinal.aborted) await Promise.race([saida, pausa(ESPERA_SAIDA_MS)]);
           if (vivo(processo)) {
-            processo.kill();
+            encerrar();
             await Promise.race([saida, pausa(ESPERA_ENCERRAR_MS)]);
           }
         }
       } finally {
-        sinal.removeEventListener("abort", aoAbortar);
+        sinal.removeEventListener("abort", encerrar);
       }
     }
   }

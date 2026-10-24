@@ -6,7 +6,7 @@ import {
   type TipoProvedorCli,
 } from "@moductus/contrato";
 import { ambienteDoCli } from "./claude-cli/claude-cli.ts";
-import { acharNoPath, alvoDoCli, type AlvoCli } from "./executavel.ts";
+import { acharNoPath, alvoDoCli, derrubarArvore, type AlvoCli } from "./executavel.ts";
 
 export { acharNoPath } from "./executavel.ts";
 
@@ -183,17 +183,4 @@ export function rodarComPrazo(
     if (prazo.aborted) estourar();
     else prazo.addEventListener("abort", estourar, { once: true });
   });
-}
-
-/** Derruba o processo e os filhos dele; fora do Windows, ou sem `taskkill`, só o processo. */
-function derrubarArvore(pid: number | undefined, soOProcesso: () => void): void {
-  if (process.platform !== "win32" || pid === undefined) {
-    soOProcesso();
-    return;
-  }
-  const taskkill = spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
-    windowsHide: true,
-    stdio: "ignore",
-  });
-  taskkill.once("error", soOProcesso);
 }

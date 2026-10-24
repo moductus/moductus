@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { join, win32 } from "node:path";
 
@@ -169,4 +170,30 @@ export function arquivoExiste(caminho: string): boolean {
 function valorDe(ambiente: NodeJS.ProcessEnv, nome: string): string | undefined {
   const chave = Object.keys(ambiente).find((k) => k.toUpperCase() === nome);
   return chave === undefined ? undefined : ambiente[chave];
+}
+
+/**
+ * Derruba o processo e os filhos dele (`taskkill /T /F`): matar só o processo deixaria viver o que
+ * ele abriu (o node de um `.cmd`, um hook do CLI em andamento). Fora do Windows, sem `taskkill` ou
+ * com ele falhando, só o processo.
+ */
+export function derrubarArvore(pid: number | undefined, soOProcesso: () => void): void {
+  if (process.platform !== "win32" || pid === undefined) {
+    soOProcesso();
+    return;
+  }
+  let feito = false;
+  const recorrer = () => {
+    if (feito) return;
+    feito = true;
+    soOProcesso();
+  };
+  const taskkill = spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
+    windowsHide: true,
+    stdio: "ignore",
+  });
+  taskkill.once("error", recorrer);
+  taskkill.once("exit", (codigo) => {
+    if (codigo !== 0) recorrer();
+  });
 }
