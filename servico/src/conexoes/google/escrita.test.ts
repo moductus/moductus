@@ -77,7 +77,7 @@ const sp = (dia: string, hora: string) => new Date(`${dia}T${hora}:00.000-03:00`
 async function montar(opcoes: { falharConta?: boolean; semPrincipal?: boolean } = {}) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-escrita-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   db.exec(`
     INSERT OR IGNORE INTO provedores (id, tipo, nome) VALUES ('p-alba', 'claude-cli', 'Falso');

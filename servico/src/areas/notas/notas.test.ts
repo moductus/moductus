@@ -24,7 +24,7 @@ afterEach(() => {
 function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-notas-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const relogio = { agora: new Date("2026-10-18T12:00:00.000Z") };
   const andar = (ms = 1000) => {

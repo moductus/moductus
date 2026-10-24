@@ -34,7 +34,7 @@ const CRIADO_EM = new Date("2026-10-08T12:34:56.000Z");
 
 /** Um PC: banco novo, o serviço de configuração e o de levar para outro PC. */
 function pc(nativo: AplicadorNativo = aceita(), portable = false) {
-  const db = abrirBanco(pasta());
+  const db = abrirBanco(pasta(), { duravel: false });
   bancos.push(db);
   const eventos: EstadoConfig[] = [];
   const config = new ServicoConfig(new RepositorioConfig(db), nativo, (e) => eventos.push(e), portable);
@@ -176,7 +176,7 @@ describe("levar para outro PC: só configurações", () => {
   });
 
   test("a cotação que chega pela importação passa pelo aviso da configuração, como no main", async () => {
-    const db = abrirBanco(pasta());
+    const db = abrirBanco(pasta(), { duravel: false });
     bancos.push(db);
     const repo = new RepositorioConfig(db);
     let cotacaoMudou = 0;

@@ -45,10 +45,16 @@ export interface FonteDoRelogio {
 
 export interface OpcoesRelogio {
   agora?: () => Date;
+  /**
+   * O quanto o timer pode dormir; o serviço usa a `GUARDA_MS`. Teste que atravessa dias passa uma
+   * guarda longa: o relógio acorda só quando as fontes pedem, e um dia não custa 1.440 conferências.
+   */
+  guardaMs?: number;
 }
 
 export class RelogioDoDia {
   private readonly agora: () => Date;
+  private readonly guardaMs: number;
   private readonly fontes: FonteDoRelogio[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** Quando o timer armado deve acordar; `null` com o relógio parado. */
@@ -61,6 +67,7 @@ export class RelogioDoDia {
 
   constructor(opcoes: OpcoesRelogio = {}) {
     this.agora = opcoes.agora ?? (() => new Date());
+    this.guardaMs = opcoes.guardaMs ?? GUARDA_MS;
   }
 
   registrar(fonte: FonteDoRelogio): void {
@@ -147,7 +154,7 @@ export class RelogioDoDia {
     if (!this.ligado) return;
     this.desarmar();
     const agora = this.agora().getTime();
-    let alvo = agora + GUARDA_MS;
+    let alvo = agora + this.guardaMs;
     for (const fonte of this.fontes) {
       try {
         const proximo = fonte.proximo(new Date(agora));

@@ -82,7 +82,7 @@ const veio = (interpretacao: Interpretacao | null): Promise<RespostaDoModelo> =>
 function montar(opcoes: { interpretar?: Interprete | null } = {}) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-captura-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const relogio = { agora: new Date(DOMINGO_9H) };
   const agora = () => relogio.agora;

@@ -40,7 +40,7 @@ function montar(
   // Com `pasta`, sobe outro serviço sobre o mesmo banco, como depois de reiniciar.
   const pasta = opcoes.pasta ?? mkdtempSync(join(tmpdir(), "moductus-conversas-"));
   if (!pastas.includes(pasta)) pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   db.exec(`
     INSERT OR IGNORE INTO provedores (id, tipo, nome) VALUES

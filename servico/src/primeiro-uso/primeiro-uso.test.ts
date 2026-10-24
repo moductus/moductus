@@ -23,7 +23,7 @@ function novaPasta() {
 }
 
 function montar(pasta = novaPasta()) {
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const eventos: EstadoPrimeiroUso[] = [];
   const servico = new ServicoPrimeiroUso(new RepositorioPrimeiroUso(db), (e) => eventos.push(e));

@@ -20,7 +20,7 @@ const AGORA = "2026-10-09T12:00:00.000Z";
 /** Banco migrado de verdade na pasta dada (ou numa nova), relógio na mão e os avisos anotados. */
 function montar(pasta = mkdtempSync(join(tmpdir(), "moductus-aprovacoes-"))) {
   if (!pastas.includes(pasta)) pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   let agora = new Date(AGORA);
   const avisos: Aprovacao[] = [];

@@ -73,7 +73,7 @@ beforeEach(() => {
 function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-ferramentas-lembretes-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   db.exec(`
     INSERT OR IGNORE INTO provedores (id, tipo, nome) VALUES ('p-alba', 'claude-cli', 'Falso da Alba');

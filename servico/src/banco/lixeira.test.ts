@@ -65,14 +65,14 @@ describe("lixeira", () => {
 
   test("roda na subida do serviço", () => {
     const pasta = mkdtempSync(join(tmpdir(), "moductus-lixeira-"));
-    const primeiro = abrirBanco(pasta);
+    const primeiro = abrirBanco(pasta, { duravel: false });
     primeiro.exec(criarTabela("teste_lixeira", [], { lixeira: true }));
     const inserir = primeiro.prepare("INSERT INTO teste_lixeira (id, apagado_em) VALUES (?, ?)");
     inserir.run("velha", new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString());
     inserir.run("nova", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
     primeiro.close();
 
-    const segundo = abrirBanco(pasta);
+    const segundo = abrirBanco(pasta, { duravel: false });
     expect(ids(segundo, "teste_lixeira")).toEqual(["nova"]);
     segundo.close();
     rmSync(pasta, { recursive: true, force: true });
@@ -80,7 +80,7 @@ describe("lixeira", () => {
 
   test("limpeza que falha não impede a subida", () => {
     const pasta = mkdtempSync(join(tmpdir(), "moductus-lixeira-"));
-    const primeiro = abrirBanco(pasta);
+    const primeiro = abrirBanco(pasta, { duravel: false });
     primeiro.exec(criarTabela("teste_lixeira", [], { lixeira: true }));
     primeiro.exec(
       "CREATE TRIGGER teste_trava BEFORE DELETE ON teste_lixeira BEGIN SELECT RAISE(ABORT, 'travado'); END",
@@ -91,7 +91,7 @@ describe("lixeira", () => {
     primeiro.close();
 
     const erros = vi.spyOn(console, "error").mockImplementation(() => {});
-    const segundo = abrirBanco(pasta);
+    const segundo = abrirBanco(pasta, { duravel: false });
     expect(erros).toHaveBeenCalledWith(expect.stringContaining("lixeira não esvaziada ao subir"));
     expect(ids(segundo, "teste_lixeira")).toEqual(["velha"]);
     erros.mockRestore();

@@ -19,7 +19,7 @@ function montar(
   portable = false,
 ) {
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const eventos: EstadoConfig[] = [];
   const servico = new ServicoConfig(new RepositorioConfig(db), nativo, (e) => eventos.push(e), portable);

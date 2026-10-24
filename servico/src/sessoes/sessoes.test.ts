@@ -19,7 +19,7 @@ afterEach(() => {
 function montar(raizes: Record<string, string> = {}) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-sessoes-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   let agora = new Date("2026-10-09T12:00:00.000Z");
   const mudancas: MudancaSessao[] = [];

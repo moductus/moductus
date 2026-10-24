@@ -18,7 +18,7 @@ afterEach(() => {
 function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-execucoes-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const repo = new RepositorioExecucoes(db);
   return { db, repo, servico: new ServicoExecucoes(repo, new Catalogo()) };

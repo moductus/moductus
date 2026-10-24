@@ -31,7 +31,7 @@ const DOMINGO_23H30 = "2026-10-19T02:30:00.000Z";
 function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-contagens-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const relogio = { agora: new Date(DOMINGO_23H30) };
   const avisos: { contagens: ContagensAreas; ms: number }[] = [];

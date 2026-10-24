@@ -25,7 +25,7 @@ const FUSO = "America/Sao_Paulo";
 function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-ferramentas-foco-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const relogio = { ms: Date.parse("2026-10-09T10:00:00.000-03:00") };
   const agora = () => new Date(relogio.ms);

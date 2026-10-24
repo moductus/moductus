@@ -32,7 +32,7 @@ afterEach(async () => {
 async function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-tarefas-canal-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   let servidor: ServidorWs | null = null;
   const notas = new ServicoNotas(new RepositorioNotas(db), { mudou: () => {} });

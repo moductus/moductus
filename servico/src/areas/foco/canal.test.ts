@@ -27,7 +27,7 @@ afterEach(async () => {
 function servicoFoco(mudou: (estado: EstadoFoco) => void = () => {}) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-foco-canal-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const mudancas: EstadoFoco[] = [];
   const foco = new ServicoFoco(

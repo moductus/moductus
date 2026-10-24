@@ -40,7 +40,7 @@ afterEach(() => {
   for (const p of pastas.splice(0)) rmSync(p, { recursive: true, force: true });
 });
 
-/** Quanto um pedido de milhares de ids pode levar (a meta é bem menos; folga para a máquina do CI). */
+/** Quanto de CPU um pedido de milhares de ids pode gastar (a meta é bem menos; folga para a máquina do CI). */
 const PRAZO_LOTE_MS = 1000;
 
 /** Domingo, 18/10/2026, 09:00 em São Paulo (UTC−3, sem horário de verão). */
@@ -53,7 +53,7 @@ const DOMINGO_9H = "2026-10-18T12:00:00.000Z";
 function montar(agora = DOMINGO_9H) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-tarefas-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const relogio = { agora: new Date(agora) };
   const andar = (ms = 1000) => {
@@ -878,21 +878,45 @@ describe("volta 1 da revisão", () => {
     expect(() => tarefas.criar({ titulo: "x", etiquetas: ["   "] })).toThrow(MENSAGEM_ETIQUETA_NOME);
   });
 
-  test("ordenar e adiar o máximo de ids cabem no prazo", () => {
-    const { db, tarefas, andar } = montar();
+  /** O máximo de ids de um pedido, gravados numa transação só: o preparo não entra na conta. */
+  function comOMaximo(db: DatabaseSync): string[] {
     const ids = Array.from({ length: LIMITE_IDS }, (_, i) => `t${String(i).padStart(5, "0")}`);
     const inserir = db.prepare(
       "INSERT INTO tarefas (id, lista_id, titulo, ordem) VALUES (?, 'entrada', ?, ?)",
     );
+    db.exec("BEGIN");
     ids.forEach((id, i) => inserir.run(id, id, i));
+    db.exec("COMMIT");
+    return ids;
+  }
+
+  test("ordenar e adiar o máximo de ids de uma vez gravam todos", () => {
+    const { db, tarefas, andar } = montar();
+    const ids = comOMaximo(db);
     andar();
-    let inicio = performance.now();
-    tarefas.ordenar({ ids: [...ids].reverse() });
-    const ordenar = performance.now() - inicio;
-    inicio = performance.now();
-    tarefas.adiar({ ids, para: "amanha", hora: "10:00" });
-    const adiar = performance.now() - inicio;
-    console.info(`ordenar ${LIMITE_IDS}: ${ordenar.toFixed(0)} ms; adiar: ${adiar.toFixed(0)} ms`);
+    const invertidos = [...ids].reverse();
+    expect(tarefas.ordenar({ ids: invertidos }).map((t) => t.id)).toEqual(invertidos);
+    expect(tarefas.listar({}).map((t) => t.id)).toEqual(invertidos);
+    const adiadas = tarefas.adiar({ ids, para: "amanha", hora: "10:00" });
+    expect(adiadas).toHaveLength(LIMITE_IDS);
+    expect(adiadas.every((t) => t.venceEm === "2026-10-19" && t.hora === "10:00")).toBe(true);
+  });
+
+  test("ordenar e adiar o máximo de ids cabem no prazo, em tempo de CPU", () => {
+    // Mede o trabalho do serviço, não a fila da máquina: com a suíte em paralelo, o relógio de parede
+    // conta o tempo em que o processo esperou a vez (e o disco), e o teste falhava sem regressão.
+    const { db, tarefas, andar } = montar();
+    const ids = comOMaximo(db);
+    andar();
+    const cpu = (fazer: () => void) => {
+      const antes = process.cpuUsage();
+      fazer();
+      const { user, system } = process.cpuUsage(antes);
+      return (user + system) / 1000;
+    };
+    const ordenar = cpu(() => tarefas.ordenar({ ids: [...ids].reverse() }));
+    const adiar = cpu(() => tarefas.adiar({ ids, para: "amanha", hora: "10:00" }));
+    console.info(`ordenar ${LIMITE_IDS}: ${ordenar.toFixed(0)} ms de CPU; adiar: ${adiar.toFixed(0)} ms`);
     expect(ordenar).toBeLessThan(PRAZO_LOTE_MS);
     expect(adiar).toBeLessThan(PRAZO_LOTE_MS);
   });

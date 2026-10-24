@@ -18,7 +18,7 @@ afterEach(() => {
 function bancoNovo() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-de-fabrica-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   return { db, repo: new RepositorioAgentes(db) };
 }

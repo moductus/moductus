@@ -86,7 +86,7 @@ function avisosDeCartao() {
 async function montarComCli(ferramentas: Ferramenta[], falso: string[]) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-runtime-mcp-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   db.exec(`
     INSERT INTO provedores (id, tipo, nome) VALUES ('p-cli', 'claude-cli', 'Claude Code');
@@ -128,7 +128,7 @@ describe("runtime pelo MCP do Moductus", () => {
   test("a chamada do CLI chega pelo MCP, roda no executor da execução e fica em chamadas_ferramenta", async () => {
     const pasta = mkdtempSync(join(tmpdir(), "moductus-runtime-mcp-"));
     pastas.push(pasta);
-    const db = abrirBanco(pasta);
+    const db = abrirBanco(pasta, { duravel: false });
     bancos.push(db);
     db.exec(`
       INSERT INTO provedores (id, tipo, nome) VALUES ('p-cli', 'claude-cli', 'Claude Code');

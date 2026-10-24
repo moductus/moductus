@@ -61,6 +61,7 @@ afterEach(() => {
 const FUSO = "America/Sao_Paulo";
 /** Segunda-feira: o primeiro dos dias simulados. */
 const SEG = "2026-10-19";
+const DIA = 86_400_000;
 const dia = (n: number) => somarDias(SEG, n);
 const sp = (d: string, hora: string) => new Date(`${d}T${hora}:00.000-03:00`);
 
@@ -71,12 +72,12 @@ const sp = (d: string, hora: string) => new Date(`${d}T${hora}:00.000-03:00`);
  * sem modelo e sem rede. Só o `Date` é falso; os dias passam por `vi.setSystemTime`, e o relógio do
  * dia só liga quando o teste pede (`ligarRelogio`).
  */
-function montar(resumos: ResumoDoAgente[] = []) {
+function montar(resumos: ResumoDoAgente[] = [], guardaMs?: number) {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(sp(SEG, "07:00"));
   const pasta = mkdtempSync(join(tmpdir(), "moductus-ignorados-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   db.exec("UPDATE agentes SET provedor_id = NULL WHERE id = 'alba'");
   const lerFuso = () => FUSO;
@@ -117,7 +118,7 @@ function montar(resumos: ResumoDoAgente[] = []) {
     },
     { mudou: () => {} },
   );
-  const relogio = new RelogioDoDia();
+  const relogio = new RelogioDoDia({ guardaMs });
   relogios.push(relogio);
   const registro = new RepositorioRegistroRotinas(db);
   const atividade = new RepositorioAtividade(db);
@@ -486,7 +487,8 @@ describe("três dias ignorados seguidos", () => {
   });
 
   test("Desligar: o briefing não aparece mais, e os avisos de prazo continuam", async () => {
-    const m = montar();
+    // A tarde passa com o relógio ligado: ele acorda quando as fontes pedem, não a cada minuto.
+    const m = montar([], DIA);
     for (const n of [0, 1, 2]) await m.ignorar(dia(n));
     await m.manha(dia(3));
     expect(m.canal["rotinas.responder"]({ resposta: "desligar" })).toMatchObject({

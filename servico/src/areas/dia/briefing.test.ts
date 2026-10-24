@@ -93,7 +93,7 @@ async function montar(
   vi.setSystemTime(sp(DIA, "08:00"));
   const pasta = mkdtempSync(join(tmpdir(), "moductus-briefing-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const lerFuso = () => FUSO;
   const agenda = new ServicoAgenda(

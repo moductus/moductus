@@ -55,7 +55,7 @@ const utc = (dia: string, hora: string) => new Date(`${dia}T${hora}:00.000-03:00
 async function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-leitura-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const google = await abrirGoogleFalso(CLIENTE, CONTA);
   googles.push(google);

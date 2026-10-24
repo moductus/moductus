@@ -78,7 +78,7 @@ function relogio() {
 function montar(opcoes: { emCentavos?: ConverterCusto; estimarCusto?: EstimarCusto } = {}) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-estado-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   db.exec(`
     INSERT INTO provedores (id, tipo, nome, modelo) VALUES
