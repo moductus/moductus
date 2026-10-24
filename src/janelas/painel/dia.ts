@@ -122,6 +122,11 @@ export function dataPorExtenso(dia: string): string {
   return `${DIAS[diaDaSemana(dia)]}, ${d.dia} de ${MESES[d.mes - 1]}`;
 }
 
+/** "quinta", no alto do fechamento do dia. */
+export function nomeDoDia(dia: string): string {
+  return DIAS[diaDaSemana(dia)] ?? "";
+}
+
 /** "sex, 9 out", na prévia da frase. */
 export function diaCurto(dia: string): string {
   const d = lerDia(dia);

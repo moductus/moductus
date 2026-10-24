@@ -1,0 +1,163 @@
+/*
+ * Briefing da manhã e fechamento do dia no painel Hoje (Briefing.dc.html, Fechamento.dc.html):
+ * linhas com a cabeça do agente, o nome na cor dele e o texto; as ações embaixo de cada linha.
+ */
+
+.rotina-corpo {
+  gap: var(--esp-16);
+}
+
+/* ---------- peças comuns ---------- */
+.rotina-cabeca {
+  display: flex;
+  flex: none;
+}
+
+.rotina-linha-corpo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-4);
+  min-width: 0;
+}
+
+.rotina-nome {
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-forte);
+  color: var(--texto-2);
+}
+
+.rotina-nome[data-agente="alba"] {
+  color: var(--agente-alba);
+}
+.rotina-nome[data-agente="tula"] {
+  color: var(--agente-tula);
+}
+.rotina-nome[data-agente="faina"] {
+  color: var(--agente-faina);
+}
+.rotina-nome[data-agente="nuno"] {
+  color: var(--agente-nuno);
+}
+
+.rotina-texto {
+  color: var(--texto);
+  text-wrap: pretty;
+}
+
+.rotina-texto-2 {
+  margin: 0;
+  color: var(--texto-2);
+  text-wrap: pretty;
+}
+
+.rotina-acoes-linha {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-6);
+}
+
+.rotina-linha-corpo > .rotina-acoes-linha {
+  padding-top: var(--esp-4);
+}
+
+.rotina-feito {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.rotina-nota {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+/* ---------- briefing ---------- */
+.rotina-linhas {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rotina-linha {
+  display: flex;
+  gap: var(--esp-12);
+  padding: var(--esp-12) 0;
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.rotina-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--esp-8);
+}
+
+/* ---------- fechamento ---------- */
+.rotina-alba {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+}
+
+.rotina-alba-topo {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.rotina-meta,
+.rotina-rotulo {
+  margin: 0;
+  font: inherit;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.rotina-abertas {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rotina-aberta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+  padding: var(--esp-8) 0;
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.rotina-aberta-titulo {
+  overflow: hidden;
+  color: var(--texto);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rotina-outra-data {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-6);
+}
+
+.rotina-campo-data {
+  flex: 1;
+}
+
+.rotina-outro {
+  display: flex;
+  gap: var(--esp-12);
+  padding-top: var(--esp-12);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.rotina-encerrar {
+  flex: none;
+  width: 100%;
+  height: var(--altura-botao-rotina);
+}
