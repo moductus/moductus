@@ -289,6 +289,8 @@
   --largura-prioridade: 3px;
   --altura-prioridade: 18px;
   --altura-campo-frase: 38px;
+  /* "Encerrar o dia" no fechamento (Fechamento.dc.html): o botão da largura do painel, de 38 */
+  --altura-botao-rotina: 38px;
   /* Tarefas (AreaTarefas.dc.html): sub-navegação de 210, campo da frase de 40, linha de 40, o traço
      da prioridade e a coluna do quando */
   --largura-subnav-tarefas: 210px;

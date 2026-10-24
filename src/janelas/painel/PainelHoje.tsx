@@ -35,6 +35,8 @@ import {
   useAvisoDesfazer,
 } from "./Dia.tsx";
 import { LembretesDoHoje } from "./LembretesDoHoje.tsx";
+import { BriefingDoDia, DiaEncerrado, FechamentoDoDia } from "./Rotinas.tsx";
+import { rotinaDaVez, useRotinasDeHoje } from "./rotinas.ts";
 import { abrirNoSistema, PedidoDaSessao } from "./PedidosSessoes.tsx";
 import { itensDasSessoes } from "./sessoes.ts";
 import { deCima, feitasDoDia, linhasDoHoje } from "./tarefas.ts";
@@ -194,6 +196,10 @@ function FinancasVazio() {
  * numa tela. No alto o lembrete (atrasados, tocando, chegando), depois o foco, as tarefas de hoje
  * com a captura por frase, as finanças (vazio honesto até a Tula) e as sessões de IA esperando
  * você. Tudo vem do serviço; o que ele não disse, o painel não inventa.
+ *
+ * O briefing da manhã e o fechamento do dia aparecem aqui: o serviço abre o painel na área Hoje e,
+ * enquanto a rotina espera resposta, ela ocupa o painel (Briefing.dc.html, Fechamento.dc.html).
+ * Sem as rotinas lidas, o Hoje aparece como sempre.
  */
 export function PainelHoje({ canal, abertura }: { canal: EstadoConexao; abertura: number }) {
   const agora = useAgora();
@@ -206,6 +212,9 @@ export function PainelHoje({ canal, abertura }: { canal: EstadoConexao; abertura
   const listas = useListas(canal, abertura);
   const tarefas = useTarefasDoDia(canal, hoje, abertura);
   const pedidos = usePedidosDoTerminal(canal, abertura);
+  const rotinas = useRotinasDeHoje(canal, abertura);
+  // O "Dia encerrado." fica até o painel abrir de novo.
+  const [encerrado, setEncerrado] = useState<{ abertura: number; dia: string } | null>(null);
   const [aviso, setAviso] = useAvisoDesfazer();
   const [erro, setErro] = useState<string | null>(null);
   const idTarefas = useId();
@@ -221,6 +230,39 @@ export function PainelHoje({ canal, abertura }: { canal: EstadoConexao; abertura
     setErro(null);
     marcarTarefa(tarefa, feita, setAviso, setErro);
   };
+
+  const lidas = rotinas.leitura.estado === "pronta" ? rotinas.leitura.dados : null;
+  const daVez = rotinaDaVez(lidas);
+  if (encerrado && encerrado.abertura === abertura) {
+    return <DiaEncerrado dia={encerrado.dia} agora={agora} fuso={fuso} />;
+  }
+  if (daVez?.tipo === "briefing") {
+    return (
+      <BriefingDoDia
+        key={daVez.id}
+        apresentacao={daVez}
+        pergunta={lidas?.pergunta ?? null}
+        atrasadas={doDia?.atrasadas ?? null}
+        fuso={fuso}
+        agora={agora}
+        aplicar={rotinas.aplicar}
+      />
+    );
+  }
+  if (daVez?.tipo === "fechamento") {
+    return (
+      <FechamentoDoDia
+        key={daVez.id}
+        apresentacao={daVez}
+        doDia={doDia ? conhecidas : null}
+        hoje={hoje}
+        fuso={fuso}
+        agora={agora}
+        aplicar={rotinas.aplicar}
+        aoEncerrar={() => setEncerrado({ abertura, dia: daVez.dia })}
+      />
+    );
+  }
 
   return (
     <>
