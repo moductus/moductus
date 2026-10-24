@@ -262,13 +262,14 @@ export class ServicoFechamento implements FonteDoRelogio {
    * A hora de parar chegou: monta, pede a abertura à Alba (até 15 s; sem modelo, o molde), grava,
    * avisa as janelas e abre o painel Hoje. O fechamento do dia que já apareceu não repete. Se falhar
    * aqui, o vigia não tenta de novo no mesmo dia: o dia fica sem fechamento e vira o "Ontem" do
-   * briefing seguinte. O briefing de hoje (e o que ficou de antes) sem resposta fecha sozinho: o
-   * que ele trazia de aberto está no "Ficou aberto".
+   * briefing seguinte. Os briefings e fechamentos de antes de hoje sem resposta fecham sozinhos; o
+   * de hoje fica para o briefing seguinte fechar (ele pode ter aparecido agora, depois da hora de
+   * parar).
    */
   async aparecer(hora: HoraDoFechamento): Promise<ApresentacaoRotina> {
     const ja = this.deps.registro.doDia(FECHAMENTO, hora.dia);
     if (ja) return ja;
-    this.deps.registro.fecharSozinhas(BRIEFING, somarDias(hora.dia, 1));
+    this.deps.registro.fecharSozinhas(BRIEFING, hora.dia);
     this.deps.registro.fecharSozinhas(FECHAMENTO, hora.dia);
     const montagem = this.montar(hora.dia);
     const redacao = await this.redigir(montagem);

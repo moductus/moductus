@@ -166,7 +166,13 @@ function montar(resumos: ResumoDoAgente[] = []) {
     apareceu: (a) => apareceram.push(a),
   });
   fechamento = f;
-  const ignorados = new ServicoIgnorados({ lerFuso, registro, marcas, rotinas });
+  const ignorados = new ServicoIgnorados({
+    lerFuso,
+    registro,
+    marcas,
+    rotinas,
+    emitir: (lista) => mudancasDasRotinas.push(lista),
+  });
   const briefing = new ServicoBriefing({
     ...comum,
     tarefas,
@@ -261,24 +267,23 @@ function montar(resumos: ResumoDoAgente[] = []) {
 }
 
 describe("fecham sozinhos e reaparecem resumidos", () => {
-  test("o briefing sem resposta fecha quando o fechamento aparece; o fechamento, no briefing seguinte", async () => {
+  test("o briefing e o fechamento sem resposta fecham sozinhos no briefing seguinte", async () => {
     const m = montar();
     const b1 = (await m.manha(dia(0)))!;
     expect(b1.acao).toBeNull();
     const f1 = await m.tarde(dia(0));
-    // O fechamento apareceu: o briefing de hoje, sem resposta, fechou sozinho, com a hora.
-    expect(m.registro.porId(b1.id)).toMatchObject({
-      acao: "ignorado",
-      acaoEm: sp(dia(0), "18:00").toISOString(),
-    });
+    // O fechamento de hoje não fecha o briefing de hoje: ele espera o de amanhã.
+    expect(m.registro.porId(b1.id)).toMatchObject({ acao: null });
     expect(m.registro.porId(f1.id)).toMatchObject({ acao: null });
-    expect(ApresentacaoRotina.parse(m.registro.porId(b1.id))).toBeTruthy();
 
     const b2 = (await m.manha(dia(1)))!;
-    expect(m.registro.porId(f1.id)).toMatchObject({
-      acao: "ignorado",
-      acaoEm: sp(dia(1), "08:00").toISOString(),
-    });
+    for (const id of [b1.id, f1.id]) {
+      expect(m.registro.porId(id)).toMatchObject({
+        acao: "ignorado",
+        acaoEm: sp(dia(1), "08:00").toISOString(),
+      });
+      expect(ApresentacaoRotina.parse(m.registro.porId(id))).toBeTruthy();
+    }
     // Nada se acumula: hoje há um briefing só, o de hoje.
     expect(m.hoje()).toEqual({
       briefing: b2,
@@ -301,8 +306,23 @@ describe("fecham sozinhos e reaparecem resumidos", () => {
 
     const b2 = m.registro.doDia("briefing", dia(1))!;
     await m.tarde(dia(1));
+    await m.manha(dia(2));
     expect(m.registro.porId(b2.id)!.acao).toBe("ignorado");
     expect(m.fechamento.agir({ id: b2.id, acao: "fechar" }).acao).toBe("fechar");
+  });
+
+  test("o briefing que aparece depois da hora de parar não conta como ignorado", async () => {
+    const m = montar();
+    // O PC ligou às 19:00: o briefing sai na primeira atividade e o fechamento logo depois.
+    vi.setSystemTime(sp(dia(0), "19:00"));
+    m.primeira.sinal("desbloqueio");
+    await vi.waitFor(() => expect(m.registro.doDia("briefing", dia(0))).not.toBeNull());
+    const b1 = m.registro.doDia("briefing", dia(0))!;
+    await m.fechamento.aparecer({ dia: dia(0), previsto: sp(dia(0), "18:00"), atrasado: true });
+
+    expect(m.registro.porId(b1.id)!.acao).toBeNull();
+    expect(m.hoje().briefing).toMatchObject({ id: b1.id, acao: null });
+    expect(m.fechamento.agir({ id: b1.id, acao: "comecar" }).acao).toBe("comecar");
   });
 
   test("o fechamento ignorado volta resumido no Ontem; a pendência não replanejada vem marcada", async () => {
@@ -402,7 +422,8 @@ describe("três dias ignorados seguidos", () => {
     const briefing = m.canal["rotinas.responder"]({ resposta: "curto" });
 
     expect(briefing).toMatchObject({ id: "briefing", ativa: true, curta: true });
-    expect(m.mudancasDasRotinas.at(-1)).toEqual(m.rotinas.listar());
+    // Um aviso só de `rotinas.mudou`, com as rotinas como ficaram.
+    expect(m.mudancasDasRotinas).toEqual([m.rotinas.listar()]);
     expect(JSON.parse(m.marcas.ler(MARCA_PERGUNTA)!)).toMatchObject({
       dia: dia(3),
       resposta: "curto",
@@ -422,13 +443,46 @@ describe("três dias ignorados seguidos", () => {
     expect(b5.linhas.map((l) => l.agenteId)).toEqual(["alba", "tula", "nuno"]);
   });
 
-  test("Manter: grava a escolha e nada muda", async () => {
+  test("Manter: grava a escolha, nada muda, e o aviso de rotinas.mudou sai do mesmo jeito", async () => {
     const m = montar();
     for (const n of [0, 1, 2]) await m.ignorar(dia(n));
     await m.manha(dia(3));
     expect(m.canal["rotinas.responder"]({ resposta: "manter" })).toMatchObject({ ativa: true, curta: false });
-    expect(m.mudancasDasRotinas).toEqual([]);
+    // A janela relê `rotinas.hoje` por este aviso, e a pergunta some.
+    expect(m.mudancasDasRotinas).toEqual([m.rotinas.listar()]);
     expect(JSON.parse(m.marcas.ler(MARCA_PERGUNTA)!)).toMatchObject({ resposta: "manter" });
+    expect(m.hoje().pergunta).toBeNull();
+  });
+
+  test("com o briefing já curto, a pergunta não sai e fica para depois", async () => {
+    const m = montar();
+    for (const n of [0, 1, 2]) await m.ignorar(dia(n));
+    m.rotinas.definir({ id: "briefing", curta: true });
+    await m.manha(dia(3));
+    expect(m.hoje().pergunta).toBeNull();
+    expect(m.marcas.ler(MARCA_PERGUNTA)).toBeNull();
+    await m.tarde(dia(3));
+
+    // De volta ao briefing inteiro, os ignorados seguidos ainda contam.
+    m.rotinas.definir({ id: "briefing", curta: false });
+    await m.manha(dia(4));
+    expect(m.hoje().pergunta).toMatchObject({ dia: dia(4) });
+  });
+
+  test("o briefing curto ou desligado depois de a pergunta sair a esconde", async () => {
+    const m = montar();
+    for (const n of [0, 1, 2]) await m.ignorar(dia(n));
+    await m.manha(dia(3));
+    expect(m.hoje().pergunta).not.toBeNull();
+
+    m.rotinas.definir({ id: "briefing", curta: true });
+    expect(m.hoje().pergunta).toBeNull();
+    m.rotinas.definir({ id: "briefing", curta: false, ativa: false });
+    expect(m.hoje().pergunta).toBeNull();
+    expect(() => m.canal["rotinas.responder"]({ resposta: "curto" })).toThrow(MENSAGEM_SEM_PERGUNTA);
+    // Ligado e inteiro de novo no mesmo dia, ela volta a esperar a resposta.
+    m.rotinas.definir({ id: "briefing", ativa: true });
+    expect(m.hoje().pergunta).toMatchObject({ dia: dia(3) });
   });
 
   test("Desligar: o briefing não aparece mais, e os avisos de prazo continuam", async () => {
@@ -462,5 +516,45 @@ describe("três dias ignorados seguidos", () => {
     // O fechamento continua no horário dele.
     await m.ate(sp(dia(4), "18:00"));
     expect(m.registro.doDia("fechamento", dia(4))).not.toBeNull();
+  });
+});
+
+describe("quando algo falha por dentro", () => {
+  test("a marca da pergunta que não se lê conta como feita: a pergunta não sai", async () => {
+    const erro = vi.spyOn(console, "error").mockImplementation(() => {});
+    const m = montar();
+    m.marcas.gravar(MARCA_PERGUNTA, "{quebrada");
+    for (const n of [0, 1, 2]) await m.ignorar(dia(n));
+    const b4 = (await m.manha(dia(3)))!;
+    expect(m.hoje()).toMatchObject({ briefing: { id: b4.id }, pergunta: null });
+    expect(m.marcas.ler(MARCA_PERGUNTA)).toBe("{quebrada");
+    expect(() => m.canal["rotinas.responder"]({ resposta: "desligar" })).toThrow(MENSAGEM_JA_RESPONDIDA);
+    expect(m.rotinas.listar()[0]).toMatchObject({ ativa: true, curta: false });
+    expect(erro).toHaveBeenCalledWith(expect.stringContaining("a marca da pergunta não se lê"));
+  });
+
+  test("a pergunta que falha não derruba rotinas.hoje: o briefing vem, sem ela", async () => {
+    const erro = vi.spyOn(console, "error").mockImplementation(() => {});
+    const m = montar();
+    for (const n of [0, 1, 2]) await m.ignorar(dia(n));
+    const b4 = (await m.manha(dia(3)))!;
+    vi.spyOn(m.ignorados, "pergunta").mockImplementation(() => {
+      throw new Error("banco fora");
+    });
+    expect(m.hoje()).toEqual({ briefing: b4, fechamento: null, diaEncerrado: false, pergunta: null });
+    expect(erro).toHaveBeenCalledWith(expect.stringContaining("a pergunta dos ignorados não se leu"));
+  });
+
+  test("a conferência da pergunta que falha não segura o briefing", async () => {
+    const erro = vi.spyOn(console, "error").mockImplementation(() => {});
+    const m = montar();
+    vi.spyOn(m.ignorados, "conferir").mockImplementation(() => {
+      throw new Error("banco fora");
+    });
+    const b1 = (await m.manha(dia(0)))!;
+    expect(b1).toMatchObject({ tipo: "briefing", dia: dia(0) });
+    expect(m.apareceram).toEqual([b1]);
+    expect(m.registro.doDia("briefing", dia(0))).toEqual(b1);
+    expect(erro).toHaveBeenCalledWith(expect.stringContaining("a pergunta dos ignorados não se conferiu"));
   });
 });

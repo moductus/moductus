@@ -620,6 +620,7 @@ const ignorados = new ServicoIgnorados({
   registro: registroRotinas,
   marcas: marcasDosVigias,
   rotinas,
+  emitir: (lista) => servidor?.emitir("rotinas.mudou", lista),
 });
 // Contagens das áreas (F3-20): a barra lateral do Sistema e os badges do dock leem daqui. As
 // sessões esperando são os pedidos do terminal, como o Nuno no dock.

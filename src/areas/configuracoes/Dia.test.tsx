@@ -41,8 +41,8 @@ const TODOS = [1, 2, 3, 4, 5, 6, 7];
 
 function rotinasPadrao(dias: number[] = TODOS): Rotina[] {
   return [
-    { id: "briefing", tipo: "briefing", hora: null, diasSemana: dias, ativa: true },
-    { id: "fechamento", tipo: "fechamento", hora: "18:00", diasSemana: dias, ativa: true },
+    { id: "briefing", tipo: "briefing", hora: null, diasSemana: dias, ativa: true, curta: false },
+    { id: "fechamento", tipo: "fechamento", hora: "18:00", diasSemana: dias, ativa: true, curta: false },
   ];
 }
 
