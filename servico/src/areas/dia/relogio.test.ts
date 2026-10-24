@@ -68,6 +68,19 @@ describe("relógio do dia", () => {
     ]);
   });
 
+  test("com a guarda longa, só acorda quando a fonte pede; sem próximo, na guarda", async () => {
+    const relogio = new RelogioDoDia({ guardaMs: 86_400_000 });
+    const f = fonte();
+    f.proximoEm = em(3_600_000);
+    relogio.registrar(f);
+    await relogio.ligar();
+    f.proximoEm = null;
+    await vi.advanceTimersByTimeAsync(3_600_000 + 86_400_000);
+    expect(f.conferencias.map((c) => c.agora)).toEqual([em(0), em(3_600_000), em(3_600_000 + 86_400_000)]);
+    // Acordou na hora pedida: dormir muito não é ausência.
+    expect(f.conferencias.slice(1).map((c) => c.ausencia)).toEqual([null, null]);
+  });
+
   test("a subida é ausência de começo desconhecido; a retomada começa na última conferência", async () => {
     const relogio = new RelogioDoDia();
     const f = fonte();

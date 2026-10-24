@@ -52,7 +52,14 @@ const HOJE = "2026-10-08";
  * Banco migrado de verdade, as notificações de verdade com uma casca de mentira que só anota, e o
  * relógio do dia de verdade sobre o relógio falso do vitest. Nenhum provedor, nenhuma rede.
  */
-function montar(opcoes: { agora?: Date; ligar?: boolean; noGoogle?: (lembreteId: string) => boolean } = {}) {
+function montar(
+  opcoes: {
+    agora?: Date;
+    ligar?: boolean;
+    noGoogle?: (lembreteId: string) => boolean;
+    guardaMs?: number;
+  } = {},
+) {
   vi.setSystemTime(opcoes.agora ?? sp(HOJE, "14:30"));
   const pasta = mkdtempSync(join(tmpdir(), "moductus-lembretes-"));
   pastas.push(pasta);
@@ -79,7 +86,7 @@ function montar(opcoes: { agora?: Date; ligar?: boolean; noGoogle?: (lembreteId:
     },
     { estado: () => {}, nova: () => {}, naoVistas: () => {} },
   );
-  const relogio = new RelogioDoDia();
+  const relogio = new RelogioDoDia({ guardaMs: opcoes.guardaMs });
   const config = { fuso: "America/Sao_Paulo" };
   const eventos = { mudou: [] as MudancaLembretes[], hoje: [] as LembretesDeHoje[] };
   const lembretes = new ServicoLembretes(
@@ -345,7 +352,8 @@ describe("aviso do Windows", () => {
 
 describe("recorrentes", () => {
   test("o esquecido toca de novo na próxima; Feito volta na seguinte; a regra que acaba sai", async () => {
-    const { casca, relogio, lembretes, notificacoes } = montar();
+    // Dois dias passam: com a guarda de 60 s seriam 2.900 conferências; o relógio acorda quando o lembrete pede.
+    const { casca, relogio, lembretes, notificacoes } = montar({ guardaMs: DIA });
     await relogio.ligar();
     const criado = await lembretes.criar({
       texto: "Beber água",
@@ -573,7 +581,7 @@ describe("volta 1", () => {
   });
 
   test("o único atrasado que volta a tocar leva o aviso agrupado junto", async () => {
-    const { casca, relogio, lembretes } = montar({ agora: sp(HOJE, "14:00") });
+    const { casca, relogio, lembretes } = montar({ agora: sp(HOJE, "14:00"), guardaMs: DIA });
     await lembretes.criar({ texto: "Beber água", quando: iso(sp(HOJE, "15:00")), recorrencia: "FREQ=DAILY" });
     vi.setSystemTime(sp(HOJE, "16:00"));
     await relogio.ligar();

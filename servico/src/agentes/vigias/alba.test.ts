@@ -44,6 +44,7 @@ afterEach(() => {
 const FUSO = "America/Sao_Paulo";
 /** Segunda-feira. */
 const DIA = "2026-10-19";
+const UM_DIA_MS = 86_400_000;
 const sp = (dia: string, hora: string) => new Date(`${dia}T${hora}:00.000-03:00`);
 
 function bancoNovo(prefixo: string) {
@@ -62,7 +63,7 @@ function bancoNovo(prefixo: string) {
  * agenda avisa o vigia a cada mudança, como no main.ts. O vigia não recebe runtime: não tem como
  * chamar o modelo.
  */
-function montar(inicio: Date) {
+function montar(inicio: Date, guardaMs?: number) {
   vi.useFakeTimers();
   vi.setSystemTime(inicio);
   const db = bancoNovo("moductus-vigia-alba-");
@@ -91,7 +92,7 @@ function montar(inicio: Date) {
   const marcas = new RepositorioMarcasDosVigias(db);
   /** Uma subida do serviço: vigia e relógio novos, com o mesmo banco. */
   const ligar = async () => {
-    const relogio = new RelogioDoDia();
+    const relogio = new RelogioDoDia({ guardaMs });
     relogios.push(relogio);
     vigia = new VigiaAlba({
       lerFuso,
@@ -116,7 +117,8 @@ function montar(inicio: Date) {
 
 describe("virada do dia", () => {
   test("à meia-noite as abertas que venciam ontem vêm para hoje, marcadas pelo dia delas", async () => {
-    const m = montar(sp(DIA, "23:50"));
+    // Um dia inteiro passa: o relógio acorda quando o vigia pede, não a cada minuto.
+    const m = montar(sp(DIA, "23:50"), UM_DIA_MS);
     const aberta = m.tarefas.criar({ titulo: "Ligar pro banco", venceEm: DIA });
     const feita = m.tarefas.criar({ titulo: "Pagar a luz", venceEm: DIA });
     m.tarefas.concluir({ id: feita.id });
@@ -249,7 +251,7 @@ describe("compromisso chegando", () => {
 
 describe("rotinas", () => {
   test("a hora de parar chega uma vez por dia; o fechamento que já apareceu não volta", async () => {
-    const m = montar(sp(DIA, "17:00"));
+    const m = montar(sp(DIA, "17:00"), UM_DIA_MS);
     await m.ligar();
     await m.ate(new Date(sp(DIA, "18:00").getTime() - 1));
     expect(m.fechamentos).toEqual([]);
