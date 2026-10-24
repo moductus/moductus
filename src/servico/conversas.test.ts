@@ -8,10 +8,13 @@ import {
   falhaNaConversa,
   juntarConversa,
   juntarMensagem,
+  LINHAS_CODIGO_ABERTO,
   mencionar,
   mensagemDeErro,
+  partesDaFala,
   previa,
   quandoCurto,
+  recortarFala,
 } from "./conversas.ts";
 
 function conversa(id: string, parte: Partial<Conversa> = {}): Conversa {
@@ -189,5 +192,45 @@ describe("como a lista escreve", () => {
     expect(mensagemDeErro(new ServicoIndisponivel())).toMatch(/Nada foi enviado/);
     expect(mensagemDeErro(new RecusaDoServico("conversa não encontrada"))).toBe("Conversa não encontrada");
     expect(mensagemDeErro(new Error("caiu"))).toMatch(/Não consegui confirmar/);
+  });
+});
+
+describe("resposta enxuta", () => {
+  const script = Array.from({ length: 30 }, (_, i) => `Remove-Item C:\\temp\\${i}`).join("\n");
+  const cerca = "```";
+
+  it("separa o texto dos blocos de código, contando as linhas de cada bloco", () => {
+    expect(partesDaFala(`Rode isto:\n\n${cerca}powershell\n${script}\n${cerca}\nPronto.`)).toEqual([
+      { tipo: "texto", texto: "Rode isto:" },
+      { tipo: "codigo", codigo: script, linhas: 30 },
+      { tipo: "texto", texto: "Pronto." },
+    ]);
+    expect(partesDaFala("Movi 38 arquivos.")).toEqual([{ tipo: "texto", texto: "Movi 38 arquivos." }]);
+    // Cerca de outra marca dentro do bloco não fecha o bloco.
+    expect(partesDaFala(`~~~\n${cerca}\n~~~`)).toEqual([{ tipo: "codigo", codigo: cerca, linhas: 1 }]);
+  });
+
+  it("o bloco que ainda está chegando já é código, não texto na tela", () => {
+    expect(partesDaFala(`Assim:\n${cerca}bash\nrm -rf /tmp/a\nrm -rf /tmp/b`)).toEqual([
+      { tipo: "texto", texto: "Assim:" },
+      { tipo: "codigo", codigo: "rm -rf /tmp/a\nrm -rf /tmp/b", linhas: 2 },
+    ]);
+  });
+
+  it("a resposta longa é cortada no fim de uma palavra; o código recolhido quase não ocupa", () => {
+    const { partes, cortada } = recortarFala(partesDaFala("palavra ".repeat(300).trim()), 100);
+    expect(cortada).toBe(true);
+    expect(partes).toHaveLength(1);
+    const texto = (partes[0] as { texto: string }).texto;
+    expect(texto.endsWith("palavra…")).toBe(true);
+    expect(texto.length).toBeLessThanOrEqual(101);
+
+    const comScript = partesDaFala(`Feito.\n${cerca}\n${script}\n${cerca}`);
+    expect(script.split("\n").length).toBeGreaterThan(LINHAS_CODIGO_ABERTO);
+    expect(recortarFala(comScript, 200)).toEqual({ partes: comScript, cortada: false });
+    expect(recortarFala([{ tipo: "texto", texto: "Curta." }])).toEqual({
+      partes: [{ tipo: "texto", texto: "Curta." }],
+      cortada: false,
+    });
   });
 });

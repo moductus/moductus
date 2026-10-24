@@ -39,8 +39,12 @@ export function metodo<E extends z.ZodType, S extends z.ZodType>(entrada: E, sai
  * Versão do protocolo entre interface e serviço; sobe quando uma mensagem muda de forma.
  * 2: agentes, provedores, execuções, conversas, aprovações, sessões, GitHub, conexões e
  * notificações (fase 2).
+ * 3: o dia: listas, tarefas, lembretes, agenda, foco, notas, rotinas, captura e as contagens das
+ * áreas, e o agente diz o que tem de personalizado e o gasto de hoje contra o teto, na moeda do
+ * teto com a cotação da configuração, e a sessão do Claude Code diz se roda no terminal ou no
+ * app Desktop (fase 3).
  */
-export const VERSAO_PROTOCOLO = 2;
+export const VERSAO_PROTOCOLO = 3;
 
 /** Nome do parâmetro de URL que leva o token: o WebSocket do navegador não manda cabeçalho. */
 export const PARAMETRO_TOKEN = "token";

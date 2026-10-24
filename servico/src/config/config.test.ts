@@ -19,7 +19,7 @@ function montar(
   portable = false,
 ) {
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const eventos: EstadoConfig[] = [];
   const servico = new ServicoConfig(new RepositorioConfig(db), nativo, (e) => eventos.push(e), portable);
@@ -86,9 +86,20 @@ describe("configuração", () => {
     const escolhida: Config = {
       tema: "papel",
       dock: { lado: "direita", modo: "inteligente", forma: "flutuante" },
-      atalhos: { sistema: "Ctrl+Shift+M", dock: "Ctrl+Alt+J", captura: "Ctrl+Alt+K" },
+      atalhos: { sistema: "Ctrl+Shift+M", dock: "Ctrl+Alt+J", captura: "Ctrl+Alt+K", foco: "Ctrl+Alt+F" },
       autostart: true,
       silencio: { horario: { ligado: true, inicio: "23:00", fim: "06:45" }, telaCheia: false, foco: true },
+      dia: {
+        fuso: "Europe/Lisbon",
+        expediente: { inicio: "08:30", fim: "17:00" },
+        foco: { focoMin: 50, pausaMin: 10, pausaLongaMin: 30, ciclosAtePausaLonga: 3 },
+      },
+      // A cotação digitada do teto diário fica na configuração, com o dia (ADR-0040).
+      cambio: { cotacoes: { BRL: { milionesimos: 5_430_000, data: "2026-10-18", fonte: "digitada" } } },
+      inicio: {
+        ordem: ["briefing", "foco", "tarefas", "dev", "sessoes", "financas"],
+        escondidos: ["financas"],
+      },
     };
     // Uma chave por vez, como a interface manda.
     for (const [chave, valor] of Object.entries(escolhida))
@@ -96,6 +107,78 @@ describe("configuração", () => {
     primeiro.db.close();
     const depois = montar(aceita(), primeiro.pasta);
     expect(depois.servico.obter().config).toEqual(escolhida);
+  });
+
+  test("blocos escondidos do Início continuam escondidos depois de reiniciar, sem passar pela casca", async () => {
+    const aplicados: Aplicacao[] = [];
+    const primeiro = montar(aceita(aplicados));
+    await primeiro.servico.definir({
+      inicio: { ordem: [...CONFIG_PADRAO.inicio.ordem], escondidos: ["financas", "dev"] },
+    });
+    expect(aplicados).toEqual([]);
+    primeiro.db.close();
+    const depois = montar(aceita(), primeiro.pasta);
+    expect(depois.servico.obter().config.inicio.escondidos).toEqual(["financas", "dev"]);
+    await expect(
+      depois.servico.definir({ inicio: { ordem: ["foco", "foco"], escondidos: [] } }),
+    ).rejects.toThrow();
+    expect(depois.servico.obter().config.inicio.escondidos).toEqual(["financas", "dev"]);
+  });
+
+  test("config da 0.6.0, sem o atalho do foco e sem o dia, sobe com o padrão e fica com o resto", () => {
+    const { db, servico } = montar(aceita());
+    const antigos = { sistema: "Ctrl+Shift+M", dock: "Ctrl+Alt+J", captura: "Ctrl+Alt+K" };
+    db.prepare("INSERT INTO config (chave, valor) VALUES (?, ?)").run("atalhos", JSON.stringify(antigos));
+    const { config } = servico.obter();
+    expect(config.atalhos).toEqual({ ...antigos, foco: "Ctrl+Alt+P" });
+    expect(config.dia).toEqual(CONFIG_PADRAO.dia);
+    expect(config.dia.expediente).toEqual({ inicio: "09:00", fim: "18:00" });
+    expect(config.dia.foco).toEqual({ focoMin: 25, pausaMin: 5, pausaLongaMin: 15, ciclosAtePausaLonga: 4 });
+  });
+
+  test("o Ctrl+Alt+P do padrão que colide com um atalho já salvo deixa o foco sem atalho, com o motivo", async () => {
+    const aplicados: Aplicacao[] = [];
+    const { db, servico } = montar(aceita(aplicados));
+    const antigos = { sistema: "alt+ctrl+p", dock: "Ctrl+Alt+D", captura: "Ctrl+Alt+Space" };
+    db.prepare("INSERT INTO config (chave, valor) VALUES (?, ?)").run("atalhos", JSON.stringify(antigos));
+    const estado = servico.obter();
+    // O atalho escolhido pelo usuário vale; o do foco fica vazio e não vai ser registrado.
+    expect(estado.config.atalhos).toEqual({ ...antigos, foco: "" });
+    expect(estado.falhasAtalhos).toEqual({
+      foco: "Ctrl+Alt+P já é o atalho para abrir o Sistema, então o foco ficou sem atalho. Escolha outro em Configurações.",
+    });
+    await servico.aplicarAoSubir();
+    expect(aplicados[0]?.config.atalhos.foco).toBe("");
+
+    // Escolhido um atalho para o foco, o motivo some.
+    const depois = await servico.definir({ atalhos: { ...estado.config.atalhos, foco: "Ctrl+Alt+F" } });
+    expect(depois.config.atalhos.foco).toBe("Ctrl+Alt+F");
+    expect(depois.falhasAtalhos).toEqual({});
+  });
+
+  test("sem colisão, o atalho do foco gravado pelo usuário e o do padrão ficam como estão", () => {
+    const { db, servico } = montar(aceita());
+    const salvos = {
+      sistema: "Ctrl+Alt+P",
+      dock: "Ctrl+Alt+D",
+      captura: "Ctrl+Alt+Space",
+      foco: "Ctrl+Alt+F",
+    };
+    db.prepare("INSERT INTO config (chave, valor) VALUES (?, ?)").run("atalhos", JSON.stringify(salvos));
+    expect(servico.obter()).toMatchObject({ config: { atalhos: salvos }, falhasAtalhos: {} });
+  });
+
+  test("dia gravado pela metade completa com o padrão campo a campo", () => {
+    const { db, servico } = montar(aceita());
+    db.prepare("INSERT INTO config (chave, valor) VALUES (?, ?)").run(
+      "dia",
+      JSON.stringify({ fuso: "Europe/Lisbon", foco: { focoMin: 50 } }),
+    );
+    expect(servico.obter().config.dia).toEqual({
+      fuso: "Europe/Lisbon",
+      expediente: CONFIG_PADRAO.dia.expediente,
+      foco: { ...CONFIG_PADRAO.dia.foco, focoMin: 50 },
+    });
   });
 
   test("portable: autostart não liga, o resto continua editável", async () => {

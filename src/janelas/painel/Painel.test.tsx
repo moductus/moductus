@@ -9,6 +9,7 @@ import type {
   SituacaoAgente,
   SituacaoGithub,
 } from "@moductus/contrato";
+import { RecusaDoServico } from "@moductus/contrato/cliente";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -23,9 +24,12 @@ import { auditar } from "../../teste/acessibilidade.ts";
  */
 const eventosCasca = new Map<string, (e: { payload: unknown }) => void>();
 const chamadasCasca: { comando: string; args: unknown }[] = [];
+/** A área que a casca já tinha aberto quando o painel montou (`painel_area_atual`). */
+const casca = { areaAberta: null as string | null };
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (comando: string, args?: unknown) => {
     chamadasCasca.push({ comando, args });
+    if (comando === "painel_area_atual") return casca.areaAberta;
     if (comando === "servico_estado") return { estado: "pronto", porta: 1, token: "t" };
     if (comando === "dock_configuracao") return { lado: "esquerda", modo: "fixo", forma: "colada" };
     return undefined;
@@ -66,7 +70,17 @@ function agente(
     gatilhos: [],
     escoposMemoria: [],
     tetoDiarioCentavos: null,
+    tetoMoeda: "BRL",
+    gastoDeHoje: {
+      microdolares: 0,
+      centavos: null,
+      cotacaoDe: null,
+      limiteCentavos: null,
+      liberarCentavos: null,
+      pedeCotacao: false,
+    },
     deFabrica: true,
+    camposPersonalizados: [],
     situacao: { ...ATIVO, ...situacao },
   };
 }
@@ -96,6 +110,7 @@ const servidor: {
   github: SituacaoGithub;
   conexoes: Conexao[];
   provedores: Provedor[];
+  acordar: () => Promise<unknown>;
 } = {
   agentes: [],
   pendentes: [],
@@ -103,6 +118,7 @@ const servidor: {
   github: { itens: [], atualizadoEm: null },
   conexoes: [],
   provedores: [PROVEDOR],
+  acordar: async () => [],
 };
 const ouvintes = new Map<string, Set<(dados: unknown) => void>>();
 const pedir = vi.fn(async (metodo: string, _dados?: unknown): Promise<unknown> => {
@@ -125,6 +141,10 @@ const pedir = vi.fn(async (metodo: string, _dados?: unknown): Promise<unknown> =
       return servidor.github;
     case "agentes.retomar":
       return [];
+    case "agentes.acordar":
+      return servidor.acordar();
+    case "agentes.liberarTeto":
+      return servidor.acordar();
     case "config.obter":
       return { config: { atalhos: { sistema: "Ctrl+Shift+M" } }, portable: false, falhasAtalhos: {} };
     case "aprovacoes.decidir":
@@ -167,6 +187,7 @@ const SESSAO = {
   id: "s1",
   projetoId: "p1",
   ferramenta: "claude-code",
+  ondeRoda: null,
   idExterno: "x",
   modelo: null,
   estado: "esperando",
@@ -188,6 +209,7 @@ const SESSOES: ListaSessoes = {
       ...SESSAO,
       id: "s2",
       projetoId: "p2",
+      ondeRoda: "terminal",
       estado: "trabalhando",
       contexto: { usadoTokens: 168_000, janelaTokens: 200_000 },
       ultimoEvento: {
@@ -228,8 +250,10 @@ beforeEach(() => {
   servidor.github = { itens: [], atualizadoEm: null };
   servidor.conexoes = [conexao("hooks-claude-code"), conexao("github")];
   servidor.provedores = [PROVEDOR];
+  servidor.acordar = async () => [];
   pedir.mockClear();
   chamadasCasca.length = 0;
+  casca.areaAberta = null;
 });
 
 afterEach(() => {
@@ -258,6 +282,82 @@ const cartoes = () => [...recipiente.querySelectorAll<HTMLElement>(".aprovacao")
 const botaoCom = (dentro: ParentNode, texto: string) =>
   [...dentro.querySelectorAll("button")].find((b) => b.textContent === texto)!;
 const linhaDo = (id: string) => recipiente.querySelector<HTMLElement>(`.time-linha[data-agente="${id}"]`)!;
+
+describe("painel: a área que a casca abriu antes de ele ouvir", () => {
+  it("ao montar, pergunta a área já aberta, desenha e confirma com painel_pronto", async () => {
+    casca.areaAberta = "agentes";
+    await montar();
+    await vi.waitFor(() => expect(cartoes()).toHaveLength(1));
+    expect(recipiente.querySelector("main")?.getAttribute("aria-label")).toBe("Painel Agentes");
+    await vi.waitFor(() =>
+      expect(chamadasCasca).toContainEqual({ comando: "painel_pronto", args: { area: "agentes" } }),
+    );
+  });
+
+  it("fechado, nada abre até o painel:area", async () => {
+    await montar();
+    expect(chamadasCasca.map((c) => c.comando)).toContain("painel_area_atual");
+    expect(cartoes()).toHaveLength(0);
+    expect(chamadasCasca.map((c) => c.comando)).not.toContain("painel_pronto");
+    await abrir("agentes");
+    expect(cartoes()).toHaveLength(1);
+  });
+});
+
+describe("painel: encostado no dock e o clique fora", () => {
+  const clicarFora = () => act(async () => eventosCasca.get("painel:clique-fora")?.({ payload: null }));
+  const fechou = () => chamadasCasca.some((c) => c.comando === "painel_fechar");
+
+  it("o cartão segue a forma e o lado do dock, ao vivo (a folga vai para o lado de fora)", async () => {
+    await montar();
+    const main = recipiente.querySelector("main")!;
+    await vi.waitFor(() => expect(main.dataset.forma).toBe("colada"));
+    expect(main.dataset.lado).toBe("esquerda");
+    await act(async () =>
+      eventosCasca.get("dock:configuracao")?.({
+        payload: { lado: "direita", modo: "fixo", forma: "flutuante" },
+      }),
+    );
+    expect(main.dataset.forma).toBe("flutuante");
+    expect(main.dataset.lado).toBe("direita");
+  });
+
+  it("clique em outro app ou na área de trabalho fecha o painel", async () => {
+    servidor.pendentes = [];
+    await montar();
+    await abrir("agentes");
+    expect(fechou()).toBe(false);
+    await clicarFora();
+    expect(fechou()).toBe(true);
+  });
+
+  it("com um pedido esperando a resposta, o clique fora não fecha; respondido, fecha", async () => {
+    await montar();
+    await abrir("agentes");
+    expect(cartoes()).toHaveLength(1);
+    await clicarFora();
+    expect(fechou()).toBe(false);
+    // A resposta a caminho também segura: o pedido ainda não valeu.
+    await act(async () => botaoCom(cartoes()[0]!, "Permitir").click());
+    await clicarFora();
+    expect(fechou()).toBe(false);
+    avisar("aprovacoes.mudou", pedido("a1", "npm test -- --watch=false", { estado: "aprovada" }));
+    await clicarFora();
+    expect(fechou()).toBe(true);
+  });
+
+  it("com o tour passando pelo painel, o clique fora não fecha", async () => {
+    servidor.pendentes = [];
+    await montar();
+    await abrir("agentes");
+    await act(async () => eventosCasca.get("tour:parada")?.({ payload: 2 }));
+    await clicarFora();
+    expect(fechou()).toBe(false);
+    await act(async () => eventosCasca.get("tour:parada")?.({ payload: null }));
+    await clicarFora();
+    expect(fechou()).toBe(true);
+  });
+});
 
 describe("painel Agentes: pedidos das sessões do terminal", () => {
   it("o pedido mostra projeto, ferramenta, esperando você e o comando inteiro em linha", async () => {
@@ -407,6 +507,11 @@ describe("painel Agentes: pedidos das sessões do terminal", () => {
     await abrir("agentes");
     const sessao = recipiente.querySelector<HTMLElement>(".sessao-cartao")!;
     expect(sessao.querySelector(".sessao-projeto")?.textContent).toBe("moductus");
+    // Ao lado do projeto só cabe o nome; onde roda vai no title e no nome acessível.
+    const ferramenta = sessao.querySelector(".sessao-ferramenta");
+    expect(ferramenta?.textContent).toBe("Claude Code");
+    expect(ferramenta?.getAttribute("title")).toBe("Claude Code no terminal");
+    expect(ferramenta?.getAttribute("aria-label")).toBe("Claude Code no terminal");
     expect(sessao.querySelector(".sessao-acao")?.textContent).toBe("Editando src-tauri/src/appbar.rs");
     expect(sessao.textContent).toContain("trabalhando");
     expect(recipiente.querySelector(".painel-secao-cabecalho span")?.textContent).toBe("2 projetos");
@@ -571,7 +676,7 @@ describe("painel Agentes: estados que pedem decisão (Estados.dc.html)", () => {
     expect(estados()).toHaveLength(0);
   });
 
-  it("erro de provedor: selo de erro, nada alterado e Trocar modelo", async () => {
+  it("erro de provedor: selo de erro, nada alterado, Tentar agora acorda e Trocar modelo leva aos Modelos", async () => {
     servidor.agentes = [agente("tula", { estado: "dormindo", motivoSono: "fora_do_ar" })];
     await montar();
     await abrir("agentes");
@@ -581,8 +686,33 @@ describe("painel Agentes: estados que pedem decisão (Estados.dc.html)", () => {
     expect(cartao!.textContent).toContain(
       "O Claude Code não respondeu. Nada foi alterado; tento de novo em breve.",
     );
-    expect([...cartao!.querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Trocar modelo"]);
+    expect([...cartao!.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
+      "Trocar modelo",
+      "Tentar agora",
+    ]);
     expect(linhaDo("tula").querySelector(".selo")?.textContent).toBe("erro");
+    await act(async () => botaoCom(cartao!, "Tentar agora").click());
+    expect(pedir).toHaveBeenCalledWith("agentes.acordar", { id: "tula" });
+    await act(async () => botaoCom(cartao!, "Trocar modelo").click());
+    expect(chamadasCasca).toContainEqual({
+      comando: "sistema_abrir",
+      args: { area: "configuracoes/modelos" },
+    });
+  });
+
+  it("Tentar agora acorda cada um do grupo, e a recusa do serviço aparece no cartão", async () => {
+    servidor.agentes = [
+      agente("alba", { estado: "dormindo", motivoSono: "fora_do_ar" }),
+      agente("tula", { estado: "dormindo", motivoSono: "fora_do_ar" }),
+    ];
+    servidor.acordar = () => Promise.reject(new RecusaDoServico("Tula espera o limite de uso renovar."));
+    await montar();
+    await abrir("agentes");
+    const [cartao] = estados();
+    await act(async () => botaoCom(cartao!, "Tentar agora").click());
+    const acordados = pedir.mock.calls.filter(([m]) => m === "agentes.acordar").map(([, d]) => d);
+    expect(acordados).toEqual([{ id: "alba" }, { id: "tula" }]);
+    expect(cartao!.querySelector('[role="alert"]')?.textContent).toBe("Tula espera o limite de uso renovar.");
   });
 
   it("CLI sem login: o cartão diz como entrar, com o comando como código, e a linha fala de login", async () => {
@@ -608,6 +738,37 @@ describe("painel Agentes: estados que pedem decisão (Estados.dc.html)", () => {
       "O Claude `trabalho` está sem login. Entre no terminal com claude e tento de novo em breve.",
     );
     expect([...cartao!.querySelectorAll("p code")].map((c) => c.textContent)).toEqual(["claude"]);
+  });
+
+  it("teto com o gasto contado: o valor como estimativa, e Liberar pede ao serviço", async () => {
+    servidor.agentes = [
+      {
+        ...agente("nuno", { estado: "dormindo", motivoSono: "teto" }),
+        tetoDiarioCentavos: 1000,
+        tetoMoeda: "USD",
+        gastoDeHoje: {
+          microdolares: 10_000_000,
+          centavos: 1000,
+          cotacaoDe: null,
+          limiteCentavos: 1000,
+          liberarCentavos: 200,
+          pedeCotacao: false,
+        },
+      },
+    ];
+    await montar();
+    await abrir("agentes");
+    const [cartao] = estados();
+    expect(cartao!.querySelector("p")?.textContent).toBe(
+      "Usei cerca de US$ 10,00 de US$ 10,00 na API, estimativa. Paro até meia-noite, a menos que você libere mais.",
+    );
+    expect([...cartao!.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
+      "Parar até amanhã",
+      "Liberar US$ 2,00",
+    ]);
+    await act(async () => botaoCom(cartao!, "Liberar US$ 2,00").click());
+    expect(pedir).toHaveBeenCalledWith("agentes.liberarTeto", { id: "nuno" });
+    expect(auditar(recipiente)).toEqual([]);
   });
 
   it("teto: sem valor inventado, leva aos Modelos para mudar o teto", async () => {

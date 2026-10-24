@@ -5,7 +5,11 @@ import type { ConfigProvedor, EventoAgente, Provedor } from "./provedor.ts";
 export type FabricaProvedor = (config: ConfigProvedor) => Provedor;
 
 const mesmaConfig = (a: ConfigProvedor, b: ConfigProvedor) =>
-  a.tipo === b.tipo && a.modelo === b.modelo && a.baseUrl === b.baseUrl && a.credencial === b.credencial;
+  a.tipo === b.tipo &&
+  a.modelo === b.modelo &&
+  a.baseUrl === b.baseUrl &&
+  a.credencial === b.credencial &&
+  (a.caminho ?? null) === (b.caminho ?? null);
 
 /**
  * Qual adaptador atende cada tipo de provedor. O runtime pede pelo provedor configurado e recebe

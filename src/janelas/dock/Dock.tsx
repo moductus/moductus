@@ -7,7 +7,7 @@ import { AGENTES, DADOS_AGENTES } from "../../componentes/personagem/agentes.ts"
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
 import { formatarHora } from "../../componentes/personagem/quando.ts";
 import { CONVITE_MODELO, lerSituacao } from "../../componentes/personagem/situacao.ts";
-import { Contagem } from "../../componentes/Selo.tsx";
+import { Contagem, textoDaContagem } from "../../componentes/Selo.tsx";
 import {
   useAwake,
   useConfiguracaoDock,
@@ -16,20 +16,35 @@ import {
   useServico,
   useTelaCheia,
 } from "../../nativo/eventos.ts";
-import { useDadosDev } from "../../areas/dev/dev.ts";
 import { useAgora } from "../../areas/tempo.ts";
 import { useCanal } from "../../servico/conexao.ts";
+import { ROTULOS_CONTAGEM, useContagens } from "../../servico/contagens.ts";
+import { minutosDoDock, useEstadoFoco, useSegundosRestantes } from "../../servico/foco.ts";
 import { marcarVistasDe, usePontosTime } from "../../servico/notificacoes.ts";
 import { useTime } from "../../servico/time.ts";
-import { AREAS_DOCK, DADOS_AREAS, type AreaDock } from "../areas.ts";
-import { sessoesEsperando } from "../painel/agentes.ts";
-import { usePendentesDoTerminal } from "../painel/dados.ts";
+import { AREAS_DOCK, DADOS_AREAS } from "../areas.ts";
+import { useTour } from "../tour/tour.ts";
 import { pontoDoAgente, rotuloDoAgente } from "./agentes.ts";
 import { proximoIndice } from "./navegacao.ts";
 import "./Dock.css";
 
 /** Convite das cabeças do time enquanto nenhum modelo está conectado. */
 export const CONVITE_AGENTES = CONVITE_MODELO;
+
+/**
+ * O tempo no ícone do Foco (Dock.dc.html): os minutos inteiros do relógio do painel, que a janela
+ * conta sozinha e só acorda quando o número muda. Sem etapa, nada; o rótulo diz o mesmo em texto.
+ */
+function useTempoDoFoco(canal: ReturnType<typeof useCanal>) {
+  const foco = useEstadoFoco(canal);
+  const etapa = foco?.etapa ?? null;
+  const segundos = useSegundosRestantes(etapa, 60);
+  if (etapa === null || segundos === null) return null;
+  const minutos = minutosDoDock(segundos);
+  const pausada = etapa.pausadaEm !== null;
+  const situacao = pausada ? "em pausa, " : etapa.tipo === "foco" ? "" : "na pausa, ";
+  return { minutos, pausada, rotulo: `${situacao}${minutos} min restantes` };
+}
 
 /** Área aberta no painel lateral, para marcar o botão; `null` com o painel fechado. */
 function useAreaAberta(): string | null {
@@ -56,24 +71,21 @@ export function Dock() {
   const awake = useAwake();
   const servico = useServico();
   const canal = useCanal(servico);
-  const { situacoes: time, modelos } = useTime(canal);
+  const { situacoes: time, modelos, gastos } = useTime(canal);
   const pontos = usePontosTime(canal);
+  // Os badges e as sessões esperando vêm contados do serviço, os mesmos da barra lateral do Sistema.
+  const contagens = useContagens(canal);
+  const tempoDoFoco = useTempoDoFoco(canal);
   // As sessões do terminal esperando você são do Nuno, que fica de olho nelas (Dock.dc.html).
-  const esperandoNoTerminal = sessoesEsperando(usePendentesDoTerminal(canal) ?? []);
-  const github = useDadosDev(canal);
-  // O badge do Dev conta o que precisa de você no GitHub; sem conexão, nada.
-  const contagens: Partial<Record<AreaDock, number>> = {
-    dev:
-      github.estado === "pronta"
-        ? github.dados.situacao.itens.filter((i) => i.estado === "aberto" && i.precisaDeMim).length
-        : 0,
-  };
+  const esperandoNoTerminal = contagens.sessoesEsperando;
   const config = useConfiguracaoDock();
   const aberta = useAreaAberta();
   // Um relógio só para o dock: a hora no rodapé e a hora das dicas viram juntas, no minuto.
   const agora = useAgora();
   const hora = formatarHora(agora);
   const nav = useRef<HTMLElement>(null);
+  // No tour, o dock é a parada 1 (com o anel) e escurece nas outras; nada nele recebe clique.
+  const { parada } = useTour();
 
   // A casca avisa que o dock ganhou o foco pelo atalho: o teclado começa na primeira área.
   useEffect(() => {
@@ -117,6 +129,8 @@ export function Dock() {
       data-forma={config.forma}
       data-lado={config.lado}
       data-tela-cheia={telaCheia}
+      data-tour={parada === null ? undefined : parada === 1 ? "parada" : "veu"}
+      inert={parada !== null || undefined}
       onKeyDown={aoTeclar}
     >
       <button
@@ -131,6 +145,15 @@ export function Dock() {
 
       {AREAS_DOCK.map((id) => {
         const area = DADOS_AREAS[id];
+        const valor = area.contagem ? contagens[area.contagem] : 0;
+        // O nome do botão leva a contagem ("Tarefas, 4 tarefas pendentes"): o aria-label cobre o badge.
+        const tempo = id === "foco" ? tempoDoFoco : null;
+        const rotulo =
+          area.contagem && valor > 0
+            ? `${area.nome}, ${textoDaContagem(valor, ROTULOS_CONTAGEM[area.contagem])}`
+            : tempo
+              ? `${area.nome}, ${tempo.rotulo}`
+              : area.nome;
         return (
           <button
             key={id}
@@ -138,14 +161,20 @@ export function Dock() {
             className="dock-botao"
             data-area={id}
             data-ativo={aberta === id || undefined}
-            aria-label={area.nome}
+            aria-label={rotulo}
             aria-expanded={aberta === id}
-            title={area.nome}
+            title={rotulo}
             onClick={() => void invoke("painel_abrir", { area: id })}
           >
             <Icone nome={area.icone} tamanho={20} />
-            {/* Área sem número ao vivo ainda conta zero, e zero não desenha o badge. */}
-            {area.contagem && <Contagem valor={contagens[id] ?? 0} rotulo={area.contagem} />}
+            {/* Zero não desenha o badge. */}
+            {area.contagem && <Contagem valor={valor} rotulo={ROTULOS_CONTAGEM[area.contagem]} />}
+            {/* O tempo restante embaixo do ícone; o aria-label já diz o mesmo. */}
+            {tempo && (
+              <span className="dock-tempo" data-pausado={tempo.pausada || undefined} aria-hidden="true">
+                {tempo.minutos}
+              </span>
+            )}
           </button>
         );
       })}
@@ -159,8 +188,9 @@ export function Dock() {
         data-ativo={aberta === "agentes" || undefined}
       >
         {AGENTES.map((agente) => {
-          // A cabeça segue o runtime: expressão, anel no tom do status e o status no rótulo.
-          const leitura = lerSituacao(time[agente], agora, modelos[agente] ?? null);
+          // A cabeça segue o runtime: expressão, anel no tom do status e o status no rótulo; no
+          // teto, a dica diz o gasto e o limite, como estimativa (Estados.dc.html).
+          const leitura = lerSituacao(time[agente], agora, modelos[agente] ?? null, gastos[agente] ?? null);
           const { expressao, moldura } = leitura;
           const avisos = pontos[agente] ?? 0;
           const esperando = agente === "nuno" ? esperandoNoTerminal : 0;

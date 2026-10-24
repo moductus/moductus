@@ -8,6 +8,7 @@ import type {
 } from "@moductus/contrato";
 import type { ServicoAprovacoes } from "../aprovacoes/aprovacoes.ts";
 import { novoId } from "../banco/ulid.ts";
+import type { ConverterCusto } from "../cambio/cambio.ts";
 import type { Autorizar, Catalogo, EscopoAgente } from "../ferramentas/catalogo.ts";
 import type {
   ChamadaDeFerramenta,
@@ -21,7 +22,7 @@ import { estimarCusto, type CustoExecucao, type UsoDeChamada } from "../provedor
 import type { RegistroProvedores } from "../provedores/registro.ts";
 import type { AgenteGuardado, RepositorioAgentes } from "./agentes.ts";
 import type { AutorizarComCartao } from "./autorizar.ts";
-import { EstadosAgentes, type ConverterCusto } from "./estado.ts";
+import { EstadosAgentes } from "./estado.ts";
 import type { FimExecucao, RepositorioExecucoes } from "./execucoes.ts";
 import { FilaPorAgente } from "./fila.ts";
 import { historicoCurto, montarInstrucoes, resumir } from "./pedido.ts";
@@ -122,7 +123,7 @@ export interface OpcoesRuntime {
   estimarCusto?: EstimarCusto;
   /** O despertador de quem dorme ou está pausado; o teste troca pelo relógio falso. */
   programar?: (fazer: () => void, ms: number) => () => void;
-  /** Câmbio do custo para a moeda do teto diário; sem ele, o teto não vale (estado.ts). */
+  /** O custo na moeda do teto diário, pela cotação; sem ele, só o teto em dólar vale (estado.ts). */
   emCentavos?: ConverterCusto;
 }
 
@@ -255,6 +256,11 @@ export class Runtime {
         this.estados.depoisDaExecucao(agente.id, null, false);
         return tentativa.resultado;
       }
+      // Teto zero e reserva de API: repetir já seria gasto. Dorme pela falha, como sem reserva.
+      if (this.estados.barradoNoTetoZero(agente, reserva.id)) {
+        this.estados.depoisDaExecucao(agente.id, sono, false);
+        return tentativa.resultado;
+      }
       tentativa = await this.tentar(pedido, agente, reserva, true);
     }
     const { resultado } = tentativa;
@@ -275,12 +281,13 @@ export class Runtime {
   ): Promise<{ resultado: ResultadoExecucao; agiu: boolean }> {
     const sinal = pedido.sinal ?? new AbortController().signal;
     const id = this.gerarId();
+    const inicio = this.agora();
     this.deps.execucoes.iniciar({
       id,
       agenteId: agente.id,
       gatilho: pedido.gatilho,
       provedorId: config?.id ?? null,
-      inicio: this.agora().toISOString(),
+      inicio: inicio.toISOString(),
     });
 
     const escopo = this.deps.catalogo.doAgente(agente.ferramentas);
@@ -322,7 +329,9 @@ export class Runtime {
           {
             agenteId: agente.id,
             execucaoId: id,
-            instrucoes: pedido.instrucoes ?? montarInstrucoes(agente),
+            // O dia de hoje vai só na voz do agente: o trabalho curto que traz as próprias
+            // instruções (classificador, captura, teste do provedor) diz a data se precisar.
+            instrucoes: pedido.instrucoes ?? montarInstrucoes(agente, inicio),
             mensagens: historicoCurto(
               semSessao ? (pedido.mensagensSemSessao ?? pedido.mensagens) : pedido.mensagens,
             ),

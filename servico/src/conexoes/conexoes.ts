@@ -17,6 +17,10 @@ interface LinhaConexao {
   ultimo_erro: string | null;
   conectada_em: string | null;
   lida_em: string | null;
+  /** Nome no Gerenciador de Credenciais; o valor nunca está no banco. */
+  credencial: string | null;
+  /** JSON lista dos escopos concedidos (a do Google); `[]` nas que não têm. */
+  escopos: string;
 }
 
 /**
@@ -32,7 +36,7 @@ export class RepositorioConexoes {
   obter(tipo: TipoConexao): LinhaConexao | null {
     const linha = this.db
       .prepare(
-        `SELECT id, estado, conta, ultimo_erro, conectada_em, lida_em FROM conexoes
+        `SELECT id, estado, conta, ultimo_erro, conectada_em, lida_em, credencial, escopos FROM conexoes
           WHERE tipo = ? AND apagado_em IS NULL ORDER BY id DESC LIMIT 1`,
       )
       .get(tipo) as LinhaConexao | undefined;
@@ -50,6 +54,8 @@ export class RepositorioConexoes {
       conta?: string | null;
       /** Última leitura que deu certo; ausente mantém a de antes, `null` apaga. */
       lidaEm?: string | null;
+      /** Escopos concedidos; ausente mantém os de antes. */
+      escopos?: readonly string[];
     },
     agora: string,
     origem: OrigemConexao = "usuario",
@@ -57,11 +63,12 @@ export class RepositorioConexoes {
     const atual = this.obter(tipo);
     const conta = dados.conta ?? null;
     const lidaEm = dados.lidaEm === undefined ? (atual?.lida_em ?? null) : dados.lidaEm;
+    const escopos = JSON.stringify(dados.escopos ?? JSON.parse(atual?.escopos ?? "[]"));
     if (atual) {
       this.db
         .prepare(
           `UPDATE conexoes SET estado = ?, ultimo_erro = ?, conectada_em = ?, credencial = ?, conta = ?,
-                  lida_em = ?, origem = ?, atualizado_em = ? WHERE id = ?`,
+                  lida_em = ?, escopos = ?, origem = ?, atualizado_em = ? WHERE id = ?`,
         )
         .run(
           dados.estado,
@@ -70,6 +77,7 @@ export class RepositorioConexoes {
           dados.credencial,
           conta,
           lidaEm,
+          escopos,
           origem,
           agora,
           atual.id,
@@ -79,8 +87,8 @@ export class RepositorioConexoes {
     this.db
       .prepare(
         `INSERT INTO conexoes (id, tipo, conta, credencial, estado, ultimo_erro, conectada_em, lida_em,
-           origem, criado_em, atualizado_em)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           escopos, origem, criado_em, atualizado_em)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         novoId(),
@@ -91,6 +99,7 @@ export class RepositorioConexoes {
         dados.ultimoErro,
         dados.conectadaEm,
         lidaEm,
+        escopos,
         origem,
         agora,
         agora,
@@ -98,8 +107,8 @@ export class RepositorioConexoes {
   }
 }
 
-/** A conexão com o GitHub (`ServicoGithub`), que avisa as janelas ela mesma. */
-export interface ConexaoGithub {
+/** Uma conexão que cuida de si e avisa as janelas ela mesma: o GitHub, o Google Agenda. */
+export interface ConexaoPropria {
   conexao(): Conexao;
   ligar(): Promise<Conexao>;
   desligar(): Promise<Conexao>;
@@ -110,7 +119,10 @@ export interface DependenciasConexoes {
   ambiente: AmbienteDoUsuario;
   /** O token dos hooks (`tokenDosHooks`), lido do Gerenciador de Credenciais na hora. */
   token: () => Promise<string>;
-  github: ConexaoGithub;
+  /** A do GitHub (`ServicoGithub`). */
+  github: ConexaoPropria;
+  /** A do Google Agenda da Alba (`ServicoGoogleAgenda`, F3-22). */
+  google: ConexaoPropria;
   agora?: () => Date;
 }
 
@@ -120,7 +132,8 @@ const mensagem = (erro: unknown) => (erro instanceof Error ? erro.message : Stri
  * Conexões da tela de Configurações › Conexões. A do Claude Code (F2-22): ligar mostra antes o que
  * muda no `settings.json`, publica `MODUCTUS_HOOKS_TOKEN` e grava os hooks; desligar tira só o que
  * é do Moductus e apaga a variável. A do GitHub (F2-25) não mexe em arquivo nenhum: ligar é ler o
- * GitHub pelo `gh` já autenticado, e o `ServicoGithub` cuida dela.
+ * GitHub pelo `gh` já autenticado, e o `ServicoGithub` cuida dela. A do Google Agenda (F3-22) é o
+ * OAuth no navegador, e o `ServicoGoogleAgenda` cuida dela.
  */
 export class ServicoConexoes {
   private readonly agora: () => Date;
@@ -134,12 +147,11 @@ export class ServicoConexoes {
   }
 
   listar(): Conexao[] {
-    return [this.claudeCode(), this.deps.github.conexao()];
+    return [this.claudeCode(), this.deps.github.conexao(), this.deps.google.conexao()];
   }
 
   previa(pedido: PedidoConexao): PreviaConexao {
-    if (pedido.tipo === "github") return { tipo: "github", arquivos: [] };
-    this.soClaudeCode(pedido.tipo);
+    if (pedido.tipo !== "hooks-claude-code") return { tipo: pedido.tipo, arquivos: [] };
     return { tipo: pedido.tipo, arquivos: [this.deps.ligacao.previa()] };
   }
 
@@ -148,8 +160,8 @@ export class ServicoConexoes {
    * no meio vira estado `erro` com o motivo, que a tela mostra; o arquivo não fica pela metade.
    */
   async ligar(pedido: PedidoConexao): Promise<Conexao> {
-    if (pedido.tipo === "github") return this.deps.github.ligar();
-    this.soClaudeCode(pedido.tipo);
+    const propria = this.propria(pedido.tipo);
+    if (propria) return propria.ligar();
     const agora = this.agora().toISOString();
     let publicou = false;
     let nadaNoArquivo = false;
@@ -186,8 +198,8 @@ export class ServicoConexoes {
 
   /** O arquivo sai antes da variável, pelo mesmo motivo de ligar ao contrário. */
   async desligar(pedido: PedidoConexao): Promise<Conexao> {
-    if (pedido.tipo === "github") return this.deps.github.desligar();
-    this.soClaudeCode(pedido.tipo);
+    const propria = this.propria(pedido.tipo);
+    if (propria) return propria.desligar();
     const agora = this.agora().toISOString();
     try {
       this.deps.ligacao.desligar();
@@ -219,10 +231,11 @@ export class ServicoConexoes {
     return conexao;
   }
 
-  private soClaudeCode(tipo: TipoConexao): void {
-    if (tipo !== "hooks-claude-code") {
-      throw new Error(`a conexão ${tipo} ainda não está disponível nesta versão do serviço`);
-    }
+  /** As que não mexem em arquivo do usuário; `null` é a do Claude Code, que mora aqui. */
+  private propria(tipo: TipoConexao): ConexaoPropria | null {
+    if (tipo === "github") return this.deps.github;
+    if (tipo === "google-agenda") return this.deps.google;
+    return null;
   }
 
   /**

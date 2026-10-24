@@ -2,7 +2,7 @@
 
 > Um sistema pessoal para o Windows: fica sempre à mão num dock lateral, e um time de agentes de IA — com o modelo que você escolher — cuida das suas demandas, finanças, código e memória.
 
-**Status:** fase 1 concluída (`v0.5.0-alpha`, a casca) e fase 2 implementada (os agentes; sai como `v0.6.0-alpha` com o PR da fase); próxima: fase 3. A suíte de utilitários (`v0.4.0`) foi o produto até aqui; o registro dela está em [v0/](v0/). Este documento descreve o produto novo e é a fonte de verdade a partir de agora.
+**Status:** fases 1 (`v0.5.0-alpha`, a casca) e 2 (`v0.6.0-alpha`, os agentes) concluídas e fase 3 implementada (o dia; sai como `v0.7.0-alpha` com o PR da fase); próxima: fase 4. A suíte de utilitários (`v0.4.0`) foi o produto até aqui; o registro dela está em [v0/](v0/). Este documento descreve o produto novo e é a fonte de verdade a partir de agora.
 **Última revisão:** outubro de 2026
 
 ---
@@ -115,18 +115,18 @@ Janela normal com barra lateral de navegação.
 
 | Área | O que faz |
 |---|---|
-| **Início** | O dia numa tela: blocos configuráveis de tarefas, foco, finanças, PRs e o briefing do agente de demandas |
+| **Início** | O dia numa tela: blocos de tarefas, foco, finanças, PRs e sessões de IA, e o briefing da Alba. No modo de edição você ordena os blocos (arrastando ou pelo teclado), esconde e mostra; cada mudança vale na hora. O bloco de finanças chega com a fase 4 |
 | **Agentes** | Conversa com o time, com menção direta (`@alba`, `@tula`, `@faina`, `@nuno`); histórico de cada agente e o que cada um fez sozinho |
 | **Sessões de IA** | Todas as sessões de agentes de código: projeto, estado, última ação, pedidos pendentes, consumo e limites. Hoje o Claude Code (com aprovação pelo dock) e o OpenCode (só informa); Codex, Gemini CLI e Antigravity são previstos |
-| **Tarefas** | Listas, datas, prioridade, recorrência; entrada em linguagem natural ("ligar pro banco amanhã 15h") |
-| **Foco** | Pomodoro com etapas, sessão ligada a uma tarefa, histórico e relatório |
+| **Tarefas** | Listas, subtarefas, etiquetas, datas, prioridade, recorrência; entrada em linguagem natural ("ligar pro banco amanhã 15h"), que mostra o que entendeu antes de lançar; a coluna Agenda de hoje, com o encaixe da Alba nos blocos livres; o detalhe da tarefa e do evento ao lado, para editar tudo |
+| **Foco** | Pomodoro com ciclos (25, 5 e 15 min, ajustáveis), sessão ligada a uma tarefa, `Ctrl+Alt+P`, histórico e relatório da semana por tarefa |
 | **Finanças** | Contas, cartões, lançamentos, categorias, orçamento por categoria, recorrentes, importação de extrato (OFX e CSV), relatórios |
 | **Dev** | PRs esperando seu review, PRs seus com review a atender, issues e demandas atribuídas a você, CI quebrado — por repositório |
-| **Notas** | Notas em markdown que salvam sozinhas; o bloco rápido do v0 vira a nota fixa do topo |
+| **Notas** | Notas em markdown que salvam sozinhas; o bloco rápido do v0 vira a nota fixa do topo; a busca acha com ou sem acento |
 | **Arquivos** | Caixa de entrada: solte um arquivo e o agente resume, classifica, extrai texto (OCR) ou lança em finanças |
 | **Memória** | Fatos, decisões, pessoas e referências que os agentes guardaram ou você pediu para guardar; busca e edição |
 | **Ferramentas** | Os utilitários herdados do v0 (seção 7) |
-| **Configurações** | Provedores de IA por agente, conexões, dock, atalhos, tema (Grafite, Papel, Vidro ou automático pelo Windows), notificações, privacidade, exportar e importar |
+| **Configurações** | Provedores de IA por agente, conexões, dock, atalhos, tema (Grafite, Papel, Vidro ou automático pelo Windows), notificações, o dia (dias de trabalho, fuso, briefing, hora de parar, expediente e ciclos do foco), privacidade, exportar e importar |
 
 ### Primeiro uso
 
@@ -137,20 +137,20 @@ Duas etapas, as duas com "pular" e "fazer depois":
    2. Tema e lado do dock, com prévia ao vivo.
    3. **Conectar um modelo:** escolher entre os CLIs detectados no PC (Claude Code, Codex, Gemini, OpenCode) ou uma API, com um teste de verdade antes de seguir. Na fase 2 só o Claude Code e as APIs compatíveis com a da OpenAI podem ser conectados; os demais aparecem como "em breve".
    4. **Conhecer o time:** os quatro personagens se apresentam, cada um em uma frase.
-   5. **Conexões por agente, todas opcionais:** Google Agenda para a Alba, pastas autorizadas para a Faina, hooks das sessões de IA e GitHub para o Nuno, primeiro extrato para a Tula. Na fase 2 funcionam as do Nuno (os hooks do Claude Code e o GitHub); as demais chegam com as áreas.
+   5. **Conexões por agente, todas opcionais:** Google Agenda para a Alba, pastas autorizadas para a Faina, hooks das sessões de IA e GitHub para o Nuno, primeiro extrato para a Tula. Funcionam as do Nuno (os hooks do Claude Code e o GitHub) e o Google Agenda da Alba; as pastas da Faina e o primeiro extrato da Tula chegam com as áreas e aparecem apagados, com "chega com Arquivos" e "chega com Finanças".
    6. Notificações (seção abaixo) e início com o Windows.
 2. **Tutorial** (depois da configuração, no próprio app, sem vídeo):
-   - um tour curto pelo dock, um painel, o Sistema e a captura rápida (`Ctrl+Alt+Espaço`);
+   - um tour de quatro paradas pelo dock, um painel, o Sistema e a captura rápida (`Ctrl+Alt+Espaço`);
    - uma lista **"Primeiros passos"** no Início, com uma missão por agente ("peça um lembrete à Alba", "mande um extrato para a Tula", "peça à Faina para olhar seus Downloads", "abra uma sessão do Claude Code e veja o Nuno acompanhar"), incluindo um cartão de aprovação de treino;
-   - some quando completa e volta pelo menu de ajuda.
+   - some quando completa e volta pelo submenu Ajuda do ícone na bandeja (o tour, também em Configurações › Geral). Hoje valem as missões da Alba (pedir um lembrete), do cartão de aprovação de treino e do Nuno; as da Tula e dos Downloads aparecem apagadas e não contam.
 
 ### Notificações
 
 Você decide, por agente e por tipo (aprovação, lembrete, erro, aviso e rotina):
 
-- **Níveis:** *tudo*, *só o que precisa de mim* (pedidos de aprovação, lembretes e erros) ou *nada*. De fábrica, os agentes vêm em *só o que precisa de mim* e o **Nuno em *tudo***, porque o que ele observa (contexto de uma sessão passando de 80%, CI quebrado, sessão esperando) é aviso, não pedido. Com *só o que precisa de mim*, o aviso de contexto alto fica só no histórico.
+- **Níveis:** *tudo*, *só o que precisa de mim* (pedidos de aprovação, lembretes, erros e os avisos do briefing e do fechamento) ou *nada*. De fábrica, os agentes vêm em *só o que precisa de mim* e o **Nuno em *tudo***, porque o que ele observa (contexto de uma sessão passando de 80%, CI quebrado, sessão esperando) é aviso, não pedido. Com *só o que precisa de mim*, o aviso de contexto alto fica só no histórico.
 - **Onde:** aviso do Windows, só o ponto no dock, ou os dois. O pedido de aprovação sai do Windows com os mesmos botões do cartão (Negar, Sempre aqui, Permitir); clicar no corpo do aviso abre o painel do time. O aviso não repete o comando inteiro, porque a tela de bloqueio o mostraria. A cópia portable não mostra aviso do Windows, só o ponto no dock.
-- **Silêncio:** horário sem aviso (desligado de fábrica; a sugestão é das 22:00 às 07:30), tela cheia e apresentação, e foco (o Foco chega na fase 3; durante ele ainda passam aprovações e lembretes). O silêncio cala só o aviso do Windows: o ponto no dock e o histórico continuam.
+- **Silêncio:** horário sem aviso (desligado de fábrica; a sugestão é das 22:00 às 07:30), tela cheia e apresentação, e foco (com o foco correndo, só passam aprovações e lembretes; na pausa do ciclo e com o foco parado, os avisos voltam ao normal). "Encerrar o dia", no fechamento, silencia o aviso do Windows dos agentes até as 05:00 do dia seguinte, também com aprovações e lembretes passando. O silêncio cala só o aviso do Windows: o ponto no dock e o histórico continuam.
 - Com *nada*, o agente continua trabalhando e registrando; o aviso fica no histórico, já visto, e você vê tudo no dock quando quiser.
 
 `Ctrl+K` dentro do Sistema abre uma busca global por qualquer item e comando. É a herança da Palette, agora como coadjuvante.
@@ -182,11 +182,11 @@ Duas formas, a mesma memória: **com o time**, uma conversa única em que o rote
 
 ### Fora do PC
 
-O Moductus é o seu assistente **no PC**: quando você sai dele, os agentes param junto. O que precisa te alcançar longe da máquina vai para a sua agenda: com o Google Agenda conectado, compromissos e lembretes com horário viram eventos num calendário "Moductus", e o celular avisa. Não existe servidor, app de celular nem mensagem por WhatsApp.
+O Moductus é o seu assistente **no PC**: quando você sai dele, os agentes param junto. O que precisa te alcançar longe da máquina vai para a sua agenda: com o Google Agenda conectado, compromissos e lembretes com horário viram eventos num calendário "Moductus", e o celular avisa. O Moductus nunca vê a senha do Google: a conexão usa o cliente OAuth do autor, que a tela do Google mostra como **"app não verificado"** (é preciso clicar em "Avançado" para seguir), ou o seu próprio cliente. Não existe servidor, app de celular nem mensagem por WhatsApp.
 
 ### Quando o modelo acaba
 
-Limite de uso estourado, provedor fora do ar, chave recusada ou teto de gasto atingido: o agente **dorme** até poder voltar, e o dock mostra quando. Limite de uso é sono tranquilo; falha do provedor aparece como erro, com ponto vermelho; teto pede uma decisão sua, com ponto amarelo. O teto diário fica desligado até a moeda dele ser decidida. Os vigias continuam (lembrete dispara), e o que precisar do modelo fica na fila para quando ele acordar.
+Limite de uso estourado, provedor fora do ar, chave recusada ou teto de gasto atingido: o agente **dorme** até poder voltar, e o dock mostra quando. Limite de uso é sono tranquilo; falha do provedor aparece como erro, com ponto vermelho; teto pede uma decisão sua, com ponto amarelo. O teto diário, opcional, vale na moeda que você escolher (real por padrão), com a cotação que você digita; quem dorme por falha do provedor pode ser acordado com "Tentar agora". Os vigias continuam (lembrete dispara), e o que precisar do modelo fica na fila para quando ele acordar.
 
 ---
 
@@ -232,7 +232,7 @@ Todos configuráveis, com detecção de conflito.
 
 - **Local:** banco SQLite e arquivos em `%APPDATA%\Moductus`, ou ao lado do executável no modo portable.
 - **Chaves e tokens:** só no Gerenciador de Credenciais do Windows, nunca no banco nem em texto.
-- **Rede:** sai apenas para o provedor de IA configurado e para as conexões ligadas (GitHub, por exemplo). A tela de cada conexão diz o que é enviado.
+- **Rede:** sai apenas para o provedor de IA configurado e para as conexões ligadas (GitHub e Google Agenda, por exemplo) e, só quando você pede "Buscar cotação", para a fonte da cotação do teto de gasto. A tela de cada conexão diz o que é enviado.
 - **O que vai para o modelo:** cada agente envia só o contexto das próprias ferramentas. A Tula não manda lançamentos para o Nuno, e vice-versa.
 - **Modo privacidade:** esconde valores e textos sensíveis no dock e no Sistema, para compartilhar a tela.
 - **Sem telemetria.** Continua valendo do v0.
@@ -254,11 +254,12 @@ Este documento, [ARCHITECTURE.md](ARCHITECTURE.md), [AGENTS.md](AGENTS.md) e [DE
 ### Fase 1 — A casca ✓ (`v0.5.0-alpha`)
 Projeto Tauri, dock lateral com os três modos e detecção de tela cheia, Sistema com navegação vazia, banco e migrações, configurações, atalhos, bandeja, autostart. Mídia e os controles diretos (Mic, Awake) já entram aqui: são simples e tornam o dock útil desde o primeiro dia. Entram também a configuração do primeiro uso e exportar e importar configurações.
 
-### Fase 2 — Os agentes começam a trabalhar ✓ (`v0.6.0-alpha`, no PR da fase)
-Camada de provedores (Claude Code CLI e API compatível com a da OpenAI), catálogo de ferramentas e servidor MCP, cartão de aprovação com desfazer, runtime com estados (dormir quando o modelo acaba, pausar pela bandeja), agendador, conversa com o time e com cada agente, notificações. O **Nuno** e as **Sessões de IA** primeiro: o Claude Code é acompanhado por hooks e aprovado pelo dock, o OpenCode por plugin, e o GitHub é lido pelo `gh`. O primeiro uso conecta e testa um modelo de verdade, e a missão do Nuno nos Primeiros passos fecha com a primeira sessão do Claude Code. Alba, Tula e Faina existem e conversam; ganham ferramentas e vigias nas fases 3 a 5. Ficaram fora: os adaptadores do Codex, do Gemini CLI e das APIs da Anthropic e do Gemini, a varredura de processos para sessões sem hook e a moeda do teto de gasto.
+### Fase 2 — Os agentes começam a trabalhar ✓ (`v0.6.0-alpha`)
+Camada de provedores (Claude Code CLI e API compatível com a da OpenAI), catálogo de ferramentas e servidor MCP, cartão de aprovação com desfazer, runtime com estados (dormir quando o modelo acaba, pausar pela bandeja), agendador, conversa com o time e com cada agente, notificações. O **Nuno** e as **Sessões de IA** primeiro: o Claude Code é acompanhado por hooks e aprovado pelo dock, o OpenCode por plugin, e o GitHub é lido pelo `gh`. O primeiro uso conecta e testa um modelo de verdade, e a missão do Nuno nos Primeiros passos fecha com a primeira sessão do Claude Code. Alba, Tula e Faina existem e conversam; ganham ferramentas e vigias nas fases 3 a 5. Ficaram fora: os adaptadores do Codex, do Gemini CLI e das APIs da Anthropic e do Gemini, a varredura de processos para sessões sem hook e a moeda do teto de gasto, que a fase 3 resolveu.
 
-### Fase 3 — O dia
-Agenda (local e Google Agenda, com o calendário "Moductus"), Tarefas, lembretes, Foco, Notas, captura rápida, Início, o tutorial com as missões e a **Alba** com briefing e fechamento.
+### Fase 3 — O dia ✓ (`v0.7.0-alpha`, no PR da fase)
+Dá o dia à **Alba**. Tarefas (listas, subtarefas, etiquetas, recorrência), lembretes que tocam na hora sem modelo e sem rede, a agenda local e o **Google Agenda** (leitura dos calendários, o calendário "Moductus" com fila de saída para o celular avisar, e escrita nos outros calendários só com aprovação), Foco com `Ctrl+Alt+P`, Notas com a nota fixa e a busca, a **captura rápida** que entende a frase em pt-BR sem modelo, o Início com blocos que você reordena, o tour e as missões, Configurações › O dia e a Alba com o **briefing** e o **fechamento**, e os rituais que fecham sozinhos quando ignorados. A casca passou a abrir o que o usuário clica (endereço, arquivo e o login do CLI) e a avisar o desbloqueio da sessão. Fecharam-se pendências da fase 2: o "Tentar agora", o teto de gasto na moeda do usuário, o Claude Code instalado pelo npm, "Restaurar padrão" nos agentes de fábrica e o painel de 400 px.
+Ficaram fora: a conexão do Google só vale para quem usa o próprio cliente até o autor criar o dele (F3-21); o roteiro com conta real e no app real fica para o PR da fase ([AGENTS.md](AGENTS.md#o-que-foi-validado)); gasto e memória pela captura, as linhas da Tula e da Faina no briefing e o Outlook, para as fases seguintes; e a memória em release segue acima da meta, à espera de decisão ([ARCHITECTURE.md](ARCHITECTURE.md#medições-da-fase-3)).
 
 ### Fase 4 — O dinheiro
 Finanças completa (gastos, dívidas e planos) e a **Tula**, com importação de extrato e OCR de comprovante.
@@ -315,8 +316,18 @@ Criar, duplicar, exportar e importar agentes, com nome, função, visual, modelo
 | 35 | Notificações: o Nuno vem em *tudo*, os outros agentes em *só o que precisa de mim*; *nada* registra o aviso já visto; o silêncio cala só o aviso do Windows | Interrupção é decisão do usuário, mas o que o Nuno observa é aviso por natureza. Decidido pelo orquestrador (ADR-0027) |
 | 36 | Número sem fonte confiável não aparece: janela de contexto vem da ferramenta ou de uma tabela de modelos versionada, limites de uso ficam fora, custo é vazio em assinatura | Um aviso de 80% sobre uma janela errada é pior que nenhum aviso. Decidido pelo orquestrador (ADR-0021) |
 | 37 | Trocar o modelo de um agente vale na próxima execução; a sessão do CLI não segue para outro provedor; no primeiro uso, trocar de modelo substitui o anterior | Evita dois modelos configurados sem querer e conversa que mistura provedores. Decidido pelo orquestrador (ADR-0025) |
+| 38 | O painel do dock é um cartão de 400 px, encostado no dock, que não reserva espaço na tela | Cabe a lista, o campo e a linha de situação sem quebrar, e o painel passa por cima do que estiver ao lado. Decidido pelo humano |
+| 39 | "Tentar agora" acorda quem dorme por falha do provedor (fora do ar, chave recusada, CLI ausente); limite de uso e teto continuam esperando sozinhos | Esperar a hora de volta é inútil quando o usuário acabou de religar a rede. Decidido pelo humano |
+| 40 | O teto diário vale na moeda que o usuário escolhe (real, dólar, euro ou libra), com a cotação digitada ou buscada e confirmada; sem cotação, o teto em outra moeda não é aplicado; sessão de assinatura não mostra custo "como API" | O custo é medido em dólar, e nenhuma cotação é presumida; na assinatura não há cobrança por token, e o valor seria lido como gasto real. Decidido pelo humano (ADR-0040) |
+| 41 | O Google Agenda conecta pelo cliente OAuth do autor, publicado sem verificação, ou pelo cliente do próprio usuário; a tela do Google avisa "app não verificado" | App instalado não guarda segredo, a verificação custa mais que o público de hoje, e em "Testing" o token morre em 7 dias. Decidido pelo humano (ADR-0031) |
+| 42 | Lembrete e compromisso tocam na hora sem modelo e sem rede; o que venceu com o PC suspenso ou desligado chega como atrasado, num aviso só, nunca um por um | O lembrete é o que não pode falhar, e o modelo e a rede falham. Decidido pelo orquestrador (ADR-0032) |
+| 43 | A captura rápida entende a frase por código em pt-BR e mostra o que entendeu antes de lançar; o modelo só entra quando o código não reconhece nada e a janela pede; o lançamento se desfaz por 10 segundos | Lembrete criado pela captura não pode depender de provedor, e chute silencioso é pior que campo editável. Decidido pelo orquestrador (ADR-0034) |
+| 44 | O calendário "Moductus" é um espelho nos dois sentidos: a Alba escreve nele sem pedir, a hora ou o título que você muda no celular valem no Moductus, e o evento apagado lá desliga o espelho sem apagar a tarefa; nos outros calendários, só com cartão de aprovação | O celular avisa mesmo com o PC desligado sem desfazer o que o usuário mexeu lá. Decidido pelo orquestrador (ADR-0035) |
+| 45 | O briefing e o fechamento também avisam no Windows depois de 10 minutos fechados (o tipo `rotina` entra no "só o que precisa de mim"); "Encerrar o dia" cala só o aviso do Windows até as 05:00, exceto aprovações e lembretes; 3 briefings ignorados seguidos levam a uma única pergunta (mais curto, desligar ou manter) | Ritual que não aparece não vira hábito, e nada se acumula se for ignorado. Decidido pelo orquestrador (ADR-0027 e ADR-0039) |
+| 46 | Os dias da semana de Configurações › O dia são os dias de trabalho: valem para o briefing, para o fechamento e para o expediente em que a agenda procura horário livre | Um conjunto só evita briefing num dia em que a agenda diz que você não trabalha. Decidido na F3-45 e aceito pelo orquestrador |
+| 47 | A casca abre só endereço `https://`, arquivo de um tipo da lista e terminal com comando fixo, e nenhuma ferramenta de agente chama isso | Abrir o que o serviço pedir seria uma porta para o modelo agir fora do Moductus. Decidido pelo orquestrador (ADR-0038) |
 
-**Em aberto, do humano:** a moeda do teto diário de gasto (hoje o custo é medido em dólar e o teto fica desligado), um botão "Tentar agora" para acordar um agente que dorme por falha (pede `agentes.acordar` no contrato) e a largura do painel (o canvas desenhou 400 px; a casca usa 372 px).
+**Em aberto, do humano:** a **memória em release**: a fase 3 fechou em 353,5 MB, 6,6 MB acima da meta de 346,9 MB (a da fase 2) e muito acima dos 200 MB do orçamento. Resta aceitar o número ou escolher uma das alavancas medidas, que custam algo no visual (ARCHITECTURE §8 e ADR-0013). E a criação do projeto do Google, que destrava o cliente do autor (F3-21).
 
 As 21 decisões do v0 estão em [v0/PRODUCT.md](v0/PRODUCT.md#10-decisões-registradas), como registro histórico.
 
@@ -326,8 +337,9 @@ As 21 decisões do v0 estão em [v0/PRODUCT.md](v0/PRODUCT.md#10-decisões-regis
 
 - **Substituir a barra de tarefas** é o item mais frágil: vários monitores, janelas que não se declaram, apps que dependem da barra. Por isso fica na fase 6 e a barra do Windows nunca é removida, só ocultada.
 - **Latência dos agentes CLI:** abrir `claude -p` ou `codex exec` custa segundos por chamada. Agentes em segundo plano toleram; o chat precisa mostrar progresso desde o primeiro instante. Medido na fase 2: de 3 a 5 s até a primeira resposta, quase todos do CLI.
-- **Consumo de memória:** WebView2 mais o serviço de agentes. Meta: abaixo de 200 MB de memória privada em repouso, medido a cada release (o teste de viabilidade mediu cerca de 150 MB em build de debug). Em release, a fase 1 mediu 341,7 MB e a fase 2, 346,9 MB: o serviço dos agentes custa só 2,5 MB, e o peso é do WebView2, então reduzir é uma etapa própria ([ARCHITECTURE.md](ARCHITECTURE.md#medições-da-fase-2)).
+- **Consumo de memória:** WebView2 mais o serviço de agentes. Meta: abaixo de 200 MB de memória privada em repouso, medido a cada release (o teste de viabilidade mediu cerca de 150 MB em build de debug). Em release, a fase 1 mediu 341,7 MB, a fase 2, 346,9 MB e a fase 3, 353,5 MB: o serviço custa 8,4 MB a mais na fase 3 e o resto é do WebView2, então reduzir é uma etapa própria ([ARCHITECTURE.md](ARCHITECTURE.md#medições-da-fase-3)).
 - **Integração com agentes de código** depende de hooks e formatos que essas ferramentas mudam com frequência. Cada integração fica isolada num adaptador. A fase 2 validou o Claude Code 2.1.287 e o OpenCode 1.18.29; os hooks do Codex só rodam comando, então ele não entra sem um script intermediário.
+- **Cliente OAuth do Google sem verificação:** a tela de consentimento mostra "app não verificado", o projeto aceita até 100 usuários novos na vida dele, e o Google pode bloquear o cliente. O plano B já existe: "Usar meu próprio cliente", com o passo a passo na tela de Conexões (ADR-0031). Reavaliar a verificação perto dos 100 usuários.
 - **Assinatura de código:** continua sem certificado; o mesmo tratamento do v0 (build pelo Actions com attestation, aviso honesto no README).
 - **Curva de Rust:** a camada nativa fica fina de propósito; a maior parte do código é TypeScript.
 

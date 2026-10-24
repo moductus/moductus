@@ -11,6 +11,11 @@
   color: var(--texto-3);
 }
 
+/* O porém de um teste que passou: o modelo só conversa. */
+.uso-rotulo[data-tom="aviso"] {
+  color: var(--aviso);
+}
+
 /* ---------- Lateral ---------- */
 .uso-lateral {
   display: flex;
@@ -394,8 +399,9 @@
 }
 
 /* ---------- 5. Conexões (Uso5Conexoes.dc.html) ---------- */
-/* A do Nuno abre embaixo os cartões de Configurações › Conexões. */
-.uso-item--nuno {
+/* A do Nuno e a do Google abrem embaixo os cartões de Configurações › Conexões. */
+.uso-item--nuno,
+.uso-item--google {
   flex-direction: column;
   align-items: stretch;
 }
@@ -419,6 +425,14 @@
   gap: var(--esp-10);
 }
 
+/* Os calendários do Google, alinhados ao texto, depois da cabeça da Alba. */
+.uso-google-calendarios {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+  padding-left: var(--recuo-calendarios-uso);
+}
+
 /* ---------- 3. Modelo (Uso3Modelo.dc.html) ---------- */
 /* Os modelos são rádios em linha, um por cartão, com o estado num selo ao lado do nome. */
 .uso-opcoes--lista {
@@ -434,6 +448,26 @@
 .uso-opcoes--lista .uso-opcao-texto {
   font-size: var(--tipo-12);
   color: var(--texto-3);
+}
+
+/* Opção com botão ao lado (Uso3Modelo.dc.html, "Como instalar"): o botão fica dentro da moldura,
+   à direita, mas fora do rótulo: não entra no nome do rádio e não apaga quando a opção está
+   desativada. */
+.uso-opcao-moldura {
+  position: relative;
+  display: grid;
+}
+
+.uso-opcao-moldura > .uso-opcao {
+  padding-inline-end: var(--largura-acao-opcao);
+}
+
+.uso-opcao-acao {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--esp-16);
+  display: flex;
+  align-items: center;
 }
 
 .uso-procurar {

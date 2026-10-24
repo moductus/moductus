@@ -74,3 +74,8 @@
   font-size: var(--tipo-12);
   color: var(--texto-3);
 }
+
+/* No fim da linha do selo, à direita: o cartão continua lendo como antes. */
+.dev-item-abrir {
+  margin-inline-start: auto;
+}

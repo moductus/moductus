@@ -21,11 +21,12 @@
   --esp-24: 24px;
   --esp-32: 32px;
 
-  /* Tipo: 11 meta e atalho, 12 rótulo, 13 corpo, 17–22 título de painel,
-     26 título do Sistema, 30–36 número grande (mono) */
+  /* Tipo: 11 meta e atalho, 12 rótulo, 13 corpo, 15 o lembrete tocando, 17–22 título de
+     painel, 26 título do Sistema, 30–36 número grande (mono) */
   --tipo-11: 11px;
   --tipo-12: 12px;
   --tipo-13: 13px;
+  --tipo-15: 15px;
   --tipo-17: 17px;
   --tipo-20: 20px;
   --tipo-22: 22px;
@@ -40,7 +41,7 @@
 
   /* Medidas fixas da estrutura (as mesmas da casca em src-tauri) */
   --largura-dock: 64px;
-  --largura-painel: 372px;
+  --largura-painel: 400px;
   --largura-lateral-sistema: 232px;
   --tamanho-botao-dock: 44px;
   --tamanho-badge: 16px;
@@ -58,7 +59,8 @@
   --tamanho-ponto-estado: 6px;
   /* Ponto do status nas linhas de sessão e de PR (Agentes.dc.html) */
   --tamanho-ponto-status: 8px;
-  /* O painel desenha o cartão afastado do dock, como no Main.dc.html */
+  /* O cartão do painel encosta no dock; a janela tem o cartão mais esta folga do lado de fora,
+     onde a sombra cabe (MARGEM_PAINEL em src-tauri/src/janelas.rs) */
   --margem-painel: 12px;
 
   /* Traços: elevação por borda de 1 px, ícones de 1,6 px, foco de 2 px */
@@ -173,6 +175,12 @@
   --raio-toast: 8px;
   /* Silêncio e prévia lado a lado só com esta largura cada; abaixo, um embaixo do outro */
   --largura-min-coluna-notificacoes: 300px;
+  /* O dia (ConfigDia.dc.html): os botões dos dias da semana, o campo da hora, a lista do fuso e a
+     largura mínima de cada cartão nas duas colunas; abaixo dela, um cartão embaixo do outro */
+  --largura-dia-semana: 44px;
+  --largura-campo-hora: 84px;
+  --largura-campo-fuso: 300px;
+  --largura-min-cartao-dia: 320px;
   /* Modelos e Conexões (ConfigModelos*.dc.html, ConfigConexoes*.dc.html): colunas Estado,
      Resposta e Teto, a lista do provedor, o trilho do teste, os caminhos do vazio lado a lado só
      com esta largura cada, as colunas do resumo de uma conexão e a altura dos blocos da prévia */
@@ -186,8 +194,17 @@
   --fracao-col-teto: 18cqi;
   --largura-lista-modelo-min: 132px;
   --largura-trilho-teste: 120px;
+  /* O valor do teto e a cotação do dólar: cabe "1.234,56" sem alargar a coluna */
+  --largura-campo-valor: 120px;
   --largura-min-caminho: 220px;
   --largura-min-dado-conexao: 160px;
+  /* Google Agenda (ConfigConexoesGoogle*.dc.html, Uso5Conexoes.dc.html): a linha de cada calendário,
+     a linha dele no primeiro uso, as duas colunas do antes de conectar lado a lado só com esta
+     largura cada, e o recuo dos calendários até o texto, depois da cabeça da Alba */
+  --altura-linha-calendario: 40px;
+  --altura-linha-calendario-uso: 30px;
+  --largura-min-coluna-google: 260px;
+  --recuo-calendarios-uso: 46px;
   --altura-bloco-hooks: 216px;
   /* A lista aberta de um <select> é desenhada pelo Windows: cores de sistema, que seguem o
      color-scheme do tema */
@@ -220,6 +237,8 @@
   --espaco-uso-vertical: 40px;
   --espaco-uso-lateral: 48px;
   --largura-texto-uso: 560px;
+  /* Espaço guardado à direita de uma opção com botão ao lado ("Como instalar" no passo Modelo). */
+  --largura-acao-opcao: 132px;
   --altura-passo-uso: 34px;
   --tamanho-marca-passo: 22px;
   --altura-previa-tema: 120px;
@@ -229,6 +248,13 @@
   --altura-boas-vindas: 150px;
   --largura-cartao-treino: 380px;
   --largura-progresso-tutorial: 120px;
+  /* Tour (TutorialTour.dc.html): a bolha de 340 com o título em 15, os pontos de progresso, o
+     afastamento dela para o anel ao lado, e a cabeça de quem ainda não tem missão, mais apagada */
+  --largura-bolha-tour: 340px;
+  --tipo-titulo-bolha: 15px;
+  --tamanho-ponto-tour: 6px;
+  --afastamento-bolha-tour: 36px;
+  --opacidade-missao-depois: 0.6;
   /* Segunda volta de borda da opção marcada (a cor vem junto, do tema): 2 sem mudar o tamanho */
   --sombra-opcao-marcada: inset 0 0 0 1px;
 
@@ -238,6 +264,13 @@
   --largura-barra-trabalho: 40%;
   --dur-correr: 1.4s;
   --altura-trilho-sessao: 3px;
+  /* Painel Foco (PainelFoco.dc.html): o relógio grande em mono, os ciclos da rodada em trilhos
+     de 6 px e as linhas do "Depois deste" */
+  --tipo-relogio-foco: 48px;
+  --tracado-relogio-foco: -0.03em;
+  --altura-trilho-ciclo: 6px;
+  --raio-trilho-ciclo: 3px;
+  --altura-linha-foco: 36px;
   /* Selo dos PRs do painel Dev numa coluna só, para os títulos alinharem */
   --largura-selo-pr: 66px;
   /* Agentes (Conversas.dc.html e AreaAgente.dc.html): lista de conversas, cabeçalho da conversa,
@@ -250,6 +283,98 @@
   --raio-balao-ponta: 4px;
   --espessura-aba: 2px;
   --largura-hora: 40px;
+  /* Painéis Hoje e Tarefas (PainelTarefas.dc.html, LembreteHoje.dc.html): a linha de tarefa, a
+     barrinha da prioridade e o campo da frase */
+  --altura-linha-tarefa: 38px;
+  --largura-prioridade: 3px;
+  --altura-prioridade: 18px;
+  --altura-campo-frase: 38px;
+  /* "Encerrar o dia" no fechamento (Fechamento.dc.html): o botão da largura do painel, de 38 */
+  --altura-botao-rotina: 38px;
+  /* Tarefas (AreaTarefas.dc.html): sub-navegação de 210, campo da frase de 40, linha de 40, o traço
+     da prioridade e a coluna do quando */
+  --largura-subnav-tarefas: 210px;
+  --altura-campo-frase-area: 40px;
+  --altura-linha-tarefa-area: 40px;
+  --raio-prioridade: 2px;
+  --largura-quando-tarefa: 44px;
+  /* A coluna Agenda da área: 300 de largura, a lista ao lado com pelo menos 360 (abaixo disso a
+     agenda desce), 43 por hora, a régua das horas de 38, o traço de 3 e o canto de 6 do bloco, e o
+     ponto de 7 na linha de agora */
+  --largura-agenda-area: 300px;
+  --largura-min-lista-tarefas-area: 360px;
+  --altura-hora-agenda-area: 43px;
+  --largura-horas-agenda-area: 38px;
+  --traco-bloco-agenda-area: 3px;
+  --raio-bloco-agenda-area: 6px;
+  --tamanho-ponto-agora-area: 7px;
+  --opacidade-hora-bloco-area: 0.8;
+  /* O bloco de poucos minutos não fica menor que uma linha de 12 */
+  --altura-min-bloco-agenda-area: 18px;
+  /* O detalhe da tarefa e do evento (DetalheTarefa.dc.html, DetalheEvento.dc.html): a coluna de
+     440 (que encolhe até 320 na janela estreita), o título de 18 com o traçado de -0,01em, o chip
+     de 24 com canto de 12, a linha da subtarefa de 28, as notas a 1,5, a coluna "Começa" de 52 e
+     a hora de 84, e a coluna do rótulo de 92 no só leitura */
+  --largura-detalhe-area: 440px;
+  --largura-min-detalhe-area: 320px;
+  --tracado-titulo-detalhe-area: -0.01em;
+  --altura-chip-area: 24px;
+  --raio-chip-area: 12px;
+  --altura-linha-subtarefa-area: 28px;
+  --entrelinha-texto-area: 1.5;
+  --largura-etiqueta-nova-area: 120px;
+  --largura-rotulo-quando-area: 52px;
+  --largura-hora-evento-area: 84px;
+  --largura-rotulo-leitura-area: 92px;
+  /* O que está aberto no detalhe: a linha da tarefa com o traço de 3 à esquerda, o bloco da
+     agenda com o anel de 2 (a cor vem junto, o destaque) */
+  --sombra-linha-aberta-area: inset 3px 0 0;
+  --sombra-bloco-aberto-area: 0 0 0 2px;
+  /* Notas (AreaNotas.dc.html, PainelNotas.dc.html): a lista à esquerda, a coluna do que está
+     ligado à nota à direita, a margem do texto, a linha de leitura e o entrelinha de quem escreve */
+  --largura-lista-notas: 290px;
+  --largura-lado-nota: 250px;
+  --espaco-nota-lateral: 48px;
+  --largura-texto-nota: 620px;
+  --altura-min-texto-nota: 160px;
+  --altura-linha-escrita: 1.6;
+  /* Captura rápida (Captura.dc.html): a frase em 18, o valor de cada campo em 14, os botões do
+     "Na verdade é" a 30, o Lançar a 34 e a tecla dentro dele mais apagada */
+  --tipo-frase-captura: 18px;
+  --tipo-valor-captura: 14px;
+  --altura-alternativa-captura: 30px;
+  --altura-lancar-captura: 34px;
+  --opacidade-tecla-captura: 0.75;
+  /* Sistema · Foco (AreaFoco.dc.html): o relógio em 64, a barra do ciclo e os segmentos da rodada,
+     a coluna das etapas com o estado à direita, as linhas do dia, o gráfico da semana e os
+     cartões vazios */
+  --tipo-relogio-area-foco: 64px;
+  --tracado-relogio-area-foco: -0.03em;
+  --altura-barra-ciclo: 6px;
+  --raio-barra-ciclo: 3px;
+  --altura-segmento-rodada: 8px;
+  --raio-segmento-rodada: 3px;
+  --opacidade-pausa-rodada: 0.55;
+  --largura-etapas-foco: 400px;
+  --largura-min-ciclo-foco: 420px;
+  --largura-min-cartao-foco: 240px;
+  --altura-linha-etapa: 27px;
+  --largura-estado-etapa: 52px;
+  --altura-linha-ciclo: 40px;
+  --altura-grafico-foco: 150px;
+  --largura-barra-foco: 34px;
+  --altura-barra-foco: 110px;
+  --opacidade-dia-sem-foco: 0.25;
+  --largura-ciclos-tarefa: 18px;
+  --altura-vazio-foco: 150px;
+  --tamanho-numero-passo: 20px;
+  /* Sistema · Início (Sistema.dc.html, InicioEditar.dc.html): o relógio do foco em 34, as
+     linhas de esboço dos blocos ao editar (8 de altura, canto de 4) e a altura mínima de um
+     bloco na grade de editar */
+  --tipo-relogio-inicio: 34px;
+  --altura-linha-esboco: 8px;
+  --raio-linha-esboco: 4px;
+  --altura-min-bloco-inicio: 150px;
 }
 
 /* Menos animação no Windows: pela mídia do WebView ou pelo "Efeitos de animação" que a casca
@@ -316,8 +441,16 @@
 
   --sombra-janela: 0 24px 64px rgba(0, 0, 0, 0.45);
   --sombra-painel: 0 24px 48px rgba(0, 0, 0, 0.45);
+  /* O bloco do Início selecionado ao editar (InicioEditar.dc.html): a segunda volta de borda no
+     destaque, por dentro (2 sem mudar o tamanho), e a sombra que o levanta */
+  --sombra-bloco-editando: inset 0 0 0 1px var(--destaque), 0 8px 24px rgba(0, 0, 0, 0.35);
   --sombra-dock: none;
   --desfoque: none;
+  /* O que fica fora da parada do tour escurece (TutorialTour.dc.html) */
+  --veu-tour: rgba(0, 0, 0, 0.55);
+  --sombra-anel-tour: 0 0 0 100vmax var(--veu-tour);
+  --fundo-bolha-tour: var(--fundo-janela);
+  --sombra-bolha-tour: var(--sombra-painel);
 
   --fonte-interface: "Geist", "Segoe UI", system-ui, sans-serif;
   --fonte-mono: "Geist Mono", Consolas, monospace;
@@ -368,8 +501,13 @@
 
   --sombra-janela: 0 24px 64px rgba(40, 36, 28, 0.16);
   --sombra-painel: 0 16px 40px rgba(40, 36, 28, 0.12);
+  --sombra-bloco-editando: inset 0 0 0 1px var(--destaque), 0 8px 24px rgba(40, 36, 28, 0.14);
   --sombra-dock: 0 8px 24px rgba(40, 36, 28, 0.08);
   --desfoque: none;
+  --veu-tour: rgba(40, 36, 28, 0.22);
+  --sombra-anel-tour: 0 0 0 100vmax var(--veu-tour);
+  --fundo-bolha-tour: var(--fundo-janela);
+  --sombra-bolha-tour: var(--sombra-painel);
 
   --fonte-interface: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
   --fonte-mono: "JetBrains Mono", Consolas, monospace;
@@ -419,9 +557,15 @@
 
   --sombra-janela: 0 24px 64px rgba(0, 0, 0, 0.35);
   --sombra-painel: none;
+  --sombra-bloco-editando: inset 0 0 0 1px var(--destaque), 0 8px 24px rgba(0, 0, 0, 0.35);
   --sombra-dock: none;
   /* O desfoque de verdade é o Acrylic da janela; este vale para camadas dentro dela. */
   --desfoque: blur(32px) saturate(140%);
+  /* A bolha fica quase sólida: ela fala por cima do véu. Sem sombra de painel no Vidro, a dela. */
+  --veu-tour: rgba(5, 7, 12, 0.48);
+  --sombra-anel-tour: 0 0 0 100vmax var(--veu-tour);
+  --fundo-bolha-tour: rgba(26, 30, 41, 0.92);
+  --sombra-bolha-tour: 0 16px 40px rgba(0, 0, 0, 0.3);
 
   --fonte-interface: "Onest", "Segoe UI", system-ui, sans-serif;
   --fonte-mono: "IBM Plex Mono", Consolas, monospace;

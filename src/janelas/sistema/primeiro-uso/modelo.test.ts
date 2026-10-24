@@ -1,10 +1,14 @@
 import { NovoProvedor } from "@moductus/contrato";
 import { describe, expect, it } from "vitest";
 import {
+  CLIS,
+  COMO_INSTALAR,
   criadosDepois,
   formatarLatencia,
   FORMULARIO_API_VAZIO,
   novoDaApi,
+  precisaEntrar,
+  precisaInstalar,
   situacaoDoCli,
   substituicao,
 } from "./modelo.ts";
@@ -17,6 +21,33 @@ const claude = {
   impedimento: null,
   versaoMinima: null,
 };
+
+describe("como instalar", () => {
+  it("aparece sem o CLI no PATH e com o Claude Code do npm; não para quem só precisa entrar", () => {
+    expect(precisaInstalar(undefined)).toBe(true);
+    expect(precisaInstalar({ ...claude, impedimento: "instalado_pelo_npm" })).toBe(true);
+    expect(precisaInstalar({ ...claude, logado: false })).toBe(false);
+    expect(precisaInstalar({ ...claude, impedimento: "sem_adaptador" })).toBe(false);
+    expect(precisaInstalar(claude)).toBe(false);
+  });
+
+  it("cada CLI tem a página de instalação em https://, que é o que a casca abre", () => {
+    for (const c of CLIS) expect(COMO_INSTALAR[c.tipo]).toMatch(/^https:\/\/[a-z0-9.-]+\//);
+  });
+});
+
+describe("entrar", () => {
+  it("aparece só para o CLI que serve e está sem login; sem saber o login, não", () => {
+    expect(precisaEntrar({ ...claude, logado: false })).toBe(true);
+    expect(precisaEntrar(claude)).toBe(false);
+    expect(precisaEntrar({ ...claude, logado: null })).toBe(false);
+    expect(precisaEntrar(undefined)).toBe(false);
+    // Antes de entrar, falta instalar, atualizar ou um Moductus que fale com ele.
+    expect(precisaEntrar({ ...claude, logado: false, impedimento: "instalado_pelo_npm" })).toBe(false);
+    expect(precisaEntrar({ ...claude, logado: false, impedimento: "sem_adaptador" })).toBe(false);
+    expect(precisaEntrar({ ...claude, logado: false, versaoMinima: "2.1.257" })).toBe(false);
+  });
+});
 
 describe("situação de cada CLI", () => {
   it("sem login ou sem saber o login: só o sem login fica de fora", () => {
@@ -83,6 +114,18 @@ describe("chave de API", () => {
     });
     expect(novoDaApi({ ...FORMULARIO_API_VAZIO, tipo: "openai-compativel", baseUrl: "localhost" }).nome).toBe(
       "Compatível com OpenAI",
+    );
+  });
+
+  it("endereço neste PC vira Modelo local; o nome digitado vale mais que o sugerido", () => {
+    const local = { ...FORMULARIO_API_VAZIO, tipo: "openai-compativel" as const };
+    expect(novoDaApi({ ...local, baseUrl: "http://localhost:20128/v1" }).nome).toBe("Modelo local");
+    expect(novoDaApi({ ...local, baseUrl: "http://127.0.0.1:11434/v1" }).nome).toBe("Modelo local");
+    expect(novoDaApi({ ...local, baseUrl: "http://localhost:20128/v1", nome: "  Roteador  " }).nome).toBe(
+      "Roteador",
+    );
+    expect(novoDaApi({ ...local, baseUrl: "http://localhost:20128/v1", nome: "  " }).nome).toBe(
+      "Modelo local",
     );
   });
 });

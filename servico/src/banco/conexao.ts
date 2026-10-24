@@ -18,13 +18,23 @@ export function portable(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.MODUCTUS_PORTABLE === "1";
 }
 
+export interface OpcoesBanco {
+  /**
+   * `false` só nos testes: o COMMIT não espera o disco (`synchronous = OFF`). O que se lê e grava é
+   * o mesmo; sai só a garantia contra queda de energia, que teste nenhum mede, e com ela a fila de
+   * descargas no disco que, com a suíte em paralelo, fazia cada teste levar segundos.
+   */
+  duravel?: boolean;
+}
+
 /** Abre o banco, aplica as migrações e esvazia da lixeira o que venceu: é a subida do dado. */
-export function abrirBanco(pasta: string): DatabaseSync {
+export function abrirBanco(pasta: string, opcoes: OpcoesBanco = {}): DatabaseSync {
   mkdirSync(pasta, { recursive: true });
   const db = new DatabaseSync(join(pasta, "moductus.db"));
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA foreign_keys = ON");
   db.exec("PRAGMA busy_timeout = 3000");
+  if (opcoes.duravel === false) db.exec("PRAGMA synchronous = OFF");
   const { de, para } = migrar(db, MIGRACOES);
   if (de !== para) console.error(`banco migrado da versão ${de} para ${para}`);
   // Lixeira que não esvaziou (banco ocupado, por exemplo) não impede a subida: tenta na próxima.

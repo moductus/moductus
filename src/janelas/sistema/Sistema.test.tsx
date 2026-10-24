@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AREAS, areaDoAtalho, IDS_AREAS, lerDestino } from "../../areas/areas.ts";
 import { SECOES } from "../../areas/configuracoes/secoes.ts";
 import { auditar, marcos, nomeAcessivel, ordemDoTab } from "../../teste/acessibilidade.ts";
-import { CHAVE_DESTINO, EVENTO_IR, Sistema } from "./Sistema.tsx";
+import { CHAVE_DESTINO, carregarAreas, EVENTO_IR, Sistema } from "./Sistema.tsx";
 
 // A casca não existe no teste: eventos guardados para disparar à mão, janela e comandos falsos.
 const ouvintes = new Map<string, (e: { payload: unknown }) => void>();
@@ -47,6 +47,8 @@ function desmontar() {
   recipiente?.remove();
 }
 
+// As áreas vêm sob demanda; já baixadas, cada troca desenha no mesmo quadro, como o teste lê.
+beforeAll(carregarAreas);
 beforeEach(() => localStorage.clear());
 afterEach(desmontar);
 
@@ -126,9 +128,14 @@ describe("Sistema", () => {
         expect(por("main .conversa-nome").textContent).toBe("Time");
         continue;
       }
-      // Sessões de IA e Dev já leem o serviço: sem ele, dizem que esperam a resposta.
-      if (area.id === "sessoes" || area.id === "dev") {
+      // Início, Sessões de IA, Tarefas, Foco e Dev já leem o serviço: sem ele, dizem que esperam a resposta.
+      if (["inicio", "sessoes", "tarefas", "foco", "dev"].includes(area.id)) {
         expect(por('main [role="status"]').textContent).toBe("Esperando o serviço responder.");
+        continue;
+      }
+      // Notas também: a lista diz que está lendo.
+      if (area.id === "notas") {
+        expect(por('main [role="status"]').textContent).toBe("Lendo as notas.");
         continue;
       }
       const vazio = por("main .estado-vazio");
@@ -191,13 +198,14 @@ describe("Sistema", () => {
     expect(areaAtual()).toBe("configuracoes");
   });
 
-  it("as Configurações têm as 9 seções, cada uma com conteúdo", async () => {
+  it("as Configurações têm as 10 seções, cada uma com conteúdo", async () => {
     await montar();
     act(() => itemArea("configuracoes").click());
     const nomes = [
       "Geral",
       "Tema e dock",
       "Notificações",
+      "O dia",
       "Modelos",
       "Agentes",
       "Conexões",
@@ -262,7 +270,7 @@ describe("acessibilidade do Sistema", () => {
     expect(marcos(recipiente)).toEqual(["banner", "navigation: Áreas", "main", "navigation: Seções"]);
   });
 
-  it("as 12 áreas e as 9 seções das Configurações passam na checagem", async () => {
+  it("as 12 áreas e as 10 seções das Configurações passam na checagem", async () => {
     await montar();
     for (const area of AREAS) {
       act(() => itemArea(area.id).click());

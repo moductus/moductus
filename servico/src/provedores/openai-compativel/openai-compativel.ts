@@ -1,4 +1,4 @@
-import type { FalhaProvedor } from "@moductus/contrato";
+import { enderecoAceitaChave, MENSAGEM_CHAVE_SEM_HTTPS, type FalhaProvedor } from "@moductus/contrato";
 import type { Credenciais } from "../../casca/credenciais.ts";
 import type {
   ChamadaDeFerramenta,
@@ -282,6 +282,16 @@ export class ProvedorOpenAiCompativel implements Provedor {
     };
     let chave: string | null = null;
     if (this.config.credencial) {
+      // Guardada antes da regra (F3-52): em http para fora deste PC, a chave iria aberta pela rede.
+      if (!enderecoAceitaChave(base)) {
+        return {
+          falha: {
+            motivo: "credencial",
+            mensagem: `${MENSAGEM_CHAVE_SEM_HTTPS} Troque o endereço para https em Configurações › Modelos.`,
+            voltaEm: null,
+          },
+        };
+      }
       chave = await this.opcoes.credenciais.ler(this.config.credencial);
       if (!chave) {
         return {
@@ -452,7 +462,7 @@ function ausente(mensagem: string): { falha: FalhaProvedor } {
 }
 
 /** O erro do corpo de uma recusa; corpo que não é JSON (proxy, página de erro) vale como texto. */
-function lerRecusa(corpo: string, status: number): ErroDaApi {
+export function lerRecusa(corpo: string, status: number): ErroDaApi {
   try {
     const erro = erroDoCorpo(JSON.parse(corpo), status);
     if (erro) return erro;
@@ -462,6 +472,6 @@ function lerRecusa(corpo: string, status: number): ErroDaApi {
   return { status, mensagem: corpo, codigo: null, tipo: null, moderacao: false };
 }
 
-function maiuscula(texto: string): string {
+export function maiuscula(texto: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }

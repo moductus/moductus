@@ -41,6 +41,7 @@ const sessao = (extra: Partial<SessaoIa> = {}): SessaoIa => ({
   id: "s1",
   projetoId: "p1",
   ferramenta: "claude-code",
+  ondeRoda: null,
   idExterno: "x",
   modelo: "claude-opus-4-5",
   estado: "trabalhando",
@@ -59,6 +60,7 @@ const LISTA: ListaSessoes = {
   ],
   sessoes: [
     sessao({
+      ondeRoda: "desktop",
       ultimoEvento: {
         id: "e1",
         sessaoId: "s1",
@@ -206,7 +208,8 @@ describe("Sessões de IA com dados", () => {
     expect(linhas()).toEqual([
       [
         "moductus",
-        "Claude Code",
+        // Onde roda, quando o transcript disse, vai abaixo do nome; a segunda ainda não disse.
+        "Claude Code, Desktop",
         "trabalhando",
         "não sei",
         "12,4 mil tokens12,4 mil tokens hoje no projeto",
@@ -227,6 +230,13 @@ describe("Sessões de IA com dados", () => {
     expect(contextos[0]!.querySelector('[role="progressbar"]')).toBeNull();
     expect(contextos[1]!.querySelector('[role="progressbar"]')?.className).toContain("progresso--aviso");
     expect(por(".sessoes-ferramentas")?.textContent).toBe("Claude Code");
+    const ferramentas = [...recipiente.querySelectorAll<HTMLElement>(".sessoes-tabela-ferramenta")];
+    expect(ferramentas.map((f) => f.querySelector(".sessoes-tabela-onde")?.textContent ?? null)).toEqual([
+      "Desktop",
+      null,
+    ]);
+    // A vírgula é só para o leitor de tela; na tela, o nome e a linha de baixo.
+    expect(ferramentas[0]!.querySelector(".so-leitor")?.textContent).toBe(", ");
     expect(falso.pedidos.find((p) => p.metodo === "sessoes.uso")?.dados).toEqual({
       de: "2026-10-03",
       ate: "2026-10-09",

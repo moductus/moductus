@@ -1,0 +1,518 @@
+/* Sistema · Tarefas (AreaTarefas.dc.html): a sub-navegação vai até a borda, sem a margem das outras
+   áreas, e só a vista ao lado rola. */
+.sistema-conteudo:has(> .tarefas) {
+  padding: 0;
+  overflow: hidden;
+}
+
+.tarefas {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.tarefas-rotulo {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+/* ---------- Sub-navegação ---------- */
+.tarefas-lateral {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--esp-2);
+  width: var(--largura-subnav-tarefas);
+  padding: var(--espaco-cabecalho) var(--esp-12);
+  border-right: var(--espessura-borda) solid var(--borda);
+  overflow-y: auto;
+}
+
+.tarefas-lateral-titulo {
+  margin: 0;
+  padding: 0 var(--esp-10) var(--esp-12);
+  font-size: var(--tipo-17);
+  font-weight: var(--peso-forte);
+}
+
+.tarefas-listas-cabeca {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--esp-14) var(--esp-4) var(--esp-4) var(--esp-10);
+}
+
+.tarefas-nova-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  padding: var(--esp-2) 0 var(--esp-4);
+}
+
+/* ---------- A vista ---------- */
+.tarefas-conteudo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--espaco-pagina) var(--esp-32);
+  overflow-y: auto;
+}
+
+.tarefas-erro {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--perigo);
+}
+
+/* ---------- O campo em linguagem natural ---------- */
+/* Sem gap: a região de status vazia, sempre montada, não abre espaço. */
+.tarefas-frase {
+  display: flex;
+  flex-direction: column;
+}
+
+.tarefas-frase-caixa {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  height: var(--altura-campo-frase-area);
+  padding: 0 var(--esp-10);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-campo);
+  color: var(--texto-3);
+  transition: border-color var(--dur-entrada) ease-out;
+}
+
+/* O foco aparece na caixa inteira, como na busca: borda e contorno no anel do tema. */
+.tarefas-frase-caixa:focus-within {
+  border-color: var(--cor-foco);
+  outline: var(--espessura-borda) solid var(--cor-foco);
+}
+
+.tarefas-frase-entrada {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--texto);
+  font-size: var(--tipo-13);
+}
+
+.tarefas-frase-entrada::placeholder {
+  color: var(--texto-3);
+}
+
+.tarefas-frase-entrada:focus-visible {
+  outline: 0;
+}
+
+.tarefas-entendi {
+  display: flex;
+  margin-top: var(--esp-6);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-6);
+  padding-left: var(--esp-4);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.tarefas-entendi-aviso {
+  flex-basis: 100%;
+}
+
+.tarefas-frase-erro {
+  margin: var(--esp-6) 0 0;
+  padding-left: var(--esp-4);
+  font-size: var(--tipo-12);
+  color: var(--perigo);
+}
+
+.tarefas-frase-criado {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  margin: var(--esp-6) 0 0;
+  padding-left: var(--esp-4);
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+/* ---------- Grupos e linhas ---------- */
+.tarefas-grupos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+}
+
+.tarefas-grupo-cabeca {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  padding: var(--esp-12) 0 var(--esp-4);
+}
+
+.tarefas-grupo-nome {
+  margin: 0;
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-forte);
+  color: var(--texto-3);
+}
+
+.tarefas-grupo-nome[data-atrasado] {
+  color: var(--aviso);
+}
+
+.tarefas-linhas {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tarefa {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  min-height: var(--altura-linha-tarefa-area);
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.tarefa-prioridade {
+  flex: none;
+  width: var(--largura-prioridade);
+  height: var(--altura-prioridade);
+  border-radius: var(--raio-prioridade);
+}
+
+/* No contrato 3 é alta (o 1 do quadro) e 2 é média (o 2 do quadro); a baixa não pinta. */
+.tarefa-prioridade[data-prioridade="3"] {
+  background: var(--perigo);
+}
+
+.tarefa-prioridade[data-prioridade="2"] {
+  background: var(--aviso);
+}
+
+.tarefa-texto {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* O título é o botão que abre o detalhe: sem cara de botão, a linha continua a do quadro. */
+.tarefa-abrir {
+  align-self: stretch;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--raio-caixa);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tarefa-abrir:focus-visible {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco-interno);
+}
+
+/* A tarefa aberta no detalhe, como no DetalheTarefa: fundo ativo e o traço do destaque. */
+.tarefa[data-aberta] {
+  border-bottom-color: transparent;
+  border-radius: var(--raio-controle);
+  background: var(--fundo-ativo);
+  box-shadow: var(--sombra-linha-aberta-area) var(--destaque);
+}
+
+.tarefa[data-aberta] .tarefa-titulo {
+  font-weight: var(--peso-forte);
+}
+
+.tarefa-titulo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tarefa[data-feita] .tarefa-titulo {
+  color: var(--texto-apagado);
+  text-decoration: line-through;
+}
+
+.tarefa-nota,
+.tarefa-lista {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.tarefa-lista {
+  flex: none;
+}
+
+.tarefa-quando {
+  flex: none;
+  width: var(--largura-quando-tarefa);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tarefa-quando--larga {
+  width: auto;
+}
+
+/* ---------- A vista e a coluna Agenda ---------- */
+/* A lista e a Agenda lado a lado; sem largura para as duas, a Agenda desce para baixo da lista. */
+.tarefas-corpo {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: var(--esp-20);
+}
+
+.tarefas-principal {
+  display: flex;
+  flex: 1 1 var(--largura-min-lista-tarefas-area);
+  flex-direction: column;
+  gap: var(--espaco-cabecalho);
+  min-width: 0;
+}
+
+.tarefas-agenda {
+  display: flex;
+  flex: 0 0 var(--largura-agenda-area);
+  flex-direction: column;
+  gap: var(--esp-12);
+  min-width: 0;
+}
+
+.tarefas-agenda-cabeca {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.tarefas-agenda-titulo {
+  margin: 0;
+  font-size: inherit;
+  font-weight: var(--peso-normal);
+  color: inherit;
+}
+
+.tarefas-agenda-falha {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+}
+
+.tarefas-agenda-dia-todo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-4);
+  margin: 0;
+  padding: 0 0 0 var(--largura-horas-agenda-area);
+  list-style: none;
+}
+
+.tarefas-agenda-dia-todo-item {
+  max-width: 100%;
+  padding: var(--esp-2) var(--esp-8);
+  border-radius: var(--raio-bloco-agenda-area);
+  background: var(--fundo-ativo);
+  font-size: var(--tipo-12);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A régua: uma hora vale a altura do token; o CSS recebe as horas em número (--horas, --inicio). */
+.tarefas-agenda-regua {
+  position: relative;
+  height: calc(var(--altura-hora-agenda-area) * var(--horas));
+  margin-left: var(--largura-horas-agenda-area);
+  border-left: var(--espessura-borda) solid var(--borda);
+}
+
+.tarefas-agenda-hora {
+  position: absolute;
+  top: calc(var(--altura-hora-agenda-area) * var(--inicio));
+  right: 0;
+  left: 0;
+  height: var(--espessura-borda);
+  background: var(--borda);
+}
+
+.tarefas-agenda-hora-rotulo {
+  position: absolute;
+  top: 0;
+  left: calc(-1 * var(--largura-horas-agenda-area));
+  transform: translateY(-50%);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.tarefas-agenda-blocos {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Os que se sobrepõem dividem a largura que sobra depois do recuo (--coluna de --colunas). */
+.tarefas-agenda-bloco {
+  position: absolute;
+  top: calc(var(--altura-hora-agenda-area) * var(--inicio) + var(--esp-2));
+  left: calc(var(--esp-8) + (100% - var(--esp-8)) * var(--coluna) / var(--colunas));
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: calc((100% - var(--esp-8)) / var(--colunas));
+  height: calc(var(--altura-hora-agenda-area) * var(--duracao) - var(--esp-4));
+  padding: var(--esp-4) var(--esp-8);
+  border-left: var(--traco-bloco-agenda-area) solid var(--texto-3);
+  border-radius: var(--raio-bloco-agenda-area);
+  background: var(--fundo-ativo);
+  overflow: hidden;
+}
+
+/* A sugestão da Alba ainda não é compromisso: tracejada, na cor dela, sem fundo. */
+.tarefas-agenda-bloco[data-tipo="sugestao"] {
+  border: var(--espessura-borda) dashed var(--agente-alba);
+  background: transparent;
+  color: var(--agente-alba);
+}
+
+/* Abaixo de uma hora, nome e hora numa linha só, sem o respiro de cima e de baixo; o de poucos
+   minutos ganha a altura de uma linha. */
+.tarefas-agenda-bloco[data-curto] {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--esp-6);
+  min-height: var(--altura-min-bloco-agenda-area);
+  padding-block: 0;
+}
+
+.tarefas-agenda-bloco[data-curto] .tarefas-agenda-bloco-nome {
+  flex: 1;
+  min-width: 0;
+}
+
+.tarefas-agenda-bloco[data-curto] .tarefas-agenda-bloco-hora {
+  flex: none;
+}
+
+/* O compromisso aberto no detalhe ganha o anel do destaque, como no DetalheEvento. */
+.tarefas-agenda-bloco[data-aberto] {
+  background: var(--fundo-elevado);
+  box-shadow: var(--sombra-bloco-aberto-area) var(--destaque);
+}
+
+/* O bloco inteiro é o botão que abre o detalhe, por cima do nome e da hora. */
+.tarefas-agenda-bloco-abrir {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tarefas-agenda-bloco-abrir:focus-visible {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco-interno);
+}
+
+.tarefas-agenda-dia-todo-item[data-aberto] {
+  box-shadow: var(--sombra-bloco-aberto-area) var(--destaque);
+}
+
+.tarefas-agenda-dia-todo-abrir {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tarefas-agenda-bloco-nome {
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-forte);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tarefas-agenda-bloco-hora {
+  font-size: var(--tipo-11);
+  opacity: var(--opacidade-hora-bloco-area);
+}
+
+.tarefas-agenda-agora {
+  position: absolute;
+  top: calc(var(--altura-hora-agenda-area) * var(--inicio));
+  right: 0;
+  left: calc(-1 * var(--esp-4));
+  height: var(--espessura-borda);
+  background: var(--perigo);
+}
+
+.tarefas-agenda-agora::before {
+  position: absolute;
+  top: calc((var(--espessura-borda) - var(--tamanho-ponto-agora-area)) / 2);
+  left: 0;
+  width: var(--tamanho-ponto-agora-area);
+  height: var(--tamanho-ponto-agora-area);
+  border-radius: 50%;
+  background: var(--perigo);
+  content: "";
+}
+
+.tarefas-agenda-convite {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.tarefas-agenda-convite p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+/* A fala da Alba na coluna: o texto em 12, como no quadro. */
+.tarefas-agenda-sugestao .fala-texto {
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.tarefas-agenda-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--esp-8);
+}

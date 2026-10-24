@@ -11,6 +11,21 @@ import { m009 } from "./009-execucoes-cobranca.ts";
 import { m010 } from "./010-agendador-disparos.ts";
 import { m011 } from "./011-agentes-sono.ts";
 import { m012 } from "./012-execucoes-falha-do-provedor.ts";
+import { m013 } from "./013-tarefas.ts";
+import { m014 } from "./014-agenda-foco.ts";
+import { m015 } from "./015-notas.ts";
+import { m016 } from "./016-provedores-caminho.ts";
+import { m017 } from "./017-agentes-teto-moeda.ts";
+import { m018 } from "./018-tarefas-fechamento.ts";
+import { m019 } from "./019-lembretes-inicio.ts";
+import { m020 } from "./020-eventos-excecoes.ts";
+import { m021 } from "./021-foco-etapas.ts";
+import { m022 } from "./022-agenda-espelho.ts";
+import { m023 } from "./023-alba-listas.ts";
+import { m024 } from "./024-alba-do-dia.ts";
+import { m025 } from "./025-rotinas-curta.ts";
+import { m026 } from "./026-sessoes-ponto-de-entrada.ts";
+import { m027 } from "./027-provedores-ferramentas.ts";
 
 /** Todas as migrações, em ordem. Migração publicada não muda: corrige-se com outra. */
 export const MIGRACOES: readonly Migracao[] = [
@@ -26,4 +41,19 @@ export const MIGRACOES: readonly Migracao[] = [
   m010,
   m011,
   m012,
+  m013,
+  m014,
+  m015,
+  m016,
+  m017,
+  m018,
+  m019,
+  m020,
+  m021,
+  m022,
+  m023,
+  m024,
+  m025,
+  m026,
+  m027,
 ];

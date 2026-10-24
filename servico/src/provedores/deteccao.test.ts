@@ -1,8 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { ProvedorDetectado } from "@moductus/contrato";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   acharNoPath,
   compararVersoes,
@@ -146,7 +146,7 @@ describe("detectar", () => {
     expect(chamadas).toEqual([]);
   });
 
-  test("o Claude Code do npm (.cmd) aparece, mas o Moductus não o usa", async () => {
+  test("o Claude Code do npm (.cmd) que não dá para ler aparece, mas o Moductus não o usa", async () => {
     const { rodar } = cli({
       "C:\\npm\\claude.cmd --version": { codigo: 0, saida: "2.1.287 (Claude Code)" },
       "C:\\npm\\claude.cmd auth status --json": { codigo: 0, saida: STATUS_LOGADO },
@@ -160,27 +160,166 @@ describe("detectar", () => {
   });
 });
 
+describe("Claude Code instalado pelo npm", () => {
+  const pastas: string[] = [];
+  afterEach(() => {
+    for (const p of pastas.splice(0)) rmSync(p, { recursive: true, force: true });
+  });
+
+  /**
+   * Uma pasta como a `%APPDATA%\npm`: o `claude.cmd` no formato que o npm grava e, se `comPacote`,
+   * o script do pacote, que responde versão e login como a 2.1.287 e, a qualquer outra coisa, os
+   * argumentos que recebeu. O node é o do PATH do ambiente devolvido: o deste teste.
+   */
+  function npmDeExemplo(comPacote: boolean) {
+    const pasta = mkdtempSync(join(tmpdir(), "moductus-npm-"));
+    pastas.push(pasta);
+    const shim = join(pasta, "claude.cmd");
+    writeFileSync(
+      shim,
+      [
+        "@ECHO off",
+        "GOTO start",
+        ":find_dp0",
+        "SET dp0=%~dp0",
+        "EXIT /b",
+        ":start",
+        "SETLOCAL",
+        "CALL :find_dp0",
+        "",
+        'IF EXIST "%dp0%\\node.exe" (',
+        '  SET "_prog=%dp0%\\node.exe"',
+        ") ELSE (",
+        '  SET "_prog=node"',
+        "  SET PATHEXT=%PATHEXT:;.JS;=;%",
+        ")",
+        "",
+        'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\node_modules\\@anthropic-ai\\claude-code\\cli.js" %*',
+        "",
+      ].join("\r\n"),
+    );
+    if (comPacote) {
+      const pacote = join(pasta, "node_modules", "@anthropic-ai", "claude-code");
+      mkdirSync(pacote, { recursive: true });
+      writeFileSync(
+        join(pacote, "cli.js"),
+        [
+          "const args = process.argv.slice(2);",
+          "if (args[0] === '--version') process.stdout.write('2.1.287 (Claude Code)\\n');",
+          `else if (args[0] === 'auth') process.stdout.write(${JSON.stringify(STATUS_LOGADO)});`,
+          "else process.stdout.write(JSON.stringify(args));",
+        ].join("\n"),
+      );
+    }
+    const ambiente = { SystemRoot: process.env.SystemRoot, PATH: dirname(process.execPath) };
+    return { shim, ambiente };
+  }
+
+  test.runIf(process.platform === "win32")(
+    "o shim de exemplo roda pelo node, sem shell, e a detecção marca o Claude Code como atendido",
+    async () => {
+      const { shim, ambiente } = npmDeExemplo(true);
+
+      const [claude] = await detectar({ atende: () => true, achar: () => shim, ambiente });
+
+      expect(claude).toEqual({
+        tipo: "claude-cli",
+        caminho: shim,
+        versao: "2.1.287",
+        logado: true,
+        impedimento: null,
+        versaoMinima: null,
+      });
+      // Sem shell, o argumento chega inteiro: `&` não separa comandos e o vazio não some.
+      const resposta = await rodarComPrazo(
+        shim,
+        ["a & echo b", "", '"%PATH%"'],
+        ambiente,
+        new AbortController().signal,
+      );
+      expect(resposta.codigo).toBe(0);
+      expect(JSON.parse(resposta.saida)).toEqual(["a & echo b", "", '"%PATH%"']);
+    },
+    20_000,
+  );
+
+  test("o shim sem o pacote que ele chama continua instalado pelo npm", async () => {
+    const { shim, ambiente } = npmDeExemplo(false);
+    const rodar: RodarCli = () => Promise.resolve({ codigo: 0, saida: "2.1.287 (Claude Code)" });
+
+    const [claude] = await detectar({ atende: () => true, rodar, achar: () => shim, ambiente });
+
+    expect(claude).toMatchObject({ caminho: shim, impedimento: "instalado_pelo_npm" });
+  });
+});
+
 describe("rodar o CLI", () => {
   const pastas: string[] = [];
   afterEach(() => {
     for (const p of pastas.splice(0)) rmSync(p, { recursive: true, force: true });
   });
 
+  /** O pid que o neto escreveu no arquivo; `null` enquanto o arquivo não existe ou está vazio. */
+  function pidEscrito(arquivo: string): number | null {
+    const texto = existsSync(arquivo) ? readFileSync(arquivo, "utf8") : "";
+    return texto === "" ? null : Number(texto);
+  }
+
+  /** Resolve com o pid quando o neto o escreve: pelo aviso da pasta, conferido também de saída. */
+  function quandoOPidChegar(arquivo: string): Promise<number> {
+    return new Promise((resolve) => {
+      const conferir = () => {
+        const pid = pidEscrito(arquivo);
+        if (pid === null) return;
+        vigia.close();
+        resolve(pid);
+      };
+      const vigia = watch(dirname(arquivo), conferir);
+      conferir();
+    });
+  }
+
+  function vivo(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // Um .cmd que abre um node que não sai, como o do npm: matar o cmd.exe não fecharia a saída.
-  // O prazo folgado deixa o `echo` sair mesmo com a máquina carregada (com 500 ms, o cmd.exe às
-  // vezes nem tinha escrito); o que o teste prova é a resposta chegar muito antes do neto acabar.
+  // O prazo é disparado pelo teste quando o neto avisa que está de pé, e não por relógio: o `echo`
+  // já saiu antes de o cmd.exe abrir o neto, com a máquina carregada ou não. O neto dura 120 s e
+  // o teste tem 30 s: esperar o `close` estouraria o teste, e `codigo: null` diz que foi o prazo.
+  // O teste só acaba com o neto morto: sem isso, o worker do vitest podia sair antes de o
+  // `taskkill` terminar, e o neto ficava órfão até o fim dos 120 s.
   test.runIf(process.platform === "win32")(
     "o prazo vale para o .cmd: a árvore cai e a resposta sai sem esperar o neto",
     async () => {
       const pasta = mkdtempSync(join(tmpdir(), "moductus-sonda-"));
       pastas.push(pasta);
       const cmd = join(pasta, "travado.cmd");
-      writeFileSync(cmd, `@echo 1.2.3\r\n@"${process.execPath}" -e "setTimeout(() => {}, 120000)"\r\n`);
-      const inicio = Date.now();
-      const resposta = await rodarComPrazo(cmd, ["--version"], process.env, 3000);
-      expect(resposta).toEqual({ codigo: null, saida: "1.2.3\r\n" });
-      expect(Date.now() - inicio).toBeLessThan(20_000);
+      const dePe = join(pasta, "neto-de-pe");
+      const neto = `require('node:fs').writeFileSync(process.argv[1], String(process.pid)); setTimeout(() => {}, 120000)`;
+      writeFileSync(cmd, `@echo 1.2.3\r\n@"${process.execPath}" -e "${neto}" "${dePe}"\r\n`);
+      const prazo = new AbortController();
+      const pidDoNeto = quandoOPidChegar(dePe);
+
+      const resposta = rodarComPrazo(cmd, ["--version"], process.env, prazo.signal);
+      const pid = await pidDoNeto;
+      prazo.abort();
+
+      expect(await resposta).toEqual({ codigo: null, saida: "1.2.3\r\n" });
+      await vi.waitFor(() => expect(vivo(pid)).toBe(false), { timeout: 25_000 });
     },
     30_000,
   );
+
+  // O sinal já vencido é atendido na hora, antes de qualquer saída do CLI: `codigo: null` e saída
+  // vazia, mesmo que o `--version` responda e saia sozinho logo depois.
+  test("prazo já vencido responde na hora, sem esperar o CLI", async () => {
+    const resposta = await rodarComPrazo(process.execPath, ["--version"], process.env, AbortSignal.abort());
+    expect(resposta).toEqual({ codigo: null, saida: "" });
+  });
 });

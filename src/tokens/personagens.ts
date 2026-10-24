@@ -20,6 +20,16 @@ export const TAMANHO_PERSONAGEM = {
   fala: 30,
   /** Cabeça na lista por agente de Notificações (AreaNotificacoes.dc.html). */
   notificacoes: 28,
+  /** Cabeça em "Ligado a esta nota" (AreaNotas.dc.html). */
+  ligado: 20,
+  /** Cabeça da fala da Alba no ciclo do foco (AreaFoco.dc.html). */
+  ciclo: 28,
+  /** Cabeça da Alba no briefing do Início (Sistema.dc.html). */
+  inicio: 28,
+  /** Cabeça em cada linha do briefing no painel Hoje (Briefing.dc.html). */
+  briefing: 28,
+  /** Cabeça na origem do detalhe da tarefa (DetalheTarefa.dc.html, "Criada pela Alba"). */
+  detalhe: 18,
   /** Corpo inteiro no time das boas-vindas (Uso1Boas.dc.html). */
   boasVindas: 116,
   /** Corpo inteiro na apresentação do time (Uso4Time.dc.html). */

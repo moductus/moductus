@@ -47,7 +47,7 @@ const SEM_REDE: SaidaGh = { codigo: 1, saida: "", erro: "error connecting to api
 function montar(roteiro: (SaidaGh | Error)[] = [OK()]) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-github-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   let relogio = new Date("2026-10-09T12:00:00.000Z");
   const chamadas: (readonly string[])[] = [];

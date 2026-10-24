@@ -16,6 +16,7 @@ import { ProvedorFalso, roteiros } from "../provedores/falso.ts";
 import { RegistroProvedores } from "../provedores/registro.ts";
 import { montarPrompt } from "../provedores/claude-cli/claude-cli.ts";
 import {
+  AVISO_PARADA,
   AVISO_PAROU_NO_MEIO,
   paraModelo,
   pedidoDe,
@@ -40,7 +41,7 @@ function montar(
   // Com `pasta`, sobe outro serviço sobre o mesmo banco, como depois de reiniciar.
   const pasta = opcoes.pasta ?? mkdtempSync(join(tmpdir(), "moductus-conversas-"));
   if (!pastas.includes(pasta)) pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   db.exec(`
     INSERT OR IGNORE INTO provedores (id, tipo, nome) VALUES
@@ -734,6 +735,141 @@ describe("mensagens", () => {
     // Cancelada por apagar não é falha: nada no log de erro.
     expect(falhas).not.toHaveBeenCalled();
     falhas.mockRestore();
+  });
+});
+
+describe("parar a resposta", () => {
+  test("parar no meio encerra a execução, guarda o que já tinha dito e a próxima não segue a sessão cortada", async () => {
+    const { servico, falsos, execucoes, eventos, repo } = montar();
+    falsos.tula.roteirizar(
+      [
+        { tipo: "texto", texto: "R$ 512 no mês." },
+        { tipo: "fim", continuacao: "sessao-tula" },
+      ],
+      [
+        { tipo: "texto", texto: "Primeiro abra o terminal" },
+        { tipo: "pausa", ms: 5_000 },
+        { tipo: "texto", texto: " e rode este script enorme." },
+        { tipo: "fim", continuacao: "sessao-tula-2" },
+      ],
+      roteiros.resposta("Oi."),
+    );
+    const falhas = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const tula = servico.abrir({ agenteId: "tula" });
+    await servico.enviar({ conversaId: tula.id, conteudo: "quanto foi o mês?" });
+    await servico.ocioso();
+    // Sem nada rodando, não há o que parar.
+    expect(servico.parar({ id: tula.id })).toBe(0);
+
+    await servico.enviar({ conversaId: tula.id, conteudo: "limpa o cache do PC" });
+    await vi.waitFor(
+      () => expect(eventos.parciais.some((p) => p.texto === "Primeiro abra o terminal")).toBe(true),
+      { interval: 1 },
+    );
+    expect(servico.parar({ id: tula.id })).toBe(1);
+    await servico.ocioso();
+
+    const parada = conversaInteira(servico, tula.id).at(-1)!;
+    expect(parada).toMatchObject({
+      agenteId: "tula",
+      conteudo: `Primeiro abra o terminal\n\n${AVISO_PARADA}`,
+    });
+    expect(execucoes.execucao(parada.execucaoId!)).toMatchObject({
+      estado: "erro",
+      erro: MENSAGEM_CANCELADA,
+    });
+    // O resto do roteiro nunca saiu: a execução parou de verdade, não só a tela.
+    expect(eventos.parciais.some((p) => p.texto.includes("script enorme"))).toBe(false);
+    expect(repo.pendentes()).toEqual([]);
+    expect(falhas).not.toHaveBeenCalled();
+    falhas.mockRestore();
+
+    // A seguinte começa outra sessão, com a parada no histórico como fala dela, não como pedido pendente.
+    await servico.enviar({ conversaId: tula.id, conteudo: "oi" });
+    await servico.ocioso();
+    const proximo = falsos.tula.pedidos[2]!;
+    expect(proximo.continuarDe).toBeNull();
+    expect(proximo.mensagens.slice(-3)).toEqual([
+      { papel: "usuario", texto: "limpa o cache do PC" },
+      { papel: "agente", texto: `Primeiro abra o terminal\n\n${AVISO_PARADA}` },
+      { papel: "usuario", texto: "oi" },
+    ]);
+  });
+
+  test("parar a resposta que espera o agente acordar: nunca chega ao modelo e não volta ao reiniciar", async () => {
+    const { db, servico, falsos, runtime, eventos, repo } = montar();
+    db.exec(`UPDATE agentes SET estado = 'dormindo', motivo_sono = 'limite', dorme_ate = '2026-10-09T18:00:00.000Z'
+             WHERE id = 'tula'`);
+    falsos.tula.roteirizar(roteiros.resposta("R$ 45 no mercado."));
+    const tula = servico.abrir({ agenteId: "tula" });
+    await servico.enviar({ conversaId: tula.id, conteudo: "quanto foi de mercado?" });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(servico.parar({ id: tula.id })).toBe(1);
+    runtime.estados.acordar("tula");
+    await servico.ocioso();
+    expect(falsos.tula.pedidos).toEqual([]);
+    expect(eventos.mensagens.map((m) => [m.agenteId, m.conteudo, m.execucaoId])).toEqual([
+      [null, "quanto foi de mercado?", null],
+      ["tula", AVISO_PARADA, null],
+    ]);
+    expect(repo.pendentes()).toEqual([]);
+    expect(() => servico.parar({ id: "nada" })).toThrow("não encontrada");
+  });
+
+  test("mandar logo depois de parar: a fala nova fica depois do aviso de quem parou", async () => {
+    const { servico, falsos, eventos } = montar();
+    falsos.tula.roteirizar(
+      [
+        { tipo: "texto", texto: "Vou listar" },
+        { tipo: "pausa", ms: 5_000 },
+      ],
+      roteiros.resposta("Oi."),
+    );
+    const tula = servico.abrir({ agenteId: "tula" });
+    await servico.enviar({ conversaId: tula.id, conteudo: "limpa o cache" });
+    await vi.waitFor(() => expect(eventos.parciais.length).toBeGreaterThan(0), { interval: 1 });
+
+    expect(servico.parar({ id: tula.id })).toBe(1);
+    // Sem esperar nada: como a janela faz quando você para e já escreve outra coisa.
+    await servico.enviar({ conversaId: tula.id, conteudo: "deixa, só oi" });
+    await servico.ocioso();
+    expect(conversaInteira(servico, tula.id).map((m) => [m.agenteId, m.conteudo])).toEqual([
+      [null, "limpa o cache"],
+      ["tula", `Vou listar\n\n${AVISO_PARADA}`],
+      [null, "deixa, só oi"],
+      ["tula", "Oi."],
+    ]);
+  });
+
+  test("no time, parar para todos que iam responder", async () => {
+    const { servico, falsos, eventos } = montar({
+      roteador: () =>
+        ({
+          rotear: async () => [
+            { agenteId: "tula", parte: null },
+            { agenteId: "alba", parte: null },
+          ],
+        }) as unknown as Roteador,
+    });
+    const devagar = [{ tipo: "texto", texto: "Vendo" } as const, { tipo: "pausa", ms: 5_000 } as const];
+    falsos.tula.roteirizar(devagar);
+    falsos.alba.roteirizar(devagar);
+    const time = servico.abrir({});
+    await servico.enviar({ conversaId: time.id, conteudo: "como estou?" });
+    await vi.waitFor(() => expect(eventos.parciais.length).toBe(2), { interval: 1 });
+
+    expect(servico.parar({ id: time.id })).toBe(2);
+    await servico.ocioso();
+    expect(
+      eventos.mensagens
+        .filter((m) => m.agenteId !== null)
+        .map((m) => [m.agenteId, m.conteudo])
+        .sort(),
+    ).toEqual([
+      ["alba", `Vendo\n\n${AVISO_PARADA}`],
+      ["tula", `Vendo\n\n${AVISO_PARADA}`],
+    ]);
   });
 });
 

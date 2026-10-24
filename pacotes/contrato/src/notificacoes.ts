@@ -10,8 +10,11 @@ import { Id, Instante, pagina } from "./comum.ts";
 export const TipoNotificacao = z.enum(["aprovacao", "lembrete", "erro", "aviso", "rotina"]);
 export type TipoNotificacao = z.infer<typeof TipoNotificacao>;
 
-/** "Só o que precisa de mim" deixa passar estes tipos (PRODUCT.md §5). */
-export const TIPOS_QUE_PRECISAM: readonly TipoNotificacao[] = ["aprovacao", "lembrete", "erro"];
+/**
+ * "Só o que precisa de mim" deixa passar estes tipos (PRODUCT.md §5): também a rotina, para o aviso
+ * do briefing e do fechamento chegar ao Windows no padrão; o silêncio do foco continua valendo para ela.
+ */
+export const TIPOS_QUE_PRECISAM: readonly TipoNotificacao[] = ["aprovacao", "lembrete", "erro", "rotina"];
 
 export const NivelNotificacao = z.enum(["tudo", "so_o_que_precisa", "nada"]);
 export type NivelNotificacao = z.infer<typeof NivelNotificacao>;

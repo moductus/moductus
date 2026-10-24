@@ -15,8 +15,8 @@ export function dataCurta(data: Date): string {
 
 interface PropsPagina {
   titulo: string;
-  /** Linha acima do título no lugar da data: quem cuida da área ("Nuno · GitHub"). */
-  rotulo?: string;
+  /** Linha acima do título no lugar da data: quem cuida da área ("Nuno · GitHub"), com atalho se houver. */
+  rotulo?: ReactNode;
   /** Ação ou situação contextual à direita do título ("atualizado há 2 min"). */
   acao?: ReactNode;
   children: ReactNode;

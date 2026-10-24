@@ -253,6 +253,20 @@ describe("vigias", () => {
     ]);
   });
 
+  it("a agenda do Google é vigia da Alba, não do Nuno", () => {
+    const google: Conexao = {
+      tipo: "google-agenda",
+      estado: "ligada",
+      conta: "gustavo@exemplo.com",
+      ultimoErro: null,
+      conectadaEm: as(8),
+    };
+    expect(vigiasDoAgente("alba", [], [google])).toEqual([
+      { nome: "Google Agenda", quando: "a cada 10 min · gustavo@exemplo.com", estado: "ligada" },
+    ]);
+    expect(vigiasDoAgente("nuno", [], [google])).toEqual([]);
+  });
+
   it("descreve cada gatilho como a página escreve", () => {
     expect(descreverGatilho({ tipo: "horario", hora: "08:30" })).toBe("todo dia às 08:30");
     expect(descreverGatilho({ tipo: "evento", nome: "arquivo.chegou" })).toBe(

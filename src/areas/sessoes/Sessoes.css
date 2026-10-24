@@ -198,6 +198,13 @@
   color: var(--texto-2);
 }
 
+/* Onde roda (terminal, Desktop), abaixo do nome: o secundário da tabela, como o número do contexto. */
+.sessoes-tabela-onde {
+  display: block;
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
 .sessoes-tabela-contexto {
   display: flex;
   align-items: center;

@@ -1,6 +1,16 @@
-import type { Agente, Aprovacao, Execucao, Provedor } from "@moductus/contrato";
+import type {
+  Agente,
+  Aprovacao,
+  EstadoFoco,
+  Execucao,
+  LembretesDeHoje,
+  Lista,
+  Provedor,
+  Tarefa,
+} from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Leitura } from "../../areas/leitura.ts";
 import { juntarAprovacao } from "../../servico/aprovacoes.ts";
 import { servico } from "../../servico/conexao.ts";
 
@@ -98,28 +108,8 @@ const pedirAtalho = () => servico.pedir("config.obter").then((estado) => estado.
 const ouvirAtalho: Ouvinte<string> = (aplicar) =>
   servico.ouvir("config.mudou", (estado) => aplicar(() => estado.config.atalhos.sistema));
 
-/**
- * Só os pedidos do terminal ainda esperando você: decidido ou expirado sai da lista. É o que o
- * dock conta (o Nuno com o ponto); a lista não cresce com o que já foi respondido.
- */
-export function juntarPendente(lista: readonly Aprovacao[], aprovacao: Aprovacao): Aprovacao[] {
-  const outros = lista.filter((a) => a.id !== aprovacao.id);
-  return aprovacao.estado === "pendente" ? [...outros, aprovacao] : outros;
-}
-
-const pedirPendentesDoTerminal = () =>
-  servico.pedir("aprovacoes.pendentes").then((lista) => lista.filter((a) => a.fonte !== "moductus"));
-const ouvirPendentesDoTerminal: Ouvinte<Aprovacao[]> = (aplicar) =>
-  servico.ouvir("aprovacoes.mudou", (aprovacao) => {
-    if (aprovacao.fonte !== "moductus") aplicar((lista) => juntarPendente(lista, aprovacao));
-  });
-
 /** O atalho que abre o Sistema, como você configurou (Configurações › Atalhos). */
 export const useAtalhoDoSistema = (canal: EstadoConexao) => useCarga(canal, pedirAtalho, ouvirAtalho);
-
-/** Os pedidos do terminal esperando você, para o dock; o painel usa `usePedidosDoTerminal`. */
-export const usePendentesDoTerminal = (canal: EstadoConexao) =>
-  useCarga(canal, pedirPendentesDoTerminal, ouvirPendentesDoTerminal);
 
 /** O time como o serviço guarda: configuração (o modelo de cada um) e a situação do runtime. */
 export const useAgentes = (canal: EstadoConexao, recarregar?: unknown) =>
@@ -136,3 +126,161 @@ export const useExecucoes = (canal: EstadoConexao, recarregar?: unknown) =>
 /** Os pedidos de aprovação dos agentes do Moductus (os do terminal vêm de `usePedidosDoTerminal`). */
 export const usePedidosDosAgentes = (canal: EstadoConexao, recarregar?: unknown) =>
   useCarga(canal, pedirPedidosDosAgentes, ouvirPedidosDosAgentes, recarregar);
+
+// ---------- O dia: painéis Hoje e Tarefas ----------
+
+/**
+ * Uma leitura que o serviço refaz inteira a cada aviso (`tarefas.mudou` não diz em que vista a
+ * tarefa caiu: quem sabe o que é "hoje" é o serviço). Cada aviso e cada `recarregar` pede de novo;
+ * a resposta de um pedido que já foi superado é descartada. Falhou, diz isso e oferece tentar de
+ * novo, em vez de mostrar o que já não vale. `pedir` precisa ser estável.
+ */
+export function useRelida<T>(
+  canal: EstadoConexao,
+  pedir: () => Promise<T>,
+  aviso: "tarefas.mudou" | "lembretes.mudou",
+  recarregar?: unknown,
+): Leitura<T> {
+  const [lido, setLido] = useState<{ ok: true; dados: T } | { ok: false } | null>(null);
+  const [vez, setVez] = useState(0);
+  const tentarDeNovo = useCallback(() => setVez((v) => v + 1), []);
+
+  useEffect(() => servico.ouvir(aviso, () => setVez((v) => v + 1)), [aviso]);
+
+  useEffect(() => {
+    if (canal !== "conectado") return;
+    let vivo = true;
+    pedir()
+      .then((dados) => {
+        if (vivo) setLido({ ok: true, dados });
+      })
+      .catch(() => {
+        if (vivo) setLido({ ok: false });
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [canal, pedir, recarregar, vez]);
+
+  if (canal !== "conectado" || lido === null) return { estado: "esperando" };
+  return lido.ok ? { estado: "pronta", dados: lido.dados } : { estado: "falhou", tentarDeNovo };
+}
+
+/** Junta duas leituras: falhou se uma falhou (tentar de novo refaz as duas), pronta se as duas. */
+export function juntarLeituras<A, B>(a: Leitura<A>, b: Leitura<B>): Leitura<[A, B]> {
+  if (a.estado === "falhou" || b.estado === "falhou") {
+    return {
+      estado: "falhou",
+      tentarDeNovo: () => {
+        if (a.estado === "falhou") a.tentarDeNovo();
+        if (b.estado === "falhou") b.tentarDeNovo();
+      },
+    };
+  }
+  if (a.estado === "esperando" || b.estado === "esperando") return { estado: "esperando" };
+  return { estado: "pronta", dados: [a.dados, b.dados] };
+}
+
+const pedirFuso = () => servico.pedir("config.obter").then((estado) => estado.config.dia.fuso);
+const ouvirFuso: Ouvinte<string> = (aplicar) =>
+  servico.ouvir("config.mudou", (estado) => aplicar(() => estado.config.dia.fuso));
+
+/** O fuso em que "hoje" é contado (Configurações › O dia); `null` até a configuração chegar. */
+export const useFuso = (canal: EstadoConexao) => useCarga(canal, pedirFuso, ouvirFuso);
+
+const pedirLembretesDeHoje = () => servico.pedir("lembretes.hoje");
+const ouvirLembretesDeHoje = (receber: (hoje: LembretesDeHoje) => void) =>
+  servico.ouvir("lembretes.hoje", receber);
+
+/**
+ * Uma leitura que o aviso troca inteira (`lembretes.hoje` traz o recorte todo): a carga ao conectar
+ * e a cada `recarregar`, e cada aviso depois. Aviso que chega com a carga a caminho é mais novo que
+ * ela: a resposta não o desfaz. Falhou, diz isso e oferece tentar de novo. `pedir` e `ouvir`
+ * precisam ser estáveis.
+ */
+export function useLidaComAviso<T>(
+  canal: EstadoConexao,
+  pedir: () => Promise<T>,
+  ouvir: (receber: (dados: T) => void) => () => void,
+  recarregar?: unknown,
+): Leitura<T> {
+  const [lido, setLido] = useState<{ ok: true; dados: T } | { ok: false } | null>(null);
+  const [vez, setVez] = useState(0);
+  const avisos = useRef(0);
+  const tentarDeNovo = useCallback(() => setVez((v) => v + 1), []);
+
+  useEffect(
+    () =>
+      ouvir((dados) => {
+        avisos.current++;
+        setLido({ ok: true, dados });
+      }),
+    [ouvir],
+  );
+
+  useEffect(() => {
+    if (canal !== "conectado") return;
+    let vivo = true;
+    const antes = avisos.current;
+    pedir()
+      .then((dados) => {
+        if (vivo && avisos.current === antes) setLido({ ok: true, dados });
+      })
+      .catch(() => {
+        if (vivo && avisos.current === antes) setLido({ ok: false });
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [canal, pedir, recarregar, vez]);
+
+  if (canal !== "conectado" || lido === null) return { estado: "esperando" };
+  return lido.ok ? { estado: "pronta", dados: lido.dados } : { estado: "falhou", tentarDeNovo };
+}
+
+/** O lembrete do Hoje: o que está chegando, os que tocam e os atrasados, como o relógio decidiu. */
+export const useLembretesDeHoje = (canal: EstadoConexao, recarregar?: unknown) =>
+  useLidaComAviso(canal, pedirLembretesDeHoje, ouvirLembretesDeHoje, recarregar);
+
+const pedirFoco = () => servico.pedir("foco.obter");
+const ouvirFoco: Ouvinte<EstadoFoco> = (aplicar) =>
+  servico.ouvir("foco.mudou", (foco) => aplicar(() => foco));
+
+/** O foco agora: a etapa em andamento (ou nenhuma), o ciclo e o que vem depois. */
+export const useFoco = (canal: EstadoConexao, recarregar?: unknown) =>
+  useCarga(canal, pedirFoco, ouvirFoco, recarregar);
+
+const pedirListas = () => servico.pedir("listas.listar");
+const ouvirListas: Ouvinte<Lista[]> = (aplicar) =>
+  servico.ouvir("listas.mudou", (listas) => aplicar(() => listas));
+
+/** As listas, para a linha de baixo da tarefa dizer de qual ela é. */
+export const useListas = (canal: EstadoConexao, recarregar?: unknown) =>
+  useCarga(canal, pedirListas, ouvirListas, recarregar);
+
+const pedirHoje = () => servico.pedir("tarefas.listar", { vista: "hoje" });
+const pedirAtrasadas = () => servico.pedir("tarefas.listar", { vista: "atrasadas" });
+const pedirProximas = () => servico.pedir("tarefas.listar", { vista: "proximas" });
+
+/**
+ * As tarefas de hoje (abertas e feitas hoje) e as atrasadas, relidas a cada mudança e na virada do
+ * dia (`dia` entra no `recarregar`).
+ */
+export function useTarefasDoDia(
+  canal: EstadoConexao,
+  dia: string,
+  recarregar?: unknown,
+): Leitura<{ hoje: Tarefa[]; atrasadas: Tarefa[] }> {
+  const chave = `${dia}|${String(recarregar)}`;
+  const leitura = juntarLeituras(
+    useRelida(canal, pedirHoje, "tarefas.mudou", chave),
+    useRelida(canal, pedirAtrasadas, "tarefas.mudou", chave),
+  );
+  return leitura.estado === "pronta"
+    ? { estado: "pronta", dados: { hoje: leitura.dados[0], atrasadas: leitura.dados[1] } }
+    : leitura;
+}
+
+/** As abertas de amanhã em diante ("Próximos 7 dias" no pé do painel Tarefas). */
+export const useProximas = (canal: EstadoConexao, dia: string, recarregar?: unknown) =>
+  useRelida(canal, pedirProximas, "tarefas.mudou", `${dia}|${String(recarregar)}`);

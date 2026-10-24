@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
+  MISSOES_QUE_VALEM,
   MISSOES_TUTORIAL,
   PASSOS_PRIMEIRO_USO,
   PedidoConcluirPrimeiroUso,
@@ -46,8 +47,8 @@ export class RepositorioPrimeiroUso {
 
 /**
  * A regra do primeiro uso: concluir a configuração (feita ou pulada) faz o Sistema abrir direto
- * nas áreas dali em diante; o tutorial aparece depois dela e some quando as cinco missões ficam
- * feitas ou quando é pulado, e volta se pedido.
+ * nas áreas dali em diante; o tutorial aparece depois dela e some quando as missões que valem
+ * nesta versão ficam feitas ou quando é pulado, e volta se pedido.
  */
 export class ServicoPrimeiroUso {
   /** A missão do Nuno já foi vista feita neste processo. */
@@ -95,8 +96,9 @@ export class ServicoPrimeiroUso {
     this.repo.gravar([[missao(pedido.missao), pedido.estado]]);
     // A missão do Nuno voltou a valer: a próxima sessão do Claude Code a faz de novo.
     if (pedido.missao === "nuno-sessao" && pedido.estado === "pendente") this.nunoVisto = false;
+    // Só as missões que valem nesta versão encerram; as que chegam com outra área não contam.
     const { missoes, tutorial } = this.obter();
-    if (tutorial === "pendente" && Object.values(missoes).every((e) => e === "feito")) {
+    if (tutorial === "pendente" && MISSOES_QUE_VALEM.every((m) => missoes[m] === "feito")) {
       this.repo.gravar([[TUTORIAL, "feito"]]);
     }
     return this.publicar();
@@ -113,6 +115,16 @@ export class ServicoPrimeiroUso {
       this.marcar({ alvo: "missao", missao: "nuno-sessao", estado: "feito" });
     }
     this.nunoVisto = true;
+  }
+
+  /**
+   * A captura lançou um lembrete pedido na frase: a missão da Alba ("peça um lembrete à Alba") está
+   * feita. Grava e avisa só na primeira vez; feita ou pulada, fica como está.
+   */
+  lembretePedido(): void {
+    if (this.obter().missoes["alba-lembrete"] === "pendente") {
+      this.marcar({ alvo: "missao", missao: "alba-lembrete", estado: "feito" });
+    }
   }
 
   private publicar(): EstadoPrimeiroUso {

@@ -33,7 +33,7 @@ describe("Personagem", () => {
     const svg = desenhar({ agente, modo: "cabeca", tamanho: "dock", estado: "dormindo" });
     expect(svg.getAttribute("role")).toBe("img");
     expect(svg.getAttribute("aria-label")).toBe(`${DADOS_AGENTES[agente].nome}, dormindo`);
-    expect(svg.getAttribute("viewBox")).toMatch(/^16 \d+ 68 68$/);
+    expect(svg.getAttribute("viewBox")).toMatch(agente === "faina" ? /^19 14 68 68$/ : /^16 \d+ 68 68$/);
     expect(svg.style.getPropertyValue("--personagem-altura")).toBe("32px");
     expect(svg.querySelector('[data-olhos="fechados"]')).not.toBeNull();
     expect(svg.querySelector("[data-zz]")).not.toBeNull();
@@ -51,18 +51,12 @@ describe("Personagem", () => {
   });
 
   it("o nó da bandana da Faina cabe inteiro na cabeça: cortado, no dock ele se lê como o z do sono", () => {
-    const direitaDoNo = (svg: SVGSVGElement) => {
-      // O nó vai de x 76 a 86 no desenho; a cabeça o encolhe na largura a partir de x 76.
-      const transform = svg.querySelector("[data-no]")!.getAttribute("transform");
-      const escala = transform ? Number(/scale\(([\d.]+) 1\)/.exec(transform)![1]) : 1;
-      return 76 + 10 * escala;
-    };
+    // O nó vai até x 86 no desenho, sem deformar em modo nenhum: o recorte da cabeça é que anda.
     const cabeca = desenhar({ agente: "faina", modo: "cabeca", tamanho: "dock", estado: "ocioso" });
     const [x, , largura] = cabeca.getAttribute("viewBox")!.split(" ").map(Number) as [number, number, number];
-    expect(direitaDoNo(cabeca)).toBeLessThan(x + largura);
+    expect(cabeca.querySelector("[data-no]")!.getAttribute("transform")).toBeNull();
+    expect(86).toBeLessThan(x + largura);
     expect(cabeca.querySelector("[data-zz]")).toBeNull();
-    // O corpo inteiro mostra o nó como o canvas desenha.
-    expect(direitaDoNo(desenhar({ agente: "faina", modo: "inteiro" }))).toBe(86);
   });
 
   it("os óculos são só da Tula", () => {
@@ -109,6 +103,51 @@ describe("Personagem", () => {
     expect(moldura.dataset.estado).toBe("erro");
     expect(moldura.dataset.tom).toBe("perigo");
     expect(moldura.querySelector('svg[role="img"]')).not.toBeNull();
+  });
+
+  /*
+   * O anel é a borda em volta do svg, centrado no centro do recorte da cabeça. O corpo vazava pelos
+   * cantos de baixo do quadrado e o anel parecia torto: o recorte termina em meio círculo com o
+   * mesmo centro, rente ao lado de dentro do anel, para cada agente e em qualquer tamanho.
+   */
+  it.each(AGENTES)("%s com anel: o corpo termina num meio círculo concêntrico ao anel", (agente) => {
+    for (const tamanho of ["mini", "dock", "painel", 40] as const) {
+      const svg = desenhar({ agente, modo: "cabeca", tamanho, estado: "trabalhando", moldura: true });
+      const [x, y, w, h] = svg.getAttribute("viewBox")!.split(" ").map(Number) as [
+        number,
+        number,
+        number,
+        number,
+      ];
+      const recorte = svg.querySelector("clipPath [data-recorte]")!.getAttribute("d")!;
+      const m = /^M([\d.]+) ([\d.]+)H([\d.]+)V([\d.]+)A([\d.]+) ([\d.]+) 0 0 1 ([\d.]+) ([\d.]+)Z$/.exec(
+        recorte,
+      );
+      expect(m, recorte).not.toBeNull();
+      const [, x0, y0, x1, meio, rx, ry, xFim, yFim] = m!.map(Number);
+      // O quadrado de cima é o próprio recorte da cabeça.
+      expect([x0, y0, x1]).toEqual([x, y, x + w]);
+      // O meio círculo tem o centro e o raio do anel (o centro do svg, metade do lado).
+      expect([rx, ry]).toEqual([w / 2, h / 2]);
+      expect([meio, yFim]).toEqual([y + h / 2, y + h / 2]);
+      expect((x0! + x1!) / 2).toBe(x + w / 2);
+      expect(xFim).toBe(x);
+      // O corpo (o grupo que respira) fica dentro do recorte; o recorte não respira.
+      const corpo = svg.querySelector(".personagem-corpo")!;
+      const recortado = corpo.parentElement!;
+      expect(recortado.getAttribute("clip-path")).toBe(`url(#${svg.querySelector("clipPath")!.id})`);
+    }
+  });
+
+  it("sem anel, nada é recortado: o corpo inteiro e a cabeça das listas ficam como no canvas", () => {
+    for (const props of [
+      { agente: "faina", modo: "cabeca", tamanho: "lista" },
+      { agente: "alba", modo: "inteiro", moldura: true },
+    ] as const) {
+      const svg = desenhar(props);
+      expect(svg.querySelector("clipPath")).toBeNull();
+      expect(svg.querySelector("[clip-path]")).toBeNull();
+    }
   });
 
   it("o anel pode seguir o status em vez da expressão: teto é cara preocupada com anel de aviso", () => {

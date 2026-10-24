@@ -231,6 +231,32 @@
   overflow-wrap: anywhere;
 }
 
+/* Código da resposta em mono, como na prévia de arquivo (DESIGN.md §5); linha longa rola de lado. */
+.fala-codigo {
+  display: block;
+  margin-block: var(--esp-6);
+  padding: var(--esp-8) var(--esp-10);
+  overflow-x: auto;
+  border-radius: var(--raio-caixa);
+  background: var(--fundo-chip);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.fala-codigo[hidden] {
+  display: none;
+}
+
+/* "Ver tudo" e "Mostrar N linhas de código": linha própria, no começo dela. */
+.fala-texto .fala-alternar {
+  display: flex;
+  width: fit-content;
+  margin-block: var(--esp-4);
+  margin-inline-start: calc(-1 * var(--esp-10));
+}
+
 .conversa-pensando {
   color: var(--texto-3);
 }
@@ -308,8 +334,13 @@
   color: var(--texto);
 }
 
-.escrever-enviar {
+.escrever-enviar,
+.escrever-parar {
   margin-left: auto;
+}
+
+.escrever-parar + .escrever-enviar {
+  margin-left: 0;
 }
 
 /* ---------- Página do agente ---------- */
@@ -359,6 +390,56 @@
   display: flex;
   flex: none;
   gap: var(--esp-8);
+}
+
+/* Restaurar padrão (AreaAgente.dc.html): o botão fica marcado enquanto a confirmação está aberta. */
+.pagina-agente-restaurar[aria-expanded="true"] {
+  background: var(--fundo-ativo);
+}
+
+/* Confirmação no lugar (DESIGN.md §5): cartão elevado logo abaixo do cabeçalho, nunca modal. */
+.pagina-agente-confirmacao {
+  gap: var(--esp-12);
+  padding: var(--esp-16) var(--esp-18);
+}
+
+.pagina-agente-confirmacao-colunas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--esp-24);
+}
+
+.pagina-agente-confirmacao-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  min-width: 0;
+}
+
+.pagina-agente-confirmacao-linha {
+  display: flex;
+  gap: var(--esp-10);
+}
+
+.pagina-agente-confirmacao-campo {
+  flex: none;
+  width: var(--largura-rotulo-mudanca);
+  font-weight: var(--peso-forte);
+}
+
+.pagina-agente-confirmacao-muda {
+  min-width: 0;
+  color: var(--texto-2);
+}
+
+.pagina-agente-confirmacao-rodape {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.pagina-agente-confirmacao-aviso {
+  flex: 1;
 }
 
 .pagina-agente-erro {

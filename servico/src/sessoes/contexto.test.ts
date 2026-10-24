@@ -1,6 +1,6 @@
 import { appendFileSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DatabaseSync } from "node:sqlite";
 import { MudancaSessao, UsoIa } from "@moductus/contrato";
@@ -46,7 +46,7 @@ interface Montagem {
 }
 
 function montar(opcoes: { ler?: LerTranscript } = {}): Montagem {
-  const db = abrirBanco(pasta());
+  const db = abrirBanco(pasta(), { duravel: false });
   bancos.push(db);
   const mudancas: MudancaSessao[] = [];
   const avisos: AvisoContexto[] = [];
@@ -121,6 +121,9 @@ function resposta(
 const compactacao = (depois: number) =>
   JSON.stringify({ type: "system", subtype: "compact_boundary", compactMetadata: { postTokens: depois } });
 
+/** A mesma linha com o `entrypoint` que o Claude Code anota (`cli`, `claude-desktop`). */
+const deOnde = (linha: string, entrypoint: string) => JSON.stringify({ ...JSON.parse(linha), entrypoint });
+
 const escrever = (caminho: string, ...linhas: string[]) => appendFileSync(caminho, `${linhas.join("\n")}\n`);
 
 /** Um evento do hook com o transcript e a espera da leitura que ele dispara. */
@@ -191,6 +194,8 @@ describe("contexto e uso pelo transcript", () => {
     // Depois da compactação, a última resposta (Opus 5.5, 1M pela tabela) leu 81.378 tokens.
     expect(s?.contexto).toEqual({ usadoTokens: 81_378, janelaTokens: MIL_K });
     expect(s?.modelo).toBe("claude-opus-5-5");
+    // A fixture foi gravada na aba Code do app Desktop (`entrypoint` = `claude-desktop`).
+    expect(s?.ondeRoda).toBe("desktop");
     expect(MudancaSessao.parse(mudancas.at(-1))).toEqual({ sessao: s, projeto: expect.anything() });
 
     const uso = servico.uso({ de: "2026-10-01", ate: "2026-10-31" });
@@ -435,6 +440,33 @@ describe("contexto e uso pelo transcript", () => {
     expect(sessao(servico)?.contexto?.usadoTokens).toBe(70_000);
     // O uso lido do arquivo velho conta; o do novo também, do início.
     expect(usoDoDia(servico)[0]).toMatchObject({ tokensSaida: 300 });
+  });
+
+  test("onde roda: terminal ou app Desktop pelo entrypoint; antes da primeira resposta e valor desconhecido, não se sabe", async () => {
+    const { servico, transcript, mudancas } = montar();
+    await evento(servico, transcript, "SessionStart");
+    expect(sessao(servico)?.ondeRoda).toBeNull();
+
+    escrever(transcript, deOnde(resposta("msg_1", 20_000), "claude-desktop"));
+    await evento(servico, transcript);
+    expect(sessao(servico)?.ondeRoda).toBe("desktop");
+    // As janelas ficam sabendo pela mudança que a leitura emite.
+    expect(mudancas.at(-1)?.sessao.ondeRoda).toBe("desktop");
+
+    // Linha sem o campo não apaga o que já se sabia.
+    escrever(transcript, resposta("msg_2", 21_000));
+    await evento(servico, transcript);
+    expect(sessao(servico)?.ondeRoda).toBe("desktop");
+
+    const outra = join(dirname(transcript), "sessao-b.jsonl");
+    escrever(outra, deOnde(resposta("msg_3", 20_000), "cli"));
+    await evento(servico, outra, "Stop", "sessao-b");
+    expect(sessao(servico, "sessao-b")?.ondeRoda).toBe("terminal");
+
+    const terceira = join(dirname(transcript), "sessao-c.jsonl");
+    escrever(terceira, deOnde(resposta("msg_4", 20_000), "sdk-cli"));
+    await evento(servico, terceira, "Stop", "sessao-c");
+    expect(sessao(servico, "sessao-c")?.ondeRoda).toBeNull();
   });
 
   test("outra ferramenta não tem o transcript lido: formato desconhecido", async () => {

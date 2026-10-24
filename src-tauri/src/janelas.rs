@@ -14,7 +14,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewWindow, WebviewWindowBuilder};
 use windows::Win32::{
     Foundation::{HWND, RECT},
     Graphics::Gdi::{GetMonitorInfoW, MonitorFromRect, MONITORINFO, MONITOR_DEFAULTTONEAREST},
@@ -24,12 +24,26 @@ use windows::Win32::{
     },
 };
 
-use crate::{appbar, dock};
+use crate::{
+    appbar,
+    clique_fora::{self, Origem},
+    dock,
+};
 
-/// Largura do painel lateral em pixels lógicos (DESIGN §3: 368–372 px).
-pub const LARGURA_PAINEL: f64 = 372.0;
+/// Largura do cartão do painel lateral em pixels lógicos (DESIGN §3: 400 px, como nos quadros).
+pub const LARGURA_PAINEL: f64 = 400.0;
+/// Folga transparente do lado de fora do cartão (`--margem-painel`), onde a sombra dele cabe. Do
+/// lado do dock não há folga: o cartão encosta no dock.
+pub const MARGEM_PAINEL: f64 = 12.0;
+
+/// Largura física da janela do painel: o cartão mais a folga, na escala do monitor.
+pub fn largura_janela_painel(escala: f64) -> i32 {
+    ((LARGURA_PAINEL + MARGEM_PAINEL) * escala).round() as i32
+}
 
 static PAINEL: Mutex<Option<(String, Instant)>> = Mutex::new(None);
+/// A área que a interface do painel confirmou ter desenhado (`painel_pronto`) desde a abertura.
+static CONFIRMADA: Mutex<Option<String>> = Mutex::new(None);
 static ARQUIVO_SISTEMA: OnceLock<PathBuf> = OnceLock::new();
 
 fn janela(app: &AppHandle, rotulo: &str) -> Option<WebviewWindow> {
@@ -75,27 +89,36 @@ fn esconder(janela: &WebviewWindow) {
 
 // ---------- painel ----------
 
-/// Retângulo do painel encostado no dock, do lado de dentro da tela.
-pub fn retangulo_painel(dock: RECT, lado: appbar::Lado, largura: i32) -> RECT {
+/// Retângulo do painel encostado no dock desenhado, do lado de dentro da tela. `recuo` é a margem
+/// transparente da janela do dock flutuante (física; zero no colado): a janela do painel entra
+/// nela para o cartão encostar no dock, não na borda da janela dele.
+pub fn retangulo_painel(dock: RECT, lado: appbar::Lado, largura: i32, recuo: i32) -> RECT {
     match lado {
-        appbar::Lado::Esquerda => RECT { left: dock.right, top: dock.top, right: dock.right + largura, bottom: dock.bottom },
-        appbar::Lado::Direita => RECT { left: dock.left - largura, top: dock.top, right: dock.left, bottom: dock.bottom },
+        appbar::Lado::Esquerda => {
+            let left = dock.right - recuo;
+            RECT { left, top: dock.top, right: left + largura, bottom: dock.bottom }
+        }
+        appbar::Lado::Direita => {
+            let right = dock.left + recuo;
+            RECT { left: right - largura, top: dock.top, right, bottom: dock.bottom }
+        }
     }
 }
 
 /// Abre o painel de uma área ao lado do dock; a mesma área de novo fecha.
 #[tauri::command]
 pub fn painel_abrir(app: AppHandle, area: String) {
-    abrir_painel(app, area, true);
+    abrir_painel(app, area, true, Origem::Usuario);
 }
 
 /// Abre o painel de uma área sem alternar: já aberto nela, fica aberto (o clique no aviso do
-/// Windows leva ao time, nunca o esconde).
-pub fn painel_mostrar(app: AppHandle, area: String) {
-    abrir_painel(app, area, false);
+/// Windows leva ao time, nunca o esconde). Já aberto na área, quem abriu antes continua valendo
+/// para o clique fora.
+pub fn painel_mostrar(app: AppHandle, area: String, origem: Origem) {
+    abrir_painel(app, area, false, origem);
 }
 
-fn abrir_painel(app: AppHandle, area: String, alternar: bool) {
+fn abrir_painel(app: AppHandle, area: String, alternar: bool, origem: Origem) {
     let (Some(painel), Some(janela_dock)) = (janela(&app, "painel"), janela(&app, "dock")) else { return };
     let aberta = PAINEL.lock().unwrap().as_ref().map(|(a, _)| a.clone());
     if aberta.as_deref() == Some(area.as_str()) && unsafe { IsWindowVisible(hwnd(&painel)) }.as_bool() {
@@ -105,19 +128,23 @@ fn abrir_painel(app: AppHandle, area: String, alternar: bool) {
         return;
     }
     *PAINEL.lock().unwrap() = Some((area.clone(), Instant::now()));
+    *CONFIRMADA.lock().unwrap() = None;
 
     let mut rd = RECT::default();
     unsafe {
         let _ = GetWindowRect(hwnd(&janela_dock), &mut rd);
     }
-    let largura = (LARGURA_PAINEL * appbar::escala(dock::hwnd_de(&janela_dock))).round() as i32;
-    let rc = retangulo_painel(rd, dock::configuracao().lado, largura);
+    let escala = appbar::escala(dock::hwnd_de(&janela_dock));
+    let config = dock::configuracao();
+    let recuo = (dock::margem_janela(config.forma) * escala).round() as i32;
+    let rc = retangulo_painel(rd, config.lado, largura_janela_painel(escala), recuo);
     let _ = painel.emit("painel:area", &area);
     unsafe {
         let h = hwnd(&painel);
         let _ = SetWindowPos(h, Some(HWND_TOPMOST), rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, SWP_NOACTIVATE);
         let _ = ShowWindow(h, SW_SHOWNOACTIVATE);
     }
+    clique_fora::vigiar(origem);
 }
 
 #[tauri::command]
@@ -130,12 +157,74 @@ pub fn painel_fechar(app: AppHandle) {
         }
         dock::sem_ativar(dock::hwnd_de(&painel));
     }
+    clique_fora::desligar();
     *PAINEL.lock().unwrap() = None;
+    *CONFIRMADA.lock().unwrap() = None;
     // O dock tira a marca da área aberta.
     let _ = app.emit("painel:fechado", ());
 }
 
-/// A interface do painel avisa que desenhou a área: fecha a medição de abertura.
+/// As áreas que o serviço abre sozinho: o painel Hoje, onde o briefing e o fechamento aparecem.
+const AREAS_DO_SERVICO: [&str; 1] = ["hoje"];
+
+/// Pedido do serviço pelo canal do sidecar (`{"tipo":"painel","id",…}`).
+#[derive(Debug, PartialEq, Deserialize)]
+#[serde(tag = "op", rename_all = "kebab-case")]
+pub enum PedidoPainel {
+    /// Mostra o painel na área, sem ativar e sem alternar.
+    Mostrar { area: String },
+    /// Se o painel está à vista nessa área.
+    Aberto { area: String },
+}
+
+/// Lê o pedido do serviço; área fora da lista é recusada.
+pub fn pedido_do_servico(linha: &str) -> Result<PedidoPainel, String> {
+    let pedido: PedidoPainel = serde_json::from_str(linha).map_err(|e| format!("pedido inválido: {e}"))?;
+    let (PedidoPainel::Mostrar { area } | PedidoPainel::Aberto { area }) = &pedido;
+    if !AREAS_DO_SERVICO.contains(&area.as_str()) {
+        return Err(format!("o serviço não abre o painel em {area}"));
+    }
+    Ok(pedido)
+}
+
+/// O serviço pede o painel (o briefing apareceu) ou pergunta se ele está aberto. Em tela cheia o
+/// painel não aparece por cima do jogo ou da apresentação: responde `ok: false`.
+pub fn atender_servico(app: &AppHandle, linha: &str) -> serde_json::Value {
+    match pedido_do_servico(linha) {
+        Err(erro) => serde_json::json!({ "erro": erro }),
+        Ok(PedidoPainel::Mostrar { area }) => {
+            if crate::tela_cheia::agora() {
+                return serde_json::json!({ "ok": false, "tela_cheia": true });
+            }
+            painel_mostrar(app.clone(), area, Origem::Servico);
+            serde_json::json!({ "ok": true })
+        }
+        Ok(PedidoPainel::Aberto { area }) => {
+            let aberta = PAINEL.lock().unwrap().as_ref().map(|(a, _)| a.clone());
+            let confirmada = CONFIRMADA.lock().unwrap().clone();
+            let visivel = janela(app, "painel").is_some_and(|p| unsafe { IsWindowVisible(hwnd(&p)) }.as_bool());
+            serde_json::json!({ "aberto": aberto_e_confirmado(visivel, aberta.as_deref(), confirmada.as_deref(), &area) })
+        }
+    }
+}
+
+/// O painel está à vista na área só quando a interface confirmou que a desenhou: a janela visível
+/// com o `painel:area` perdido (o WebView ainda subindo) mostra um cartão vazio, não o briefing.
+pub fn aberto_e_confirmado(visivel: bool, aberta: Option<&str>, confirmada: Option<&str>, area: &str) -> bool {
+    visivel && aberta == Some(area) && confirmada == Some(area)
+}
+
+/// O painel que acabou de montar pergunta a área aberta: o `painel:area` emitido antes de a
+/// interface ouvir se perdeu. Fechado, nenhuma.
+#[tauri::command]
+pub fn painel_area_atual(app: AppHandle) -> Option<String> {
+    let aberta = PAINEL.lock().unwrap().as_ref().map(|(a, _)| a.clone())?;
+    let visivel = janela(&app, "painel").is_some_and(|p| unsafe { IsWindowVisible(hwnd(&p)) }.as_bool());
+    visivel.then_some(aberta)
+}
+
+/// A interface do painel avisa que desenhou a área: fecha a medição de abertura e confirma a área
+/// para quem pergunta se o painel está à vista.
 #[tauri::command]
 pub fn painel_pronto(area: String) -> Option<f64> {
     let guarda = PAINEL.lock().unwrap();
@@ -143,6 +232,7 @@ pub fn painel_pronto(area: String) -> Option<f64> {
     if *aberta != area {
         return None;
     }
+    *CONFIRMADA.lock().unwrap() = Some(area.clone());
     let ms = inicio.elapsed().as_secs_f64() * 1000.0;
     crate::registro::info(&format!("painel {area} aberto em {ms:.1} ms"));
     Some(ms)
@@ -153,6 +243,7 @@ pub fn painel_pronto(area: String) -> Option<f64> {
 pub fn painel_foco(app: AppHandle, quer: bool) {
     let Some(painel) = janela(&app, "painel") else { return };
     let h = hwnd(&painel);
+    clique_fora::teclado(quer);
     if quer {
         dock::com_ativar(dock::hwnd_de(&painel));
         unsafe {
@@ -281,11 +372,30 @@ pub fn sistema_abrir(app: AppHandle, area: String) {
 
 // ---------- captura ----------
 
-/// Centraliza a captura no monitor principal, um pouco acima do meio.
-pub fn retangulo_captura(monitor: RECT, largura: i32, altura: i32) -> RECT {
+/// Largura do cartão da captura em pixels lógicos (Captura.dc.html): a janela é o cartão.
+pub const LARGURA_CAPTURA: f64 = 640.0;
+/// A altura que a captura segue ao crescer: o cartão com a prévia e o "Na verdade é" cabe com
+/// folga; mais que isso é pedido fora do normal e fica no teto.
+pub const ALTURA_MAXIMA_CAPTURA: f64 = 560.0;
+pub const ALTURA_MINIMA_CAPTURA: f64 = 48.0;
+/// Altura de referência para o ponto de abertura: o topo da captura fica no mesmo lugar com ou
+/// sem prévia, e ela cresce para baixo.
+pub const ALTURA_ANCORA_CAPTURA: f64 = 72.0;
+
+/// Centraliza a captura no monitor principal, com o topo um pouco acima do meio: o centro da
+/// altura de referência (`ancora`) no terço de cima, qualquer que seja a altura de agora.
+pub fn retangulo_captura(monitor: RECT, largura: i32, altura: i32, ancora: i32) -> RECT {
     let x = monitor.left + (monitor.right - monitor.left - largura) / 2;
-    let y = monitor.top + (monitor.bottom - monitor.top) / 3 - altura / 2;
+    let y = monitor.top + (monitor.bottom - monitor.top) / 3 - ancora / 2;
     RECT { left: x, top: y, right: x + largura, bottom: y + altura }
+}
+
+/// A altura pedida pela interface, dentro dos limites; o que não é número vira o mínimo.
+pub fn altura_captura(pedida: f64) -> f64 {
+    if !pedida.is_finite() {
+        return ALTURA_MINIMA_CAPTURA;
+    }
+    pedida.clamp(ALTURA_MINIMA_CAPTURA, ALTURA_MAXIMA_CAPTURA)
 }
 
 #[tauri::command]
@@ -299,10 +409,22 @@ pub fn captura_alternar(app: AppHandle) {
     unsafe {
         let _ = GetWindowRect(hwnd(&captura), &mut rc);
     }
-    let alvo = retangulo_captura(appbar::monitor_principal(), rc.right - rc.left, rc.bottom - rc.top);
+    let escala = captura.scale_factor().unwrap_or(1.0);
+    let ancora = (ALTURA_ANCORA_CAPTURA * escala).round() as i32;
+    let alvo = retangulo_captura(appbar::monitor_principal(), rc.right - rc.left, rc.bottom - rc.top, ancora);
     let _ = captura.set_position(PhysicalPosition::new(alvo.left, alvo.top));
     let _ = captura.show();
     let _ = captura.set_focus();
+}
+
+/// A captura tem a altura do cartão: a interface mede e pede, e a janela cresce para baixo,
+/// com a largura sempre a do cartão. Só a própria captura pede.
+#[tauri::command]
+pub fn captura_altura(janela: WebviewWindow, altura: f64) {
+    if janela.label() != "captura" {
+        return;
+    }
+    let _ = janela.set_size(LogicalSize::new(LARGURA_CAPTURA, altura_captura(altura)));
 }
 
 #[tauri::command]
@@ -317,13 +439,79 @@ mod testes {
     use super::*;
 
     #[test]
+    fn servico_so_abre_o_painel_hoje() {
+        assert_eq!(
+            pedido_do_servico(r#"{"tipo":"painel","id":3,"op":"mostrar","area":"hoje"}"#),
+            Ok(PedidoPainel::Mostrar { area: "hoje".into() })
+        );
+        assert_eq!(
+            pedido_do_servico(r#"{"tipo":"painel","id":4,"op":"aberto","area":"hoje"}"#),
+            Ok(PedidoPainel::Aberto { area: "hoje".into() })
+        );
+        assert!(pedido_do_servico(r#"{"tipo":"painel","id":5,"op":"mostrar","area":"agentes"}"#).is_err());
+        assert!(pedido_do_servico(r#"{"tipo":"painel","id":6,"op":"fechar","area":"hoje"}"#).is_err());
+        assert!(pedido_do_servico(r#"{"tipo":"painel","id":7,"op":"mostrar"}"#).is_err());
+    }
+
+    #[test]
+    fn aberto_so_com_a_area_confirmada_pela_interface() {
+        assert!(aberto_e_confirmado(true, Some("hoje"), Some("hoje"), "hoje"));
+        // Visível, mas a interface ainda não desenhou o Hoje (o `painel:area` se perdeu na subida).
+        assert!(!aberto_e_confirmado(true, Some("hoje"), None, "hoje"));
+        // Confirmou outra área, ou a janela está escondida.
+        assert!(!aberto_e_confirmado(true, Some("hoje"), Some("tarefas"), "hoje"));
+        assert!(!aberto_e_confirmado(false, Some("hoje"), Some("hoje"), "hoje"));
+        assert!(!aberto_e_confirmado(true, Some("tarefas"), Some("tarefas"), "hoje"));
+    }
+
+    #[test]
     fn painel_encosta_no_dock_pelo_lado_de_dentro() {
         let dock = RECT { left: 0, top: 48, right: 64, bottom: 1440 };
-        let e = retangulo_painel(dock, appbar::Lado::Esquerda, 372);
-        assert_eq!((e.left, e.right, e.top, e.bottom), (64, 436, 48, 1440));
+        let e = retangulo_painel(dock, appbar::Lado::Esquerda, 412, 0);
+        assert_eq!((e.left, e.right, e.top, e.bottom), (64, 476, 48, 1440));
         let dock_d = RECT { left: 2496, top: 48, right: 2560, bottom: 1440 };
-        let d = retangulo_painel(dock_d, appbar::Lado::Direita, 372);
-        assert_eq!((d.left, d.right), (2124, 2496));
+        let d = retangulo_painel(dock_d, appbar::Lado::Direita, 412, 0);
+        assert_eq!((d.left, d.right), (2084, 2496));
+    }
+
+    /// O dock flutuante tem 8 px transparentes em volta do que desenha: a janela do painel entra
+    /// neles e o cartão encosta no dock, sem o vão de 8 px (mais os 12 da folga) que sobrava.
+    #[test]
+    fn painel_encosta_no_dock_flutuante_e_nao_na_janela_dele() {
+        let recuo = (dock::margem_janela(dock::Forma::Flutuante) * 1.25).round() as i32;
+        assert_eq!(recuo, 10);
+        // Janela do dock de 80 lógicos a 125%: 100 físicos, o dock desenhado vai de 10 a 90.
+        let janela = RECT { left: 0, top: 0, right: 100, bottom: 1440 };
+        let e = retangulo_painel(janela, appbar::Lado::Esquerda, largura_janela_painel(1.25), recuo);
+        assert_eq!((e.left, e.right), (90, 605));
+        let janela_d = RECT { left: 2460, top: 0, right: 2560, bottom: 1440 };
+        let d = retangulo_painel(janela_d, appbar::Lado::Direita, largura_janela_painel(1.25), recuo);
+        assert_eq!((d.left, d.right), (1955, 2470));
+    }
+
+    #[test]
+    fn janela_do_painel_tem_o_cartao_de_400_mais_o_afastamento() {
+        assert_eq!(largura_janela_painel(1.0), 412);
+        assert_eq!(largura_janela_painel(1.25), 515);
+        assert_eq!(largura_janela_painel(1.5), 618);
+        assert_eq!(largura_janela_painel(2.0), 824);
+    }
+
+    /// Com sombra, o Windows põe uma moldura invisível de redimensionar em volta da janela sem
+    /// decoração, e ela sai da área do WebView: a janela de 412 px dava 396 úteis e o cartão
+    /// ficava com 384. O dock e o painel são posicionados pelo retângulo externo, então a área útil
+    /// tem de ser a janela inteira; a sombra do cartão vem do CSS (`--sombra-painel`).
+    #[test]
+    fn janelas_encostadas_no_dock_nao_tem_moldura_do_windows() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let janelas = conf["app"]["windows"].as_array().unwrap();
+        for rotulo in ["dock", "painel"] {
+            let janela = janelas.iter().find(|j| j["label"] == rotulo).unwrap();
+            assert_eq!(janela["shadow"], false, "janela {rotulo} com sombra do Windows");
+            assert_eq!(janela["decorations"], false, "janela {rotulo} com decoração");
+        }
+        let painel = janelas.iter().find(|j| j["label"] == "painel").unwrap();
+        assert_eq!(painel["width"].as_f64(), Some(LARGURA_PAINEL + MARGEM_PAINEL));
     }
 
     #[test]
@@ -360,7 +548,37 @@ mod testes {
     #[test]
     fn captura_fica_centralizada_no_terco_de_cima() {
         let m = RECT { left: 0, top: 0, right: 2560, bottom: 1440 };
-        let r = retangulo_captura(m, 640, 72);
+        let r = retangulo_captura(m, 640, 72, 72);
         assert_eq!((r.left, r.top, r.right, r.bottom), (960, 444, 1600, 516));
+    }
+
+    /// Com a prévia aberta (mais alta), o topo é o mesmo: a captura cresce para baixo.
+    #[test]
+    fn captura_com_previa_abre_com_o_mesmo_topo() {
+        let m = RECT { left: 0, top: 0, right: 2560, bottom: 1440 };
+        let r = retangulo_captura(m, 640, 300, 72);
+        assert_eq!((r.left, r.top, r.right, r.bottom), (960, 444, 1600, 744));
+    }
+
+    #[test]
+    fn altura_da_captura_fica_nos_limites() {
+        assert_eq!(altura_captura(268.0), 268.0);
+        assert_eq!(altura_captura(0.0), ALTURA_MINIMA_CAPTURA);
+        assert_eq!(altura_captura(10_000.0), ALTURA_MAXIMA_CAPTURA);
+        assert_eq!(altura_captura(f64::NAN), ALTURA_MINIMA_CAPTURA);
+        assert_eq!(altura_captura(f64::INFINITY), ALTURA_MINIMA_CAPTURA);
+    }
+
+    /// A captura é posicionada pelo retângulo externo e o cartão ocupa a janela inteira: com a
+    /// sombra do Windows, a moldura invisível tirava 16 px da largura e 30 da altura (656x81 por
+    /// fora, 640x42 por dentro).
+    #[test]
+    fn captura_nao_tem_moldura_do_windows() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let janelas = conf["app"]["windows"].as_array().unwrap();
+        let captura = janelas.iter().find(|j| j["label"] == "captura").unwrap();
+        assert_eq!(captura["shadow"], false, "captura com sombra do Windows");
+        assert_eq!(captura["decorations"], false, "captura com decoração");
+        assert_eq!(captura["width"].as_f64(), Some(LARGURA_CAPTURA));
     }
 }

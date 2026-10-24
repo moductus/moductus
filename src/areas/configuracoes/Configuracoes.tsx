@@ -9,7 +9,7 @@ interface PropsConfiguracoes {
   aoEscolherSecao: (secao: IdSecao) => void;
 }
 
-/** Configurações: sub-navegação de 220 com as 9 seções e a seção escolhida ao lado. */
+/** Configurações: sub-navegação de 220 com as 10 seções e a seção escolhida ao lado. */
 export function Configuracoes({ secao, aoEscolherSecao }: PropsConfiguracoes) {
   const ativa: IdSecao = eIdSecao(secao) ? secao : SECAO_INICIAL;
   const { Componente } = SECOES.find((s) => s.id === ativa)!;

@@ -16,6 +16,11 @@ pub fn em_tela_cheia(estado: QUERY_USER_NOTIFICATION_STATE) -> bool {
     estado == QUNS_BUSY || estado == QUNS_RUNNING_D3D_FULL_SCREEN || estado == QUNS_PRESENTATION_MODE
 }
 
+/// Tela cheia agora, para quem decide na hora (o painel que o serviço pede).
+pub fn agora() -> bool {
+    unsafe { SHQueryUserNotificationState() }.map(em_tela_cheia).unwrap_or(false)
+}
+
 pub fn vigiar(app: AppHandle) {
     thread::spawn(move || {
         let mut anterior = false;

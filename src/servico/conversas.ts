@@ -138,6 +138,92 @@ export function previa(mensagem: Mensagem, doTime: boolean, falha: FalaCartao | 
   return `${nome}: ${texto}`;
 }
 
+/** Um pedaço da fala: texto corrido ou um bloco de código entre cercas (```). */
+export type ParteDaFala =
+  { tipo: "texto"; texto: string } | { tipo: "codigo"; codigo: string; linhas: number };
+
+/** Bloco de código com mais linhas que isto aparece recolhido, com "Mostrar N linhas de código". */
+export const LINHAS_CODIGO_ABERTO = 8;
+
+/** Quanto da resposta aparece antes de "Ver tudo", em caracteres. */
+export const LIMITE_FALA = 1_200;
+
+/** O que um bloco recolhido ocupa na conta do limite: a linha do botão. */
+const TAMANHO_CODIGO_RECOLHIDO = 80;
+
+const CERCA = /^ {0,3}(`{3,}|~{3,})/;
+
+/**
+ * A fala em texto e blocos de código. O bloco que ainda não fechou (a resposta chegando) já conta
+ * como código, para não despejar o script na tela enquanto ele é escrito.
+ */
+export function partesDaFala(conteudo: string): ParteDaFala[] {
+  const partes: ParteDaFala[] = [];
+  let texto: string[] = [];
+  let codigo: string[] | null = null;
+  let cerca = "";
+  const fecharTexto = () => {
+    const junto = texto.join("\n").replace(/^\n+|\n+$/g, "");
+    if (junto.trim() !== "") partes.push({ tipo: "texto", texto: junto });
+    texto = [];
+  };
+  const fecharCodigo = (linhas: string[]) => {
+    partes.push({ tipo: "codigo", codigo: linhas.join("\n"), linhas: linhas.length });
+  };
+  for (const linha of conteudo.split(/\r?\n/)) {
+    const marca = CERCA.exec(linha)?.[1];
+    if (codigo === null) {
+      if (!marca) {
+        texto.push(linha);
+        continue;
+      }
+      fecharTexto();
+      codigo = [];
+      cerca = marca;
+    } else if (marca && marca[0] === cerca[0] && marca.length >= cerca.length && linha.trim() === marca) {
+      fecharCodigo(codigo);
+      codigo = null;
+    } else codigo.push(linha);
+  }
+  if (codigo !== null) fecharCodigo(codigo);
+  else fecharTexto();
+  return partes;
+}
+
+/** O tamanho que a parte ocupa na tela, para o limite da fala. */
+function tamanhoNaTela(parte: ParteDaFala): number {
+  if (parte.tipo === "texto") return parte.texto.length;
+  return parte.linhas > LINHAS_CODIGO_ABERTO ? TAMANHO_CODIGO_RECOLHIDO : parte.codigo.length;
+}
+
+/**
+ * As partes que cabem no limite: o texto que passa é cortado no fim de uma palavra, com
+ * reticências; o código curto que não cabe fica para o "Ver tudo".
+ */
+export function recortarFala(
+  partes: readonly ParteDaFala[],
+  limite: number = LIMITE_FALA,
+): { partes: ParteDaFala[]; cortada: boolean } {
+  const cabem: ParteDaFala[] = [];
+  let resta = limite;
+  for (const parte of partes) {
+    const tamanho = tamanhoNaTela(parte);
+    if (tamanho <= resta) {
+      cabem.push(parte);
+      resta -= tamanho;
+      continue;
+    }
+    if (parte.tipo === "texto") {
+      const corte = parte.texto.slice(0, resta);
+      const espaco = corte.search(/\s\S*$/);
+      const inteiro = (espaco > 0 ? corte.slice(0, espaco) : corte).trimEnd();
+      if (inteiro) cabem.push({ tipo: "texto", texto: `${inteiro}…` });
+    }
+    return { partes: cabem, cortada: true };
+  }
+  return { partes: cabem, cortada: false };
+}
+
 /** Põe "@tula " no começo do que está escrito, sem repetir a menção que já está lá. */
 export function mencionar(texto: string, agente: Agente): string {
   const apelido = DADOS_AGENTES[agente].apelido;
@@ -182,6 +268,8 @@ export interface AcoesConversas {
   nova: () => Promise<void>;
   /** Manda a conversa aberta para a lixeira e abre outra vazia. */
   apagar: () => Promise<boolean>;
+  /** Para as respostas em andamento na conversa aberta; devolve se o serviço aceitou. */
+  parar: () => Promise<boolean>;
   anteriores: () => Promise<void>;
   limparErro: () => void;
 }
@@ -353,6 +441,18 @@ export function useConversas(canal: EstadoConexao, com: Interlocutor): EstadoCon
     }
   }, [aberta, com, mostrar]);
 
+  const parar = useCallback(async () => {
+    if (!aberta) return false;
+    setErro(null);
+    try {
+      await servico.pedir("conversas.parar", { id: aberta.id });
+      return true;
+    } catch (e) {
+      setErro(mensagemDeErro(e));
+      return false;
+    }
+  }, [aberta]);
+
   const anteriores = useCallback(async () => {
     if (!aberta || !proximo) return;
     try {
@@ -386,6 +486,7 @@ export function useConversas(canal: EstadoConexao, com: Interlocutor): EstadoCon
     enviar,
     nova,
     apagar,
+    parar,
     anteriores,
     limparErro: () => setErro(null),
   };

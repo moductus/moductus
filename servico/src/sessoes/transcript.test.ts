@@ -76,10 +76,12 @@ describe("linha do transcript", () => {
         saida: 53,
         cacheCriado: 16619,
         cacheLido: 26314,
+        // A fixture foi gravada na aba Code do app Desktop.
+        pontoDeEntrada: "claude-desktop",
       },
       expect.objectContaining({ tipo: "uso", mensagemId: "msg_fixture01" }),
       expect.objectContaining({ tipo: "uso", modelo: "claude-opus-5-5", cacheLido: 515126 }),
-      { tipo: "compactacao", tokensDepois: 14210 },
+      { tipo: "compactacao", tokensDepois: 14210, pontoDeEntrada: "claude-desktop" },
       expect.objectContaining({ tipo: "uso", cacheCriado: 36815, cacheLido: 44561 }),
     ]);
   });
@@ -98,7 +100,16 @@ describe("linha do transcript", () => {
       lerLinhaTranscript(
         JSON.stringify({ type: "system", subtype: "compact_boundary", compactMetadata: { trigger: "auto" } }),
       ),
-    ).toEqual({ tipo: "compactacao", tokensDepois: null });
+    ).toEqual({ tipo: "compactacao", tokensDepois: null, pontoDeEntrada: null });
+  });
+
+  test("onde a sessão roda vem do entrypoint de cada linha, como o Claude Code escreveu", () => {
+    expect(lerLinhaTranscript(resposta({ entrypoint: "cli" }))).toMatchObject({ pontoDeEntrada: "cli" });
+    expect(lerLinhaTranscript(resposta({ entrypoint: "claude-desktop" }))).toMatchObject({
+      pontoDeEntrada: "claude-desktop",
+    });
+    expect(lerLinhaTranscript(resposta({ entrypoint: 3 }))).toMatchObject({ pontoDeEntrada: null });
+    expect(lerLinhaTranscript(resposta({}))).toMatchObject({ pontoDeEntrada: null });
   });
 
   test("texto do usuário que fala de assistant não vira resposta; número estranho vira 0", () => {

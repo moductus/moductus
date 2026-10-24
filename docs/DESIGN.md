@@ -2,7 +2,7 @@
 
 > O sistema visual do Moductus: três temas sobre a mesma estrutura. O produto está em [PRODUCT.md](PRODUCT.md); os desenhos vivem no canvas [Moductus — identidade visual](https://claude.ai/artifact/8im3xVzwsYkKuTocTiDfXZ), com cópia das fontes em [design/](design/).
 
-**Status:** em uso desde a fase 1; a fase 2 acrescentou as telas dos agentes (seção 5) e a leitura dos estados no personagem (seção 6). Os valores abaixo saem dos desenhos do canvas e são a fonte dos tokens em `src/tokens/`.
+**Status:** em uso desde a fase 1; a fase 2 acrescentou as telas dos agentes (seção 5) e a leitura dos estados no personagem (seção 6); a fase 3 acrescentou as telas do dia (tarefas, foco, notas, Google Agenda, O dia, briefing e fechamento, tour) e os padrões que saíram delas. Os valores abaixo saem dos desenhos do canvas e são a fonte dos tokens em `src/tokens/`.
 
 ---
 
@@ -91,9 +91,9 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 ### Escala comum aos três
 
 - **Espaço** (grade de 4): 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 32.
-- **Tipo:** 11 (meta, atalho), 12 (rótulo), 13 (corpo), 17–22 (título de painel), 26 (título do Sistema), 30–36 (número grande, mono).
+- **Tipo:** 11 (meta, atalho), 12 (rótulo), 13 (corpo), 15 (linha de tarefa nos painéis e título da bolha do tour), 17–22 (título de painel), 26 (título do Sistema), 30–36 (número grande, mono). Os relógios do foco têm token próprio (48 no painel, 64 na área Foco) e o do Início, 34.
 - **Dock:** 64–68 px de largura; botões de 44 × 44; badge de 16 px.
-- **Painel lateral:** 368–372 px de largura. O quadro Agentes da fase 2 foi desenhado com 400 px e a casca usa 372; a largura é decisão do humano, ainda em aberto.
+- **Painel lateral:** cartão de 400 px de largura, encostado no dock (decisão do humano na fase 3; no flutuante, o alto e o pé acompanham os do dock). A janela do painel tem 412 px (o cartão mais 12 px de folga do lado de fora, para a sombra) e não reserva espaço na tela: passa por cima do que estiver ao lado do dock. Fecha com Esc, com o fechar ou com um clique em outro app ou na área de trabalho, menos com um pedido de aprovação esperando a resposta; o briefing e o fechamento que o serviço abre ficam até uma ação ou o Esc.
 - **Medidas de tela:** colunas de tabela, trilhos de progresso, o balão da conversa e afins também são tokens (`--largura-col-*`, `--altura-trilho-*`, `--largura-balao`…) em `src/tokens/temas.css`, e o lint visual reprova número solto. `--dur-correr` (1,4 s) é a barra indeterminada de "testando" e vira 0 com movimento reduzido.
 
 ---
@@ -117,20 +117,28 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 | Captura rápida | ✓ (tweak de tema) | ✓ | ✓ |
 | Componente Dock, reutilizado pelos painéis | ✓ | ✓ | ✓ |
 | Marca: quatro opções, com a **C · Borda e ponto** escolhida e aplicada em todos os desenhos | ✓ | ✓ | ✓ |
+| Ícone do app e da bandeja, na barra clara, escura e de alto contraste | ✓ (tweak de tema) | ✓ | ✓ |
 | Agentes: personagens, expressões e criar agente | ✓ (tweak de tema) | ✓ | ✓ |
 | Componente Personagem (agente, expressão, corpo ou cabeça) | ✓ | ✓ | ✓ |
 | Primeiro uso: boas-vindas, tema e dock, modelo, conhecer o time, conexões | ✓ (tweak de tema) | ✓ | ✓ |
 | Tutorial "Primeiros passos" no Início, com cartão de aprovação de treino | ✓ (tweak de tema) | ✓ | ✓ |
 | Briefing da manhã e fechamento do dia | ✓ (tweak de tema) | ✓ | ✓ |
-| Painéis do dock: Foco, Finanças, Dev, Arquivos | ✓ (tweak de tema) | ✓ | ✓ |
+| Painéis do dock: Foco, Finanças, Dev, Arquivos, Tarefas e Notas | ✓ (tweak de tema) | ✓ | ✓ |
+| Lembrete no painel Hoje: chegando, tocando com Adiar e Feito, atrasados agrupados depois da suspensão | ✓ (tweak de tema) | ✓ | ✓ |
 | Estados do agente: sem modelo, erro, teto de gasto, vazio, conexão caída, pausado | ✓ (tweak de tema) | ✓ | ✓ |
 | Conversa com o time | ✓ (tweak de tema) | ✓ | ✓ |
 | Importar extrato: mapear colunas e revisar antes de lançar | ✓ (tweak de tema) | ✓ | ✓ |
 | Prévia da Faina antes de organizar | ✓ (tweak de tema) | ✓ | ✓ |
-| Sistema: Tarefas, Finanças, Notas, Sessões de IA, Dev, Memória, página do agente | ✓ (tweak de tema) | ✓ | ✓ |
+| Sistema: Tarefas, Finanças, Notas, Sessões de IA, Dev, Memória, página do agente, com restaurar padrão | ✓ (tweak de tema) | ✓ | ✓ |
 | Configurações: notificações e levar para outro PC | ✓ (tweak de tema) | ✓ | ✓ |
 | Configurações › Modelos: provedores, principal e reserva por agente, teto por dia, trocar o modelo, nenhum conectado | ✓ (tweak de tema) | ✓ | ✓ |
 | Configurações › Conexões: Claude Code e GitHub, prévia do `settings.json` com consentimento, conectando, erros, nenhuma ligada | ✓ (tweak de tema) | ✓ | ✓ |
+| Configurações › Conexões › Google Agenda: antes de conectar, abrindo o navegador, conectado com os calendários, erros, próprio cliente, desconectar; e o passo 5 do primeiro uso com o Google ligado | ✓ (tweak de tema) | ✓ | ✓ |
+| Configurações › O dia: dias, fuso, briefing, hora de parar, expediente e ciclos do foco | ✓ (tweak de tema) | ✓ | ✓ |
+| Sistema · Foco: rodando, em pausa, terminado, na pausa, rodada completa e vazio | ✓ (tweak de tema) | ✓ | ✓ |
+| Detalhe de tarefa e de evento, com o evento de outro calendário só leitura | ✓ (tweak de tema) | ✓ | ✓ |
+| Início no modo de editar blocos | ✓ (tweak de tema) | ✓ | ✓ |
+| Tour do tutorial em quatro paradas e as missões que ainda não valem | ✓ (tweak de tema) | ✓ | ✓ |
 
 O cartão de aprovação traz três ações: **Negar**, **Sempre neste projeto** e **Permitir**. A do meio vira uma regra do Moductus para aquele projeto: os próximos pedidos iguais (o mesmo comando, o mesmo caminho, o mesmo domínio) são decididos sem cartão. O Moductus não escreve nas permissões do Claude Code (ADR-0023). No aviso do Windows o rótulo é "Sempre aqui".
 
@@ -145,11 +153,22 @@ Padrões que saíram dessas telas e valem para o resto:
 - **Estado de uma conexão ou provedor:** ponto + texto ao lado do nome (`funcionando`, `testando`, `erro`, `desligada`, `em breve`); testando ganha uma barra indeterminada embaixo e o botão vira "Cancelar"; o erro vem numa linha abaixo, com impacto, motivo e saída.
 - **Prévia de arquivo antes de mexer:** o agente diz numa fala o que muda e o tamanho; ao lado, o trecho antes e depois em mono, linhas novas marcadas com `+` no tom de sucesso; uma linha diz onde fica a cópia e como desfazer; o botão primário é verbo com objeto ("Ligar 8 hooks no Claude Code").
 - **Estado do agente, em texto:** o status, a hora de volta e a frase de cada situação saem de um formatador só (`situacao.ts` e `quando.ts` em `src/componentes/personagem/`), então dock, painel, página do agente e conversa dizem o mesmo: "seg 9:00" curto no dock e "segunda às 9:00" no cartão (a hora é sempre HH:MM, inclusive a cheia: diferença deliberada do quadro Estados); "tentando de novo" quando a hora já chegou, em vez de prometer uma hora que passou. Um quadro novo de estado reaproveita esses textos (ADR-0026).
+- **Lembrete:** quando toca, sobe para o topo do Hoje num bloco elevado com sino, hora e origem, com [Adiar 10 min] e [Feito]. O que venceu com o PC suspenso chega junto num cartão só, com a fala da Alba, Feito por item e as ações em grupo; nunca toca um por um.
+- **Confirmação no lugar:** ação que não se desfaz abre um cartão elevado logo abaixo do botão, nunca modal. Diz o que muda e o que fica e termina em "Não dá para desfazer."; o secundário é "Manter como está" e o primário é verbo com objeto.
 - **Valor pendente de decisão:** marcador tracejado no tom de aviso ("moeda a decidir") no lugar do símbolo, até a decisão ser registrada.
+- **Detalhe ao lado:** tarefa ou evento abre num painel de 440 px à direita da lista ou da agenda, nunca em modal; o item aberto fica marcado na lista. Salva sozinho ("salvo agora"), e apagar fica no rodapé, no tom de perigo, dizendo para onde vai ("fica 30 dias na Lixeira", "sai também do Google").
+- **Só leitura com pedido:** o que vem de fora e não é do Moductus (evento de outro calendário) mostra os campos como texto, com cadeado e "só leitura"; a mudança é um pedido ao agente, que responde com o cartão de aprovação logo abaixo.
+- **Tour:** a parada fica num anel de 2 px no destaque e o resto da tela escurece e não recebe clique; a bolha fica ao lado do que aponta, com "n de 4", pontos de progresso, até duas frases e [Pular tour] [Voltar] [Próximo]. Esc pula, as setas andam, e o tour volta pelo menu Ajuda.
+- **Ainda não vale:** missão ou conexão que chega com outra área aparece apagada, com caixa tracejada e o selo "chega com Finanças", sem ação e fora da contagem.
+- **Foco parado:** no painel Hoje, uma linha "Nenhum foco agora." com [Começar foco] no lugar do relógio, no padrão do vazio que explica. É um estado que o quadro do painel não desenhou; os outros estados do foco seguem `PainelFoco` e `AreaFocoEstados`.
+- **Editar blocos:** no modo de edição, cada bloco ganha alça, posição ("3 de 5"), mover para cima e para baixo e Esconder; o escondido vai para uma lista "Escondidos" com Mostrar, e cada mudança vale na hora.
 
-**A desenhar:** Foco e Ferramentas no Sistema, instruções e ferramentas na página do agente, criar agente (fase 7), demais seções de Configurações (Geral, Atalhos, Privacidade) e o instalador.
+**A desenhar:** Ferramentas no Sistema, instruções e ferramentas na página do agente, criar agente (fase 7), demais seções de Configurações (Geral, Atalhos, Privacidade) e o instalador.
 
-**Ícones da marca:** em [design/marca/](design/marca/): `moductus.ico` (16 a 256 px, Grafite), `app-*.png` (32 a 512), ícones da bandeja claro e escuro (16 e 32) e `marca.svg` em `currentColor`.
+**Ícones da marca:** em [design/marca/](design/marca/), iguais aos de `src-tauri/icons`: `moductus.ico` (16, 20, 24, 32, 40, 48, 64, 128 e 256 px, cada um desenhado no próprio tamanho), `app-*.png` (32 a 512), ícones da bandeja claro e escuro (16, 20, 24 e 32) e `marca.svg` em `currentColor`. Quadro: `Icones`.
+
+- **App:** quadrado `#131417` com raio de 20% e a marca em `#E8E9EB`, com 62% do lado (o respiro de 0,25 da marca).
+- **Bandeja:** só a marca, na altura toda, em branco puro na barra escura e preto puro na clara; no alto contraste vale o fundo do tema do Windows. Um desenho por escala (16 px a 100%, 20 a 125%, 24 a 150%, 32 a 200%), com linha e ponto em pixel inteiro. A casca troca o desenho sozinha quando o tema, o alto contraste ou a escala mudam (`src-tauri/src/bandeja.rs`).
 
 ---
 

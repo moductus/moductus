@@ -5,6 +5,7 @@ import { CONFIG_PADRAO, Manifesto, VERSAO_FORMATO, type Config, type EstadoConfi
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { afterEach, describe, expect, test } from "vitest";
 import { abrirBanco } from "../banco/conexao.ts";
+import { vigiarCotacao } from "../cambio/cambio.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "../config/config.ts";
 import { ServicoOutroPc } from "./outro-pc.ts";
 
@@ -33,7 +34,7 @@ const CRIADO_EM = new Date("2026-10-08T12:34:56.000Z");
 
 /** Um PC: banco novo, o serviço de configuração e o de levar para outro PC. */
 function pc(nativo: AplicadorNativo = aceita(), portable = false) {
-  const db = abrirBanco(pasta());
+  const db = abrirBanco(pasta(), { duravel: false });
   bancos.push(db);
   const eventos: EstadoConfig[] = [];
   const config = new ServicoConfig(new RepositorioConfig(db), nativo, (e) => eventos.push(e), portable);
@@ -49,9 +50,17 @@ function pc(nativo: AplicadorNativo = aceita(), portable = false) {
 const MINHA: Config = {
   tema: "vidro",
   dock: { lado: "direita", modo: "inteligente", forma: "flutuante" },
-  atalhos: { sistema: "Ctrl+Alt+M", dock: "Ctrl+Alt+B", captura: "Ctrl+Shift+Space" },
+  atalhos: { sistema: "Ctrl+Alt+M", dock: "Ctrl+Alt+B", captura: "Ctrl+Shift+Space", foco: "Ctrl+Alt+F" },
   autostart: true,
   silencio: { horario: { ligado: true, inicio: "22:00", fim: "07:30" }, telaCheia: true, foco: false },
+  dia: {
+    fuso: "America/Manaus",
+    expediente: { inicio: "08:00", fim: "17:00" },
+    foco: { focoMin: 45, pausaMin: 10, pausaLongaMin: 20, ciclosAtePausaLonga: 3 },
+  },
+  cambio: { cotacoes: { EUR: { milionesimos: 920_000, data: "2026-10-16", fonte: "frankfurter" } } },
+  // Os blocos do Início são preferência: vão junto para o outro PC.
+  inicio: { ordem: ["briefing", "foco", "tarefas", "financas", "dev", "sessoes"], escondidos: ["financas"] },
 };
 
 const manifestoValido = (extra: Partial<Record<string, unknown>> = {}) => ({
@@ -110,7 +119,17 @@ describe("levar para outro PC: só configurações", () => {
     const caminho = join(pasta(), "casa.moductus");
     await casa.outro.exportar({ caminho });
     const conteudo = unzipSync(new Uint8Array(readFileSync(caminho)));
-    const tabelas = ["agentes", "conexoes", "notificacoes_preferencias", "provedores", "regras_permissao"];
+    const tabelas = [
+      "agentes",
+      "calendarios",
+      "conexoes",
+      "etiquetas",
+      "listas",
+      "notificacoes_preferencias",
+      "provedores",
+      "regras_permissao",
+      "rotinas",
+    ];
     expect(Object.keys(conteudo).sort()).toEqual(
       ["config.json", "manifesto.json", ...tabelas.map((t) => `${t}.json`)].sort(),
     );
@@ -131,6 +150,10 @@ describe("levar para outro PC: só configurações", () => {
       expect.objectContaining({ id: "c1", tipo: "github", conta: "gustavo" }),
     ]);
     expect(ler("regras_permissao")).toEqual([]);
+    expect(ler("listas").map((l) => l.nome)).toEqual(["Entrada", "Pessoal", "Trabalho"]);
+    expect(ler("etiquetas")).toEqual([]);
+    expect(ler("calendarios").map((c) => c.id)).toEqual(["local"]);
+    expect(ler("rotinas").map((r) => r.id)).toEqual(["briefing", "fechamento"]);
     for (const nome of Object.keys(conteudo)) {
       expect(strFromU8(conteudo[nome]!), nome).not.toContain("moductus:");
     }
@@ -150,6 +173,37 @@ describe("levar para outro PC: só configurações", () => {
     const caminho = arquivo({ "manifesto.json": manifestoValido(), "config.json": { dock: MINHA.dock } });
     const estado = await trabalho.outro.importar({ caminho, modo: "substituir" });
     expect(estado.config).toEqual({ ...CONFIG_PADRAO, dock: MINHA.dock });
+  });
+
+  test("a cotação que chega pela importação passa pelo aviso da configuração, como no main", async () => {
+    const db = abrirBanco(pasta(), { duravel: false });
+    bancos.push(db);
+    const repo = new RepositorioConfig(db);
+    let cotacaoMudou = 0;
+    const vigia = vigiarCotacao(repo.ler().cambio, () => cotacaoMudou++);
+    const config = new ServicoConfig(repo, aceita(), (e) => vigia(e.config.cambio), false);
+    const outro = new ServicoOutroPc(config, db, {
+      versaoApp: "0.5.0-alpha",
+      versaoEsquema: 1,
+      pcOrigem: "casa",
+    });
+
+    // Sem cambio no arquivo, juntar não mexe na cotação: nada a reagir.
+    const semCambio = arquivo({ "manifesto.json": manifestoValido(), "config.json": { tema: "papel" } });
+    await outro.importar({ caminho: semCambio, modo: "juntar" });
+    expect(cotacaoMudou).toBe(0);
+
+    const comCambio = arquivo({
+      "manifesto.json": manifestoValido(),
+      "config.json": { cambio: MINHA.cambio },
+    });
+    await outro.importar({ caminho: comCambio, modo: "juntar" });
+    expect(config.obter().config.cambio).toEqual(MINHA.cambio);
+    expect(cotacaoMudou).toBe(1);
+
+    // Substituir com um arquivo sem cambio volta ao padrão (sem cotação): mudou de novo.
+    await outro.importar({ caminho: semCambio, modo: "substituir" });
+    expect(cotacaoMudou).toBe(2);
   });
 
   test("prévia: lista o que muda, chave a chave, e não grava nada", async () => {
@@ -266,6 +320,21 @@ describe("levar para outro PC: só configurações", () => {
     });
     const estado = await trabalho.outro.importar({ caminho, modo: "juntar" });
     expect(estado.config).toEqual({ ...CONFIG_PADRAO, tema: "grafite" });
+  });
+
+  test("arquivo da 0.6.0, sem o atalho do foco e sem o dia, importa com o padrão no que falta", async () => {
+    const trabalho = pc();
+    const antigos = { sistema: "Ctrl+Alt+M", dock: "Ctrl+Alt+B", captura: "Ctrl+Shift+Space" };
+    const caminho = arquivo({
+      "manifesto.json": manifestoValido({ versao_app: "0.6.0-alpha" }),
+      "config.json": { tema: "grafite", atalhos: antigos },
+    });
+    const estado = await trabalho.outro.importar({ caminho, modo: "substituir" });
+    expect(estado.config).toEqual({
+      ...CONFIG_PADRAO,
+      tema: "grafite",
+      atalhos: { ...antigos, foco: CONFIG_PADRAO.atalhos.foco },
+    });
   });
 
   test("a casca recusa um atalho do arquivo: o motivo volta e nada é gravado", async () => {

@@ -413,17 +413,61 @@
   font-weight: var(--peso-forte);
 }
 
-/* ---------- Pendente de decisão (moeda do teto) ---------- */
-/* Marcador tracejado do quadro: o que espera uma decisão do humano não parece valor. */
-.config-pendente {
-  display: inline-flex;
+/* ---------- Teto por dia e cotação (ConfigModelos*.dc.html, ADR-0040) ---------- */
+/* "Hoje" com teto: o gasto em cima e a barra do quanto do limite já foi, como no quadro. */
+.config-modelos-hoje {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+}
+
+/* A moeda, o valor e o "Tirar" lado a lado; sem largura, descem. */
+.config-modelos-teto-campos,
+.config-cotacao-campos {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  padding: 0 var(--esp-6);
-  border: var(--espessura-borda) dashed var(--aviso);
-  border-radius: var(--raio-selo);
-  font-size: var(--tipo-11);
-  color: var(--aviso);
-  white-space: nowrap;
+  gap: var(--esp-8);
+}
+
+.config-modelos-teto-campos .campo,
+.config-cotacao-campos .campo {
+  width: var(--largura-campo-valor);
+}
+
+.config-cotacoes {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-cartao);
+  list-style: none;
+}
+
+.config-cotacao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-12);
+  padding: var(--esp-12) var(--esp-16);
+}
+
+.config-cotacao + .config-cotacao {
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+/* O que a fonte deu, esperando o sim: ocupa a linha inteira, abaixo do campo. */
+.config-cotacao-buscada {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  padding-top: var(--esp-12);
+  border-top: var(--espessura-borda) solid var(--borda);
 }
 
 /* ---------- Tabela das seções (Modelos) ---------- */
@@ -515,8 +559,7 @@
   gap: var(--esp-8);
 }
 
-.config-modelos-rotulos,
-.config-modelos-pendencia {
+.config-modelos-rotulos {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -524,10 +567,6 @@
   gap: var(--esp-8);
   font-size: var(--tipo-12);
   color: var(--texto-3);
-}
-
-.config-modelos-pendencia {
-  justify-content: flex-start;
 }
 
 .config-modelos-textos {
@@ -628,6 +667,42 @@
 .config-modelos-chave > .campo {
   flex: 1;
   min-width: var(--largura-min-dado-conexao);
+}
+
+/* Funciona, com um porém (o modelo só conversa): o mesmo bloco do erro, no tom de aviso. */
+.config-modelos-erro[data-tom="aviso"] {
+  color: var(--aviso);
+}
+
+.config-tabela-extra .config-modelos-erro + .config-modelos-formulario,
+.config-tabela-extra .config-modelos-erro + .config-modelos-remover {
+  margin-top: var(--esp-8);
+}
+
+/* O modelo: o campo, e embaixo o "Testar" com a lista do que o endereço oferece. */
+.config-modelos-campo-modelo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+}
+
+.config-modelos-modelos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.config-modelos-modelos > .config-lista {
+  flex: 1;
+}
+
+.config-modelos-remover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-10);
+  padding: var(--esp-6) 0 var(--esp-6) var(--esp-14);
+  border-left: var(--espessura-aba) solid var(--aviso);
 }
 
 /* O agente na tabela abre o painel de troca: o botão é a linha inteira da coluna. */
@@ -1111,4 +1186,517 @@
   width: var(--esp-20);
   text-align: center;
   color: var(--sucesso);
+}
+
+/* ---------- Google Agenda (ConfigConexoesGoogle*.dc.html) ---------- */
+.config-conexao[data-destacado] {
+  border-color: var(--borda-forte);
+}
+
+/* O "Desconectar" com a confirmação aberta embaixo fica marcado. */
+.config-conexao-acoes .botao[data-ativo] {
+  background: var(--fundo-ativo);
+  color: var(--texto);
+}
+
+/* Link de texto miúdo: "Usar meu próprio cliente", "Copiar o endereço", "Passo a passo". */
+.config-link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--texto-3);
+  font: inherit;
+  font-size: var(--tipo-12);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.config-link:hover {
+  color: var(--texto);
+}
+
+.config-google-espaco {
+  flex: 1;
+}
+
+.config-google-lista {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+}
+
+.config-google-lista-topo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-12);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-google-lista-pe {
+  margin: 0;
+  padding-top: var(--esp-4);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-google-calendarios {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.config-google-calendario {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  min-width: 0;
+  min-height: var(--altura-linha-calendario);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.config-google-caixa {
+  flex: none;
+  gap: var(--esp-12);
+  font-weight: var(--peso-forte);
+}
+
+.config-google-calendario:not([data-lido]) .config-google-caixa {
+  color: var(--texto-2);
+}
+
+.config-google-sobre {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-google-papel {
+  flex: none;
+  padding: var(--esp-1) var(--esp-7);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-selo);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
+.config-google-papel[data-escreve] {
+  color: var(--agente-alba);
+}
+
+/* No primeiro uso: duas colunas, linhas baixas e sem borda (Uso5Conexoes.dc.html). */
+.config-google-calendarios[data-compacta] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--largura-min-dado-conexao)), 1fr));
+  gap: var(--esp-2) var(--esp-20);
+}
+
+.config-google-calendarios[data-compacta] .config-google-calendario {
+  min-height: var(--altura-linha-calendario-uso);
+  border-top: 0;
+}
+
+.config-google-calendarios[data-compacta] .config-google-caixa {
+  font-weight: var(--peso-normal);
+}
+
+.config-google-dados {
+  padding-top: var(--esp-12);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.config-google-autorizar,
+.config-google-cliente,
+.config-google-mensagem {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-14);
+}
+
+.config-google-mensagem {
+  gap: var(--esp-4);
+}
+
+.config-google-erro,
+.config-google-fila {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+.config-google-colunas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--largura-min-coluna-google)), 1fr));
+  gap: var(--esp-24);
+}
+
+.config-google-coluna {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-10);
+  min-width: 0;
+}
+
+.config-google-rotulo {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-google-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+}
+
+.config-google-item-titulo {
+  font-size: var(--tipo-12);
+  font-weight: var(--peso-forte);
+}
+
+.config-google-item-titulo[data-tom="sucesso"] {
+  color: var(--sucesso);
+}
+
+.config-google-item-titulo[data-tom="aviso"] {
+  color: var(--aviso);
+}
+
+.config-google-item-titulo[data-tom="perigo"] {
+  color: var(--perigo);
+}
+
+.config-google-item-texto {
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+  text-wrap: pretty;
+}
+
+.config-google-aviso {
+  padding: var(--esp-10) var(--esp-12);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-chip);
+}
+
+.config-google-aviso b {
+  font-weight: var(--peso-forte);
+}
+
+.config-google-rodape,
+.config-google-esperando {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.config-google-rodape > .config-link,
+.config-google-esperando > .config-link {
+  align-self: center;
+}
+
+.config-google-prazo {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.config-google-confirmar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-12);
+  padding: var(--esp-14);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-elevado);
+}
+
+.config-google-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--largura-min-coluna-google)), 1fr));
+  gap: var(--esp-12);
+}
+
+.config-google-campo .campo-entrada {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+}
+
+/* ---------- O dia (ConfigDia.dc.html) ---------- */
+
+.config-dia-rotulo {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-dia-titulo {
+  margin: 0;
+  font-size: var(--tipo-13);
+  font-weight: var(--peso-forte);
+}
+
+/* Dias de trabalho à esquerda e o fuso à direita, alinhados pela base; sem largura, o fuso desce. */
+.cartao.config-dia-topo {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--esp-16) var(--esp-32);
+  padding: var(--esp-16);
+}
+
+.config-dia-dias {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--esp-8);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.config-dia-dias > legend {
+  padding: 0 0 var(--esp-8);
+}
+
+.config-dia-semana {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-6);
+}
+
+.config-dia-semana-dia {
+  width: var(--largura-dia-semana);
+  height: var(--altura-botao);
+  padding: 0;
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-controle);
+  background: transparent;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-dia-semana-dia[aria-pressed="true"] {
+  border-color: var(--destaque);
+  background: var(--destaque);
+  font-weight: var(--peso-forte);
+  color: var(--sobre-destaque);
+}
+
+.config-dia-semana-dia:disabled {
+  cursor: default;
+}
+
+.config-dia-semana-dia:disabled:not([aria-pressed="true"]) {
+  opacity: var(--opacidade-desativado);
+}
+
+.config-dia-fuso {
+  flex: 0 1 var(--largura-campo-fuso);
+  min-width: 0;
+}
+
+/* Rótulo em cima e a lista na altura do campo. */
+.config-dia-campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-4);
+  min-width: 0;
+}
+
+.config-dia-campo > .config-dia-rotulo,
+.config-dia-campo > label {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-dia-lista select {
+  min-width: 0;
+  height: var(--altura-campo);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Duas colunas de cartões; cada coluna tem ao menos metade da largura, então nunca passam de
+   duas, e abaixo da largura mínima viram uma. */
+.config-dia-grade {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(max(min(100%, var(--largura-min-cartao-dia)), calc((100% - var(--esp-16)) / 2)), 1fr)
+  );
+  gap: var(--esp-16);
+  align-items: stretch;
+}
+
+.cartao.config-dia-cartao {
+  gap: var(--esp-12);
+  padding: var(--esp-16);
+}
+
+.config-dia-cabeca {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+}
+
+.config-dia-cabeca > .config-dia-titulo {
+  flex: 1;
+}
+
+.config-dia-ligado,
+.config-dia-atalho {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.config-dia-modos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.config-dia-modo {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-12);
+  padding: var(--esp-10) var(--esp-12);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-controle);
+}
+
+.config-dia-modo[data-marcada="true"] {
+  border-color: var(--destaque);
+  background: var(--fundo-elevado);
+  box-shadow: var(--sombra-opcao-marcada) var(--destaque);
+}
+
+.config-dia-modo:has(input[type="radio"]:focus-visible) {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco);
+}
+
+.config-dia-modos:disabled .config-dia-modo {
+  opacity: var(--opacidade-desativado);
+}
+
+.config-dia-modo-escolha {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--esp-12);
+  min-width: 0;
+  cursor: pointer;
+}
+
+.config-dia-modo-escolha input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--destaque);
+}
+
+.config-dia-modo-escolha input:focus-visible {
+  outline: 0;
+}
+
+.config-dia-modo-textos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  min-width: 0;
+}
+
+.config-dia-modo-nome {
+  font-weight: var(--peso-forte);
+}
+
+/* A hora em mono, centrada, na largura de "18:30". */
+.config-dia-hora {
+  flex: none;
+  width: var(--largura-campo-hora);
+}
+
+.config-dia-hora .campo-entrada {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+  text-align: center;
+}
+
+.config-dia-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-12);
+}
+
+.config-dia-linha-nome {
+  flex: 1;
+}
+
+.config-dia-expediente {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-10);
+}
+
+/* O aviso da hora de parar fica no pé do cartão, onde aparece sem empurrar o resto. */
+.config-dia-status-lugar {
+  margin-top: auto;
+}
+
+.config-dia-status {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  padding: var(--esp-8) var(--esp-12);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-elevado);
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.config-dia-status > span {
+  flex: 1;
+}
+
+.config-dia-ciclos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--esp-10);
+}
+
+/* A rodada inteira: cada etapa ocupa o tempo dela; a pausa mais leve que o foco, como na área Foco. */
+.config-dia-segmentos {
+  display: flex;
+  gap: var(--esp-3);
+}
+
+.config-dia-segmento {
+  flex: 1 1 0;
+  height: var(--altura-segmento-rodada);
+  border-radius: var(--raio-segmento-rodada);
+  background: var(--destaque);
+}
+
+.config-dia-segmento:not([data-tipo="foco"]) {
+  background: var(--texto-3);
+  opacity: var(--opacidade-pausa-rodada);
 }

@@ -3,10 +3,12 @@ import {
   Conexao,
   ItemGithub,
   MudancaSessao,
+  PedidoClienteGoogle,
   PedidoUso,
   PreviaConexao,
   SessaoIa,
   SituacaoGithub,
+  SituacaoGoogle,
   UsoIa,
 } from "./sessoes.ts";
 
@@ -22,6 +24,7 @@ const sessao = {
   id: "01K79Z6N7Q4W3J5XG2B8C1D0EM",
   projetoId: projeto.id,
   ferramenta: "claude-code",
+  ondeRoda: "desktop",
   idExterno: "4f1c2e1a-8d7b-4b8e-9a3c-2f0d1e6b7a90",
   modelo: "claude-opus-4-1",
   estado: "esperando",
@@ -61,6 +64,12 @@ describe("sessão de IA", () => {
   test("ferramenta e estado fora da lista são recusados", () => {
     expect(SessaoIa.safeParse({ ...sessao, ferramenta: "cursor" }).success).toBe(false);
     expect(SessaoIa.safeParse({ ...sessao, estado: "ocupada" }).success).toBe(false);
+  });
+
+  test("onde roda: terminal, app Desktop ou não se sabe; o entrypoint cru não passa", () => {
+    expect(SessaoIa.safeParse({ ...sessao, ondeRoda: "terminal" }).success).toBe(true);
+    expect(SessaoIa.safeParse({ ...sessao, ondeRoda: null }).success).toBe(true);
+    expect(SessaoIa.safeParse({ ...sessao, ondeRoda: "claude-desktop" }).success).toBe(false);
   });
 });
 
@@ -137,6 +146,17 @@ describe("conexões", () => {
     expect(Conexao.safeParse({ ...github, estado: "quebrada" }).success).toBe(false);
   });
 
+  test("a agenda do Google já tem tipo de conexão", () => {
+    const google = {
+      tipo: "google-agenda",
+      estado: "desligada",
+      conta: null,
+      ultimoErro: null,
+      conectadaEm: null,
+    };
+    expect(Conexao.safeParse(google).success).toBe(true);
+  });
+
   test("Claude Code ligado diz o arquivo, os eventos, a porta e a cópia; sem cópia é null", () => {
     const ligada = {
       tipo: "hooks-claude-code",
@@ -181,5 +201,37 @@ describe("conexões", () => {
       arquivos: [{ ...hooks, conteudo: '{"env":{"TOKEN":"segredo"}}' }],
     });
     expect(lida.arquivos[0]).not.toHaveProperty("conteudo");
+  });
+
+  const situacaoGoogle = {
+    autorizacao: {
+      endereco: "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&state=y",
+      venceEm: "2026-10-10T12:05:00.000Z",
+    },
+    lidaEm: null,
+    fila: 0,
+    clienteProprio: false,
+    problema: null,
+  };
+
+  test("a situação do Google aceita só autorização em https e nunca leva o segredo do cliente", () => {
+    expect(SituacaoGoogle.safeParse(situacaoGoogle).success).toBe(true);
+    expect(
+      SituacaoGoogle.safeParse({ ...situacaoGoogle, autorizacao: null, problema: "reconectar" }).success,
+    ).toBe(true);
+    const http = { ...situacaoGoogle.autorizacao, endereco: "http://127.0.0.1:5000/" };
+    expect(SituacaoGoogle.safeParse({ ...situacaoGoogle, autorizacao: http }).success).toBe(false);
+    expect(SituacaoGoogle.safeParse({ ...situacaoGoogle, fila: -1 }).success).toBe(false);
+    expect(SituacaoGoogle.parse({ ...situacaoGoogle, segredo: "s" })).not.toHaveProperty("segredo");
+  });
+
+  test("o cliente próprio do Google tem client ID; null volta ao do Moductus", () => {
+    expect(PedidoClienteGoogle.safeParse({ cliente: { id: "123.apps.googleusercontent.com" } }).success).toBe(
+      true,
+    );
+    expect(PedidoClienteGoogle.safeParse({ cliente: { id: "a", segredo: null } }).success).toBe(true);
+    expect(PedidoClienteGoogle.safeParse({ cliente: null }).success).toBe(true);
+    expect(PedidoClienteGoogle.safeParse({ cliente: { id: "   " } }).success).toBe(false);
+    expect(PedidoClienteGoogle.safeParse({ cliente: { id: "a".repeat(513) } }).success).toBe(false);
   });
 });

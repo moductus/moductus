@@ -19,6 +19,7 @@ const sessao = (extra: Partial<SessaoIa> = {}): SessaoIa => ({
   id: "s1",
   projetoId: "p1",
   ferramenta: "claude-code",
+  ondeRoda: null,
   idExterno: "x",
   modelo: "claude-opus-4-5",
   estado: "trabalhando",
@@ -121,12 +122,13 @@ describe("gasto de hoje", () => {
     });
   });
 
-  it("estimativa sai marcada; custo só quando todas as linhas têm preço", () => {
+  it("estimativa sai marcada; a sessão mostra só o uso, nunca dinheiro, nem com custo na linha (H4)", () => {
     expect(gastoDeHoje([uso({ fonte: "estimativa" })], s, "2026-10-09").texto).toBe("≈ 1,2 mil tokens");
+    // Uma linha com custo (vinda de outro PC, ou de uma versão que estimava) continua só em tokens.
     const comPreco = [uso({ custoEstimadoMicrodolares: 1_860_000 })];
     expect(gastoDeHoje(comPreco, s, "2026-10-09")).toEqual({
-      texto: "≈ US$ 1,86",
-      rotulo: "cerca de US$ 1,86 hoje no projeto, estimativa",
+      texto: "1,2 mil tokens",
+      rotulo: "1,2 mil tokens hoje no projeto",
       vazio: false,
     });
     const misturado = [...comPreco, uso({ modelo: "sem-tabela" })];

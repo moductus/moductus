@@ -1,10 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
+  enderecoAceitaChave,
+  MENSAGEM_CHAVE_SEM_HTTPS,
   MudancaProvedor,
   NovoProvedor,
+  PedidoModelosProvedor,
   PedidoTesteProvedor,
   Provedor,
   ProvedorDetectado,
+  ResultadoModelosProvedor,
   ResultadoTesteProvedor,
   TIPOS_PROVEDOR,
 } from "./provedores.ts";
@@ -101,5 +105,61 @@ describe("provedor", () => {
       }).success,
     ).toBe(false);
     expect(ResultadoTesteProvedor.safeParse({ ...base, ok: true }).success).toBe(false);
+  });
+
+  test("teste que passou pode dizer se o modelo usa ferramentas", () => {
+    const base = { ok: true, provedorId: ollama.id, latenciaMs: 840, testadoEm: "2026-10-09T12:00:00.000Z" };
+    expect(ResultadoTesteProvedor.parse({ ...base, ferramentas: false })).toMatchObject({
+      ferramentas: false,
+    });
+    expect(ResultadoTesteProvedor.safeParse({ ...base, ferramentas: null }).success).toBe(true);
+    expect(ResultadoTesteProvedor.safeParse({ ...base, ferramentas: "não" }).success).toBe(false);
+  });
+
+  test("a chave só vai por https ou para este PC", () => {
+    expect(enderecoAceitaChave("https://openrouter.exemplo/api/v1")).toBe(true);
+    expect(enderecoAceitaChave("http://localhost:20128/v1")).toBe(true);
+    expect(enderecoAceitaChave("http://127.0.0.1:11434/v1")).toBe(true);
+    expect(enderecoAceitaChave("http://127.8.9.10/v1")).toBe(true);
+    expect(enderecoAceitaChave("http://[::1]:1234/v1")).toBe(true);
+    expect(enderecoAceitaChave(null)).toBe(true);
+    expect(enderecoAceitaChave("http://192.168.0.10:11434/v1")).toBe(false);
+    expect(enderecoAceitaChave("http://localhost.exemplo.com/v1")).toBe(false);
+    expect(enderecoAceitaChave("http://128.0.0.1/v1")).toBe(false);
+
+    const aberto = { tipo: "openai-compativel", nome: "x", baseUrl: "http://192.168.0.10:11434/v1" };
+    const recusa = NovoProvedor.safeParse({ ...aberto, chave: "sk-1" });
+    expect(recusa.success).toBe(false);
+    expect(recusa.error?.issues[0]).toMatchObject({ path: ["chave"], message: MENSAGEM_CHAVE_SEM_HTTPS });
+    expect(NovoProvedor.safeParse(aberto).success).toBe(true);
+    expect(
+      MudancaProvedor.safeParse({ id: ollama.id, baseUrl: "http://192.168.0.10/v1", chave: "sk-1" }).success,
+    ).toBe(false);
+    expect(
+      MudancaProvedor.safeParse({ id: ollama.id, baseUrl: "http://192.168.0.10/v1", chave: null }).success,
+    ).toBe(true);
+    expect(
+      PedidoModelosProvedor.safeParse({
+        tipo: "openai-compativel",
+        baseUrl: "http://10.0.0.2/v1",
+        chave: "sk",
+      }).success,
+    ).toBe(false);
+  });
+
+  test("lista de modelos: só de quem fala a API; endereço ou provedor gravado", () => {
+    expect(
+      PedidoModelosProvedor.safeParse({ tipo: "openai-compativel", baseUrl: ollama.baseUrl }).success,
+    ).toBe(true);
+    expect(PedidoModelosProvedor.safeParse({ tipo: "openai", id: ollama.id }).success).toBe(true);
+    expect(PedidoModelosProvedor.safeParse({ tipo: "claude-cli" }).success).toBe(false);
+    expect(PedidoModelosProvedor.safeParse({ tipo: "openai", chave: "" }).success).toBe(false);
+    expect(
+      ResultadoModelosProvedor.safeParse({ ok: true, modelos: [{ id: "qwen3:8b", ferramentas: null }] })
+        .success,
+    ).toBe(true);
+    expect(
+      ResultadoModelosProvedor.safeParse({ ok: true, modelos: [{ id: "", ferramentas: null }] }).success,
+    ).toBe(false);
   });
 });

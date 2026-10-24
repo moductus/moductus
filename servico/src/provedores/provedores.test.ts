@@ -6,11 +6,16 @@ import { Provedor, ResultadoTesteProvedor, type ProvedorDetectado } from "@moduc
 import { afterEach, describe, expect, test } from "vitest";
 import { abrirBanco } from "../banco/conexao.ts";
 import { ProvedorFalso } from "./falso.ts";
+import type { DestinoModelos } from "./openai-compativel/modelos.ts";
+import type { ConfigProvedor } from "./provedor.ts";
 import {
   credencialDoProvedor,
+  FERRAMENTA_TESTE,
   INSTRUCOES_TESTE,
+  INSTRUCOES_TESTE_FERRAMENTA,
   RepositorioProvedores,
   ServicoProvedores,
+  type DependenciasProvedores,
 } from "./provedores.ts";
 import { RegistroProvedores } from "./registro.ts";
 
@@ -39,22 +44,31 @@ function montar(
   opcoes: {
     detectados?: ProvedorDetectado[];
     detectar?: () => Promise<ProvedorDetectado[]>;
+    listarModelos?: DependenciasProvedores["listarModelos"];
     prazoTesteMs?: number;
     prazoDeteccaoMs?: number;
+    prazoModelosMs?: number;
   } = {},
 ) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-provedores-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const cofre = new Map<string, string>();
   const falso = new ProvedorFalso("falso");
+  /** Com que configuração o registro montou o adaptador do CLI, a cada vez. */
+  const configsDoCli: ConfigProvedor[] = [];
   const registro = new RegistroProvedores()
     .registrar("openai-compativel", () => falso)
     .registrar("openai", () => falso)
-    .registrar("claude-cli", () => falso);
+    .registrar("claude-cli", (config) => {
+      configsDoCli.push(config);
+      return falso;
+    });
   const avisos = { provedores: [] as Provedor[][], agentes: [] as string[][], voltou: [] as string[][] };
   let deteccoes = 0;
+  /** Para onde a lista de modelos foi pedida, com a chave que foi junto. */
+  const listas: DestinoModelos[] = [];
   const tempos = [1000, 3100];
   const servico = new ServicoProvedores(
     new RepositorioProvedores(db),
@@ -68,16 +82,24 @@ function montar(
           cofre.delete(nome);
           return Promise.resolve();
         },
+        ler: (nome) => Promise.resolve(cofre.get(nome) ?? null),
       },
       registro,
       detectar: () => {
         deteccoes++;
         return opcoes.detectar ? opcoes.detectar() : Promise.resolve(opcoes.detectados ?? [CLAUDE]);
       },
+      listarModelos: (destino, sinal) => {
+        listas.push(destino);
+        return opcoes.listarModelos
+          ? opcoes.listarModelos(destino, sinal)
+          : Promise.resolve({ ok: true, modelos: [{ id: "qwen3:8b", ferramentas: null }] });
+      },
       agora: () => new Date("2026-10-10T12:00:00.000Z"),
       cronometro: () => tempos.shift() ?? 0,
       ...(opcoes.prazoTesteMs ? { prazoTesteMs: opcoes.prazoTesteMs } : {}),
       ...(opcoes.prazoDeteccaoMs ? { prazoDeteccaoMs: opcoes.prazoDeteccaoMs } : {}),
+      ...(opcoes.prazoModelosMs ? { prazoModelosMs: opcoes.prazoModelosMs } : {}),
     },
     {
       provedores: (lista) => avisos.provedores.push(lista),
@@ -93,7 +115,18 @@ function montar(
     };
   const linha = (id: string) =>
     db.prepare("SELECT * FROM provedores WHERE id = ?").get(id) as Record<string, unknown>;
-  return { db, servico, cofre, falso, avisos, agente, linha, deteccoes: () => deteccoes };
+  return {
+    db,
+    servico,
+    cofre,
+    falso,
+    avisos,
+    agente,
+    linha,
+    configsDoCli,
+    listas,
+    deteccoes: () => deteccoes,
+  };
 }
 
 const ollama = { tipo: "openai-compativel", nome: "Ollama", modelo: "qwen3:8b" } as const;
@@ -188,10 +221,104 @@ describe("configurar provedores", () => {
   });
 });
 
+describe("chave só por https ou para este PC", () => {
+  const aberto = "http://192.168.0.10:11434/v1";
+
+  test("criar, trocar a chave e listar modelos recusam chave em http para fora; sem chave passa", async () => {
+    const { servico, cofre, listas } = montar();
+    await expect(servico.criar({ ...ollama, baseUrl: aberto, chave: CHAVE })).rejects.toThrow(
+      "A chave só vai por https, ou para um endereço deste PC.",
+    );
+    expect(cofre.size).toBe(0);
+    const semChave = await servico.criar({ ...ollama, baseUrl: aberto });
+    await expect(servico.definir({ id: semChave.id, chave: CHAVE })).rejects.toThrow("só vai por https");
+    await expect(
+      servico.modelos({ tipo: "openai-compativel", baseUrl: aberto, chave: CHAVE }),
+    ).rejects.toThrow("só vai por https");
+    expect(cofre.size).toBe(0);
+    expect(listas).toEqual([]);
+    // Neste PC e por https, a chave vai.
+    await expect(
+      servico.criar({ ...ollama, baseUrl: "http://127.0.0.1:20128/v1", chave: CHAVE }),
+    ).resolves.toMatchObject({ temChave: true });
+    await expect(
+      servico.definir({ id: semChave.id, baseUrl: "https://roteador.exemplo/v1", chave: CHAVE }),
+    ).resolves.toMatchObject({ temChave: true });
+  });
+
+  test("chave guardada antes da regra, num endereço http de fora, não vai à lista de modelos", async () => {
+    const { db, servico, cofre, listas } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:20128/v1", chave: CHAVE });
+    db.prepare("UPDATE provedores SET base_url = ? WHERE id = ?").run(aberto, criado.id);
+
+    await expect(servico.modelos({ id: criado.id, tipo: "openai-compativel" })).rejects.toThrow(
+      "só vai por https",
+    );
+    expect(listas).toEqual([]);
+    expect(cofre.size).toBe(1);
+  });
+});
+
+describe("modelos do endereço", () => {
+  test("do formulário: endereço e chave do pedido, sem gravar nada", async () => {
+    const { servico, listas, cofre } = montar();
+    await expect(
+      servico.modelos({ tipo: "openai-compativel", baseUrl: "http://localhost:20128/v1", chave: CHAVE }),
+    ).resolves.toEqual({ ok: true, modelos: [{ id: "qwen3:8b", ferramentas: null }] });
+    expect(listas).toEqual([
+      { tipo: "openai-compativel", baseUrl: "http://localhost:20128/v1", chave: CHAVE },
+    ]);
+    expect(servico.listar()).toEqual([]);
+    expect(cofre.size).toBe(0);
+    await expect(servico.modelos({ tipo: "openai-compativel" })).rejects.toThrow("Falta o endereço");
+  });
+
+  test("de um provedor gravado: a chave guardada vai só para o endereço dela", async () => {
+    const { servico, listas } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:20128/v1", chave: CHAVE });
+
+    await servico.modelos({ id: criado.id, tipo: "openai-compativel" });
+    await servico.modelos({ id: criado.id, tipo: "openai-compativel", baseUrl: "http://localhost:20128/v1" });
+    await servico.modelos({ id: criado.id, tipo: "openai-compativel", baseUrl: "https://outro.exemplo/v1" });
+    await servico.modelos({
+      id: criado.id,
+      tipo: "openai-compativel",
+      baseUrl: "https://outro.exemplo/v1",
+      chave: "sk-2",
+    });
+
+    expect(listas.map((l) => [l.baseUrl, l.chave])).toEqual([
+      ["http://localhost:20128/v1", CHAVE],
+      ["http://localhost:20128/v1", CHAVE],
+      ["https://outro.exemplo/v1", null],
+      ["https://outro.exemplo/v1", "sk-2"],
+    ]);
+    await expect(servico.modelos({ id: criado.id, tipo: "openai" })).rejects.toThrow("tipo do pedido");
+  });
+
+  test("endereço que não manda a lista no prazo é fora do ar", async () => {
+    const { servico } = montar({
+      prazoModelosMs: 20,
+      listarModelos: (_destino, sinal) =>
+        new Promise((_resolve, rejeitar) => sinal.addEventListener("abort", () => rejeitar(sinal.reason))),
+    });
+    await expect(
+      servico.modelos({ tipo: "openai-compativel", baseUrl: "http://localhost:20128/v1" }),
+    ).resolves.toEqual({
+      ok: false,
+      falha: {
+        motivo: "fora_do_ar",
+        mensagem: "O endereço não mandou a lista de modelos em 1 s.",
+        voltaEm: null,
+      },
+    });
+  });
+});
+
 describe("testar provedor", () => {
-  test("chamada curta sem ferramentas, latência medida e testado_em gravado", async () => {
+  test("CLI: chamada curta sem ferramentas, latência medida e testado_em gravado", async () => {
     const { servico, falso, linha } = montar();
-    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    const criado = await servico.criar({ tipo: "claude-cli", nome: "Claude Code" });
     falso.roteirizar([{ tipo: "texto", texto: "ok" }, { tipo: "fim" }]);
 
     const resultado = await servico.testar({ id: criado.id });
@@ -201,6 +328,7 @@ describe("testar provedor", () => {
       provedorId: criado.id,
       latenciaMs: 2100,
       testadoEm: "2026-10-10T12:00:00.000Z",
+      ferramentas: null,
     });
     expect(linha(criado.id).testado_em).toBe("2026-10-10T12:00:00.000Z");
     const pedido = falso.pedidos[0]!;
@@ -208,6 +336,109 @@ describe("testar provedor", () => {
     expect(pedido.mensagens).toHaveLength(1);
     // Fila própria: o teste não espera nem segura a fila de um agente no adaptador de CLI.
     expect(pedido.fila).toBe(`teste-${criado.id}`);
+  });
+
+  test("API: o modelo chama a ferramenta do teste, que para ali sem rodar nada", async () => {
+    const { servico, falso, linha } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    let rodou = false;
+    falso.roteirizar((pedido) => {
+      // O falso roda a ferramenta depois de relatar a chamada, como o adaptador de API.
+      const rodar = pedido.executarFerramenta;
+      Object.assign(pedido, {
+        executarFerramenta: (c: Parameters<typeof rodar>[0]) => ((rodou = true), rodar(c)),
+      });
+      return [
+        { tipo: "ferramenta", nome: "moductus_teste", entrada: {} },
+        { tipo: "texto", texto: "ok" },
+      ];
+    });
+
+    const resultado = await servico.testar({ id: criado.id });
+
+    expect(resultado).toEqual({
+      ok: true,
+      provedorId: criado.id,
+      latenciaMs: 2100,
+      testadoEm: "2026-10-10T12:00:00.000Z",
+      ferramentas: true,
+    });
+    expect(linha(criado.id).testado_em).toBe("2026-10-10T12:00:00.000Z");
+    expect(falso.pedidos[0]).toMatchObject({
+      instrucoes: INSTRUCOES_TESTE_FERRAMENTA,
+      ferramentas: [FERRAMENTA_TESTE],
+    });
+    expect(falso.pedidos).toHaveLength(1);
+    expect(rodou).toBe(false);
+  });
+
+  test("API: o modelo que só responde texto passa, avisando que não usa ferramentas", async () => {
+    const { servico, falso } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    falso.roteirizar([{ tipo: "texto", texto: "ok" }, { tipo: "fim" }]);
+
+    await expect(servico.testar({ id: criado.id })).resolves.toMatchObject({ ok: true, ferramentas: false });
+    expect(falso.pedidos).toHaveLength(1);
+  });
+
+  test("API: chamar outra ferramenta que não a do teste não conta", async () => {
+    const { servico, falso } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    falso.roteirizar([{ tipo: "ferramenta", nome: "inventada", entrada: {} }, { tipo: "fim" }]);
+
+    await expect(servico.testar({ id: criado.id })).resolves.toMatchObject({ ok: true, ferramentas: false });
+  });
+
+  test("o resultado das ferramentas fica gravado no provedor até a configuração mudar", async () => {
+    const { servico, falso, linha } = montar();
+    const api = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    const claude = await servico.criar({ tipo: "claude-cli", nome: "Claude Code" });
+    expect(servico.listar().map((p) => p.ferramentas)).toEqual([null, null]);
+    falso.roteirizar([{ tipo: "fim" }], [{ tipo: "fim" }]);
+
+    await servico.testar({ id: api.id });
+    await servico.testar({ id: claude.id });
+    expect(linha(api.id).ferramentas).toBe(0);
+    expect(servico.listar().map((p) => p.ferramentas)).toEqual([false, null]);
+    // O nome não muda o modelo: o resultado fica; o modelo novo apaga, como o testado_em.
+    expect((await servico.definir({ id: api.id, nome: "Modelo local" })).ferramentas).toBe(false);
+    expect((await servico.definir({ id: api.id, modelo: "llama3.2" })).ferramentas).toBeNull();
+    expect(linha(api.id).ferramentas).toBeNull();
+
+    falso.roteirizar([{ tipo: "ferramenta", nome: FERRAMENTA_TESTE.nome, entrada: {} }]);
+    await servico.testar({ id: api.id });
+    expect(servico.listar()[0]?.ferramentas).toBe(true);
+  });
+
+  test("API: servidor que recusa o pedido com ferramenta repete sem ela e diz que o modelo só conversa", async () => {
+    const { servico, falso, linha } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    falso.roteirizar(
+      [
+        {
+          tipo: "excecao",
+          erro: new Error("O provedor recusou o pedido (HTTP 400): does not support tools"),
+        },
+      ],
+      [{ tipo: "texto", texto: "ok" }, { tipo: "fim" }],
+    );
+
+    await expect(servico.testar({ id: criado.id })).resolves.toMatchObject({ ok: true, ferramentas: false });
+    expect(falso.pedidos.map((p) => p.ferramentas)).toEqual([[FERRAMENTA_TESTE], []]);
+    expect(linha(criado.id).testado_em).toBe("2026-10-10T12:00:00.000Z");
+  });
+
+  test("API: falha tipada com a ferramenta não repete; sem ela também falhando, vale a segunda falha", async () => {
+    const { servico, falso } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    const recusa = { motivo: "credencial" as const, mensagem: "O provedor recusou a chave.", voltaEm: null };
+    falso.roteirizar([{ tipo: "erro", falha: recusa }]);
+    await expect(servico.testar({ id: criado.id })).resolves.toMatchObject({ ok: false, falha: recusa });
+    expect(falso.pedidos).toHaveLength(1);
+
+    falso.roteirizar([{ tipo: "excecao", erro: new Error("HTTP 400") }], [{ tipo: "erro", falha: recusa }]);
+    await expect(servico.testar({ id: criado.id })).resolves.toMatchObject({ ok: false, falha: recusa });
+    expect(falso.pedidos).toHaveLength(3);
   });
 
   test("o primeiro que passa vai para os quatro agentes sem modelo; o segundo não toma o lugar", async () => {
@@ -347,7 +578,7 @@ describe("testar provedor", () => {
 
   test("adaptador que quebra vira falha com o motivo, sem derrubar o canal", async () => {
     const { servico, falso } = montar();
-    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    const criado = await servico.criar({ tipo: "claude-cli", nome: "Claude Code" });
     falso.roteirizar([{ tipo: "excecao", erro: new Error("O Claude Code saiu sem resposta (código 1)") }]);
 
     await expect(servico.testar({ id: criado.id })).resolves.toMatchObject({
@@ -372,7 +603,7 @@ describe("testar provedor", () => {
       [
         [{ ...CLAUDE, caminho: "C:\\npm\\claude.cmd", impedimento: "instalado_pelo_npm" }],
         "ausente",
-        "Claude Code foi instalado pelo npm, e o Moductus usa o do instalador nativo. Instale por ele e teste de novo.",
+        "Claude Code foi instalado pelo npm de um jeito que o Moductus não consegue rodar. Instale pelo instalador nativo e teste de novo.",
       ],
     ];
     for (const [detectados, motivo, mensagem] of casos) {
@@ -398,6 +629,32 @@ describe("testar provedor", () => {
       falha: { motivo: "fora_do_ar", mensagem: "Claude Code não respondeu à versão nem ao login em 1 s." },
     });
     expect(falso.pedidos).toEqual([]);
+  });
+
+  test("a detecção guarda onde está o CLI nos provedores do tipo, e o teste roda o desse caminho", async () => {
+    const doNpm = { ...CLAUDE, caminho: "C:\\Users\\x\\AppData\\Roaming\\npm\\claude.cmd" };
+    let detectados = [CLAUDE];
+    const { servico, falso, linha, configsDoCli } = montar({ detectar: () => Promise.resolve(detectados) });
+    const claude = await servico.criar({ tipo: "claude-cli", nome: "Claude Code" });
+    const api = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    expect(linha(claude.id).caminho).toBeNull();
+
+    await servico.detectar();
+    expect(linha(claude.id).caminho).toBe(CLAUDE.caminho);
+    expect(linha(api.id).caminho).toBeNull();
+
+    // Reinstalado pelo npm: o teste detecta de novo, guarda o caminho novo e chama o CLI de lá.
+    detectados = [doNpm];
+    falso.roteirizar([{ tipo: "fim" }]);
+    await expect(servico.testar({ id: claude.id })).resolves.toMatchObject({ ok: true });
+    expect(configsDoCli.at(-1)?.caminho).toBe(doNpm.caminho);
+    // O teste vale para o caminho que rodou: gravou, mesmo o caminho tendo mudado no meio.
+    expect(linha(claude.id)).toMatchObject({
+      caminho: doNpm.caminho,
+      testado_em: "2026-10-10T12:00:00.000Z",
+    });
+    // O caminho é deste PC e não sai pelo canal.
+    expect(servico.listar().find((p) => p.id === claude.id)).not.toHaveProperty("caminho");
   });
 
   test("CLI pronto faz a chamada; API não passa pela detecção", async () => {

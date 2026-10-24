@@ -57,7 +57,7 @@ Mudou algo que depende do Windows de verdade (dock, foco, atalhos, tela cheia, a
 - **Ligação com o Claude Code:** nenhum teste nem roteiro mexe no seu `~/.claude/settings.json`. Aponte `CLAUDE_CONFIG_DIR` para uma pasta temporária.
 - **Casca nativa:** `cargo test` no que der para separar da API do Windows; o resto, num roteiro do `verificar.ps1`.
 - **Interface:** Vitest com `happy-dom` nos componentes, incluindo nome acessível em todo controle (`src/teste/acessibilidade.ts`). Fluxos na tela real (captura, troca de tema, teclado) ficam nos roteiros com UI Automation.
-- **Orçamentos:** mudança que pesa em memória ou tempo de abertura mede de novo com `scripts/medir.ps1` no build de release e atualiza as tabelas do ARCHITECTURE.md ([fase 1](docs/ARCHITECTURE.md#medições-da-fase-1) e [fase 2](docs/ARCHITECTURE.md#medições-da-fase-2)). O `node.exe` do serviço tem meta própria: até 40 MB a mais que os 32,1 MB da fase 1.
+- **Orçamentos:** mudança que pesa em memória ou tempo de abertura mede de novo com `scripts/medir.ps1` no build de release e atualiza as tabelas do ARCHITECTURE.md ([fase 1](docs/ARCHITECTURE.md#medições-da-fase-1), [fase 2](docs/ARCHITECTURE.md#medições-da-fase-2) e [fase 3](docs/ARCHITECTURE.md#medições-da-fase-3)). O `node.exe` do serviço tem meta própria: na fase 3, até 10 MB a mais que os 34,6 MB da fase 2.
 - **Visual:** o lint visual também reprova classe CSS declarada sozinha em mais de um arquivo (as janelas carregam um bundle só e a última regra vence nas duas telas); use o prefixo da área.
 
 ## Commits

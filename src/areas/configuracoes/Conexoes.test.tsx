@@ -28,6 +28,9 @@ vi.mock("../../servico/conexao.ts", () => ({
 vi.mock("../../nativo/eventos.ts", () => ({
   useServico: () => ({ estado: "pronto", porta: 1, token: "t" }),
 }));
+// A casca é falsa: nenhum arquivo abre de verdade.
+const casca = vi.hoisted(() => ({ invoke: vi.fn((..._: unknown[]) => Promise.resolve()) }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: casca.invoke }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -101,6 +104,8 @@ async function montar() {
 beforeEach(() => {
   falso.pedidos.length = 0;
   falso.ouvintes.clear();
+  casca.invoke.mockReset();
+  casca.invoke.mockImplementation(() => Promise.resolve());
 });
 afterEach(() => {
   act(() => raiz?.unmount());
@@ -150,7 +155,7 @@ describe("Conexões", () => {
       ["Arquivo", CAMINHO],
       ["Hooks", "8 eventos · porta 47821"],
       ["Cópia de antes", "settings.json.moductus-1.bak"],
-      ["Último evento", "nenhum ainda: abra um terminal novo e rode o claude"],
+      ["Último evento", "nenhum ainda: rode o claude num terminal novo ou reabra o app Claude"],
     ]);
   });
 
@@ -192,6 +197,37 @@ describe("Conexões", () => {
     await act(async () => terminar());
     expect(por(".config-previa")).toBeNull();
     expect(cartao("Claude Code").textContent).toContain("ligada");
+  });
+
+  it("Claude Code com erro abre o settings.json pela casca para corrigir, e tenta de novo", async () => {
+    servico(
+      conexao("hooks-claude-code", {
+        estado: "erro",
+        ultimoErro: `${CAMINHO} não é um JSON válido; corrija o arquivo antes de ligar`,
+      }),
+    );
+    await montar();
+    const claude = cartao("Claude Code");
+    expect([...claude.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
+      "Abrir o arquivo",
+      "Tentar de novo",
+    ]);
+    await clicar("Abrir o arquivo");
+    expect(casca.invoke).toHaveBeenCalledWith("abrir_settings_claude");
+    expect(pedidosDe("conexoes.ligar")).toEqual([]);
+    // A recusa da casca fica no cartão, perto do botão.
+    casca.invoke.mockImplementationOnce(() => Promise.reject("o arquivo não existe"));
+    await clicar("Abrir o arquivo");
+    expect(cartao("Claude Code").querySelector('[role="alert"]')!.textContent).toBe(
+      "Não consegui abrir: o arquivo não existe.",
+    );
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("Claude Code desligado e sem erro não oferece abrir o arquivo", async () => {
+    servico();
+    await montar();
+    expect(todos("button").some((b) => b.textContent === "Abrir o arquivo")).toBe(false);
   });
 
   it("GitHub com erro diz o motivo, mostra o comando e conecta de novo", async () => {

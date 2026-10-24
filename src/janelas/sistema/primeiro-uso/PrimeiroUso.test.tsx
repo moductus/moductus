@@ -6,14 +6,33 @@ import {
   type Config,
   type EstadoPrimeiroUso,
 } from "@moductus/contrato";
+import { invoke } from "@tauri-apps/api/core";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { auditar, marcos } from "../../../teste/acessibilidade.ts";
-import { Sistema } from "../Sistema.tsx";
+import { AVISO_SEM_FERRAMENTAS } from "../../../areas/configuracoes/modelos.ts";
+import { SEGURA_FIM_MS } from "../../../areas/inicio/PrimeirosPassos.tsx";
+import { carregarAreas, Sistema } from "../Sistema.tsx";
 
-// A casca não existe no teste: eventos, janela e comandos falsos.
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(() => Promise.resolve(() => undefined)) }));
+// A casca não existe no teste: eventos, janela e comandos falsos. O evento emitido chega a quem ouve,
+// como entre as janelas de verdade.
+const tauri = vi.hoisted(() => ({
+  emitidos: [] as [string, unknown][],
+  ouvintes: new Map<string, Set<(e: { payload: unknown }) => void>>(),
+}));
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async (nome: string, fn: (e: { payload: unknown }) => void) => {
+    const lista = tauri.ouvintes.get(nome) ?? new Set();
+    lista.add(fn);
+    tauri.ouvintes.set(nome, lista);
+    return () => lista.delete(fn);
+  }),
+  emit: vi.fn(async (nome: string, payload: unknown) => {
+    tauri.emitidos.push([nome, payload]);
+    for (const fn of tauri.ouvintes.get(nome) ?? []) fn({ payload });
+  }),
+}));
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
     minimize: vi.fn(),
@@ -41,8 +60,10 @@ const falso = vi.hoisted(() => {
     recusarCriar: null as string | null,
     /** Como o teste de cada provedor termina. */
     teste: (_id: string): unknown => null,
-    /** As conexões do Nuno (Claude Code e GitHub). */
+    /** As conexões do Nuno (Claude Code e GitHub) e o Google Agenda da Alba. */
     conexoes: [] as { tipo: string; estado: string }[],
+    /** Os calendários que a leitura do Google trouxe. */
+    calendarios: [] as { id: string; ler: boolean }[],
     emitir(nome: string, dados: unknown) {
       for (const fn of ouvintes.get(nome) ?? []) fn(dados);
     },
@@ -81,6 +102,23 @@ const HOOKS = JSON.stringify(
   null,
   2,
 );
+
+const calendarioGoogle = (id: string, nome: string, mudar: { espelho?: boolean; ler?: boolean } = {}) => ({
+  id,
+  nome,
+  fonte: "google",
+  cor: null,
+  espelho: false,
+  podeEscrever: true,
+  ler: false,
+  sincronizadoEm: null,
+  ...mudar,
+});
+const CALENDARIOS_GOOGLE = [
+  calendarioGoogle("01K7MODUCTUS0000000000000A", "Moductus", { espelho: true, ler: true }),
+  calendarioGoogle("01K7PESSOAL00000000000000B", "Pessoal", { ler: true }),
+  calendarioGoogle("01K7FERIADOS0000000000000C", "Feriados no Brasil"),
+];
 
 const desligada = (tipo: string) => ({
   tipo,
@@ -132,8 +170,23 @@ function atender(metodo: string, dados: unknown): unknown {
       };
     case "conexoes.ligar": {
       const { tipo } = dados as { tipo: string };
-      falso.conexoes = falso.conexoes.map((c) => (c.tipo === tipo ? { ...c, estado: "ligada" } : c));
+      const conta = tipo === "google-agenda" ? "voce@gmail.com" : null;
+      falso.conexoes = falso.conexoes.map((c) => (c.tipo === tipo ? { ...c, estado: "ligada", conta } : c));
+      // Conectado o Google, a leitura traz a lista de calendários da conta.
+      if (tipo === "google-agenda") {
+        falso.calendarios = CALENDARIOS_GOOGLE;
+        falso.emitir("agenda.calendarios", falso.calendarios);
+      }
       return falso.conexoes.find((c) => c.tipo === tipo);
+    }
+    case "google.obter":
+      return { autorizacao: null, lidaEm: null, fila: 0, clienteProprio: false, problema: null };
+    case "agenda.calendarios":
+      return falso.calendarios;
+    case "agenda.definirCalendario": {
+      const { id, ler } = dados as { id: string; ler: boolean };
+      falso.calendarios = falso.calendarios.map((c) => (c.id === id ? { ...c, ler } : c));
+      return falso.calendarios.find((c) => c.id === id);
     }
     case "conexoes.desligar": {
       const { tipo } = dados as { tipo: string };
@@ -208,8 +261,13 @@ function desmontar() {
   recipiente?.remove();
 }
 
+// As áreas e a configuração inicial vêm sob demanda: já baixadas, desenham no mesmo quadro.
+beforeAll(carregarAreas);
 beforeEach(() => {
   localStorage.clear();
+  tauri.emitidos = [];
+  tauri.ouvintes.clear();
+  vi.mocked(invoke).mockClear();
   falso.ouvintes.clear();
   falso.pedidos = [];
   falso.estado = bancoNovo();
@@ -218,7 +276,8 @@ beforeEach(() => {
   falso.provedores = [];
   falso.criados = 0;
   falso.recusarCriar = null;
-  falso.conexoes = [desligada("hooks-claude-code"), desligada("github")];
+  falso.conexoes = [desligada("hooks-claude-code"), desligada("github"), desligada("google-agenda")];
+  falso.calendarios = [];
   falso.teste = (id) => ({
     ok: true,
     provedorId: id,
@@ -233,7 +292,19 @@ const todos = (seletor: string) => [...recipiente.querySelectorAll<HTMLElement>(
 const titulo = () => por("h1")?.textContent;
 const indicador = () => por(".uso-rodape [aria-live]")?.textContent;
 const botao = (texto: string) => todos("button").find((b) => b.textContent === texto);
+/** O botão dentro de um bloco: o Google e o Nuno têm, os dois, "Conectar" e "Agora não". */
+const botaoEm = (seletor: string, texto: string) =>
+  todos(`${seletor} button`).find((b) => b.textContent === texto);
 const pedidosDe = (metodo: string) => falso.pedidos.filter(([m]) => m === metodo).map(([, d]) => d);
+/** As paradas que o tour avisou às janelas, em ordem. */
+const paradas = () => tauri.emitidos.filter(([nome]) => nome === "tour:parada").map(([, p]) => p);
+const comandos = () => vi.mocked(invoke).mock.calls.map(([comando, args]) => [comando, args]);
+/** Um evento da casca (a Ajuda da bandeja), como chega à janela. */
+async function daCasca(nome: string) {
+  await act(async () => {
+    for (const fn of tauri.ouvintes.get(nome) ?? []) fn({ payload: null });
+  });
+}
 
 async function clicar(el: HTMLElement | undefined | null) {
   expect(el, "elemento para clicar").toBeTruthy();
@@ -358,6 +429,14 @@ describe("primeiro uso", () => {
     expect(por("main")!.dataset.area).toBe("inicio");
     expect(por('nav[aria-label="Áreas"]')).toBeTruthy();
     expect(por(".primeiros-passos h2")!.textContent).toBe("Primeiros passos");
+    // O tour começa logo depois: a parada 1 vai a todas as janelas e o painel abre ao lado do dock.
+    expect(paradas()).toEqual([1]);
+    expect(comandos()).toContainEqual(["painel_abrir", { area: "tour" }]);
+    expect(comandos()).toContainEqual(["painel_foco", { quer: true }]);
+    // O Sistema escurece e sai do teclado; a parada é de outra janela, então aqui só o véu.
+    expect(por(".sistema")!.inert).toBe(true);
+    expect(por(".tour-camada")!.dataset.tour).toBe("veu");
+    expect(por(".tour-bolha")).toBeNull();
   });
 
   it("conexões do Nuno de verdade: a prévia do settings.json vem antes, e só o sim liga", async () => {
@@ -365,8 +444,11 @@ describe("primeiro uso", () => {
     for (const nome of ["Começar", "Continuar", "Depois", "Continuar"]) await clicar(botao(nome));
     expect(titulo()).toBe(TITULOS[4]);
     // As outras ainda chegam com a área de cada agente; a do Nuno conecta.
-    expect(todos(".uso-item .selo").map((s) => s.textContent)).toEqual(["fase 3", "fase 5", "fase 4"]);
-    await clicar(botao("Conectar"));
+    expect(todos(".uso-item > .selo").map((s) => s.textContent)).toEqual([
+      "chega com Arquivos",
+      "chega com Finanças",
+    ]);
+    await clicar(botaoEm(".uso-item--nuno", "Conectar"));
     expect(pedidosDe("conexoes.ligar")).toEqual([]);
 
     await clicar(botao("Ver o que muda"));
@@ -383,19 +465,67 @@ describe("primeiro uso", () => {
     expect(todos(".uso-item--nuno .uso-item-linha .selo").map((s) => s.textContent)).toEqual([
       "1 de 2 ligada",
     ]);
-    await clicar(botao("Conectar"));
+    await clicar(botaoEm(".uso-item--nuno", "Conectar"));
     expect(pedidosDe("conexoes.ligar")).toEqual([{ tipo: "hooks-claude-code" }, { tipo: "github" }]);
     expect(todos(".uso-item--nuno .uso-item-linha .selo").map((s) => s.textContent)).toEqual(["conectado"]);
     expect(auditar(recipiente)).toEqual([]);
 
     // Conectado, como no quadro: "Desconectar" desfaz as duas.
-    await clicar(botao("Desconectar"));
+    await clicar(botaoEm(".uso-item--nuno", "Desconectar"));
     expect(pedidosDe("conexoes.desligar")).toEqual([{ tipo: "hooks-claude-code" }, { tipo: "github" }]);
     // "Agora não" fecha os cartões e deixa para depois, sem ligar nada.
-    await clicar(botao("Agora não"));
+    await clicar(botaoEm(".uso-item--nuno", "Agora não"));
     expect(por(".uso-conexoes-nuno")).toBeNull();
     expect(todos(".uso-item--nuno .uso-item-linha .selo").map((s) => s.textContent)).toEqual(["depois"]);
-    expect(botao("Conectar")).toBeTruthy();
+    expect(botaoEm(".uso-item--nuno", "Conectar")).toBeTruthy();
+  });
+
+  it("Google Agenda da Alba: o que ela pode fazer antes do navegador, depois os calendários ali mesmo", async () => {
+    await montar();
+    for (const nome of ["Começar", "Continuar", "Depois", "Continuar"]) await clicar(botao(nome));
+    expect(titulo()).toBe(TITULOS[4]);
+    // "Agora não" deixa para depois, sem pedir nada ao Google.
+    await clicar(botaoEm(".uso-item--google", "Agora não"));
+    expect(todos(".uso-item--google .uso-item-linha .selo").map((s) => s.textContent)).toEqual(["depois"]);
+
+    // "Conectar" abre o cartão de Configurações: antes do navegador, o que a Alba pode fazer.
+    await clicar(botaoEm(".uso-item--google", "Conectar"));
+    expect(por(".uso-item--google .config-google-autorizar")!.textContent).toContain("O que sai deste PC");
+    expect(pedidosDe("conexoes.ligar")).toEqual([]);
+    // O Esc fecha só o cartão: o passo continua o mesmo.
+    await teclar(por(".config-google-autorizar")!, "Escape");
+    expect(por(".config-google-autorizar")).toBeNull();
+    expect(titulo()).toBe(TITULOS[4]);
+
+    await clicar(botaoEm(".uso-item--google", "Conectar"));
+    await clicar(botao("Conectar com o Google"));
+    expect(pedidosDe("conexoes.ligar")).toEqual([{ tipo: "google-agenda" }]);
+    // Conectado, como no quadro: a conta, o "Moductus" criado e os calendários sem ele, para marcar.
+    expect(todos(".uso-item--google .uso-item-linha .selo").map((s) => s.textContent)).toEqual(["conectado"]);
+    expect(por(".uso-item--google .uso-item-descricao")!.textContent).toBe(
+      "voce@gmail.com · criei o calendário “Moductus” para os lembretes chegarem ao celular.",
+    );
+    const caixas = todos('.uso-google-calendarios [role="checkbox"]');
+    expect(caixas.map((c) => [c.textContent, c.getAttribute("aria-checked")])).toEqual([
+      ["Pessoal", "true"],
+      ["Feriados no Brasil", "false"],
+    ]);
+    await clicar(caixas[1]);
+    expect(pedidosDe("agenda.definirCalendario")).toEqual([{ id: "01K7FERIADOS0000000000000C", ler: true }]);
+    expect(todos('.uso-google-calendarios [role="checkbox"]')[1]!.getAttribute("aria-checked")).toBe("true");
+    expect(auditar(recipiente)).toEqual([]);
+
+    await clicar(botaoEm(".uso-item--google", "Desconectar"));
+    expect(pedidosDe("conexoes.desligar")).toEqual([{ tipo: "google-agenda" }]);
+    expect(botaoEm(".uso-item--google", "Conectar")).toBeTruthy();
+
+    // Conectou de novo e desconectou em outra janela: a linha oferece "Conectar", sem o cartão aberto.
+    await clicar(botaoEm(".uso-item--google", "Conectar"));
+    await clicar(botao("Conectar com o Google"));
+    expect(todos(".uso-item--google .uso-item-linha .selo").map((s) => s.textContent)).toEqual(["conectado"]);
+    await act(async () => falso.emitir("conexoes.mudou", desligada("google-agenda")));
+    expect(por(".uso-item--google .config-google-autorizar")).toBeNull();
+    expect(botaoEm(".uso-item--google", "Conectar")).toBeTruthy();
   });
 
   it("pular a configuração no meio grava o que foi visto e vai ao Início", async () => {
@@ -413,6 +543,8 @@ describe("primeiro uso", () => {
     expect(pedidosDe("primeiroUso.concluir")).toEqual([{ passos: { "boas-vindas": "feito" } }]);
     expect(por("main")!.dataset.area).toBe("configuracoes");
     expect(por(".config-secao h2")!.textContent).toBe("Levar para outro PC");
+    // Quem vai importar segue para lá: o tour não começa por cima.
+    expect(paradas()).toEqual([]);
   });
 
   it("depois de concluído não aparece de novo: o Sistema abre direto nas áreas", async () => {
@@ -521,7 +653,7 @@ describe("primeiro uso: modelo", () => {
       {
         nome: "Chave de API",
         selo: null,
-        texto: "OpenAI ou compatível com OpenAI (Ollama, OpenRouter, LM Studio) · paga por uso",
+        texto: "OpenAI ou compatível com OpenAI (roteador local, Ollama, LM Studio) · paga por uso",
         marcado: false,
         desativado: false,
       },
@@ -532,6 +664,56 @@ describe("primeiro uso: modelo", () => {
     falso.detectados = [{ ...CLAUDE, versao: "2.1.100", versaoMinima: "2.1.257" }];
     await clicar(botao("Procurar de novo"));
     expect(modelos()[0]).toMatchObject({ selo: "desatualizado", desativado: true });
+  });
+
+  it("Entrar abre o terminal de login do CLI sem login, pela chave, e Procurar de novo acha o logado", async () => {
+    falso.detectados = [{ ...CLAUDE, logado: false }];
+    await noModelo();
+    const invocar = vi.mocked(invoke);
+    invocar.mockClear();
+    const entrar = todos("button").filter((b) => b.textContent === "Entrar");
+    expect(entrar.map((b) => b.getAttribute("aria-label"))).toEqual(["Entrar no Claude Code pelo terminal"]);
+    expect(entrar[0]!.closest("label")).toBeNull();
+    await clicar(entrar[0]!);
+    // Vai só a chave: o comando é da casca.
+    expect(invocar).toHaveBeenCalledWith("abrir_terminal", { cli: "claude-cli" });
+    expect(modelos()[0]).toMatchObject({ selo: "sem login", desativado: true });
+
+    invocar.mockImplementationOnce(() => Promise.reject("esse CLI não entra pelo Moductus"));
+    await clicar(entrar[0]!);
+    expect(todos('.uso-erro[role="alert"]').map((e) => e.textContent)).toEqual([
+      "Não consegui abrir: esse CLI não entra pelo Moductus.",
+    ]);
+
+    falso.detectados = [CLAUDE];
+    await clicar(botao("Procurar de novo"));
+    expect(modelos()[0]).toMatchObject({ selo: "detectado · conectado", desativado: false });
+    expect(todos("button").filter((b) => b.textContent === "Entrar")).toEqual([]);
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("Como instalar abre a página do CLI que falta, pela casca, fora do rótulo da opção", async () => {
+    falso.detectados = [CLAUDE, { ...CLAUDE, tipo: "gemini-cli", impedimento: "sem_adaptador" }];
+    await noModelo();
+    const invocar = vi.mocked(invoke);
+    invocar.mockClear();
+    const instalar = todos("button").filter((b) => b.textContent === "Como instalar");
+    expect(instalar.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Como instalar o Codex",
+      "Como instalar o OpenCode",
+    ]);
+    // O botão não entra no nome do rádio nem marca a opção.
+    expect(instalar.every((b) => b.closest("label") === null)).toBe(true);
+    await clicar(instalar[1]);
+    expect(invocar).toHaveBeenCalledWith("abrir_endereco", { endereco: "https://opencode.ai/docs/" });
+    expect(modelos().find((m) => m.nome === "OpenCode")?.marcado).toBe(false);
+
+    invocar.mockImplementationOnce(() => Promise.reject("o Windows não abriu"));
+    await clicar(instalar[0]);
+    expect(todos('.uso-erro[role="alert"]').map((e) => e.textContent)).toEqual([
+      "Não consegui abrir: o Windows não abriu.",
+    ]);
+    expect(auditar(recipiente)).toEqual([]);
   });
 
   it("Testar conecta o CLI escolhido e mostra a latência real; aí o passo segue com Continuar", async () => {
@@ -615,7 +797,7 @@ describe("primeiro uso: modelo", () => {
     expect(pedidosDe("provedores.remover")).toEqual([]);
     expect(pedidosDe("provedores.criar").at(-1)).toEqual({
       tipo: "openai-compativel",
-      nome: "localhost:11434",
+      nome: "Modelo local",
       baseUrl: "http://localhost:11434/v1",
       modelo: "qwen3:8b",
       chave: "sk-local",
@@ -625,6 +807,30 @@ describe("primeiro uso: modelo", () => {
     expect(por(".uso-nota")!.textContent).toContain("Paga por uso");
     // A chave foi para o Gerenciador de Credenciais e saiu da tela.
     expect(por<HTMLInputElement>('input[type="password"]')!.value).toBe("");
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("modelo que passa sem chamar a ferramenta: o passo avisa que os agentes só conversam", async () => {
+    falso.detectados = [CLAUDE];
+    falso.teste = (id) => ({
+      ok: true,
+      provedorId: id,
+      latenciaMs: 900,
+      testadoEm: "2026-10-10T12:00:00.000Z",
+      ferramentas: false,
+    });
+    await noModelo();
+    await clicar(todos('input[name="modelo"]').at(-1));
+    await clicar(por('[role="radiogroup"][aria-label="Provedor da chave"] [role="radio"]:last-child'));
+    await digitar("Endereço (base_url)", "http://192.168.0.10:11434/v1");
+    // Endereço http de fora deste PC: a tela diz que a chave não vai para lá.
+    expect(recipiente.textContent).toContain("A chave só vai por https, ou para um endereço deste PC.");
+    await digitar("Modelo", "gemma3:4b");
+    await clicar(botao("Testar"));
+
+    const nota = por(".uso-nota")!;
+    expect(nota.querySelector(".selo")!.textContent).toBe("só conversa");
+    expect(nota.querySelector('[data-tom="aviso"]')!.textContent).toBe(AVISO_SEM_FERRAMENTAS);
     expect(auditar(recipiente)).toEqual([]);
   });
 
@@ -692,7 +898,7 @@ describe("primeiro uso: modelo", () => {
       nome: "Claude Code",
       selo: "instalado pelo npm",
       texto:
-        "CLI no PATH, versão 2.1.287 · o Moductus usa o Claude Code do instalador nativo. Instale por ele e procure de novo.",
+        "CLI no PATH, versão 2.1.287 · o npm instalou o Claude Code de um jeito que o Moductus não consegue rodar. Instale pelo instalador nativo e procure de novo.",
       marcado: false,
       desativado: true,
     });
@@ -705,17 +911,156 @@ describe("Primeiros passos", () => {
     await montar();
   }
 
-  it("cinco missões, uma por agente, e o cartão de treino da Faina responde sem mexer em nada", async () => {
+  const progresso = () => por(".primeiros-passos [role='progressbar']")!.getAttribute("aria-valuetext");
+
+  it("contam as três missões desta versão; Tula e Downloads ficam embaixo, sem ação, até a área chegar", async () => {
     await noInicio();
-    expect(todos(".missao").map((m) => m.dataset.missao)).toEqual([...MISSOES_TUTORIAL]);
-    expect(por(".primeiros-passos [role='progressbar']")!.getAttribute("aria-valuetext")).toBe("0 de 5");
+    expect(todos(".missao:not([data-depois])").map((m) => m.dataset.missao)).toEqual([
+      "alba-lembrete",
+      "faina-aprovacao",
+      "nuno-sessao",
+    ]);
+    expect(progresso()).toBe("0 de 3");
+    const depois = todos(".missao[data-depois]");
+    expect(depois.map((m) => m.dataset.missao)).toEqual(["tula-extrato", "faina-downloads"]);
+    expect(depois.map((m) => m.querySelector(".selo")!.textContent)).toEqual([
+      "chega com Finanças",
+      "chega com Arquivos",
+    ]);
+    expect(depois.some((m) => m.querySelector("button"))).toBe(false);
+    expect(por(".primeiros-passos-depois")!.textContent).toBe("Chegam depois · não contam agora");
+    // A da vez (a primeira que falta) fica em destaque; feita, passa para a seguinte.
+    expect(por(".missao[data-atual]")!.dataset.missao).toBe("alba-lembrete");
+  });
+
+  it("o cartão de treino da Faina responde sem mexer em nada e conta como 1 de 3", async () => {
+    await noInicio();
     await clicar(botao("Mover 3 arquivos"));
     expect(pedidosDe("primeiroUso.marcar")).toEqual([
       { alvo: "missao", missao: "faina-aprovacao", estado: "feito" },
     ]);
     expect(por('[data-missao="faina-aprovacao"]')!.dataset.feita).toBe("true");
-    expect(por(".primeiros-passos [role='progressbar']")!.getAttribute("aria-valuetext")).toBe("1 de 5");
+    expect(progresso()).toBe("1 de 3");
     expect(por(".treino [role='status']")!.textContent).toMatch(/iriam para a Lixeira/);
+    // Só o serviço; nenhum comando da casca mexe em arquivo.
+    expect(comandos().map(([c]) => c)).not.toContain("abrir_arquivo");
+  });
+
+  it("o lembrete da Alba chega pelo serviço e a lista some quando as três ficam feitas", async () => {
+    await noInicio();
+    await act(async () =>
+      falso.emitir("primeiroUso.mudou", {
+        ...(falso.estado as EstadoPrimeiroUso),
+        missoes: { ...(falso.estado as EstadoPrimeiroUso).missoes, "alba-lembrete": "feito" },
+      }),
+    );
+    expect(por('[data-missao="alba-lembrete"]')!.dataset.feita).toBe("true");
+    expect(progresso()).toBe("1 de 3");
+    // O serviço encerra o tutorial quando as que valem ficam feitas (primeiro-uso.ts); a lista fica
+    // um instante e some.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await act(async () =>
+        falso.emitir("primeiroUso.mudou", { ...(falso.estado as EstadoPrimeiroUso), tutorial: "feito" }),
+      );
+      expect(por(".primeiros-passos")).toBeTruthy();
+      await act(async () => vi.advanceTimersByTimeAsync(SEGURA_FIM_MS));
+      expect(por(".primeiros-passos")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("o cartão de treino como última missão: a resposta fica na tela um instante antes de a lista sumir", async () => {
+    const base = bancoNovo();
+    falso.estado = {
+      ...base,
+      concluido: true,
+      concluidoEm: "2026-10-08T12:00:00.000Z",
+      missoes: { ...base.missoes, "alba-lembrete": "feito", "nuno-sessao": "feito" },
+    };
+    await montar();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await clicar(botao("Mover 3 arquivos"));
+      // O serviço de verdade encerra o tutorial nessa resposta.
+      await act(async () =>
+        falso.emitir("primeiroUso.mudou", { ...(falso.estado as EstadoPrimeiroUso), tutorial: "feito" }),
+      );
+      expect(progresso()).toBe("3 de 3");
+      expect(por(".treino [role='status']")!.textContent).toMatch(/iriam para a Lixeira/);
+      await act(async () => vi.advanceTimersByTimeAsync(SEGURA_FIM_MS - 100));
+      expect(por(".primeiros-passos")).toBeTruthy();
+      await act(async () => vi.advanceTimersByTimeAsync(100));
+      expect(por(".primeiros-passos")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("Pular some na hora, sem segurar", async () => {
+    await noInicio();
+    await clicar(botao("Pular"));
+    expect(por(".primeiros-passos")).toBeNull();
+  });
+
+  it("Ver o tour de novo começa o tour do começo", async () => {
+    await noInicio();
+    await clicar(botao("Ver o tour de novo"));
+    expect(paradas()).toEqual([1]);
+    expect(comandos()).toContainEqual(["painel_abrir", { area: "tour" }]);
+  });
+
+  it("Como funciona, na missão do Nuno, leva às Sessões de IA", async () => {
+    await noInicio();
+    await clicar(botao("Como funciona"));
+    expect(por("main")!.dataset.area).toBe("sessoes");
+  });
+
+  it("a Ajuda da bandeja traz os Primeiros passos de volta ao Início e o tour de novo", async () => {
+    falso.estado = {
+      ...bancoNovo(),
+      concluido: true,
+      concluidoEm: "2026-10-08T12:00:00.000Z",
+      tutorial: "feito",
+    };
+    localStorage.setItem("moductus.sistema.destino", "notas");
+    await montar();
+    expect(por(".primeiros-passos")).toBeNull();
+    await daCasca("tutorial:rever");
+    expect(pedidosDe("primeiroUso.marcar")).toEqual([{ alvo: "tutorial", estado: "pendente" }]);
+    expect(por("main")!.dataset.area).toBe("inicio");
+    expect(por(".primeiros-passos")).toBeTruthy();
+
+    await daCasca("tutorial:tour");
+    expect(paradas()).toEqual([1]);
+  });
+
+  it("a Ajuda não começa o tour no meio da configuração inicial", async () => {
+    await montar();
+    await daCasca("tutorial:tour");
+    expect(paradas()).toEqual([]);
+    expect(comandos().map(([c]) => c)).not.toContain("painel_abrir");
+  });
+
+  it("o Sistema escondido na parada 3 encerra o tour", async () => {
+    await noInicio();
+    await act(async () => {
+      for (const fn of tauri.ouvintes.get("tour:parada") ?? []) fn({ payload: 3 });
+    });
+    expect(por(".tour-camada")!.dataset.tour).toBe("parada");
+    const visibilidade = Object.getOwnPropertyDescriptor(Document.prototype, "visibilityState");
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    try {
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+    } finally {
+      delete (document as { visibilityState?: unknown }).visibilityState;
+      if (visibilidade) Object.defineProperty(Document.prototype, "visibilityState", visibilidade);
+    }
+    expect(paradas()).toEqual([null]);
+    expect(por(".tour-camada")).toBeNull();
   });
 
   it("Pular esconde; Rever o tutorial, em Configurações, Geral, traz de volta no Início", async () => {

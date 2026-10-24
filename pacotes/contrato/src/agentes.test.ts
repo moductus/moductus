@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   AGENTES_DE_FABRICA,
   Agente,
+  CampoDeFabrica,
   ChamadaFerramenta,
   Execucao,
   ExecucaoDetalhada,
@@ -12,6 +13,7 @@ import {
   PedidoExecucoes,
   PedidoPausar,
 } from "./agentes.ts";
+import { METODOS } from "./metodos.ts";
 
 const nuno = {
   id: "nuno",
@@ -28,7 +30,17 @@ const nuno = {
   ],
   escoposMemoria: ["dev", "geral"],
   tetoDiarioCentavos: null,
+  tetoMoeda: "BRL",
   deFabrica: true,
+  gastoDeHoje: {
+    microdolares: 0,
+    centavos: null,
+    cotacaoDe: null,
+    limiteCentavos: null,
+    liberarCentavos: null,
+    pedeCotacao: false,
+  },
+  camposPersonalizados: ["instrucoes", "gatilhos"],
   situacao: {
     estado: "dormindo",
     atividade: "ocioso",
@@ -69,6 +81,9 @@ describe("agente", () => {
     const { situacao: _situacao, ...semSituacao } = nuno;
     expect(Agente.safeParse(semSituacao).success).toBe(false);
     expect(Agente.safeParse({ ...nuno, tetoDiarioCentavos: -1 }).success).toBe(false);
+    // Moeda fora da lista curta (ADR-0040) e sem moeda não passam.
+    expect(Agente.safeParse({ ...nuno, tetoMoeda: "JPY" }).success).toBe(false);
+    expect(Agente.safeParse({ ...nuno, tetoMoeda: undefined }).success).toBe(false);
     expect(Agente.safeParse({ ...nuno, ferramentas: ["Bash"] }).success).toBe(false);
     expect(Agente.safeParse({ ...nuno, nome: "  " }).success).toBe(false);
   });
@@ -89,6 +104,23 @@ describe("agente", () => {
     expect(situacao({ fila: -1 })).toBe(false);
   });
 
+  test("personalizado diz só os campos que a definição de fábrica cobre", () => {
+    expect(CampoDeFabrica.options).toEqual([
+      "nome",
+      "funcao",
+      "instrucoes",
+      "personagem",
+      "ferramentas",
+      "gatilhos",
+      "escoposMemoria",
+    ]);
+    expect(Agente.safeParse({ ...nuno, camposPersonalizados: [] }).success).toBe(true);
+    // Modelo e teto são escolha do usuário: não contam como personalização.
+    expect(Agente.safeParse({ ...nuno, camposPersonalizados: ["provedorId"] }).success).toBe(false);
+    const { camposPersonalizados: _campos, ...semCampos } = nuno;
+    expect(Agente.safeParse(semCampos).success).toBe(false);
+  });
+
   test("mudança precisa do id e aceita só parte dos campos", () => {
     expect(MudancaAgente.parse({ id: "tula", provedorId: null })).toEqual({ id: "tula", provedorId: null });
     expect(MudancaAgente.safeParse({ provedorId: null }).success).toBe(false);
@@ -102,6 +134,14 @@ describe("agente", () => {
     expect(PedidoPausar.safeParse({ agenteId: "alba", ate: "2026-10-09T13:00:00.000Z" }).success).toBe(true);
     expect(PedidoPausar.safeParse({ agenteId: "alba" }).success).toBe(false);
     expect(PedidoPausar.safeParse({ ate: "amanhã" }).success).toBe(false);
+    expect(PedidoPausar.safeParse({ ate: "2026-10-09T13:00:00Z" }).success).toBe(false);
+  });
+
+  test("tentar agora pede só o id do agente e devolve o agente como ficou", () => {
+    const { entrada, saida } = METODOS["agentes.acordar"];
+    expect(entrada.safeParse({ id: "tula" }).success).toBe(true);
+    expect(entrada.safeParse({ agenteId: "tula" }).success).toBe(false);
+    expect(saida.safeParse(nuno).success).toBe(true);
   });
 });
 

@@ -1,5 +1,5 @@
 import type { Aprovacao } from "@moductus/contrato";
-import type { EstadoConexao } from "@moductus/contrato/cliente";
+import { RecusaDoServico, type EstadoConexao } from "@moductus/contrato/cliente";
 import { useId, useState } from "react";
 import { useDadosDev } from "../../areas/dev/dev.ts";
 import { nomesDosProjetos, useDadosSessoes } from "../../areas/sessoes/sessoes.ts";
@@ -49,6 +49,20 @@ function CartaoDeEstado({ cartao, aoDispensar }: { cartao: CartaoEstado; aoDispe
         ? acao.agenteIds.map((agenteId) => servico.pedir("agentes.retomar", { agenteId }))
         : [servico.pedir("agentes.retomar", {})];
       Promise.all(pedidos).catch(() => setErro("Não consegui retomar agora. Tente de novo."));
+    }
+    if (acao.tipo === "acordar") {
+      // Acordou, o cartão sai pelo `agentes.mudou`; a recusa do serviço já diz o motivo.
+      Promise.all(acao.agenteIds.map((id) => servico.pedir("agentes.acordar", { id }))).catch((e: unknown) =>
+        setErro(e instanceof RecusaDoServico ? e.message : "Não consegui tentar agora. Tente de novo."),
+      );
+    }
+    if (acao.tipo === "liberar") {
+      // Liberado, o agente acorda e o cartão sai pelo `agentes.mudou`; a recusa já diz o motivo.
+      servico
+        .pedir("agentes.liberarTeto", { id: acao.agenteId })
+        .catch((e: unknown) =>
+          setErro(e instanceof RecusaDoServico ? e.message : "Não consegui liberar agora. Tente de novo."),
+        );
     }
   };
   const [primeiro] = cartao.agentes as [Agente];
