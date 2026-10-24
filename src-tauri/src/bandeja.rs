@@ -31,10 +31,24 @@ use windows::{
         UI::{
             HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
             Shell::{DefSubclassProc, SetWindowSubclass},
-            WindowsAndMessaging::{WM_DISPLAYCHANGE, WM_DPICHANGED, WM_SETTINGCHANGE, WM_SYSCOLORCHANGE},
+            WindowsAndMessaging::{
+                SystemParametersInfoW, SPI_GETHIGHCONTRAST, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, WM_DISPLAYCHANGE,
+                WM_DPICHANGED, WM_SETTINGCHANGE, WM_SYSCOLORCHANGE,
+            },
         },
     },
 };
+
+/// O `HIGHCONTRASTW` do Windows. O tipo do crate `windows` fica na feature `Win32_UI_Accessibility`,
+/// que a casca não liga; para ler uma flag, o mesmo layout aqui basta.
+#[repr(C)]
+struct AltoContraste {
+    tamanho: u32,
+    flags: u32,
+    esquema: *mut u16,
+}
+/// `HCF_HIGHCONTRASTON`.
+const ALTO_CONTRASTE_LIGADO: u32 = 1;
 
 const ID: &str = "moductus";
 const ID_SUBCLASSE: usize = 0x4241;
@@ -87,11 +101,22 @@ pub fn muda_a_barra(msg: u32) -> bool {
     matches!(msg, WM_SETTINGCHANGE | WM_SYSCOLORCHANGE | WM_DPICHANGED | WM_DISPLAYCHANGE)
 }
 
+/// Se o alto contraste está ligado agora. Na falha da leitura, desligado.
+fn alto_contraste() -> bool {
+    let mut hc = AltoContraste { tamanho: size_of::<AltoContraste>() as u32, flags: 0, esquema: std::ptr::null_mut() };
+    let lido = unsafe {
+        SystemParametersInfoW(
+            SPI_GETHIGHCONTRAST,
+            hc.tamanho,
+            Some(&mut hc as *mut AltoContraste as _),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+    };
+    lido.is_ok() && hc.flags & ALTO_CONTRASTE_LIGADO != 0
+}
+
 fn desenho_agora() -> Desenho {
-    let alto_contraste = crate::material::ler_texto(HKEY_CURRENT_USER, w!(r"Control Panel\Accessibility\HighContrast"), w!("Flags"))
-        .and_then(|f| f.trim().parse::<u32>().ok())
-        .is_some_and(|f| f & 1 != 0);
-    let fundo = alto_contraste.then(|| unsafe { GetSysColor(COLOR_WINDOW) });
+    let fundo = alto_contraste().then(|| unsafe { GetSysColor(COLOR_WINDOW) });
     let sistema = crate::material::ler_dword(
         HKEY_CURRENT_USER,
         w!(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"),
@@ -122,17 +147,29 @@ fn registrar(desenho: Desenho) {
     crate::registro::info(&format!("bandeja: ícone {tom}, {} px", desenho.tamanho));
 }
 
-/// Confere o Windows de novo e troca o ícone se a barra ou a escala mudou.
+/// Confere o Windows de novo e troca o ícone se a barra ou a escala mudou. A trava solta antes do
+/// `set_icon`: o `Shell_NotifyIconW` atende mensagens enquanto espera, e um aviso que chega nesse
+/// meio entra aqui de novo.
 fn redesenhar(app: &AppHandle) {
     let desenho = desenho_agora();
-    let mut atual = ATUAL.lock().unwrap_or_else(|e| e.into_inner());
-    if *atual == Some(desenho) {
-        return;
+    {
+        let mut atual = ATUAL.lock().unwrap_or_else(|e| e.into_inner());
+        if *atual == Some(desenho) {
+            return;
+        }
+        *atual = Some(desenho);
     }
-    *atual = Some(desenho);
-    if let Some(bandeja) = app.tray_by_id(ID) {
+    let Some(bandeja) = app.tray_by_id(ID) else { return };
+    let mut desenho = desenho;
+    loop {
         let _ = bandeja.set_icon(Some(imagem(desenho)));
         registrar(desenho);
+        // Um aviso atendido durante o set_icon pode ter gravado um desenho mais novo e posto o
+        // dele antes deste terminar: o último a sair põe o que está gravado.
+        match *ATUAL.lock().unwrap_or_else(|e| e.into_inner()) {
+            Some(gravado) if gravado != desenho => desenho = gravado,
+            _ => break,
+        }
     }
 }
 
@@ -381,6 +418,14 @@ mod testes {
             assert_eq!((CLARA[i].width(), CLARA[i].height()), (*t, *t));
             assert_eq!((ESCURA[i].width(), ESCURA[i].height()), (*t, *t));
         }
+    }
+
+    #[test]
+    fn le_o_alto_contraste_com_o_layout_do_windows() {
+        // HIGHCONTRASTW no x64: dois u32 e um ponteiro.
+        assert_eq!(size_of::<AltoContraste>(), 16);
+        // A leitura desta máquina não falha nem trava; o valor depende dela.
+        let _ = alto_contraste();
     }
 
     #[test]

@@ -56,7 +56,7 @@ pub(crate) fn ler_dword(raiz: HKEY, chave: PCWSTR, valor: PCWSTR) -> Option<u32>
     erro.is_ok().then_some(dado)
 }
 
-pub(crate) fn ler_texto(raiz: HKEY, chave: PCWSTR, valor: PCWSTR) -> Option<String> {
+fn ler_texto(raiz: HKEY, chave: PCWSTR, valor: PCWSTR) -> Option<String> {
     let mut dado = [0u16; 64];
     let mut tamanho = (dado.len() * 2) as u32;
     let erro = unsafe {
