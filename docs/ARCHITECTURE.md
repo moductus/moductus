@@ -390,6 +390,33 @@ Feitas em 10/10/2026 no build de release (`pnpm tauri build --no-bundle`) de `fe
 - **Piores casos.** Os 100 a 140 ms do pior caso são bimodais (6 a 8 ms contra 50 a 110 ms) e aparecem também do lado do serviço, então são jitter do serviço ou do sistema, e não foram investigados. Uma rodada sem a calibração dos relógios deu mediana de 38,7 ms e pior caso de 163 ms: o número varia com a carga da máquina.
 - **Primeira resposta.** A espera de 3 a 5 s é quase toda do CLI: o serviço devolve o `enviar` em menos de 150 ms e transmite o texto assim que o Claude Code o produz.
 
+### Medições da fase 3
+
+Feitas em 24/10/2026 no build de release (`pnpm tauri build --no-bundle`) de `feat/fase-3-o-dia` no commit `27c571e`, na mesma máquina das fases 1 e 2 (Windows 11 Pro build 26300, AMD Ryzen 5 1600, 16 GB), com WebView2 155.0.4283.62 (era 154 na fase 1) e Node 24.9.0 como sidecar. Sem modelo conectado e com o Google desconectado: o cliente do Google (F3-21) ainda não existe, então nada aqui passa por ele.
+
+**Método.** A memória é a das fases 1 e 2: bytes privados de `moductus.exe` e de todos os descendentes depois de 60 s parado, só o dock visível, em pasta de dados temporária (`APPDATA` apontado para uma pasta vazia) e banco novo, três rodadas. Para separar o que é da fase do que é da máquina, o `main` da fase 2 (`11fc549`) foi compilado e medido no mesmo dia, do mesmo jeito. As latências do serviço vêm de um roteiro fora do repositório que sobe o `node.exe` e o `servico.mjs` do build de release, faz o papel da casca no canal (responde os pedidos e manda `{"tipo":"atividade","motivo":"desbloqueio"}`) e fala com o serviço pelo WebSocket com o protocolo 3; os relógios são os do mesmo processo, então não há calibração a fazer. O Enter da captura foi medido no app de release de verdade, pelo protocolo de depuração do WebView2 (`--remote-debugging-port`): a tecla vai por `Input.dispatchKeyEvent`, e a página marca o `keydown`, o envio do `captura.lancar`, a resposta e a primeira mudança do DOM.
+
+| Item | Fase 2 | Fase 3 | Meta |
+|---|---|---|---|
+| `node.exe` do serviço, repouso 60 s, com o relógio do dia e os vigias da Alba | 34,6 MB | **43,0 MB** (43,7 / 42,7 / 42,7), +8,4 MB; no mesmo dia, o `main` deu 34,6 MB (34,1 / 35,0 / 34,6) | até +10 MB ✅ |
+| Total do app (casca, WebView2, serviço) | 346,9 MB | **372,6 MB** (379,3 / 375,8 / 362,8); no mesmo dia, o `main` deu 337,5 MB (338,9 / 335,6 / 338,1) | 346,9 MB ❌ (+25,7 MB sobre a fase 2; +35,1 MB sobre o `main` do mesmo dia) |
+| Atraso do disparo do lembrete: horário marcado até `disparadoEm` | — | mediana 11,0 ms, pior 17,0 ms (20 lembretes) | mediana < 2 s ✅ |
+| Lembrete: horário marcado até `notificacoes.nova` na interface | — | mediana 23,3 ms, pior 40,8 ms | — |
+| Lembrete: horário marcado até o pedido do aviso do Windows à casca | — | mediana 24,8 ms, pior 41,5 ms | — |
+| Enter da captura até a tarefa existir (`captura.lancar`, no app de release) | — | mediana 13,4 ms, pior 41,5 ms (32 lançamentos) | 150 ms ✅ |
+| Enter da captura até a tela mostrar o desfazer, pintada em 2 quadros | — | mediana 22,5 ms, pior 50,2 ms | — |
+| `captura.lancar` no serviço, do pedido à resposta | — | mediana 8,6 ms (30, com um build rodando ao lado) e 21,1 ms (40, máquina em uso), pior 70,2 ms | — |
+| `captura.entender` sem modelo | — | mediana 2,0 ms, pior 3,1 ms | — |
+| Primeira atividade até o briefing aparecer, com o molde e sem modelo | — | mediana 41,3 ms, pior 55,2 ms (10 execuções, 9 tarefas, 3 compromissos); 36,3 ms com o dia vazio | 1 s ✅ |
+
+**Leitura.**
+
+- **Serviço.** O relógio, os vigias da Alba, as áreas do dia, a captura e o briefing custam 8,4 MB em repouso (8,1 a 9,1 nas três rodadas), dentro dos 10 MB da meta. Foi medido o conjunto da fase; não houve rodada só com o relógio e os vigias.
+- **Orçamento total.** Passou: 372,6 MB contra os 346,9 MB da fase 2. Do aumento sobre o `main` do mesmo dia, 8,4 MB são do `node.exe`, cerca de 1 MB da casca e o resto, uns 25 MB, do WebView2 (de 290,0 para 315,7 MB nas médias das três rodadas, com o processo de GPU indo de uns 100 para 109 a 125 MB). Causa provável: o JavaScript da interface cresceu de 523 KB para 773 KB (mais 96 KB do `markdown-it`, só no Sistema) e as quatro janelas carregam o mesmo bundle; os valores oscilam 16 MB entre rodadas, sobretudo na GPU. Não foi investigado nem otimizado, como a tarefa pede: segue na etapa dedicada à memória do WebView2 (ADR-0013), agora com ponto de partida maior.
+- **Lembrete.** O disparo sai 11 ms depois da hora marcada e a interface o recebe 12 ms depois disso. Sem modelo e sem rede, por construção. Não cobre o PC suspenso: a retomada é roteiro do humano.
+- **Captura.** Do Enter à resposta são 13,4 ms, dos quais 1 ms é da janela montando o pedido e o resto é o serviço gravando. A janela de captura estava oculta na medição (o atalho `Ctrl+Alt+Espaço` é de outro programa nesta máquina e o `ShowWindow` do roteiro não a mostrou), mas o WebView2 a considera visível e o caminho de código é o mesmo.
+- **Briefing.** Mede do aviso `atividade` da casca até o evento `rotinas.apareceu` e o pedido de abrir o painel Hoje à casca (os dois chegam com 0,2 ms de diferença). Não inclui o desenho do painel nem o desbloqueio de verdade: a casca foi simulada pelo roteiro, e o fuso da configuração foi posto em `Asia/Tokyo` para passar das 05:00, porque a medição rodou de madrugada. O briefing nunca aguardou o modelo (a Alba não tinha provedor, então a abertura saiu em molde, com `daExecucaoId` vazio).
+
 ---
 
 ## 8. Questões em aberto
