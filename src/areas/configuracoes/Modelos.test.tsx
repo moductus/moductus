@@ -501,7 +501,7 @@ describe("Modelos", () => {
     expect(auditar(recipiente)).toEqual([]);
   });
 
-  it("editar fecha com Esc sem gravar", async () => {
+  it("editar fecha com Esc sem gravar, e o foco volta ao Editar", async () => {
     servico();
     await montar();
     await act(async () => botao("Editar Claude Code").click());
@@ -514,6 +514,58 @@ describe("Modelos", () => {
     );
     expect(por('section[aria-label="Editar Claude Code"]')).toBeNull();
     expect(pedidosDe("provedores.definir")).toEqual([]);
+    expect(document.activeElement).toBe(botao("Editar Claude Code"));
+  });
+
+  it("o só conversa gravado aparece ao reabrir a tela, sem testar de novo", async () => {
+    const [cli, local] = PROVEDORES;
+    servico([cli!, { ...local!, testadoEm: new Date().toISOString(), ferramentas: false }]);
+    await montar();
+    const linhas = todos('[aria-label="Provedores"] tbody tr');
+    expect(linhas[1]!.querySelector(".selo")!.textContent).toBe("só conversa");
+    expect(linhas[2]!.textContent).toContain("Com ele, os agentes só conversam");
+    expect(pedidosDe("provedores.testar")).toEqual([]);
+  });
+
+  it("chave em http para fora deste PC: a tela explica, e trocar o endereço limpa a lista de modelos", async () => {
+    servico();
+    await montar();
+    await act(async () => botao("Adicionar provedor").click());
+    await act(async () =>
+      por<HTMLElement>(
+        '[role="radiogroup"][aria-label="Provedor da chave"] [role="radio"]:last-child',
+      )!.click(),
+    );
+    await digitar("Endereço (base_url)", "http://192.168.0.10:11434/v1");
+    expect(por('section[aria-label="Conectar por chave de API ou endereço"]')!.textContent).toContain(
+      "A chave só vai por https, ou para um endereço deste PC.",
+    );
+    await digitar("Endereço (base_url)", "http://localhost:20128/v1");
+    expect(por('section[aria-label="Conectar por chave de API ou endereço"]')!.textContent).not.toContain(
+      "só vai por https",
+    );
+
+    await act(async () => botao("Testar o endereço e listar os modelos").click());
+    expect(lista("Modelos do endereço")).toBeTruthy();
+    await digitar("Endereço (base_url)", "http://localhost:1234/v1");
+    expect(lista("Modelos do endereço")).toBeNull();
+    await act(async () => botao("Testar o endereço e listar os modelos").click());
+    await digitar("Chave", "sk-local");
+    expect(lista("Modelos do endereço")).toBeNull();
+  });
+
+  it("remover: Agora não devolve o foco ao Remover; removido, o foco vai à próxima linha", async () => {
+    servico();
+    await montar();
+    await act(async () => botao("Remover Claude Code").click());
+    await act(async () => botao("Agora não").click());
+    expect(por('[role="alertdialog"]')).toBeNull();
+    expect(document.activeElement).toBe(botao("Remover Claude Code"));
+
+    await act(async () => botao("Remover Claude Code").click());
+    await act(async () => botao("Remover o Claude Code").click());
+    expect(pedidosDe("provedores.remover")).toEqual([{ id: "p1" }]);
+    expect(document.activeElement).toBe(botao("Testar Ollama neste PC"));
   });
 
   it("remover diz quem usa, oferece trocar o modelo antes e só remove com o sim", async () => {

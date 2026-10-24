@@ -1,4 +1,6 @@
 import {
+  enderecoAceitaChave,
+  MENSAGEM_CHAVE_SEM_HTTPS,
   MOEDAS_TETO,
   TIPOS_PROVEDOR_CLI,
   type Agente,
@@ -390,6 +392,7 @@ const DICA_ENDERECO =
   "O endereço da API, quase sempre terminando em /v1. Roteador local, Ollama e LM Studio mostram o deles na própria tela.";
 const DICA_MODELO = "Testar lista os modelos que o endereço oferece; escolha um na lista ou digite o nome.";
 const DICA_NOME = "Como ele aparece nas listas dos agentes.";
+const DICA_CHAVE_SEM_HTTPS = `${MENSAGEM_CHAVE_SEM_HTTPS} Sem chave, este endereço funciona.`;
 
 /** Esc fecha o formulário sem gravar; Enter num campo de texto grava (contrato de interação). */
 function teclasDoFormulario(aoFechar: () => void, aoEnviar: () => void) {
@@ -475,9 +478,11 @@ function FormularioNovo({
           type="password"
           autoComplete="off"
           dica={
-            compativel
-              ? "Só se o serviço pedir; modelo local costuma rodar sem. Fica no Gerenciador de Credenciais do Windows."
-              : "Fica no Gerenciador de Credenciais do Windows."
+            !compativel
+              ? "Fica no Gerenciador de Credenciais do Windows."
+              : enderecoAceitaChave(formulario.baseUrl.trim())
+                ? "Só se o serviço pedir; modelo local costuma rodar sem. Fica no Gerenciador de Credenciais do Windows."
+                : DICA_CHAVE_SEM_HTTPS
           }
           value={formulario.chave}
           disabled={enviando}
@@ -491,6 +496,7 @@ function FormularioNovo({
           desativado={enviando}
           aoMudar={(modelo) => mudar({ modelo })}
           listar={listar}
+          origem={`${formulario.baseUrl.trim()}\n${formulario.chave.trim()}`}
           pedido={() => {
             const chave = formulario.chave.trim();
             const base = { tipo: formulario.tipo, ...(chave ? { chave } : {}) };
@@ -531,6 +537,7 @@ function CampoModelo({
   aoMudar,
   listar,
   pedido,
+  origem,
 }: {
   tipo: TipoApi;
   valor: string;
@@ -539,8 +546,20 @@ function CampoModelo({
   listar: ModelosDaSecao["listarModelos"];
   /** Montado na hora do clique; `null` quando falta o endereço. */
   pedido: () => PedidoModelosProvedor | null;
+  /** Endereço e chave escritos: mudou um deles, a lista de antes já não vale. */
+  origem: string;
 }) {
   const [busca, setBusca] = useState<BuscaModelos>({ fase: "parado" });
+  const [origemDaBusca, setOrigemDaBusca] = useState(origem);
+  if (origem !== origemDaBusca) {
+    setOrigemDaBusca(origem);
+    setBusca({ fase: "parado" });
+  }
+  // A resposta que chega depois de o endereço ou a chave mudarem é de outra lista: fica de fora.
+  const origemAtual = useRef(origem);
+  useEffect(() => {
+    origemAtual.current = origem;
+  }, [origem]);
   const buscar = async () => {
     const p = pedido();
     if (!p) {
@@ -548,7 +567,9 @@ function CampoModelo({
       return;
     }
     setBusca({ fase: "buscando" });
+    const pedidaPara = origem;
     const r = await listar(p);
+    if (origemAtual.current !== pedidaPara) return;
     if (!r.ok) {
       setBusca({ fase: "falhou", mensagem: r.falha.mensagem });
       return;
@@ -638,6 +659,16 @@ function TabelaProvedores({
   /** Abre o painel de troca de um agente (antes de remover o provedor que ele usa). */
   aoTrocarModelo: (agenteId: string) => void;
 }) {
+  const corpo = useRef<HTMLTableSectionElement>(null);
+  // Removido um provedor, o foco vai à linha que ficou no lugar dele (ou à de cima, se era a última).
+  // Um objeto novo por remoção: o efeito roda uma vez para cada uma, já com a lista sem a linha.
+  const [focarLinha, setFocarLinha] = useState<{ indice: number } | null>(null);
+  useEffect(() => {
+    if (!focarLinha) return;
+    const linhas = corpo.current?.querySelectorAll<HTMLElement>("tr[data-provedor]") ?? [];
+    const alvo = linhas[Math.min(focarLinha.indice, linhas.length - 1)];
+    alvo?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }, [focarLinha]);
   return (
     <section className="config-modelos-grupo" aria-label="Provedores">
       <div className="config-modelos-rotulos">
@@ -663,8 +694,8 @@ function TabelaProvedores({
               </th>
             </tr>
           </thead>
-          <tbody>
-            {provedores.map((p) => (
+          <tbody ref={corpo}>
+            {provedores.map((p, i) => (
               <LinhaProvedor
                 key={p.id}
                 provedor={p}
@@ -674,6 +705,7 @@ function TabelaProvedores({
                 travado={!modelos.conectado}
                 testando={modelos.testes[p.id]?.fase === "testando"}
                 aoTrocarModelo={aoTrocarModelo}
+                aoRemovido={() => setFocarLinha({ indice: i })}
               />
             ))}
           </tbody>
@@ -694,6 +726,7 @@ function LinhaProvedor({
   travado,
   testando,
   aoTrocarModelo,
+  aoRemovido,
 }: {
   provedor: Provedor;
   estado: EstadoProvedor;
@@ -702,8 +735,17 @@ function LinhaProvedor({
   travado: boolean;
   testando: boolean;
   aoTrocarModelo: (agenteId: string) => void;
+  /** A linha saiu da tabela: a tabela leva o foco para a próxima. */
+  aoRemovido: () => void;
 }) {
   const [aberto, setAberto] = useState<AbertoNaLinha>(null);
+  const botaoEditar = useRef<HTMLButtonElement>(null);
+  const botaoRemover = useRef<HTMLButtonElement>(null);
+  // Fechou o que estava aberto: o foco volta ao botão que abriu.
+  const fechar = (botao: typeof botaoEditar) => {
+    setAberto(null);
+    botao.current?.focus();
+  };
   const trocando = aberto === "chave";
   const [chave, setChave] = useState("");
   const alternar = (qual: Exclude<AbertoNaLinha, null>) => setAberto((a) => (a === qual ? null : qual));
@@ -718,7 +760,7 @@ function LinhaProvedor({
   const extra = estado.erro || estado.aviso || aberto;
   return (
     <>
-      <tr data-com-extra={extra || undefined}>
+      <tr data-provedor={provedor.id} data-com-extra={extra || undefined}>
         <th scope="row">
           <span className="config-modelos-textos">
             <span className="config-modelos-nome">{provedor.nome}</span>
@@ -762,9 +804,10 @@ function LinhaProvedor({
               </Botao>
             )}
             <Botao
+              ref={botaoEditar}
               tamanho="pequeno"
               variante="fantasma"
-              disabled={travado || testando}
+              disabled={travado}
               aria-label={`Editar ${provedor.nome}`}
               aria-expanded={aberto === "editar"}
               onClick={() => alternar("editar")}
@@ -772,6 +815,7 @@ function LinhaProvedor({
               Editar
             </Botao>
             <Botao
+              ref={botaoRemover}
               tamanho="pequeno"
               variante="fantasma"
               disabled={travado}
@@ -799,7 +843,7 @@ function LinhaProvedor({
               </p>
             )}
             {aberto === "editar" && (
-              <FormularioEdicao provedor={provedor} modelos={modelos} aoFechar={() => setAberto(null)} />
+              <FormularioEdicao provedor={provedor} modelos={modelos} aoFechar={() => fechar(botaoEditar)} />
             )}
             {aberto === "remover" && (
               <ConfirmarRemocao
@@ -807,8 +851,12 @@ function LinhaProvedor({
                 usos={usos}
                 travado={travado}
                 aoTrocarModelo={aoTrocarModelo}
-                aoRemover={() => modelos.remover(provedor.id)}
-                aoFechar={() => setAberto(null)}
+                aoRemover={async () => {
+                  const ok = await modelos.remover(provedor.id);
+                  if (ok) aoRemovido();
+                  return ok;
+                }}
+                aoFechar={() => fechar(botaoRemover)}
               />
             )}
             {trocando && (
@@ -817,7 +865,11 @@ function LinhaProvedor({
                   rotulo={`Chave nova de ${provedor.nome}`}
                   type="password"
                   autoComplete="off"
-                  dica="Fica no Gerenciador de Credenciais do Windows."
+                  dica={
+                    enderecoAceitaChave(provedor.baseUrl)
+                      ? "Fica no Gerenciador de Credenciais do Windows."
+                      : `${MENSAGEM_CHAVE_SEM_HTTPS} Troque o endereço em Editar.`
+                  }
                   value={chave}
                   onChange={(e) => setChave(e.target.value)}
                   onKeyDown={(e) => {
@@ -902,11 +954,15 @@ function FormularioEdicao({
             type="password"
             autoComplete="off"
             dica={
-              apagaChave
-                ? "Endereço novo pede a chave de novo: vazio, o provedor fica sem chave."
-                : provedor.temChave
-                  ? "Vazio mantém a chave guardada no Gerenciador de Credenciais."
-                  : "Só se o serviço pedir. Fica no Gerenciador de Credenciais do Windows."
+              !enderecoAceitaChave(edicao.baseUrl.trim() || provedor.baseUrl)
+                ? apagaChave
+                  ? `${MENSAGEM_CHAVE_SEM_HTTPS} Vazio, o provedor fica sem chave.`
+                  : DICA_CHAVE_SEM_HTTPS
+                : apagaChave
+                  ? "Endereço novo pede a chave de novo: vazio, o provedor fica sem chave."
+                  : provedor.temChave
+                    ? "Vazio mantém a chave guardada no Gerenciador de Credenciais."
+                    : "Só se o serviço pedir. Fica no Gerenciador de Credenciais do Windows."
             }
             value={edicao.chave}
             disabled={travado}
@@ -920,6 +976,7 @@ function FormularioEdicao({
             desativado={travado}
             aoMudar={(modelo) => mudar({ modelo })}
             listar={modelos.listarModelos}
+            origem={`${edicao.baseUrl.trim()}\n${edicao.chave.trim()}`}
             pedido={() => {
               const chave = edicao.chave.trim();
               const tipo = compativel ? ("openai-compativel" as const) : ("openai" as const);
@@ -972,10 +1029,8 @@ function ConfirmarRemocao({
   useEffect(() => cancelar.current?.focus(), []);
   const remover = async () => {
     setRemovendo(true);
-    const ok = await aoRemover();
-    setRemovendo(false);
-    if (!ok) return;
-    aoFechar();
+    // Removido, a linha sai e a tabela leva o foco à próxima; recusado, fica aberto com o motivo.
+    if (!(await aoRemover())) setRemovendo(false);
   };
   return (
     <section

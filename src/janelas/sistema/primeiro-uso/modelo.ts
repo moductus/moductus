@@ -165,7 +165,8 @@ export type EscolhaModelo = TipoProvedorCli | "api";
 export type ResultadoModelo =
   | { fase: "parado" }
   | { fase: "testando"; nome: string }
-  | { fase: "ok"; nome: string; latenciaMs: number; assinatura: boolean }
+  /** `soConversa`: passou sem chamar a ferramenta do teste; os agentes não consultam nem fazem. */
+  | { fase: "ok"; nome: string; latenciaMs: number; assinatura: boolean; soConversa?: boolean }
   | { fase: "falhou"; nome: string; mensagem: string };
 
 /**

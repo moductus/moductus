@@ -1,5 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
+  enderecoAceitaChave,
+  MENSAGEM_CHAVE_SEM_HTTPS,
   MotivoFalhaProvedor,
   TIPOS_PROVEDOR_CLI,
   type FalhaProvedor,
@@ -35,11 +37,13 @@ interface LinhaProvedor {
   base_url: string | null;
   credencial: string | null;
   testado_em: string | null;
+  /** O modelo chamou a ferramenta no último teste que passou (migração 027); vazio no CLI. */
+  ferramentas: 0 | 1 | null;
   /** Onde a detecção achou o CLI neste PC (migração 016); vazio até a primeira detecção. */
   caminho: string | null;
 }
 
-const COLUNAS = "id, tipo, nome, modelo, base_url, credencial, testado_em, caminho";
+const COLUNAS = "id, tipo, nome, modelo, base_url, credencial, testado_em, ferramentas, caminho";
 
 /** O nome da chave do provedor no Gerenciador de Credenciais (fica "Moductus/provedor-<id>"). */
 export const credencialDoProvedor = (id: string) => `provedor-${id}`;
@@ -96,9 +100,9 @@ export class RepositorioProvedores {
     const origem = colunasDeOrigem(DO_USUARIO);
     this.db
       .prepare(
-        `INSERT INTO provedores (id, tipo, nome, modelo, base_url, credencial, testado_em, caminho,
-           criado_em, atualizado_em, origem, agente_id, execucao_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO provedores (id, tipo, nome, modelo, base_url, credencial, testado_em, ferramentas,
+           caminho, criado_em, atualizado_em, origem, agente_id, execucao_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         linha.id,
@@ -108,6 +112,7 @@ export class RepositorioProvedores {
         linha.base_url,
         linha.credencial,
         linha.testado_em,
+        linha.ferramentas,
         linha.caminho,
         agora,
         agora,
@@ -122,7 +127,7 @@ export class RepositorioProvedores {
     this.db
       .prepare(
         `UPDATE provedores SET nome = ?, modelo = ?, base_url = ?, credencial = ?, testado_em = ?,
-           atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
+           ferramentas = ?, atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
          WHERE id = ? AND apagado_em IS NULL`,
       )
       .run(
@@ -131,6 +136,7 @@ export class RepositorioProvedores {
         linha.base_url,
         linha.credencial,
         linha.testado_em,
+        linha.ferramentas,
         agora,
         origem.origem,
         origem.agente_id,
@@ -164,9 +170,9 @@ export class RepositorioProvedores {
   }
 
   /**
-   * Depois de um teste que passou, numa transação só: grava `testado_em`, o provedor toma o lugar
-   * dos que ele substitui (os agentes deles passam a usá-lo, e eles vão para a lixeira) e vira o
-   * principal de quem está sem modelo. Nada acontece se, enquanto o teste rodava, o provedor saiu
+   * Depois de um teste que passou, numa transação só: grava `testado_em` e se o modelo chamou a
+   * ferramenta, o provedor toma o lugar dos que ele substitui (os agentes deles passam a usá-lo, e
+   * eles vão para a lixeira) e vira o principal de quem está sem modelo. Nada acontece se, enquanto o teste rodava, o provedor saiu
    * ou mudou de configuração: o teste valia para a de antes. Substituído que já não existe é
    * ignorado. Devolve os agentes que mudaram, os substituídos e as credenciais deles, para apagar.
    */
@@ -174,11 +180,14 @@ export class RepositorioProvedores {
     testado: LinhaProvedor,
     substitui: readonly string[],
     quando: string,
+    ferramentas: boolean | null = null,
   ): { agentes: string[]; credenciais: string[]; substituidos: string[] } | null {
     return this.emTransacao(() => {
       const atual = this.obter(testado.id);
       if (!atual || !mesmaConfig(atual, testado)) return null;
-      this.db.prepare("UPDATE provedores SET testado_em = ? WHERE id = ?").run(quando, testado.id);
+      this.db
+        .prepare("UPDATE provedores SET testado_em = ?, ferramentas = ? WHERE id = ?")
+        .run(quando, ferramentas === null ? null : Number(ferramentas), testado.id);
       const agentes = new Set<string>();
       const credenciais: string[] = [];
       const substituidos: string[] = [];
@@ -384,6 +393,7 @@ export class ServicoProvedores {
       base_url: baseUrl,
       credencial,
       testado_em: null,
+      ferramentas: null,
       caminho: null,
     };
     this.repositorio.inserir(linha, this.agora().toISOString());
@@ -423,6 +433,7 @@ export class ServicoProvedores {
       base_url: baseUrl,
       credencial,
       testado_em: outraConfig ? null : atual.testado_em,
+      ferramentas: outraConfig ? null : atual.ferramentas,
     };
     this.repositorio.atualizar(linha, this.agora().toISOString());
     this.deps.registro.esquecer(atual.id);
@@ -458,7 +469,7 @@ export class ServicoProvedores {
     if ("falha" in medido) return { ok: false, provedorId: linha.id, falha: medido.falha, testadoEm };
     const ferramentas = medido.ferramentas;
 
-    const efeito = this.repositorio.depoisDePassar(linha, pedido.substitui ?? [], testadoEm);
+    const efeito = this.repositorio.depoisDePassar(linha, pedido.substitui ?? [], testadoEm, ferramentas);
     if (efeito) {
       for (const id of efeito.substituidos) this.deps.registro.esquecer(id);
       // A linha já saiu; a chave que sobrar no Gerenciador não é usada por ninguém.
@@ -491,6 +502,8 @@ export class ServicoProvedores {
     validar(pedido.tipo, baseUrl, pedido.chave);
     let chave = pedido.chave ?? null;
     if (chave === null && gravado?.credencial && baseUrl === gravado.base_url) {
+      // Guardada antes desta regra: a chave também não sai aberta pela rede.
+      if (!enderecoAceitaChave(baseUrl)) throw new Error(MENSAGEM_CHAVE_SEM_HTTPS);
       chave = await this.deps.credenciais.ler(gravado.credencial);
     }
     const prazoMs = this.deps.prazoModelosMs ?? PRAZO_MODELOS_MS;
@@ -607,9 +620,11 @@ export class ServicoProvedores {
           instrucoes: comFerramenta ? INSTRUCOES_TESTE_FERRAMENTA : INSTRUCOES_TESTE,
           mensagens: [{ papel: "usuario", texto: PERGUNTA_TESTE }],
           ferramentas: comFerramenta ? [FERRAMENTA_TESTE] : [],
-          executarFerramenta: () =>
+          executarFerramenta: (chamada) =>
             Promise.resolve(
-              comFerramenta ? { ok: true, valor: "ok" } : { ok: false, erro: "O teste não usa ferramentas." },
+              comFerramenta && chamada.nome === FERRAMENTA_TESTE.nome
+                ? { ok: true, valor: "ok" }
+                : { ok: false, erro: `O teste só tem a ferramenta ${FERRAMENTA_TESTE.nome}.` },
             ),
           continuarDe: null,
           // Fila própria: o teste não espera nem segura a fila de nenhum agente.
@@ -620,8 +635,10 @@ export class ServicoProvedores {
       const latencia = () => Math.max(0, Math.round(this.cronometro() - inicio));
       for await (const evento of eventos) {
         if (evento.tipo === "erro") return { falha: evento.falha, quebrou: false };
-        if (evento.tipo === "ferramenta" && comFerramenta)
+        // Só a ferramenta do teste conta: outro nome é o modelo inventando, não function calling.
+        if (evento.tipo === "ferramenta" && comFerramenta && evento.chamada.nome === FERRAMENTA_TESTE.nome) {
           return { latenciaMs: latencia(), chamouFerramenta: true };
+        }
         if (evento.tipo === "fim") return { latenciaMs: latencia(), chamouFerramenta: false };
       }
       return { falha: falha("fora_do_ar", `${linha.nome} parou sem responder.`), quebrou: false };
@@ -704,6 +721,8 @@ function validar(tipo: TipoProvedor, baseUrl: string | null, chave: string | und
       );
     }
   }
+  // Em http para fora deste PC, a chave iria aberta pela rede.
+  if (chave !== undefined && !enderecoAceitaChave(baseUrl)) throw new Error(MENSAGEM_CHAVE_SEM_HTTPS);
 }
 
 function falha(motivo: FalhaProvedor["motivo"], mensagem: string): FalhaProvedor {
@@ -720,5 +739,6 @@ function paraProvedor(linha: LinhaProvedor): Provedor {
     baseUrl: linha.base_url,
     temChave: linha.credencial !== null,
     testadoEm: linha.testado_em,
+    ferramentas: linha.ferramentas === null ? null : linha.ferramentas === 1,
   };
 }

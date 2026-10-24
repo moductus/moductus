@@ -11,6 +11,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { auditar, marcos } from "../../../teste/acessibilidade.ts";
+import { AVISO_SEM_FERRAMENTAS } from "../../../areas/configuracoes/modelos.ts";
 import { SEGURA_FIM_MS } from "../../../areas/inicio/PrimeirosPassos.tsx";
 import { carregarAreas, Sistema } from "../Sistema.tsx";
 
@@ -806,6 +807,30 @@ describe("primeiro uso: modelo", () => {
     expect(por(".uso-nota")!.textContent).toContain("Paga por uso");
     // A chave foi para o Gerenciador de Credenciais e saiu da tela.
     expect(por<HTMLInputElement>('input[type="password"]')!.value).toBe("");
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("modelo que passa sem chamar a ferramenta: o passo avisa que os agentes só conversam", async () => {
+    falso.detectados = [CLAUDE];
+    falso.teste = (id) => ({
+      ok: true,
+      provedorId: id,
+      latenciaMs: 900,
+      testadoEm: "2026-10-10T12:00:00.000Z",
+      ferramentas: false,
+    });
+    await noModelo();
+    await clicar(todos('input[name="modelo"]').at(-1));
+    await clicar(por('[role="radiogroup"][aria-label="Provedor da chave"] [role="radio"]:last-child'));
+    await digitar("Endereço (base_url)", "http://192.168.0.10:11434/v1");
+    // Endereço http de fora deste PC: a tela diz que a chave não vai para lá.
+    expect(recipiente.textContent).toContain("A chave só vai por https, ou para um endereço deste PC.");
+    await digitar("Modelo", "gemma3:4b");
+    await clicar(botao("Testar"));
+
+    const nota = por(".uso-nota")!;
+    expect(nota.querySelector(".selo")!.textContent).toBe("só conversa");
+    expect(nota.querySelector('[data-tom="aviso"]')!.textContent).toBe(AVISO_SEM_FERRAMENTAS);
     expect(auditar(recipiente)).toEqual([]);
   });
 

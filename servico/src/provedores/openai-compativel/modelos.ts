@@ -1,8 +1,10 @@
-import type {
-  FalhaProvedor,
-  ModeloDoProvedor,
-  ResultadoModelosProvedor,
-  TipoProvedorApi,
+import {
+  enderecoAceitaChave,
+  MENSAGEM_CHAVE_SEM_HTTPS,
+  type FalhaProvedor,
+  type ModeloDoProvedor,
+  type ResultadoModelosProvedor,
+  type TipoProvedorApi,
 } from "@moductus/contrato";
 import { BASE_URL_OPENAI, falhaDaRecusa, lerRecusa, limparDetalhe, maiuscula } from "./openai-compativel.ts";
 
@@ -69,6 +71,7 @@ export async function listarModelos(
 ): Promise<ResultadoModelosProvedor> {
   const base = destino.tipo === "openai" ? BASE_URL_OPENAI : destino.baseUrl;
   if (!base) return falhou("ausente", "Falta o endereço (base_url) para listar os modelos.");
+  if (destino.chave && !enderecoAceitaChave(base)) return falhou("credencial", MENSAGEM_CHAVE_SEM_HTTPS);
   const quem = quemResponde(destino.tipo, base);
   const cabecalhos: Record<string, string> = { Accept: "application/json" };
   if (destino.chave) cabecalhos.Authorization = `Bearer ${destino.chave}`;

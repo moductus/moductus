@@ -221,6 +221,44 @@ describe("configurar provedores", () => {
   });
 });
 
+describe("chave só por https ou para este PC", () => {
+  const aberto = "http://192.168.0.10:11434/v1";
+
+  test("criar, trocar a chave e listar modelos recusam chave em http para fora; sem chave passa", async () => {
+    const { servico, cofre, listas } = montar();
+    await expect(servico.criar({ ...ollama, baseUrl: aberto, chave: CHAVE })).rejects.toThrow(
+      "A chave só vai por https, ou para um endereço deste PC.",
+    );
+    expect(cofre.size).toBe(0);
+    const semChave = await servico.criar({ ...ollama, baseUrl: aberto });
+    await expect(servico.definir({ id: semChave.id, chave: CHAVE })).rejects.toThrow("só vai por https");
+    await expect(
+      servico.modelos({ tipo: "openai-compativel", baseUrl: aberto, chave: CHAVE }),
+    ).rejects.toThrow("só vai por https");
+    expect(cofre.size).toBe(0);
+    expect(listas).toEqual([]);
+    // Neste PC e por https, a chave vai.
+    await expect(
+      servico.criar({ ...ollama, baseUrl: "http://127.0.0.1:20128/v1", chave: CHAVE }),
+    ).resolves.toMatchObject({ temChave: true });
+    await expect(
+      servico.definir({ id: semChave.id, baseUrl: "https://roteador.exemplo/v1", chave: CHAVE }),
+    ).resolves.toMatchObject({ temChave: true });
+  });
+
+  test("chave guardada antes da regra, num endereço http de fora, não vai à lista de modelos", async () => {
+    const { db, servico, cofre, listas } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:20128/v1", chave: CHAVE });
+    db.prepare("UPDATE provedores SET base_url = ? WHERE id = ?").run(aberto, criado.id);
+
+    await expect(servico.modelos({ id: criado.id, tipo: "openai-compativel" })).rejects.toThrow(
+      "só vai por https",
+    );
+    expect(listas).toEqual([]);
+    expect(cofre.size).toBe(1);
+  });
+});
+
 describe("modelos do endereço", () => {
   test("do formulário: endereço e chave do pedido, sem gravar nada", async () => {
     const { servico, listas, cofre } = montar();
@@ -341,6 +379,35 @@ describe("testar provedor", () => {
 
     await expect(servico.testar({ id: criado.id })).resolves.toMatchObject({ ok: true, ferramentas: false });
     expect(falso.pedidos).toHaveLength(1);
+  });
+
+  test("API: chamar outra ferramenta que não a do teste não conta", async () => {
+    const { servico, falso } = montar();
+    const criado = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    falso.roteirizar([{ tipo: "ferramenta", nome: "inventada", entrada: {} }, { tipo: "fim" }]);
+
+    await expect(servico.testar({ id: criado.id })).resolves.toMatchObject({ ok: true, ferramentas: false });
+  });
+
+  test("o resultado das ferramentas fica gravado no provedor até a configuração mudar", async () => {
+    const { servico, falso, linha } = montar();
+    const api = await servico.criar({ ...ollama, baseUrl: "http://localhost:11434/v1" });
+    const claude = await servico.criar({ tipo: "claude-cli", nome: "Claude Code" });
+    expect(servico.listar().map((p) => p.ferramentas)).toEqual([null, null]);
+    falso.roteirizar([{ tipo: "fim" }], [{ tipo: "fim" }]);
+
+    await servico.testar({ id: api.id });
+    await servico.testar({ id: claude.id });
+    expect(linha(api.id).ferramentas).toBe(0);
+    expect(servico.listar().map((p) => p.ferramentas)).toEqual([false, null]);
+    // O nome não muda o modelo: o resultado fica; o modelo novo apaga, como o testado_em.
+    expect((await servico.definir({ id: api.id, nome: "Modelo local" })).ferramentas).toBe(false);
+    expect((await servico.definir({ id: api.id, modelo: "llama3.2" })).ferramentas).toBeNull();
+    expect(linha(api.id).ferramentas).toBeNull();
+
+    falso.roteirizar([{ tipo: "ferramenta", nome: FERRAMENTA_TESTE.nome, entrada: {} }]);
+    await servico.testar({ id: api.id });
+    expect(servico.listar()[0]?.ferramentas).toBe(true);
   });
 
   test("API: servidor que recusa o pedido com ferramenta repete sem ela e diz que o modelo só conversa", async () => {

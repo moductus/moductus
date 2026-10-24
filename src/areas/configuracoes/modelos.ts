@@ -138,12 +138,15 @@ export function estadoDoProvedor(
     return { texto: "erro", tom: "perigo", resposta: "—", quando: null, ...falhaDoAgente(motivo, provedor) };
   }
   if (provedor.testadoEm) {
+    // O serviço grava o que o último teste disse das ferramentas: o "só conversa" volta ao reabrir.
+    const soConversa = provedor.ferramentas === false;
     return {
-      texto: "funcionando",
-      tom: "sucesso",
+      texto: soConversa ? "só conversa" : "funcionando",
+      tom: soConversa ? "aviso" : "sucesso",
       resposta: "—",
       quando: `testado ${haQuanto(provedor.testadoEm, agora)}`,
       erro: null,
+      ...(soConversa ? { aviso: AVISO_SEM_FERRAMENTAS } : {}),
     };
   }
   return { texto: "não testado", tom: "apagado", resposta: "—", quando: null, erro: null };

@@ -11,6 +11,11 @@
   color: var(--texto-3);
 }
 
+/* O porém de um teste que passou: o modelo só conversa. */
+.uso-rotulo[data-tom="aviso"] {
+  color: var(--aviso);
+}
+
 /* ---------- Lateral ---------- */
 .uso-lateral {
   display: flex;

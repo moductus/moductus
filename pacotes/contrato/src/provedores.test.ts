@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
+  enderecoAceitaChave,
+  MENSAGEM_CHAVE_SEM_HTTPS,
   MudancaProvedor,
   NovoProvedor,
   PedidoModelosProvedor,
@@ -112,6 +114,37 @@ describe("provedor", () => {
     });
     expect(ResultadoTesteProvedor.safeParse({ ...base, ferramentas: null }).success).toBe(true);
     expect(ResultadoTesteProvedor.safeParse({ ...base, ferramentas: "não" }).success).toBe(false);
+  });
+
+  test("a chave só vai por https ou para este PC", () => {
+    expect(enderecoAceitaChave("https://openrouter.exemplo/api/v1")).toBe(true);
+    expect(enderecoAceitaChave("http://localhost:20128/v1")).toBe(true);
+    expect(enderecoAceitaChave("http://127.0.0.1:11434/v1")).toBe(true);
+    expect(enderecoAceitaChave("http://127.8.9.10/v1")).toBe(true);
+    expect(enderecoAceitaChave("http://[::1]:1234/v1")).toBe(true);
+    expect(enderecoAceitaChave(null)).toBe(true);
+    expect(enderecoAceitaChave("http://192.168.0.10:11434/v1")).toBe(false);
+    expect(enderecoAceitaChave("http://localhost.exemplo.com/v1")).toBe(false);
+    expect(enderecoAceitaChave("http://128.0.0.1/v1")).toBe(false);
+
+    const aberto = { tipo: "openai-compativel", nome: "x", baseUrl: "http://192.168.0.10:11434/v1" };
+    const recusa = NovoProvedor.safeParse({ ...aberto, chave: "sk-1" });
+    expect(recusa.success).toBe(false);
+    expect(recusa.error?.issues[0]).toMatchObject({ path: ["chave"], message: MENSAGEM_CHAVE_SEM_HTTPS });
+    expect(NovoProvedor.safeParse(aberto).success).toBe(true);
+    expect(
+      MudancaProvedor.safeParse({ id: ollama.id, baseUrl: "http://192.168.0.10/v1", chave: "sk-1" }).success,
+    ).toBe(false);
+    expect(
+      MudancaProvedor.safeParse({ id: ollama.id, baseUrl: "http://192.168.0.10/v1", chave: null }).success,
+    ).toBe(true);
+    expect(
+      PedidoModelosProvedor.safeParse({
+        tipo: "openai-compativel",
+        baseUrl: "http://10.0.0.2/v1",
+        chave: "sk",
+      }).success,
+    ).toBe(false);
   });
 
   test("lista de modelos: só de quem fala a API; endereço ou provedor gravado", () => {

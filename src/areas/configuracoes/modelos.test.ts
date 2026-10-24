@@ -180,6 +180,19 @@ describe("modelo que só conversa", () => {
       "funcionando",
     );
   });
+
+  it("o resultado gravado pelo serviço volta ao reabrir a tela, sem teste nesta", () => {
+    const gravado = provedor({ testadoEm: new Date(2026, 9, 10, 14, 2).toISOString(), ferramentas: false });
+    expect(estadoDoProvedor(gravado, undefined, [], AGORA)).toMatchObject({
+      texto: "só conversa",
+      tom: "aviso",
+      resposta: "—",
+      aviso: AVISO_SEM_FERRAMENTAS,
+    });
+    expect(estadoDoProvedor({ ...gravado, ferramentas: true }, undefined, [], AGORA).texto).toBe(
+      "funcionando",
+    );
+  });
 });
 
 describe("editar e remover um provedor", () => {

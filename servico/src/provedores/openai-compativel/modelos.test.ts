@@ -54,6 +54,24 @@ describe("lista de modelos do endereço", () => {
     });
   });
 
+  test("chave não vai por http para fora deste PC: nem chega a pedir", async () => {
+    const { buscar, pedidos } = buscarFalso(() => json({ data: [] }));
+    await expect(
+      listarModelos(
+        { tipo: "openai-compativel", baseUrl: "http://192.168.0.10:11434/v1", chave: CHAVE },
+        { buscar },
+      ),
+    ).resolves.toEqual({
+      ok: false,
+      falha: {
+        motivo: "credencial",
+        mensagem: "A chave só vai por https, ou para um endereço deste PC.",
+        voltaEm: null,
+      },
+    });
+    expect(pedidos).toEqual([]);
+  });
+
   test("o que o endereço diz sobre ferramentas, e calado é null", () => {
     expect(ferramentasDoItem({ supported_parameters: ["temperature", "tools"] })).toBe(true);
     expect(ferramentasDoItem({ supported_parameters: ["temperature"] })).toBe(false);
