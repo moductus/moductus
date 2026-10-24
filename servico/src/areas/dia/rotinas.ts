@@ -107,6 +107,30 @@ export class RepositorioRegistroRotinas {
   }
 
   /**
+   * As vezes da rotina de antes de `antesDe` que ficaram sem ação fecham sozinhas: `ignorado`, com a
+   * hora. Quem chama é a rotina seguinte, ao aparecer (AGENTS.md §2 "Se você ignorar"). A adiada
+   * não entra: teve resposta. Devolve quantas fecharam.
+   */
+  fecharSozinhas(rotinaId: string, antesDe: string): number {
+    const agora = this.agora().toISOString();
+    const r = this.db
+      .prepare(
+        `UPDATE rotinas_registro SET acao = 'ignorado', acao_em = ?, atualizado_em = ?
+          WHERE rotina_id = ? AND dia < ? AND acao IS NULL`,
+      )
+      .run(agora, agora, rotinaId, antesDe);
+    return Number(r.changes);
+  }
+
+  /** As ações das últimas `quantas` vezes da rotina antes de `antesDe`, da mais recente para trás. */
+  ultimasAcoes(rotinaId: string, antesDe: string, quantas: number): (string | null)[] {
+    const linhas = this.db
+      .prepare("SELECT acao FROM rotinas_registro WHERE rotina_id = ? AND dia < ? ORDER BY dia DESC LIMIT ?")
+      .all(rotinaId, antesDe, quantas) as { acao: string | null }[];
+    return linhas.map((l) => l.acao);
+  }
+
+  /**
    * A rotina adiada que volta: o que se mostra é montado de novo e a ação some, como se tivesse
    * acabado de aparecer.
    */

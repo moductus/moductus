@@ -183,7 +183,10 @@ export interface DependenciasFechamento {
   /** O estado do agente agora: pausado ou desligado, a linha dele não entra. */
   estadoDo: (agenteId: string) => EstadoAgente | null;
   redigir: Redigir;
-  registro: Pick<RepositorioRegistroRotinas, "doDia" | "porId" | "gravar" | "agir" | "reabrir">;
+  registro: Pick<
+    RepositorioRegistroRotinas,
+    "doDia" | "porId" | "gravar" | "agir" | "reabrir" | "fecharSozinhas"
+  >;
   /** A rotina do fechamento: a hora e os dias, para o "Ontem". */
   rotinas: Pick<RepositorioAtividade, "fechamento">;
   painel: PainelHoje;
@@ -259,11 +262,15 @@ export class ServicoFechamento implements FonteDoRelogio {
    * A hora de parar chegou: monta, pede a abertura à Alba (até 15 s; sem modelo, o molde), grava,
    * avisa as janelas e abre o painel Hoje. O fechamento do dia que já apareceu não repete. Se falhar
    * aqui, o vigia não tenta de novo no mesmo dia: o dia fica sem fechamento e vira o "Ontem" do
-   * briefing seguinte.
+   * briefing seguinte. Os briefings e fechamentos de antes de hoje sem resposta fecham sozinhos; o
+   * de hoje fica para o briefing seguinte fechar (ele pode ter aparecido agora, depois da hora de
+   * parar).
    */
   async aparecer(hora: HoraDoFechamento): Promise<ApresentacaoRotina> {
     const ja = this.deps.registro.doDia(FECHAMENTO, hora.dia);
     if (ja) return ja;
+    this.deps.registro.fecharSozinhas(BRIEFING, hora.dia);
+    this.deps.registro.fecharSozinhas(FECHAMENTO, hora.dia);
     const montagem = this.montar(hora.dia);
     const redacao = await this.redigir(montagem);
     const apresentacao = this.deps.registro.gravar({
@@ -283,7 +290,7 @@ export class ServicoFechamento implements FonteDoRelogio {
    * meia-noite e antes da manhã, sem fechamento de hoje, vale o de ontem: é ele que ainda está no
    * painel (adiado, ou encerrado com o silêncio valendo).
    */
-  hoje(): RotinasDeHoje {
+  hoje(): Omit<RotinasDeHoje, "pergunta"> {
     const agora = this.agora();
     const fuso = this.deps.lerFuso();
     const dia = diaNoFuso(agora, fuso);
@@ -343,8 +350,9 @@ export class ServicoFechamento implements FonteDoRelogio {
   }
 
   /**
-   * O último dia antes de hoje em que o fechamento valia, se ele não chegou ao fim (não apareceu, ou
-   * ficou adiado) e houve o que contar: vira o "Ontem" no topo do briefing.
+   * O último dia antes de hoje em que o fechamento valia, se ele não chegou ao fim (não apareceu,
+   * ficou adiado ou fechou sozinho, sem resposta) e houve o que contar: vira o "Ontem" no topo do
+   * briefing, resumido.
    */
   semFechamento(hoje: string): DiaSemFechamento | null {
     const rotina = this.deps.rotinas.fechamento();
@@ -356,7 +364,7 @@ export class ServicoFechamento implements FonteDoRelogio {
     }
     if (dia === null) return null;
     const fechamento = this.deps.registro.doDia(FECHAMENTO, dia);
-    if (fechamento && fechamento.acao !== "adiar") return null;
+    if (fechamento?.acao === "encerrar" || fechamento?.acao === "fechar") return null;
     const feitas = this.deps.tarefas.feitasNoDia(dia);
     const focoMin = this.focoNoDia(dia);
     if (feitas === 0 && focoMin === 0) return null;

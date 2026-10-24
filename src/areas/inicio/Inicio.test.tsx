@@ -100,7 +100,7 @@ const pedir = vi.fn(async (metodo: string, dados?: unknown): Promise<unknown> =>
       return estado();
     case "rotinas.hoje":
       if (servidor.briefing === "recusa") throw new Error("rotinas.hoje ainda não está disponível");
-      return { briefing: servidor.briefing, fechamento: null, diaEncerrado: false };
+      return { briefing: servidor.briefing, fechamento: null, diaEncerrado: false, pergunta: null };
     case "listas.listar":
       return [{ id: "entrada", nome: "Entrada", ordem: 0, cor: null, arquivada: false }];
     case "tarefas.listar": {

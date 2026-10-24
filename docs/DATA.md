@@ -52,7 +52,7 @@ Lembrete é o que **dispara**; pode estar ligado a uma tarefa, a um evento ou a 
 
 ### `rotinas`
 Briefing e fechamento do dia, e o que mais virar ritual.
-`id`, `tipo` (`briefing`, `fechamento`), `hora`, `dias_semana`, `ativa`, `ultima_execucao_id`.
+`id`, `tipo` (`briefing`, `fechamento`), `hora`, `dias_semana`, `ativa`, `curta` (o briefing mais curto, escolhido depois de 3 ignorados seguidos; só o briefing), `ultima_execucao_id`.
 
 ---
 

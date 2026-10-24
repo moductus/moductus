@@ -30,6 +30,7 @@ import { ServicoBriefing, type ResumoDoAgente } from "./areas/dia/briefing.ts";
 import { atendentesDasRotinas } from "./areas/dia/canal.ts";
 import { ServicoFechamento } from "./areas/dia/fechamento.ts";
 import { RepositorioRotinas, ServicoRotinas } from "./areas/dia/horarios.ts";
+import { ServicoIgnorados } from "./areas/dia/ignorados.ts";
 import { RelogioDoDia } from "./areas/dia/relogio.ts";
 import { RepositorioRegistroRotinas } from "./areas/dia/rotinas.ts";
 import { TempoDoDia } from "./areas/dia/tempo.ts";
@@ -610,6 +611,17 @@ const fechamento = new ServicoFechamento({
 });
 fechamentoDoDia = fechamento;
 relogio.registrar(fechamento);
+// Até onde os vigias da Alba olharam, e a pergunta dos ignorados (vigias_marcas, deste PC).
+const marcasDosVigias = new RepositorioMarcasDosVigias(banco);
+// Rituais ignorados (F3-31, AGENTS.md §2 "Se você ignorar"): depois de 3 briefings fechados
+// sozinhos seguidos, a Alba pergunta uma vez se deixa o briefing mais curto ou desliga.
+const ignorados = new ServicoIgnorados({
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  registro: registroRotinas,
+  marcas: marcasDosVigias,
+  rotinas,
+  emitir: (lista) => servidor?.emitir("rotinas.mudou", lista),
+});
 // Contagens das áreas (F3-20): a barra lateral do Sistema e os badges do dock leem daqui. As
 // sessões esperando são os pedidos do terminal, como o Nuno no dock.
 const leituraAprovacoes = new RepositorioAprovacoes(banco);
@@ -802,7 +814,7 @@ servidor = await abrirServidorWs(token, {
   "lembretes.concluir": (pedido) => lembretes.concluir(pedido),
   "lembretes.cancelar": (pedido) => lembretes.cancelar(pedido),
   ...atendentesDaCaptura(captura),
-  ...atendentesDasRotinas(fechamento),
+  ...atendentesDasRotinas(fechamento, ignorados),
   "rotinas.listar": () => rotinas.listar(),
   "rotinas.definir": (mudanca) => rotinas.definir(mudanca),
   "areas.contagens": () => contagens.obter(),
@@ -852,6 +864,8 @@ const briefing = new ServicoBriefing({
   relogio,
   apareceu: (apresentacao) => servidor?.emitir("rotinas.apareceu", apresentacao),
   semFechamento: (hoje) => fechamento.semFechamento(hoje),
+  curto: () => repositorioRotinas.porId("briefing")?.curta ?? false,
+  ignorados,
 });
 relogio.registrar(briefing);
 canal.aoAvisar(CLIQUE_NO_AVISO, (aviso) => {
@@ -878,7 +892,7 @@ vigiaAlba = new VigiaAlba({
   avisar: (aviso) => notificacoes.avisar(aviso),
   rotinas: repositorioAtividade,
   briefingNoHorario: () => sinalDeAtividade("horario"),
-  marcas: new RepositorioMarcasDosVigias(banco),
+  marcas: marcasDosVigias,
   relogio,
   avisos: {
     // As abertas de ontem passam à vista das atrasadas, com o dia em que venciam: as janelas e as

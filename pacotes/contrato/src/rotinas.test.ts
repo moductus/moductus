@@ -4,7 +4,10 @@ import {
   AcaoEscolhida,
   ApresentacaoRotina,
   DIA_ENCERRADO,
+  LINHAS_DO_BRIEFING,
+  LINHAS_DO_BRIEFING_CURTO,
   MudancaRotina,
+  PERGUNTA_DOS_IGNORADOS,
   PedidoAgirRotina,
   ROTINAS_PADRAO,
   Rotina,
@@ -35,10 +38,14 @@ describe("rotinas", () => {
       hora: "18:00",
       diasSemana: [1, 2, 3, 4, 5],
       ativa: true,
+      curta: false,
     };
     expect(Rotina.parse(fechamento)).toEqual(fechamento);
     expect(Rotina.safeParse({ ...fechamento, hora: null }).success).toBe(false);
     expect(Rotina.safeParse({ ...fechamento, tipo: "briefing", hora: null }).success).toBe(true);
+    // Só o briefing tem a versão curta.
+    expect(Rotina.safeParse({ ...fechamento, curta: true }).success).toBe(false);
+    expect(Rotina.safeParse({ ...fechamento, tipo: "briefing", curta: true }).success).toBe(true);
     expect(Rotina.safeParse({ ...fechamento, diasSemana: [0] }).success).toBe(false);
     expect(Rotina.safeParse({ ...fechamento, diasSemana: [1, 1] }).success).toBe(false);
     expect(MudancaRotina.safeParse({ id: "briefing", hora: null }).success).toBe(true);
@@ -65,7 +72,29 @@ describe("rotinas", () => {
     expect(PedidoAgirRotina.safeParse({ id: briefing.id, acao: "encerrar" }).success).toBe(true);
     expect(DIA_ENCERRADO).toBe("Dia encerrado.");
     expect(
-      METODOS["rotinas.hoje"].saida.safeParse({ briefing, fechamento: null, diaEncerrado: false }).success,
+      METODOS["rotinas.hoje"].saida.safeParse({
+        briefing,
+        fechamento: null,
+        diaEncerrado: false,
+        pergunta: null,
+      }).success,
     ).toBe(true);
+  });
+
+  test("a pergunta dos ignorados é uma fala da Alba com as respostas; outra resposta é recusada", () => {
+    const pergunta = {
+      agenteId: "alba",
+      dia: "2026-10-22",
+      texto: PERGUNTA_DOS_IGNORADOS,
+      respostas: ["curto", "desligar", "manter"],
+    };
+    expect(PERGUNTA_DOS_IGNORADOS).toBe("Deixo o briefing mais curto ou desligo?");
+    expect(LINHAS_DO_BRIEFING_CURTO).toBeLessThan(LINHAS_DO_BRIEFING);
+    expect(
+      METODOS["rotinas.hoje"].saida.safeParse({ briefing, fechamento: null, diaEncerrado: false, pergunta })
+        .success,
+    ).toBe(true);
+    expect(METODOS["rotinas.responder"].entrada.safeParse({ resposta: "desligar" }).success).toBe(true);
+    expect(METODOS["rotinas.responder"].entrada.safeParse({ resposta: "nunca" }).success).toBe(false);
   });
 });
