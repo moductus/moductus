@@ -2,7 +2,7 @@
 
 > O sistema visual do Moductus: três temas sobre a mesma estrutura. O produto está em [PRODUCT.md](PRODUCT.md); os desenhos vivem no canvas [Moductus — identidade visual](https://claude.ai/artifact/8im3xVzwsYkKuTocTiDfXZ), com cópia das fontes em [design/](design/).
 
-**Status:** em uso desde a fase 1; a fase 2 acrescentou as telas dos agentes (seção 5) e a leitura dos estados no personagem (seção 6). Os valores abaixo saem dos desenhos do canvas e são a fonte dos tokens em `src/tokens/`.
+**Status:** em uso desde a fase 1; a fase 2 acrescentou as telas dos agentes (seção 5) e a leitura dos estados no personagem (seção 6); a fase 3 acrescentou as telas do dia (tarefas, foco, notas, Google Agenda, O dia, briefing e fechamento, tour) e os padrões que saíram delas. Os valores abaixo saem dos desenhos do canvas e são a fonte dos tokens em `src/tokens/`.
 
 ---
 
@@ -91,7 +91,7 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 ### Escala comum aos três
 
 - **Espaço** (grade de 4): 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 32.
-- **Tipo:** 11 (meta, atalho), 12 (rótulo), 13 (corpo), 17–22 (título de painel), 26 (título do Sistema), 30–36 (número grande, mono).
+- **Tipo:** 11 (meta, atalho), 12 (rótulo), 13 (corpo), 15 (linha de tarefa nos painéis e título da bolha do tour), 17–22 (título de painel), 26 (título do Sistema), 30–36 (número grande, mono). Os relógios do foco têm token próprio (48 no painel, 64 na área Foco) e o do Início, 34.
 - **Dock:** 64–68 px de largura; botões de 44 × 44; badge de 16 px.
 - **Painel lateral:** cartão de 400 px de largura, afastado 12 px do dock (decisão do humano na fase 3). A janela do painel tem 412 px (cartão mais o afastamento) e não reserva espaço na tela: passa por cima do que estiver ao lado do dock.
 - **Medidas de tela:** colunas de tabela, trilhos de progresso, o balão da conversa e afins também são tokens (`--largura-col-*`, `--altura-trilho-*`, `--largura-balao`…) em `src/tokens/temas.css`, e o lint visual reprova número solto. `--dur-correr` (1,4 s) é a barra indeterminada de "testando" e vira 0 com movimento reduzido.
@@ -159,6 +159,7 @@ Padrões que saíram dessas telas e valem para o resto:
 - **Só leitura com pedido:** o que vem de fora e não é do Moductus (evento de outro calendário) mostra os campos como texto, com cadeado e "só leitura"; a mudança é um pedido ao agente, que responde com o cartão de aprovação logo abaixo.
 - **Tour:** a parada fica num anel de 2 px no destaque e o resto da tela escurece e não recebe clique; a bolha fica ao lado do que aponta, com "n de 4", pontos de progresso, até duas frases e [Pular tour] [Voltar] [Próximo]. Esc pula, as setas andam, e o tour volta pelo menu Ajuda.
 - **Ainda não vale:** missão ou conexão que chega com outra área aparece apagada, com caixa tracejada e o selo "chega com Finanças", sem ação e fora da contagem.
+- **Foco parado:** no painel Hoje, uma linha "Nenhum foco agora." com [Começar foco] no lugar do relógio, no padrão do vazio que explica. É um estado que o quadro do painel não desenhou; os outros estados do foco seguem `PainelFoco` e `AreaFocoEstados`.
 - **Editar blocos:** no modo de edição, cada bloco ganha alça, posição ("3 de 5"), mover para cima e para baixo e Esconder; o escondido vai para uma lista "Escondidos" com Mostrar, e cada mudança vale na hora.
 
 **A desenhar:** Ferramentas no Sistema, instruções e ferramentas na página do agente, criar agente (fase 7), demais seções de Configurações (Geral, Atalhos, Privacidade) e o instalador.
