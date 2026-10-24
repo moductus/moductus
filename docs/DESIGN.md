@@ -93,7 +93,7 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 - **Espaço** (grade de 4): 4, 6, 8, 10, 12, 14, 16, 18, 20, 24, 32.
 - **Tipo:** 11 (meta, atalho), 12 (rótulo), 13 (corpo), 15 (linha de tarefa nos painéis e título da bolha do tour), 17–22 (título de painel), 26 (título do Sistema), 30–36 (número grande, mono). Os relógios do foco têm token próprio (48 no painel, 64 na área Foco) e o do Início, 34.
 - **Dock:** 64–68 px de largura; botões de 44 × 44; badge de 16 px.
-- **Painel lateral:** cartão de 400 px de largura, afastado 12 px do dock (decisão do humano na fase 3). A janela do painel tem 412 px (cartão mais o afastamento) e não reserva espaço na tela: passa por cima do que estiver ao lado do dock.
+- **Painel lateral:** cartão de 400 px de largura, encostado no dock (decisão do humano na fase 3; no flutuante, o alto e o pé acompanham os do dock). A janela do painel tem 412 px (o cartão mais 12 px de folga do lado de fora, para a sombra) e não reserva espaço na tela: passa por cima do que estiver ao lado do dock. Fecha com Esc, com o fechar ou com um clique em outro app ou na área de trabalho, menos com um pedido de aprovação esperando a resposta; o briefing e o fechamento que o serviço abre ficam até uma ação ou o Esc.
 - **Medidas de tela:** colunas de tabela, trilhos de progresso, o balão da conversa e afins também são tokens (`--largura-col-*`, `--altura-trilho-*`, `--largura-balao`…) em `src/tokens/temas.css`, e o lint visual reprova número solto. `--dur-correr` (1,4 s) é a barra indeterminada de "testando" e vira 0 com movimento reduzido.
 
 ---
@@ -117,6 +117,7 @@ As fontes vão empacotadas no app (todas têm licença OFL); nada é baixado em 
 | Captura rápida | ✓ (tweak de tema) | ✓ | ✓ |
 | Componente Dock, reutilizado pelos painéis | ✓ | ✓ | ✓ |
 | Marca: quatro opções, com a **C · Borda e ponto** escolhida e aplicada em todos os desenhos | ✓ | ✓ | ✓ |
+| Ícone do app e da bandeja, na barra clara, escura e de alto contraste | ✓ (tweak de tema) | ✓ | ✓ |
 | Agentes: personagens, expressões e criar agente | ✓ (tweak de tema) | ✓ | ✓ |
 | Componente Personagem (agente, expressão, corpo ou cabeça) | ✓ | ✓ | ✓ |
 | Primeiro uso: boas-vindas, tema e dock, modelo, conhecer o time, conexões | ✓ (tweak de tema) | ✓ | ✓ |
@@ -164,7 +165,10 @@ Padrões que saíram dessas telas e valem para o resto:
 
 **A desenhar:** Ferramentas no Sistema, instruções e ferramentas na página do agente, criar agente (fase 7), demais seções de Configurações (Geral, Atalhos, Privacidade) e o instalador.
 
-**Ícones da marca:** em [design/marca/](design/marca/): `moductus.ico` (16 a 256 px, Grafite), `app-*.png` (32 a 512), ícones da bandeja claro e escuro (16 e 32) e `marca.svg` em `currentColor`.
+**Ícones da marca:** em [design/marca/](design/marca/), iguais aos de `src-tauri/icons`: `moductus.ico` (16, 20, 24, 32, 40, 48, 64, 128 e 256 px, cada um desenhado no próprio tamanho), `app-*.png` (32 a 512), ícones da bandeja claro e escuro (16, 20, 24 e 32) e `marca.svg` em `currentColor`. Quadro: `Icones`.
+
+- **App:** quadrado `#131417` com raio de 20% e a marca em `#E8E9EB`, com 62% do lado (o respiro de 0,25 da marca).
+- **Bandeja:** só a marca, na altura toda, em branco puro na barra escura e preto puro na clara; no alto contraste vale o fundo do tema do Windows. Um desenho por escala (16 px a 100%, 20 a 125%, 24 a 150%, 32 a 200%), com linha e ponto em pixel inteiro. A casca troca o desenho sozinha quando o tema, o alto contraste ou a escala mudam (`src-tauri/src/bandeja.rs`).
 
 ---
 

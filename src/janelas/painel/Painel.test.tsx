@@ -302,6 +302,61 @@ describe("painel: a área que a casca abriu antes de ele ouvir", () => {
   });
 });
 
+describe("painel: encostado no dock e o clique fora", () => {
+  const clicarFora = () => act(async () => eventosCasca.get("painel:clique-fora")?.({ payload: null }));
+  const fechou = () => chamadasCasca.some((c) => c.comando === "painel_fechar");
+
+  it("o cartão segue a forma e o lado do dock, ao vivo (a folga vai para o lado de fora)", async () => {
+    await montar();
+    const main = recipiente.querySelector("main")!;
+    await vi.waitFor(() => expect(main.dataset.forma).toBe("colada"));
+    expect(main.dataset.lado).toBe("esquerda");
+    await act(async () =>
+      eventosCasca.get("dock:configuracao")?.({
+        payload: { lado: "direita", modo: "fixo", forma: "flutuante" },
+      }),
+    );
+    expect(main.dataset.forma).toBe("flutuante");
+    expect(main.dataset.lado).toBe("direita");
+  });
+
+  it("clique em outro app ou na área de trabalho fecha o painel", async () => {
+    servidor.pendentes = [];
+    await montar();
+    await abrir("agentes");
+    expect(fechou()).toBe(false);
+    await clicarFora();
+    expect(fechou()).toBe(true);
+  });
+
+  it("com um pedido esperando a resposta, o clique fora não fecha; respondido, fecha", async () => {
+    await montar();
+    await abrir("agentes");
+    expect(cartoes()).toHaveLength(1);
+    await clicarFora();
+    expect(fechou()).toBe(false);
+    // A resposta a caminho também segura: o pedido ainda não valeu.
+    await act(async () => botaoCom(cartoes()[0]!, "Permitir").click());
+    await clicarFora();
+    expect(fechou()).toBe(false);
+    avisar("aprovacoes.mudou", pedido("a1", "npm test -- --watch=false", { estado: "aprovada" }));
+    await clicarFora();
+    expect(fechou()).toBe(true);
+  });
+
+  it("com o tour passando pelo painel, o clique fora não fecha", async () => {
+    servidor.pendentes = [];
+    await montar();
+    await abrir("agentes");
+    await act(async () => eventosCasca.get("tour:parada")?.({ payload: 2 }));
+    await clicarFora();
+    expect(fechou()).toBe(false);
+    await act(async () => eventosCasca.get("tour:parada")?.({ payload: null }));
+    await clicarFora();
+    expect(fechou()).toBe(true);
+  });
+});
+
 describe("painel Agentes: pedidos das sessões do terminal", () => {
   it("o pedido mostra projeto, ferramenta, esperando você e o comando inteiro em linha", async () => {
     await montar();

@@ -1,6 +1,7 @@
 /*
- * Painel lateral (Main.dc.html, "Painel Hoje"): cartão afastado do dock, com o fundo, a borda,
- * o raio e a sombra do tema. A janela em volta é transparente.
+ * Painel lateral (Main.dc.html, "Painel Hoje"): cartão encostado no dock, com o fundo, a borda,
+ * o raio e a sombra do tema. A janela em volta é transparente; a folga fica do lado de fora, onde
+ * a sombra cabe. No dock flutuante, o alto e o pé do cartão acompanham os do dock.
  */
 .painel {
   position: fixed;
@@ -9,12 +10,17 @@
   padding: var(--margem-painel) 0;
 }
 
+.painel[data-forma="flutuante"] {
+  padding-top: var(--margem-dock-flutuante);
+  padding-bottom: var(--margem-dock-flutuante);
+}
+
 .painel[data-lado="esquerda"] {
-  padding-left: var(--margem-painel);
+  padding-right: var(--margem-painel);
 }
 
 .painel[data-lado="direita"] {
-  padding-right: var(--margem-painel);
+  padding-left: var(--margem-painel);
 }
 
 .painel-cartao {
