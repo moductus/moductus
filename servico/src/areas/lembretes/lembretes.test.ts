@@ -56,7 +56,7 @@ function montar(opcoes: { agora?: Date; ligar?: boolean; noGoogle?: (lembreteId:
   vi.setSystemTime(opcoes.agora ?? sp(HOJE, "14:30"));
   const pasta = mkdtempSync(join(tmpdir(), "moductus-lembretes-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const casca = { mostrados: [] as AvisoWindows[], retirados: [] as string[] };
   const agentes = new RepositorioAgentes(db);

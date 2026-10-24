@@ -86,7 +86,7 @@ describe("migração tarefas", () => {
     antigo.prepare("UPDATE agentes SET nome = 'Albinha' WHERE id = 'alba'").run();
     antigo.close();
 
-    const db = abrirBanco(pasta);
+    const db = abrirBanco(pasta, { duravel: false });
     expect(versaoAtual(db)).toBe(MIGRACOES.length);
     expect(tabelas(db)).toEqual(TABELAS);
     expect(listas(db)).toEqual(PADROES);

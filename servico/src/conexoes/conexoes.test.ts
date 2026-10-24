@@ -31,7 +31,7 @@ const ORIGINAL = `${JSON.stringify({ model: "opus", hooks: { Stop: [{ hooks: [{ 
 function montar(conteudo: string | null = ORIGINAL, falhas: { ambiente?: string } = {}) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-conexoes-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   mkdirSync(join(pasta, "claude"));
   const caminho = join(pasta, "claude", "settings.json");

@@ -46,7 +46,7 @@ interface Montagem {
 }
 
 function montar(opcoes: { ler?: LerTranscript } = {}): Montagem {
-  const db = abrirBanco(pasta());
+  const db = abrirBanco(pasta(), { duravel: false });
   bancos.push(db);
   const mudancas: MudancaSessao[] = [];
   const avisos: AvisoContexto[] = [];

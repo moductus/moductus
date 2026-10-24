@@ -49,7 +49,7 @@ const leitura = (nome: string) =>
 function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-agentes-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const repo = new RepositorioAgentes(db);
   const catalogo = new Catalogo([leitura("agenda.ver"), leitura("tarefas.criar"), leitura("financas.saldo")]);

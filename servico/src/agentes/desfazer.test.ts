@@ -129,7 +129,7 @@ function areaDeNotas(banco: { db: DatabaseSync }) {
  */
 function montar(pasta = mkdtempSync(join(tmpdir(), "moductus-desfazer-"))) {
   if (!pastas.includes(pasta)) pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   db.exec(`
     INSERT OR IGNORE INTO provedores (id, tipo, nome) VALUES ('p-alba', 'claude-cli', 'Falso da Alba');
@@ -233,7 +233,7 @@ describe("desfazer pelo histórico do agente", () => {
     const { chamadas } = await rodar(m, [chamar("teste__anotar", { texto: "leite" })]);
     m.db.close();
 
-    const db = abrirBanco(m.pasta);
+    const db = abrirBanco(m.pasta, { duravel: false });
     bancos.push(db);
     m.banco.db = db;
     const reaberto = new ServicoExecucoes(new RepositorioExecucoes(db), m.catalogo, {

@@ -55,7 +55,7 @@ function portoes() {
  */
 function montar(pasta = mkdtempSync(join(tmpdir(), "moductus-runtime-"))) {
   if (!pastas.includes(pasta)) pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   db.exec(`
     INSERT OR IGNORE INTO provedores (id, tipo, nome) VALUES ('p-alba', 'claude-cli', 'Falso da Alba'), ('p-nuno', 'claude-cli', 'Falso do Nuno');

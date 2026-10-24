@@ -46,7 +46,7 @@ function montar(
 ) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-provedores-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const cofre = new Map<string, string>();
   const falso = new ProvedorFalso("falso");

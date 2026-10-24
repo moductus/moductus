@@ -23,7 +23,7 @@ const FUSO = "America/Sao_Paulo";
 function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-atividade-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const relogio = { agora: new Date("2026-10-19T07:00:00.000Z") };
   const agora = () => relogio.agora;
@@ -153,7 +153,7 @@ describe("começo que falha", () => {
   test("o briefing que falhou (promessa ou exceção) deixa o próximo sinal tentar de novo", async () => {
     const pasta = mkdtempSync(join(tmpdir(), "moductus-atividade-"));
     pastas.push(pasta);
-    const db = abrirBanco(pasta);
+    const db = abrirBanco(pasta, { duravel: false });
     bancos.push(db);
     const agora = () => new Date("2026-10-19T11:00:00.000Z");
     const tentativas: string[] = [];

@@ -283,7 +283,7 @@ describe("despertar sem ferramentas, com prazo e com o GitHub como dado", () => 
   function comRuntime() {
     const pasta = mkdtempSync(join(tmpdir(), "moductus-vigia-runtime-"));
     pastas.push(pasta);
-    const db = abrirBanco(pasta);
+    const db = abrirBanco(pasta, { duravel: false });
     bancos.push(db);
     db.exec(`
       INSERT INTO provedores (id, tipo, nome) VALUES ('p-nuno', 'claude-cli', 'Falso do Nuno');
@@ -370,7 +370,7 @@ describe("despertar sem ferramentas, com prazo e com o GitHub como dado", () => 
   test("Nuno pausado pela bandeja: o despertar que passa do prazo na porta não é falha, e retomar confere a pauta sem evento novo", async () => {
     const pasta = mkdtempSync(join(tmpdir(), "moductus-vigia-pausa-"));
     pastas.push(pasta);
-    const db = abrirBanco(pasta);
+    const db = abrirBanco(pasta, { duravel: false });
     bancos.push(db);
     db.exec(`
       INSERT INTO provedores (id, tipo, nome) VALUES ('p-nuno', 'claude-cli', 'Falso do Nuno');

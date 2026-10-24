@@ -48,7 +48,7 @@ const sp = (dia: string, hora: string) => new Date(`${dia}T${hora}:00.000-03:00`
 function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-ferramentas-agenda-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   db.exec(`
     INSERT OR IGNORE INTO provedores (id, tipo, nome) VALUES ('p-alba', 'claude-cli', 'Falso');

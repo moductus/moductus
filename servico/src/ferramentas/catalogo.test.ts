@@ -21,7 +21,7 @@ afterEach(() => {
 function listasDeFabrica(): Record<string, string[]> {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-catalogo-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const linhas = db.prepare("SELECT id, ferramentas FROM agentes").all() as {
     id: string;

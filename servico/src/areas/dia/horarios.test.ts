@@ -27,7 +27,7 @@ const AGORA = new Date("2026-10-19T20:00:00.000Z");
 function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-horarios-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const repo = new RepositorioRotinas(db, () => AGORA);
   const avisos: Rotina[][] = [];

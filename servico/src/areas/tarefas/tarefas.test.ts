@@ -53,7 +53,7 @@ const DOMINGO_9H = "2026-10-18T12:00:00.000Z";
 function montar(agora = DOMINGO_9H) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-tarefas-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const relogio = { agora: new Date(agora) };
   const andar = (ms = 1000) => {

@@ -39,7 +39,7 @@ const AGORA = new Date("2026-10-18T12:00:00.000Z");
 async function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-situacao-google-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const google = await abrirGoogleFalso(CLIENTE_DE_TESTE);
   googles.push(google);

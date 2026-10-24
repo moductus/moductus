@@ -26,7 +26,7 @@ type Valor = {
 function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-ferramentas-uso-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const repo = new RepositorioSessoes(db);
   const sessoes = new ServicoSessoes(repo, () => {});

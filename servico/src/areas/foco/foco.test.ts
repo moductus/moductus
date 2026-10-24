@@ -50,7 +50,7 @@ function montar(opcoes: { agora?: Date; pasta?: string } = {}) {
   vi.setSystemTime(opcoes.agora ?? sp(HOJE, "14:00"));
   const pasta = opcoes.pasta ?? mkdtempSync(join(tmpdir(), "moductus-foco-"));
   if (!opcoes.pasta) pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const casca = { mostrados: [] as AvisoWindows[], retirados: [] as string[] };
   const agentes = new RepositorioAgentes(db);

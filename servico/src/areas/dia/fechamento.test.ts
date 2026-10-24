@@ -135,7 +135,7 @@ async function montar(
   if (!db) {
     const pasta = mkdtempSync(join(tmpdir(), "moductus-fechamento-"));
     pastas.push(pasta);
-    db = abrirBanco(pasta);
+    db = abrirBanco(pasta, { duravel: false });
     bancos.push(db);
   }
   const { agenda, tarefas, foco } = areas(db);

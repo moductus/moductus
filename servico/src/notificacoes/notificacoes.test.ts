@@ -49,7 +49,7 @@ function montar(
 ) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-notificacoes-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   let agora = MEIO_DIA;
   let silencio: Silencio = { ...CONFIG_PADRAO.silencio, ...opcoes.silencio };

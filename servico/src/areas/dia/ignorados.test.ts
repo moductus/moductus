@@ -76,7 +76,7 @@ function montar(resumos: ResumoDoAgente[] = []) {
   vi.setSystemTime(sp(SEG, "07:00"));
   const pasta = mkdtempSync(join(tmpdir(), "moductus-ignorados-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   db.exec("UPDATE agentes SET provedor_id = NULL WHERE id = 'alba'");
   const lerFuso = () => FUSO;

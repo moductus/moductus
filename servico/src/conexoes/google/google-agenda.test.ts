@@ -51,7 +51,7 @@ async function montar(
 ) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-google-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   const google = await abrirGoogleFalso(opcoes.clienteDoGoogle ?? CLIENTE_DE_TESTE);
   googles.push(google);

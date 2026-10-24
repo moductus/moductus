@@ -20,3 +20,14 @@ test("abre o arquivo na pasta e aplica as migrações", () => {
   db.close();
   rmSync(pasta, { recursive: true, force: true });
 });
+
+test("o serviço espera o disco a cada COMMIT; só o banco de teste dispensa", () => {
+  const pasta = mkdtempSync(join(tmpdir(), "moductus-banco-"));
+  const servico = abrirBanco(pasta);
+  expect(servico.prepare("PRAGMA synchronous").get()).toEqual({ synchronous: 2 });
+  servico.close();
+  const teste = abrirBanco(pasta, { duravel: false });
+  expect(teste.prepare("PRAGMA synchronous").get()).toEqual({ synchronous: 0 });
+  teste.close();
+  rmSync(pasta, { recursive: true, force: true });
+});
