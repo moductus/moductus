@@ -97,7 +97,7 @@ pub fn run() {
             tela_cheia::vigiar(app.handle().clone());
             notificacao::iniciar(app.handle());
             atalhos::iniciar(app.handle(), atalhos::padrao());
-            bandeja::iniciar(app.handle())?;
+            bandeja::iniciar(app.handle(), dock::hwnd_de(&janela_dock))?;
             midia::iniciar(app.handle().clone());
             controles::iniciar(app.handle().clone());
             servico::iniciar(app.handle().clone(), pasta.clone());

@@ -7,15 +7,150 @@
 //!
 //! A Ajuda (fixa) traz de volta o tour e os Primeiros passos: a casca só avisa a interface por
 //! evento, e o Sistema faz o resto (`src/janelas/tour`, `PrimeirosPassos.tsx`).
+//!
+//! O ícone é a marca (DESIGN §7, `docs/design/marca`): branca na barra escura, preta na clara,
+//! desenhada a 16, 20, 24 e 32 px para cada escala do Windows. No alto contraste vale o fundo do
+//! tema. Troca sozinho quando o Windows avisa mudança de tema, de cor ou de escala.
+
+use std::sync::{Mutex, OnceLock};
 
 use serde::Deserialize;
 use tauri::{
+    image::Image,
+    include_image,
     menu::{IsMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Runtime,
 };
+use windows::{
+    core::w,
+    Win32::{
+        Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM},
+        Graphics::Gdi::{GetSysColor, MonitorFromPoint, COLOR_WINDOW, MONITOR_DEFAULTTOPRIMARY},
+        System::Registry::HKEY_CURRENT_USER,
+        UI::{
+            HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
+            Shell::{DefSubclassProc, SetWindowSubclass},
+            WindowsAndMessaging::{WM_DISPLAYCHANGE, WM_DPICHANGED, WM_SETTINGCHANGE, WM_SYSCOLORCHANGE},
+        },
+    },
+};
 
 const ID: &str = "moductus";
+const ID_SUBCLASSE: usize = 0x4241;
+const TAMANHOS: [u32; 4] = [16, 20, 24, 32];
+/// A marca branca, para a barra escura.
+const CLARA: [Image<'static>; 4] = [
+    include_image!("icons/bandeja/clara-16.png"),
+    include_image!("icons/bandeja/clara-20.png"),
+    include_image!("icons/bandeja/clara-24.png"),
+    include_image!("icons/bandeja/clara-32.png"),
+];
+/// A marca preta, para a barra clara.
+const ESCURA: [Image<'static>; 4] = [
+    include_image!("icons/bandeja/escura-16.png"),
+    include_image!("icons/bandeja/escura-20.png"),
+    include_image!("icons/bandeja/escura-24.png"),
+    include_image!("icons/bandeja/escura-32.png"),
+];
+
+static APP: OnceLock<AppHandle> = OnceLock::new();
+static ATUAL: Mutex<Option<Desenho>> = Mutex::new(None);
+
+/// Qual desenho a bandeja mostra.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Desenho {
+    pub barra_clara: bool,
+    pub tamanho: u32,
+}
+
+/// O desenho para o ícone pequeno pedido (16 px vezes a escala): o menor que cobre, senão o maior.
+pub fn tamanho_desenhado(pedido: u32) -> u32 {
+    TAMANHOS.iter().copied().find(|&t| t >= pedido).unwrap_or(TAMANHOS[TAMANHOS.len() - 1])
+}
+
+/// Se a barra de tarefas é clara. No alto contraste vale o fundo do tema (`COLOR_WINDOW`, em
+/// 0x00BBGGRR), porque o `SystemUsesLightTheme` não acompanha; sem a chave, a barra é escura, como
+/// no Windows 10.
+pub fn barra_clara(fundo_alto_contraste: Option<u32>, sistema_claro: Option<u32>) -> bool {
+    match fundo_alto_contraste {
+        Some(cor) => {
+            let (r, g, b) = (cor & 0xFF, (cor >> 8) & 0xFF, (cor >> 16) & 0xFF);
+            2126 * r + 7152 * g + 722 * b > 10_000 * 128
+        }
+        None => sistema_claro == Some(1),
+    }
+}
+
+/// Os avisos do Windows que podem mudar a barra (tema, alto contraste) ou a escala.
+pub fn muda_a_barra(msg: u32) -> bool {
+    matches!(msg, WM_SETTINGCHANGE | WM_SYSCOLORCHANGE | WM_DPICHANGED | WM_DISPLAYCHANGE)
+}
+
+fn desenho_agora() -> Desenho {
+    let alto_contraste = crate::material::ler_texto(HKEY_CURRENT_USER, w!(r"Control Panel\Accessibility\HighContrast"), w!("Flags"))
+        .and_then(|f| f.trim().parse::<u32>().ok())
+        .is_some_and(|f| f & 1 != 0);
+    let fundo = alto_contraste.then(|| unsafe { GetSysColor(COLOR_WINDOW) });
+    let sistema = crate::material::ler_dword(
+        HKEY_CURRENT_USER,
+        w!(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"),
+        w!("SystemUsesLightTheme"),
+    );
+    // A bandeja fica no monitor principal.
+    let (mut dpi, mut _y) = (96u32, 96u32);
+    unsafe {
+        let monitor = MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY);
+        if GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi, &mut _y).is_err() || dpi == 0 {
+            dpi = 96;
+        }
+    }
+    Desenho { barra_clara: barra_clara(fundo, sistema), tamanho: tamanho_desenhado((16 * dpi + 48) / 96) }
+}
+
+fn imagem(desenho: Desenho) -> Image<'static> {
+    let i = TAMANHOS.iter().position(|&t| t == desenho.tamanho).unwrap_or(0);
+    if desenho.barra_clara {
+        ESCURA[i].clone()
+    } else {
+        CLARA[i].clone()
+    }
+}
+
+fn registrar(desenho: Desenho) {
+    let tom = if desenho.barra_clara { "preto" } else { "branco" };
+    crate::registro::info(&format!("bandeja: ícone {tom}, {} px", desenho.tamanho));
+}
+
+/// Confere o Windows de novo e troca o ícone se a barra ou a escala mudou.
+fn redesenhar(app: &AppHandle) {
+    let desenho = desenho_agora();
+    let mut atual = ATUAL.lock().unwrap_or_else(|e| e.into_inner());
+    if *atual == Some(desenho) {
+        return;
+    }
+    *atual = Some(desenho);
+    if let Some(bandeja) = app.tray_by_id(ID) {
+        let _ = bandeja.set_icon(Some(imagem(desenho)));
+        registrar(desenho);
+    }
+}
+
+unsafe extern "system" fn subclasse(
+    janela: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _id: usize,
+    _dados: usize,
+) -> LRESULT {
+    if muda_a_barra(msg) {
+        if let Some(app) = APP.get() {
+            redesenhar(app);
+        }
+    }
+    DefSubclassProc(janela, msg, wparam, lparam)
+}
 const DICA: &str = "Moductus";
 /// Prefixo dos itens que vieram do serviço: o clique neles volta ao serviço sem o prefixo.
 const DO_SERVICO: &str = "servico:";
@@ -69,9 +204,13 @@ pub fn id_do_servico(id: &str) -> Option<&str> {
     id.strip_prefix(DO_SERVICO).filter(|resto| !resto.is_empty())
 }
 
-pub fn iniciar(app: &AppHandle) -> tauri::Result<()> {
+/// Cria o ícone e escuta os avisos do Windows pela janela do dock (sempre viva), na thread dela.
+pub fn iniciar(app: &AppHandle, hwnd: isize) -> tauri::Result<()> {
     let menu = montar(app, &MenuServico::default())?;
-    let mut bandeja = TrayIconBuilder::with_id(ID)
+    let desenho = desenho_agora();
+    *ATUAL.lock().unwrap_or_else(|e| e.into_inner()) = Some(desenho);
+    TrayIconBuilder::with_id(ID)
+        .icon(imagem(desenho))
         .tooltip(DICA)
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -95,11 +234,13 @@ pub fn iniciar(app: &AppHandle) -> tauri::Result<()> {
             if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = evento {
                 crate::janelas::sistema_alternar(icone.app_handle().clone());
             }
-        });
-    if let Some(icone) = app.default_window_icon() {
-        bandeja = bandeja.icon(icone.clone());
+        })
+        .build(app)?;
+    registrar(desenho);
+    let _ = APP.set(app.clone());
+    unsafe {
+        let _ = SetWindowSubclass(HWND(hwnd as _), Some(subclasse), ID_SUBCLASSE, 0);
     }
-    bandeja.build(app)?;
     Ok(())
 }
 
@@ -210,6 +351,44 @@ mod testes {
         assert_eq!(evento_da_ajuda("ajuda"), None);
         // Item do serviço com o mesmo nome não vira Ajuda: chega com o prefixo.
         assert_eq!(evento_da_ajuda("servico:ajuda-tour"), None);
+    }
+
+    #[test]
+    fn icone_preto_so_na_barra_clara_e_no_alto_contraste_de_fundo_claro() {
+        assert!(barra_clara(None, Some(1)));
+        assert!(!barra_clara(None, Some(0)));
+        // Sem a chave, como no Windows 10: barra escura.
+        assert!(!barra_clara(None, None));
+        // Alto contraste manda mais que o tema: Aquático (fundo preto) e Deserto (fundo claro).
+        assert!(!barra_clara(Some(0x000000), Some(1)));
+        assert!(barra_clara(Some(0xEFFAFF), Some(0)));
+    }
+
+    #[test]
+    fn cada_escala_usa_o_desenho_que_cobre_o_icone_pequeno() {
+        assert_eq!(tamanho_desenhado(16), 16);
+        assert_eq!(tamanho_desenhado(20), 20);
+        assert_eq!(tamanho_desenhado(24), 24);
+        // 175% pede 28: o de 32 reduzido, nunca o de 24 ampliado.
+        assert_eq!(tamanho_desenhado(28), 32);
+        assert_eq!(tamanho_desenhado(48), 32);
+        assert_eq!(tamanho_desenhado(12), 16);
+    }
+
+    #[test]
+    fn os_desenhos_tem_o_tamanho_do_nome() {
+        for (i, t) in TAMANHOS.iter().enumerate() {
+            assert_eq!((CLARA[i].width(), CLARA[i].height()), (*t, *t));
+            assert_eq!((ESCURA[i].width(), ESCURA[i].height()), (*t, *t));
+        }
+    }
+
+    #[test]
+    fn so_avisos_de_tema_cor_e_escala_redesenham() {
+        assert!(muda_a_barra(WM_SETTINGCHANGE));
+        assert!(muda_a_barra(WM_SYSCOLORCHANGE));
+        assert!(muda_a_barra(WM_DPICHANGED));
+        assert!(!muda_a_barra(windows::Win32::UI::WindowsAndMessaging::WM_POWERBROADCAST));
     }
 
     #[test]
