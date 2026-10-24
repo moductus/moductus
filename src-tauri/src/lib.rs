@@ -5,6 +5,7 @@ mod acessibilidade;
 mod ambiente;
 mod appbar;
 mod atalhos;
+mod clique_fora;
 mod config_nativa;
 mod controles;
 // O serviço chega aqui pelo canal do sidecar; nenhuma janela tem comando para isso.
@@ -94,10 +95,11 @@ pub fn run() {
                 }
             }
             janelas::iniciar(app.handle(), pasta.clone());
+            clique_fora::iniciar(app.handle().clone());
             tela_cheia::vigiar(app.handle().clone());
             notificacao::iniciar(app.handle());
             atalhos::iniciar(app.handle(), atalhos::padrao());
-            bandeja::iniciar(app.handle())?;
+            bandeja::iniciar(app.handle(), dock::hwnd_de(&janela_dock))?;
             midia::iniciar(app.handle().clone());
             controles::iniciar(app.handle().clone());
             servico::iniciar(app.handle().clone(), pasta.clone());
