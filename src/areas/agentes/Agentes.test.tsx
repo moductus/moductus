@@ -402,6 +402,39 @@ describe("parar e resposta enxuta", () => {
     expect(pedidosDe("conversas.parar")).toHaveLength(2);
   });
 
+  it("Esc em qualquer ponto da área de escrever para, menos compondo um caractere", async () => {
+    servicoDeConversas(["tula"]);
+    await montar("tula");
+    await escrever("limpa o cache do PC");
+    await teclarEnter();
+    const esc = (alvo: Element, isComposing = false) =>
+      act(async () => {
+        alvo.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, isComposing }));
+      });
+
+    // Compondo (acento, IME), o Esc é do teclado.
+    await esc(por("textarea")!, true);
+    expect(pedidosDe("conversas.parar")).toEqual([]);
+    // No próprio botão, como o aria-keyshortcuts promete.
+    await esc(botao("Parar"));
+    expect(pedidosDe("conversas.parar")).toEqual([{ id: DA_TULA.id }]);
+  });
+
+  it("se o Parar some com o foco nele, o foco volta ao campo", async () => {
+    servicoDeConversas(["tula"]);
+    await montar("tula");
+    await escrever("limpa o cache do PC");
+    await teclarEnter();
+    await emitir("conversas.parcial", { ...daTula, execucaoId: "01E9", texto: "Vendo" });
+    await act(async () => botao("Parar").focus());
+    expect(document.activeElement).toBe(botao("Parar"));
+
+    // A resposta terminou sozinha, sem ninguém clicar: o botão sai com o foco nele.
+    await emitir("conversas.mensagem", mensagem({ ...daTula, execucaoId: "01E9", conteudo: "Vendo." }));
+    expect(botao("Parar")).toBeUndefined();
+    expect(document.activeElement).toBe(por("textarea"));
+  });
+
   it("bloco de código longo vem recolhido e resposta longa vem cortada, com Ver tudo", async () => {
     servicoDeConversas(["tula"]);
     await montar("tula");

@@ -1,6 +1,6 @@
 import type { Aprovacao, FalaParcial, Mensagem } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { CartaoAprovacao } from "../../componentes/CartaoAprovacao.tsx";
 import { FalaAgente } from "../../componentes/FalaAgente.tsx";
@@ -544,14 +544,24 @@ function Escrever({ com, pronto, conectado, erro, enviar, respondendo, parar }: 
   const [parando, setParando] = useState(false);
   const podeMandar = pronto && !enviando && texto.trim() !== "";
   const podeParar = pronto && respondendo && !parando;
+  const focarCampo = useCallback(() => campo.current?.focus(), []);
 
+  // Sem desabilitar o botão enquanto para: botão desabilitado perde o foco no meio do caminho.
   const pararAgora = async () => {
     if (!podeParar) return;
     setParando(true);
     await parar();
     setParando(false);
-    // O botão some quando a resposta para: o foco fica no campo, não se perde.
     campo.current?.focus();
+  };
+
+  // Esc em qualquer ponto de onde se escreve (campo, menções, Parar, Enviar) para a resposta;
+  // compondo um acento ou um ideograma, o Esc é do teclado, não da conversa.
+  const aoTeclarNaArea = (e: KeyboardEvent<HTMLFormElement>) => {
+    if (e.key !== "Escape" || !respondendo || e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void pararAgora();
   };
 
   const mandar = async () => {
@@ -563,12 +573,6 @@ function Escrever({ com, pronto, conectado, erro, enviar, respondendo, parar }: 
   };
 
   const aoTeclar = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Escape" && respondendo) {
-      e.preventDefault();
-      e.stopPropagation();
-      void pararAgora();
-      return;
-    }
     if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
     e.preventDefault();
     void mandar();
@@ -580,6 +584,7 @@ function Escrever({ com, pronto, conectado, erro, enviar, respondendo, parar }: 
   return (
     <form
       className="escrever"
+      onKeyDown={aoTeclarNaArea}
       onSubmit={(e) => {
         e.preventDefault();
         void mandar();
@@ -626,14 +631,7 @@ function Escrever({ com, pronto, conectado, erro, enviar, respondendo, parar }: 
               </button>
             ))}
           {respondendo && (
-            <Botao
-              className="escrever-parar"
-              aria-keyshortcuts="Escape"
-              disabled={!podeParar}
-              onClick={() => void pararAgora()}
-            >
-              Parar
-            </Botao>
+            <BotaoParar disabled={!pronto} aoSumirComFoco={focarCampo} aoParar={() => void pararAgora()} />
           )}
           <Botao variante="primario" type="submit" className="escrever-enviar" disabled={!podeMandar}>
             Enviar
@@ -641,5 +639,35 @@ function Escrever({ com, pronto, conectado, erro, enviar, respondendo, parar }: 
         </div>
       </div>
     </form>
+  );
+}
+
+interface PropsBotaoParar {
+  disabled: boolean;
+  /** Chamado se o botão sumir com o foco nele (a resposta acabou ou parou); estável entre renders. */
+  aoSumirComFoco: () => void;
+  aoParar: () => void;
+}
+
+/** "Parar": Esc faz o mesmo em toda a área de escrever; sumindo com o foco, ele volta ao campo. */
+function BotaoParar({ disabled, aoSumirComFoco, aoParar }: PropsBotaoParar) {
+  const botao = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const el = botao.current;
+    // A limpeza roda antes de o botão sair da página: ainda dá para saber se o foco era dele.
+    return () => {
+      if (el && el.ownerDocument.activeElement === el) aoSumirComFoco();
+    };
+  }, [aoSumirComFoco]);
+  return (
+    <Botao
+      ref={botao}
+      className="escrever-parar"
+      aria-keyshortcuts="Escape"
+      disabled={disabled}
+      onClick={aoParar}
+    >
+      Parar
+    </Botao>
   );
 }
