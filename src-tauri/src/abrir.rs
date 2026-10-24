@@ -35,7 +35,10 @@ use windows::{
     Win32::{
         Foundation::CloseHandle,
         System::{
-            Com::{CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE},
+            Com::{
+                CoIncrementMTAUsage, CoInitializeEx, CoTaskMemFree, CoUninitialize, COINIT_APARTMENTTHREADED,
+                COINIT_DISABLE_OLE1DDE,
+            },
             Threading::{
                 CreateProcessW, CREATE_NEW_CONSOLE, CREATE_UNICODE_ENVIRONMENT, PROCESS_CREATION_FLAGS,
                 PROCESS_INFORMATION, STARTUPINFOW,
@@ -209,7 +212,20 @@ fn tipo_que_abre(caminho: &Path, copia_do_claude: bool) -> bool {
 /// Barreira extra sobre a lista: um programa instalado pode ter registrado uma extensão dela para
 /// si de um jeito que o Windows marca como perigoso ao abrir.
 fn perigosa_para_o_windows(extensao: &str) -> bool {
+    manter_o_mta();
     unsafe { AssocIsDangerous(&HSTRING::from(format!(".{extensao}"))).as_bool() }
+}
+
+/// O Shell responde por COM, e a thread que o consulta sem ter entrado num apartamento usa o MTA
+/// de carona. O MTA morre quando a última thread que entrou nele sai; uma consulta no meio caía com
+/// `STATUS_ACCESS_VIOLATION` (o `cargo test` em paralelo, com o teste do aviso do Windows saindo
+/// do MTA). Entrar e sair a cada consulta só troca a queda por um `CO_E_SERVER_STOPPING`: o MTA
+/// fica de pé enquanto a casca vive, numa referência tomada uma vez.
+fn manter_o_mta() {
+    static MTA: OnceLock<()> = OnceLock::new();
+    MTA.get_or_init(|| unsafe {
+        let _ = CoIncrementMTAUsage();
+    });
 }
 
 /// `settings.json` ou uma cópia de segurança dele (`settings.json.moductus-2026-10-09T12-00-00-000Z.bak`,
