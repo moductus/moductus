@@ -669,6 +669,42 @@
   min-width: var(--largura-min-dado-conexao);
 }
 
+/* Funciona, com um porém (o modelo só conversa): o mesmo bloco do erro, no tom de aviso. */
+.config-modelos-erro[data-tom="aviso"] {
+  color: var(--aviso);
+}
+
+.config-tabela-extra .config-modelos-erro + .config-modelos-formulario,
+.config-tabela-extra .config-modelos-erro + .config-modelos-remover {
+  margin-top: var(--esp-8);
+}
+
+/* O modelo: o campo, e embaixo o "Testar" com a lista do que o endereço oferece. */
+.config-modelos-campo-modelo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+}
+
+.config-modelos-modelos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--esp-8);
+}
+
+.config-modelos-modelos > .config-lista {
+  flex: 1;
+}
+
+.config-modelos-remover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-10);
+  padding: var(--esp-6) 0 var(--esp-6) var(--esp-14);
+  border-left: var(--espessura-aba) solid var(--aviso);
+}
+
 /* O agente na tabela abre o painel de troca: o botão é a linha inteira da coluna. */
 .config-modelos-agente {
   display: flex;

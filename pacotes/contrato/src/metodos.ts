@@ -97,10 +97,12 @@ import { EstadoPrimeiroUso, PedidoConcluirPrimeiroUso, PedidoMarcarTutorial } fr
 import {
   MudancaProvedor,
   NovoProvedor,
+  PedidoModelosProvedor,
   PedidoProvedor,
   PedidoTesteProvedor,
   Provedor,
   ProvedorDetectado,
+  ResultadoModelosProvedor,
   ResultadoTesteProvedor,
 } from "./provedores.ts";
 import {
@@ -180,6 +182,8 @@ export const METODOS = {
   "provedores.definir": metodo(MudancaProvedor, Provedor),
   "provedores.remover": metodo(PedidoProvedor, z.array(Provedor)),
   "provedores.testar": metodo(PedidoTesteProvedor, ResultadoTesteProvedor),
+  /** "Testar" no formulário: os modelos do endereço (`GET /models`), sem chamar modelo nenhum. */
+  "provedores.modelos": metodo(PedidoModelosProvedor, ResultadoModelosProvedor),
 
   "conversas.listar": metodo(z.undefined(), z.array(Conversa)),
   "conversas.abrir": metodo(PedidoAbrirConversa, Conversa),

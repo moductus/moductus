@@ -1,5 +1,7 @@
 import {
   CONFIG_PADRAO,
+  enderecoAceitaChave,
+  MENSAGEM_CHAVE_SEM_HTTPS,
   PASSOS_PRIMEIRO_USO,
   type Config,
   type ConfigDock,
@@ -24,6 +26,7 @@ import {
 import type { Destino } from "../../../areas/areas.ts";
 import { CartaoGoogle, ListaCalendarios } from "../../../areas/configuracoes/CartaoGoogle.tsx";
 import { CartaoClaudeCode, CartaoGithub } from "../../../areas/configuracoes/Conexoes.tsx";
+import { AVISO_SEM_FERRAMENTAS } from "../../../areas/configuracoes/modelos.ts";
 import { useConexoes, type ConexoesDaTela } from "../../../areas/configuracoes/useConexoes.ts";
 import { Botao } from "../../../componentes/Botao.tsx";
 import { Campo } from "../../../componentes/Campo.tsx";
@@ -589,7 +592,13 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
         ...e,
         criadosAqui: criadosDepois(criadosAqui, alvo, criado === alvo, r.ok),
         resultado: r.ok
-          ? { fase: "ok", nome, latenciaMs: r.latenciaMs, assinatura: escolha !== "api" }
+          ? {
+              fase: "ok",
+              nome,
+              latenciaMs: r.latenciaMs,
+              assinatura: escolha !== "api",
+              soConversa: r.ferramentas === false,
+            }
           : { fase: "falhou", nome, mensagem: r.falha.mensagem },
       }));
     } catch (e) {
@@ -659,7 +668,7 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
           desativada={testando}
           aoMarcar={() => escolher("api")}
           titulo="Chave de API"
-          texto="OpenAI ou compatível com OpenAI (Ollama, OpenRouter, LM Studio) · paga por uso"
+          texto="OpenAI ou compatível com OpenAI (roteador local, Ollama, LM Studio) · paga por uso"
         />
       </fieldset>
       {erroDeteccao && (
@@ -718,7 +727,9 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
             dica={
               formulario.tipo === "openai"
                 ? "Fica no Gerenciador de Credenciais do Windows."
-                : "Opcional para modelo local. Fica no Gerenciador de Credenciais do Windows."
+                : enderecoAceitaChave(formulario.baseUrl.trim())
+                  ? "Opcional para modelo local. Fica no Gerenciador de Credenciais do Windows."
+                  : `${MENSAGEM_CHAVE_SEM_HTTPS} Sem chave, este endereço funciona.`
             }
             value={formulario.chave}
             disabled={testando}
@@ -776,8 +787,17 @@ function ResultadoDoTeste({ estado, aoTestar }: { estado: EstadoModelo; aoTestar
                 ? "Usa a sua assinatura. Os agentes contam o uso no limite semanal dela, e o Nuno avisa quando chegar perto."
                 : "Paga por uso, na conta do provedor. O Nuno mostra o gasto estimado de cada agente."}
             </span>
+            {resultado.soConversa && (
+              <span className="uso-rotulo" data-tom="aviso" role="alert">
+                {AVISO_SEM_FERRAMENTAS}
+              </span>
+            )}
           </span>
-          <Selo tom="sucesso">funcionando</Selo>
+          {resultado.soConversa ? (
+            <Selo tom="aviso">só conversa</Selo>
+          ) : (
+            <Selo tom="sucesso">funcionando</Selo>
+          )}
         </>
       )}
       {resultado.fase === "falhou" && (

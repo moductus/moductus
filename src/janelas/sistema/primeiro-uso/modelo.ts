@@ -115,6 +115,8 @@ export type TipoApi = "openai" | "openai-compativel";
 
 export interface FormularioApi {
   tipo: TipoApi;
+  /** Como o provedor aparece nas listas; vazio, vale o {@link nomeSugerido}. */
+  nome?: string;
   baseUrl: string;
   modelo: string;
   chave: string;
@@ -122,21 +124,36 @@ export interface FormularioApi {
 
 export const FORMULARIO_API_VAZIO: FormularioApi = { tipo: "openai", baseUrl: "", modelo: "", chave: "" };
 
+const NESTE_PC = new Set(["localhost", "127.0.0.1", "[::1]", "0.0.0.0"]);
+
 /**
- * O pedido de criar o provedor da chave de API. O nome é o do serviço (OpenAI) ou o host do
- * endereço, nunca o endereço inteiro, que pode levar mais do que devia. Campo vazio não vai.
+ * O nome quando o usuário não dá um: o do serviço (OpenAI), "Modelo local" para um endereço neste
+ * PC (roteador local, Ollama, LM Studio) ou o host, nunca o endereço inteiro, que pode levar mais
+ * do que devia.
  */
+export function nomeSugerido(tipo: TipoApi, baseUrl: string): string {
+  if (tipo === "openai") return "OpenAI";
+  try {
+    const endereco = new URL(baseUrl.trim());
+    if (NESTE_PC.has(endereco.hostname)) return "Modelo local";
+    return endereco.host || "Compatível com OpenAI";
+  } catch {
+    return "Compatível com OpenAI";
+  }
+}
+
+/** O pedido de criar o provedor da chave de API. Campo vazio não vai. */
 export function novoDaApi(formulario: FormularioApi): NovoProvedor {
   const modelo = formulario.modelo.trim();
   const chave = formulario.chave.trim();
+  const nome = formulario.nome?.trim() || nomeSugerido(formulario.tipo, formulario.baseUrl);
   if (formulario.tipo === "openai") {
-    return { tipo: "openai", nome: "OpenAI", ...(modelo ? { modelo } : {}), ...(chave ? { chave } : {}) };
+    return { tipo: "openai", nome, ...(modelo ? { modelo } : {}), ...(chave ? { chave } : {}) };
   }
-  const baseUrl = formulario.baseUrl.trim();
   return {
     tipo: "openai-compativel",
-    nome: hostDe(baseUrl) ?? "Compatível com OpenAI",
-    baseUrl,
+    nome,
+    baseUrl: formulario.baseUrl.trim(),
     ...(modelo ? { modelo } : {}),
     ...(chave ? { chave } : {}),
   };
@@ -148,7 +165,8 @@ export type EscolhaModelo = TipoProvedorCli | "api";
 export type ResultadoModelo =
   | { fase: "parado" }
   | { fase: "testando"; nome: string }
-  | { fase: "ok"; nome: string; latenciaMs: number; assinatura: boolean }
+  /** `soConversa`: passou sem chamar a ferramenta do teste; os agentes não consultam nem fazem. */
+  | { fase: "ok"; nome: string; latenciaMs: number; assinatura: boolean; soConversa?: boolean }
   | { fase: "falhou"; nome: string; mensagem: string };
 
 /**
@@ -189,12 +207,4 @@ export function criadosDepois(
   const doPasso = criadoAgora || criadosAqui.includes(alvo);
   if (passou) return doPasso ? [alvo] : [];
   return doPasso && !criadosAqui.includes(alvo) ? [...criadosAqui, alvo] : [...criadosAqui];
-}
-
-function hostDe(endereco: string): string | null {
-  try {
-    return new URL(endereco).host || null;
-  } catch {
-    return null;
-  }
 }

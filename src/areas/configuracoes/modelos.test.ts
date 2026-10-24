@@ -1,14 +1,21 @@
 import type { Agente, Execucao, Provedor, SituacaoAgente } from "@moductus/contrato";
 import { describe, expect, it } from "vitest";
 import {
+  AVISO_SEM_FERRAMENTAS,
   contarDeHoje,
   descreverProvedor,
+  edicaoInicial,
   estadoDoProvedor,
   execucoesEmTexto,
   falaDaTroca,
   temChaveTrocavel,
   escolhaInicial,
+  mudancaDaEdicao,
   mudancaDoPainel,
+  mudancaPedeTeste,
+  textoDaRemocao,
+  trocaApagaChave,
+  usosDoProvedor,
 } from "./modelos.ts";
 
 const AGORA = new Date(2026, 9, 10, 14, 5);
@@ -154,6 +161,111 @@ describe("descrição e chave", () => {
     expect(temChaveTrocavel(ollama)).toBe(false);
     expect(temChaveTrocavel({ ...ollama, temChave: true })).toBe(true);
     expect(temChaveTrocavel(openai)).toBe(true);
+  });
+});
+
+describe("modelo que só conversa", () => {
+  it("passou no teste sem chamar a ferramenta: selo de aviso e o porquê", () => {
+    const teste = { fase: "ok" as const, latenciaMs: 900, testadoEm: AGORA.toISOString() };
+    expect(estadoDoProvedor(provedor(), { ...teste, ferramentas: false }, [], AGORA)).toMatchObject({
+      texto: "só conversa",
+      tom: "aviso",
+      resposta: "0,9 s",
+      aviso: AVISO_SEM_FERRAMENTAS,
+    });
+    expect(estadoDoProvedor(provedor(), { ...teste, ferramentas: true }, [], AGORA)).not.toHaveProperty(
+      "aviso",
+    );
+    expect(estadoDoProvedor(provedor(), { ...teste, ferramentas: null }, [], AGORA).texto).toBe(
+      "funcionando",
+    );
+  });
+
+  it("o resultado gravado pelo serviço volta ao reabrir a tela, sem teste nesta", () => {
+    const gravado = provedor({ testadoEm: new Date(2026, 9, 10, 14, 2).toISOString(), ferramentas: false });
+    expect(estadoDoProvedor(gravado, undefined, [], AGORA)).toMatchObject({
+      texto: "só conversa",
+      tom: "aviso",
+      resposta: "—",
+      aviso: AVISO_SEM_FERRAMENTAS,
+    });
+    expect(estadoDoProvedor({ ...gravado, ferramentas: true }, undefined, [], AGORA).texto).toBe(
+      "funcionando",
+    );
+  });
+});
+
+describe("editar e remover um provedor", () => {
+  const local = provedor({
+    id: "p2",
+    tipo: "openai-compativel",
+    nome: "localhost:20128",
+    modelo: "qwen3:8b",
+    baseUrl: "http://localhost:20128/v1",
+    temChave: true,
+  });
+
+  it("a edição manda só o que mudou; nada mudou não manda nada", () => {
+    const inicial = edicaoInicial(local);
+    expect(inicial).toEqual({
+      nome: "localhost:20128",
+      baseUrl: "http://localhost:20128/v1",
+      modelo: "qwen3:8b",
+      chave: "",
+    });
+    expect(mudancaDaEdicao(local, inicial)).toBeNull();
+    const renomeado = mudancaDaEdicao(local, { ...inicial, nome: " Roteador " });
+    expect(renomeado).toEqual({ id: "p2", nome: "Roteador" });
+    expect(mudancaPedeTeste(renomeado!)).toBe(false);
+    const outroModelo = mudancaDaEdicao(local, { ...inicial, modelo: "gemma3:4b", chave: " sk-2 " });
+    expect(outroModelo).toEqual({ id: "p2", modelo: "gemma3:4b", chave: "sk-2" });
+    expect(mudancaPedeTeste(outroModelo!)).toBe(true);
+    expect(mudancaDaEdicao(local, { ...inicial, modelo: "" })).toEqual({ id: "p2", modelo: null });
+  });
+
+  it("endereço novo sem chave nova tira a chave guardada, como o serviço pede", () => {
+    const edicao = { ...edicaoInicial(local), baseUrl: "http://localhost:1234/v1" };
+    expect(trocaApagaChave(local, edicao)).toBe(true);
+    expect(mudancaDaEdicao(local, edicao)).toEqual({
+      id: "p2",
+      baseUrl: "http://localhost:1234/v1",
+      chave: null,
+    });
+    expect(mudancaDaEdicao(local, { ...edicao, chave: "sk-3" })).toEqual({
+      id: "p2",
+      baseUrl: "http://localhost:1234/v1",
+      chave: "sk-3",
+    });
+    expect(trocaApagaChave({ ...local, temChave: false }, edicao)).toBe(false);
+  });
+
+  it("CLI só muda o nome", () => {
+    const cli = provedor();
+    expect(mudancaDaEdicao(cli, { nome: "Claude", baseUrl: "http://x/v1", modelo: "m", chave: "k" })).toEqual(
+      {
+        id: "p1",
+        nome: "Claude",
+      },
+    );
+  });
+
+  it("remover diz quem usa, como fica e que a chave sai", () => {
+    const usos = usosDoProvedor("p2", [
+      agente({ id: "alba", nome: "Alba", provedorId: "p2" }),
+      agente({ id: "tula", nome: "Tula", provedorId: "p1" }),
+      agente({ id: "nuno", nome: "Nuno", provedorId: "p1", provedorReservaId: "p2" }),
+    ]);
+    expect(usos.map((u) => [u.agente.id, u.papel])).toEqual([
+      ["alba", "principal"],
+      ["nuno", "reserva"],
+    ]);
+    expect(textoDaRemocao(local, usos)).toBe(
+      "Alba (principal) e Nuno (reserva) usam o localhost:20128. Sem ele, quem o tem como principal fica sem modelo e dorme até ganhar outro; troque antes, se quiser. A chave sai do Gerenciador de Credenciais.",
+    );
+    expect(textoDaRemocao(local, usos.slice(1))).toContain(
+      "Nuno (reserva) usa o localhost:20128. Sem ele, a reserva fica vazia",
+    );
+    expect(textoDaRemocao({ ...local, temChave: false }, [])).toBe("Nenhum agente usa o localhost:20128.");
   });
 });
 

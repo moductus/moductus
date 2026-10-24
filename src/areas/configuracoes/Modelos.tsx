@@ -1,10 +1,14 @@
 import {
+  enderecoAceitaChave,
+  MENSAGEM_CHAVE_SEM_HTTPS,
   MOEDAS_TETO,
   TIPOS_PROVEDOR_CLI,
   type Agente,
   type CotacaoBuscada,
+  type ModeloDoProvedor,
   type MoedaComCotacao,
   type MoedaTeto,
+  type PedidoModelosProvedor,
   type Provedor,
   type ProvedorDetectado,
   type TipoProvedorCli,
@@ -25,6 +29,7 @@ import {
   CLIS,
   COMO_INSTALAR,
   FORMULARIO_API_VAZIO,
+  nomeSugerido,
   novoDaApi,
   precisaEntrar,
   precisaInstalar,
@@ -52,16 +57,25 @@ import {
 import { comArtigo, deAgente } from "../agentes/nomes.ts";
 import { useAgora } from "../tempo.ts";
 import {
+  AVISO_MODELO_SEM_FERRAMENTAS,
   contarDeHoje,
   descreverProvedor,
+  edicaoInicial,
   estadoDoProvedor,
   execucoesEmTexto,
   falaDaTroca,
   temChaveTrocavel,
   escolhaInicial,
+  mudancaDaEdicao,
   mudancaDoPainel,
+  mudancaPedeTeste,
+  textoDaRemocao,
+  trocaApagaChave,
+  usosDoProvedor,
+  type EdicaoProvedor,
   type EscolhaModelo,
   type EstadoProvedor,
+  type UsoDoProvedor,
 } from "./modelos.ts";
 import { Aviso, Carregando } from "./Partes.tsx";
 import { Secao } from "./Secao.tsx";
@@ -148,8 +162,9 @@ export function SecaoModelos() {
       {m.erro && <Aviso>{m.erro}</Aviso>}
       {vazio && <SemModelo aoProcurar={() => void m.procurar()} aoChave={setFormulario} travado={travado} />}
       {formulario && (
-        <FormularioChave
+        <FormularioNovo
           tipoInicial={formulario}
+          listar={m.listarModelos}
           aoFechar={() => setFormulario(null)}
           aoConectar={async (novo) => {
             if (await m.conectar(novo)) setFormulario(null);
@@ -166,7 +181,13 @@ export function SecaoModelos() {
       )}
       {!vazio && (
         <>
-          <TabelaProvedores modelos={m} provedores={provedores} agentes={agentes} agora={agora} />
+          <TabelaProvedores
+            modelos={m}
+            provedores={provedores}
+            agentes={agentes}
+            agora={agora}
+            aoTrocarModelo={(agenteId) => setPainel({ agenteId, escolha: {} })}
+          />
           <TabelaAgentes
             modelos={m}
             provedores={provedores}
@@ -245,8 +266,8 @@ function SemModelo({
         />
         <Caminho
           titulo="Compatível com OpenAI"
-          quais="OpenRouter, Ollama, LM Studio"
-          texto="Por endereço, com chave se o serviço pedir. Modelo local roda sem internet."
+          quais="Roteador local, Ollama, LM Studio"
+          texto="Pelo endereço da API, com chave se o serviço pedir. Modelo local roda sem internet."
           acao={
             <Botao disabled={travado} onClick={() => aoChave("openai-compativel")}>
               Informar endereço
@@ -365,38 +386,65 @@ function Detectados({
   );
 }
 
-/* ---------- Chave de API ---------- */
+/* ---------- Chave de API e endereço compatível com OpenAI ---------- */
 
-function FormularioChave({
-  tipoInicial,
-  aoFechar,
-  aoConectar,
-}: {
-  tipoInicial: TipoApi;
-  aoFechar: () => void;
-  aoConectar: (novo: ReturnType<typeof novoDaApi>) => Promise<void>;
-}) {
-  const [formulario, setFormulario] = useState<FormularioApi>({ ...FORMULARIO_API_VAZIO, tipo: tipoInicial });
-  const [enviando, setEnviando] = useState(false);
-  const mudar = (parte: Partial<FormularioApi>) => setFormulario((f) => ({ ...f, ...parte }));
-  const enviar = async () => {
-    setEnviando(true);
-    await aoConectar(novoDaApi(formulario));
-    setEnviando(false);
-  };
-  const aoTeclar = (e: KeyboardEvent<HTMLElement>) => {
+const DICA_ENDERECO =
+  "O endereço da API, quase sempre terminando em /v1. Roteador local, Ollama e LM Studio mostram o deles na própria tela.";
+const DICA_MODELO = "Testar lista os modelos que o endereço oferece; escolha um na lista ou digite o nome.";
+const DICA_NOME = "Como ele aparece nas listas dos agentes.";
+const DICA_CHAVE_SEM_HTTPS = `${MENSAGEM_CHAVE_SEM_HTTPS} Sem chave, este endereço funciona.`;
+
+/** Esc fecha o formulário sem gravar; Enter num campo de texto grava (contrato de interação). */
+function teclasDoFormulario(aoFechar: () => void, aoEnviar: () => void) {
+  return (e: KeyboardEvent<HTMLElement>) => {
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
       aoFechar();
+    } else if (e.key === "Enter" && e.target instanceof HTMLInputElement && e.target.type !== "radio") {
+      e.preventDefault();
+      aoEnviar();
     }
+  };
+}
+
+function FormularioNovo({
+  tipoInicial,
+  listar,
+  aoFechar,
+  aoConectar,
+}: {
+  tipoInicial: TipoApi;
+  listar: ModelosDaSecao["listarModelos"];
+  aoFechar: () => void;
+  aoConectar: (novo: ReturnType<typeof novoDaApi>) => Promise<void>;
+}) {
+  const [formulario, setFormulario] = useState<FormularioApi>({
+    ...FORMULARIO_API_VAZIO,
+    nome: "",
+    tipo: tipoInicial,
+  });
+  const [enviando, setEnviando] = useState(false);
+  const mudar = (parte: Partial<FormularioApi>) => setFormulario((f) => ({ ...f, ...parte }));
+  const compativel = formulario.tipo === "openai-compativel";
+  const enviar = async () => {
+    if (enviando) return;
+    setEnviando(true);
+    await aoConectar(novoDaApi(formulario));
+    setEnviando(false);
   };
   return (
     <section
       className="config-modelos-formulario"
-      aria-label="Conectar por chave de API"
-      onKeyDown={aoTeclar}
+      aria-label="Conectar por chave de API ou endereço"
+      onKeyDown={teclasDoFormulario(aoFechar, () => void enviar())}
     >
+      {compativel && (
+        <p className="config-modelos-texto">
+          Para um roteador local ou um modelo neste PC (Ollama, LM Studio): o endereço da API e, se o serviço
+          pedir, a chave. Depois, Testar mostra os modelos para escolher.
+        </p>
+      )}
       <div className="config-modelos-formulario-campos">
         <div className="config-modelos-campo">
           <span className="config-modelos-sub">Provedor</span>
@@ -407,34 +455,55 @@ function FormularioChave({
             aoMudar={(tipo) => mudar({ tipo })}
           />
         </div>
-        {formulario.tipo === "openai-compativel" && (
+        <Campo
+          rotulo="Nome"
+          placeholder={nomeSugerido(formulario.tipo, formulario.baseUrl)}
+          dica={DICA_NOME}
+          value={formulario.nome ?? ""}
+          disabled={enviando}
+          onChange={(e) => mudar({ nome: e.target.value })}
+        />
+        {compativel && (
           <Campo
             rotulo="Endereço (base_url)"
             placeholder="http://localhost:11434/v1"
+            dica={DICA_ENDERECO}
             value={formulario.baseUrl}
             disabled={enviando}
             onChange={(e) => mudar({ baseUrl: e.target.value })}
           />
         )}
         <Campo
-          rotulo="Modelo"
-          placeholder={formulario.tipo === "openai" ? "gpt-5-mini" : "qwen3:8b"}
-          value={formulario.modelo}
-          disabled={enviando}
-          onChange={(e) => mudar({ modelo: e.target.value })}
-        />
-        <Campo
           rotulo="Chave"
           type="password"
           autoComplete="off"
           dica={
-            formulario.tipo === "openai"
+            !compativel
               ? "Fica no Gerenciador de Credenciais do Windows."
-              : "Opcional para modelo local. Fica no Gerenciador de Credenciais do Windows."
+              : enderecoAceitaChave(formulario.baseUrl.trim())
+                ? "Só se o serviço pedir; modelo local costuma rodar sem. Fica no Gerenciador de Credenciais do Windows."
+                : DICA_CHAVE_SEM_HTTPS
           }
           value={formulario.chave}
           disabled={enviando}
           onChange={(e) => mudar({ chave: e.target.value })}
+        />
+        <CampoModelo
+          // Outro provedor, outra lista: a de antes não vale.
+          key={formulario.tipo}
+          tipo={formulario.tipo}
+          valor={formulario.modelo}
+          desativado={enviando}
+          aoMudar={(modelo) => mudar({ modelo })}
+          listar={listar}
+          origem={`${formulario.baseUrl.trim()}\n${formulario.chave.trim()}`}
+          pedido={() => {
+            const chave = formulario.chave.trim();
+            const base = { tipo: formulario.tipo, ...(chave ? { chave } : {}) };
+            if (!compativel) return base;
+            const baseUrl = formulario.baseUrl.trim();
+            return baseUrl ? { ...base, baseUrl } : null;
+          }}
         />
       </div>
       <div className="config-rodape">
@@ -449,6 +518,131 @@ function FormularioChave({
   );
 }
 
+/** O que o "Testar" do campo de modelo achou no endereço. */
+type BuscaModelos =
+  | { fase: "parado" }
+  | { fase: "buscando" }
+  | { fase: "lista"; modelos: readonly ModeloDoProvedor[] }
+  | { fase: "falhou"; mensagem: string };
+
+/**
+ * O modelo, digitado ou escolhido da lista que o endereço oferece (`GET /models`): "Testar" pede a
+ * lista ao serviço com o endereço e a chave escritos agora. O que o endereço disser sobre
+ * ferramentas aparece na lista, e o modelo escolhido sem elas leva o aviso.
+ */
+function CampoModelo({
+  tipo,
+  valor,
+  desativado,
+  aoMudar,
+  listar,
+  pedido,
+  origem,
+}: {
+  tipo: TipoApi;
+  valor: string;
+  desativado: boolean;
+  aoMudar: (modelo: string) => void;
+  listar: ModelosDaSecao["listarModelos"];
+  /** Montado na hora do clique; `null` quando falta o endereço. */
+  pedido: () => PedidoModelosProvedor | null;
+  /** Endereço e chave escritos: mudou um deles, a lista de antes já não vale. */
+  origem: string;
+}) {
+  const [busca, setBusca] = useState<BuscaModelos>({ fase: "parado" });
+  const [origemDaBusca, setOrigemDaBusca] = useState(origem);
+  if (origem !== origemDaBusca) {
+    setOrigemDaBusca(origem);
+    setBusca({ fase: "parado" });
+  }
+  // A resposta que chega depois de o endereço ou a chave mudarem é de outra lista: fica de fora.
+  const origemAtual = useRef(origem);
+  useEffect(() => {
+    origemAtual.current = origem;
+  }, [origem]);
+  const buscar = async () => {
+    const p = pedido();
+    if (!p) {
+      setBusca({ fase: "falhou", mensagem: "Informe o endereço antes de testar." });
+      return;
+    }
+    setBusca({ fase: "buscando" });
+    const pedidaPara = origem;
+    const r = await listar(p);
+    if (origemAtual.current !== pedidaPara) return;
+    if (!r.ok) {
+      setBusca({ fase: "falhou", mensagem: r.falha.mensagem });
+      return;
+    }
+    setBusca({ fase: "lista", modelos: r.modelos });
+    // Um modelo só: já fica escolhido.
+    if (!valor.trim() && r.modelos.length === 1 && r.modelos[0]) aoMudar(r.modelos[0].id);
+  };
+  const modelos = busca.fase === "lista" ? busca.modelos : [];
+  const escolhido = modelos.find((m) => m.id === valor.trim());
+  return (
+    <div className="config-modelos-campo-modelo">
+      <Campo
+        rotulo="Modelo"
+        placeholder={tipo === "openai" ? "gpt-5-mini" : "qwen3:8b"}
+        dica={DICA_MODELO}
+        value={valor}
+        disabled={desativado}
+        onChange={(e) => aoMudar(e.target.value)}
+      />
+      <span className="config-modelos-modelos">
+        <Botao
+          tamanho="pequeno"
+          disabled={desativado || busca.fase === "buscando"}
+          aria-label="Testar o endereço e listar os modelos"
+          onClick={() => void buscar()}
+        >
+          {busca.fase === "buscando" ? "Testando…" : "Testar"}
+        </Botao>
+        {modelos.length > 0 && (
+          <span className="config-lista">
+            <select
+              aria-label="Modelos do endereço"
+              value={escolhido ? escolhido.id : ""}
+              disabled={desativado}
+              onChange={(e) => e.target.value && aoMudar(e.target.value)}
+            >
+              {!escolhido && (
+                <option value="" disabled>
+                  Escolha um modelo
+                </option>
+              )}
+              {modelos.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.ferramentas === false ? `${m.id} · sem ferramentas` : m.id}
+                </option>
+              ))}
+            </select>
+            <Icone nome="abrirLista" tamanho={12} />
+          </span>
+        )}
+      </span>
+      {busca.fase === "lista" && (
+        <span className="config-modelos-sub" role="status">
+          {modelos.length === 0
+            ? "O endereço respondeu sem nenhum modelo. Digite o nome do modelo."
+            : `${modelos.length} ${modelos.length === 1 ? "modelo" : "modelos"} no endereço.`}
+        </span>
+      )}
+      {busca.fase === "falhou" && (
+        <span className="config-modelos-sub" data-tom="perigo" role="alert">
+          {busca.mensagem}
+        </span>
+      )}
+      {escolhido?.ferramentas === false && (
+        <span className="config-modelos-sub" data-tom="aviso" role="alert">
+          {AVISO_MODELO_SEM_FERRAMENTAS}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /* ---------- Provedores ---------- */
 
 function TabelaProvedores({
@@ -456,12 +650,25 @@ function TabelaProvedores({
   provedores,
   agentes,
   agora,
+  aoTrocarModelo,
 }: {
   modelos: ModelosDaSecao;
   provedores: readonly Provedor[];
   agentes: readonly Agente[];
   agora: Date;
+  /** Abre o painel de troca de um agente (antes de remover o provedor que ele usa). */
+  aoTrocarModelo: (agenteId: string) => void;
 }) {
+  const corpo = useRef<HTMLTableSectionElement>(null);
+  // Removido um provedor, o foco vai à linha que ficou no lugar dele (ou à de cima, se era a última).
+  // Um objeto novo por remoção: o efeito roda uma vez para cada uma, já com a lista sem a linha.
+  const [focarLinha, setFocarLinha] = useState<{ indice: number } | null>(null);
+  useEffect(() => {
+    if (!focarLinha) return;
+    const linhas = corpo.current?.querySelectorAll<HTMLElement>("tr[data-provedor]") ?? [];
+    const alvo = linhas[Math.min(focarLinha.indice, linhas.length - 1)];
+    alvo?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }, [focarLinha]);
   return (
     <section className="config-modelos-grupo" aria-label="Provedores">
       <div className="config-modelos-rotulos">
@@ -487,16 +694,18 @@ function TabelaProvedores({
               </th>
             </tr>
           </thead>
-          <tbody>
-            {provedores.map((p) => (
+          <tbody ref={corpo}>
+            {provedores.map((p, i) => (
               <LinhaProvedor
                 key={p.id}
                 provedor={p}
                 estado={estadoDoProvedor(p, modelos.testes[p.id], agentes, agora)}
+                usos={usosDoProvedor(p.id, agentes)}
+                modelos={modelos}
                 travado={!modelos.conectado}
                 testando={modelos.testes[p.id]?.fase === "testando"}
-                aoTestar={() => void modelos.testar(p.id)}
-                aoTrocarChave={(chave) => modelos.trocarChave(p.id, chave)}
+                aoTrocarModelo={aoTrocarModelo}
+                aoRemovido={() => setFocarLinha({ indice: i })}
               />
             ))}
           </tbody>
@@ -506,34 +715,52 @@ function TabelaProvedores({
   );
 }
 
+/** O que está aberto embaixo da linha do provedor. */
+type AbertoNaLinha = "chave" | "editar" | "remover" | null;
+
 function LinhaProvedor({
   provedor,
   estado,
+  usos,
+  modelos,
   travado,
   testando,
-  aoTestar,
-  aoTrocarChave,
+  aoTrocarModelo,
+  aoRemovido,
 }: {
   provedor: Provedor;
   estado: EstadoProvedor;
+  usos: readonly UsoDoProvedor[];
+  modelos: ModelosDaSecao;
   travado: boolean;
   testando: boolean;
-  aoTestar: () => void;
-  aoTrocarChave: (chave: string) => Promise<boolean>;
+  aoTrocarModelo: (agenteId: string) => void;
+  /** A linha saiu da tabela: a tabela leva o foco para a próxima. */
+  aoRemovido: () => void;
 }) {
-  const [trocando, setTrocando] = useState(false);
+  const [aberto, setAberto] = useState<AbertoNaLinha>(null);
+  const botaoEditar = useRef<HTMLButtonElement>(null);
+  const botaoRemover = useRef<HTMLButtonElement>(null);
+  // Fechou o que estava aberto: o foco volta ao botão que abriu.
+  const fechar = (botao: typeof botaoEditar) => {
+    setAberto(null);
+    botao.current?.focus();
+  };
+  const trocando = aberto === "chave";
   const [chave, setChave] = useState("");
+  const alternar = (qual: Exclude<AbertoNaLinha, null>) => setAberto((a) => (a === qual ? null : qual));
   const guardar = async () => {
     if (!chave.trim()) return;
-    if (await aoTrocarChave(chave.trim())) {
+    if (await modelos.trocarChave(provedor.id, chave.trim())) {
       setChave("");
-      setTrocando(false);
+      setAberto(null);
     }
   };
-  const extra = estado.erro || trocando;
+  const aoTestar = () => void modelos.testar(provedor.id);
+  const extra = estado.erro || estado.aviso || aberto;
   return (
     <>
-      <tr data-com-extra={extra || undefined}>
+      <tr data-provedor={provedor.id} data-com-extra={extra || undefined}>
         <th scope="row">
           <span className="config-modelos-textos">
             <span className="config-modelos-nome">{provedor.nome}</span>
@@ -571,11 +798,33 @@ function LinhaProvedor({
                 disabled={travado || testando}
                 aria-label={`Trocar a chave de ${provedor.nome}`}
                 aria-expanded={trocando}
-                onClick={() => setTrocando((t) => !t)}
+                onClick={() => alternar("chave")}
               >
                 Trocar chave
               </Botao>
             )}
+            <Botao
+              ref={botaoEditar}
+              tamanho="pequeno"
+              variante="fantasma"
+              disabled={travado}
+              aria-label={`Editar ${provedor.nome}`}
+              aria-expanded={aberto === "editar"}
+              onClick={() => alternar("editar")}
+            >
+              Editar
+            </Botao>
+            <Botao
+              ref={botaoRemover}
+              tamanho="pequeno"
+              variante="fantasma"
+              disabled={travado}
+              aria-label={`Remover ${provedor.nome}`}
+              aria-expanded={aberto === "remover"}
+              onClick={() => alternar("remover")}
+            >
+              Remover
+            </Botao>
           </span>
         </td>
       </tr>
@@ -588,21 +837,47 @@ function LinhaProvedor({
                 {estado.comando && <code className="config-conexao-comando">{estado.comando}</code>}
               </p>
             )}
+            {estado.aviso && (
+              <p className="config-modelos-erro" data-tom="aviso">
+                {estado.aviso}
+              </p>
+            )}
+            {aberto === "editar" && (
+              <FormularioEdicao provedor={provedor} modelos={modelos} aoFechar={() => fechar(botaoEditar)} />
+            )}
+            {aberto === "remover" && (
+              <ConfirmarRemocao
+                provedor={provedor}
+                usos={usos}
+                travado={travado}
+                aoTrocarModelo={aoTrocarModelo}
+                aoRemover={async () => {
+                  const ok = await modelos.remover(provedor.id);
+                  if (ok) aoRemovido();
+                  return ok;
+                }}
+                aoFechar={() => fechar(botaoRemover)}
+              />
+            )}
             {trocando && (
               <div className="config-modelos-chave">
                 <Campo
                   rotulo={`Chave nova de ${provedor.nome}`}
                   type="password"
                   autoComplete="off"
-                  dica="Fica no Gerenciador de Credenciais do Windows."
+                  dica={
+                    enderecoAceitaChave(provedor.baseUrl)
+                      ? "Fica no Gerenciador de Credenciais do Windows."
+                      : `${MENSAGEM_CHAVE_SEM_HTTPS} Troque o endereço em Editar.`
+                  }
                   value={chave}
                   onChange={(e) => setChave(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") void guardar();
-                    if (e.key === "Escape") setTrocando(false);
+                    if (e.key === "Escape") setAberto(null);
                   }}
                 />
-                <Botao variante="fantasma" onClick={() => setTrocando(false)}>
+                <Botao variante="fantasma" onClick={() => setAberto(null)}>
                   Cancelar
                 </Botao>
                 <Botao variante="primario" disabled={!chave.trim()} onClick={() => void guardar()}>
@@ -614,6 +889,192 @@ function LinhaProvedor({
         </tr>
       )}
     </>
+  );
+}
+
+/**
+ * Editar um provedor gravado: nome, endereço, modelo e chave nova (a guardada nunca volta à tela).
+ * CLI só muda o nome. Grava só o que mudou e, com endereço, modelo ou chave novos, testa de novo.
+ */
+function FormularioEdicao({
+  provedor,
+  modelos,
+  aoFechar,
+}: {
+  provedor: Provedor;
+  modelos: ModelosDaSecao;
+  aoFechar: () => void;
+}) {
+  const [edicao, setEdicao] = useState<EdicaoProvedor>(() => edicaoInicial(provedor));
+  const [gravando, setGravando] = useState(false);
+  const primeiro = useRef<HTMLDivElement>(null);
+  const mudar = (parte: Partial<EdicaoProvedor>) => setEdicao((e) => ({ ...e, ...parte }));
+  const cli = ehCli(provedor.tipo);
+  const compativel = provedor.tipo === "openai-compativel";
+  const mudanca = mudancaDaEdicao(provedor, edicao);
+  const apagaChave = trocaApagaChave(provedor, edicao);
+  useEffect(() => primeiro.current?.querySelector("input")?.focus(), []);
+  const guardar = async () => {
+    if (!mudanca || gravando) return;
+    setGravando(true);
+    const ok = await modelos.editar(mudanca);
+    setGravando(false);
+    if (ok) aoFechar();
+  };
+  const travado = !modelos.conectado || gravando;
+  return (
+    <section
+      className="config-modelos-formulario"
+      aria-label={`Editar ${provedor.nome}`}
+      onKeyDown={teclasDoFormulario(aoFechar, () => void guardar())}
+    >
+      <div className="config-modelos-formulario-campos">
+        <div ref={primeiro}>
+          <Campo
+            rotulo="Nome"
+            dica={DICA_NOME}
+            value={edicao.nome}
+            disabled={travado}
+            onChange={(e) => mudar({ nome: e.target.value })}
+          />
+        </div>
+        {compativel && (
+          <Campo
+            rotulo="Endereço (base_url)"
+            placeholder="http://localhost:11434/v1"
+            dica={DICA_ENDERECO}
+            value={edicao.baseUrl}
+            disabled={travado}
+            onChange={(e) => mudar({ baseUrl: e.target.value })}
+          />
+        )}
+        {!cli && (
+          <Campo
+            rotulo="Chave nova"
+            type="password"
+            autoComplete="off"
+            dica={
+              !enderecoAceitaChave(edicao.baseUrl.trim() || provedor.baseUrl)
+                ? apagaChave
+                  ? `${MENSAGEM_CHAVE_SEM_HTTPS} Vazio, o provedor fica sem chave.`
+                  : DICA_CHAVE_SEM_HTTPS
+                : apagaChave
+                  ? "Endereço novo pede a chave de novo: vazio, o provedor fica sem chave."
+                  : provedor.temChave
+                    ? "Vazio mantém a chave guardada no Gerenciador de Credenciais."
+                    : "Só se o serviço pedir. Fica no Gerenciador de Credenciais do Windows."
+            }
+            value={edicao.chave}
+            disabled={travado}
+            onChange={(e) => mudar({ chave: e.target.value })}
+          />
+        )}
+        {!cli && (
+          <CampoModelo
+            tipo={compativel ? "openai-compativel" : "openai"}
+            valor={edicao.modelo}
+            desativado={travado}
+            aoMudar={(modelo) => mudar({ modelo })}
+            listar={modelos.listarModelos}
+            origem={`${edicao.baseUrl.trim()}\n${edicao.chave.trim()}`}
+            pedido={() => {
+              const chave = edicao.chave.trim();
+              const tipo = compativel ? ("openai-compativel" as const) : ("openai" as const);
+              const base = { id: provedor.id, tipo, ...(chave ? { chave } : {}) };
+              if (!compativel) return base;
+              const baseUrl = edicao.baseUrl.trim();
+              return baseUrl ? { ...base, baseUrl } : null;
+            }}
+          />
+        )}
+      </div>
+      {cli && (
+        <p className="config-modelos-texto">
+          O {provedor.nome} usa o login e o modelo do próprio CLI: aqui só muda o nome.
+        </p>
+      )}
+      <div className="config-rodape">
+        <Botao variante="fantasma" disabled={gravando} aria-keyshortcuts="Escape" onClick={aoFechar}>
+          Cancelar
+        </Botao>
+        <Botao variante="primario" disabled={travado || !mudanca} onClick={() => void guardar()}>
+          {mudanca && mudancaPedeTeste(mudanca) ? "Guardar e testar" : "Guardar"}
+        </Botao>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Remover pede o sim: diz quem usa o provedor e como fica sem ele, e oferece trocar o modelo de
+ * cada um antes. Removido, vai para a lixeira e a chave sai do Gerenciador de Credenciais.
+ */
+function ConfirmarRemocao({
+  provedor,
+  usos,
+  travado,
+  aoTrocarModelo,
+  aoRemover,
+  aoFechar,
+}: {
+  provedor: Provedor;
+  usos: readonly UsoDoProvedor[];
+  travado: boolean;
+  aoTrocarModelo: (agenteId: string) => void;
+  aoRemover: () => Promise<boolean>;
+  aoFechar: () => void;
+}) {
+  const [removendo, setRemovendo] = useState(false);
+  const cancelar = useRef<HTMLButtonElement>(null);
+  useEffect(() => cancelar.current?.focus(), []);
+  const remover = async () => {
+    setRemovendo(true);
+    // Removido, a linha sai e a tabela leva o foco à próxima; recusado, fica aberto com o motivo.
+    if (!(await aoRemover())) setRemovendo(false);
+  };
+  return (
+    <section
+      className="config-modelos-remover"
+      role="alertdialog"
+      aria-label={`Remover ${provedor.nome}`}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          aoFechar();
+        }
+      }}
+    >
+      <p className="config-modelos-texto">{textoDaRemocao(provedor, usos)}</p>
+      {usos.length > 0 && (
+        <span className="config-modelos-acoes">
+          {usos.map((u) => (
+            <Botao
+              key={u.agente.id}
+              tamanho="pequeno"
+              disabled={travado || removendo}
+              onClick={() => aoTrocarModelo(u.agente.id)}
+            >
+              Trocar o modelo {doAgente(u.agente)}
+            </Botao>
+          ))}
+        </span>
+      )}
+      <div className="config-rodape">
+        <Botao
+          ref={cancelar}
+          variante="fantasma"
+          disabled={removendo}
+          aria-keyshortcuts="Escape"
+          onClick={aoFechar}
+        >
+          Agora não
+        </Botao>
+        <Botao variante="primario" disabled={travado || removendo} onClick={() => void remover()}>
+          Remover o {provedor.nome}
+        </Botao>
+      </div>
+    </section>
   );
 }
 

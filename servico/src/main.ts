@@ -78,6 +78,7 @@ import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
 import { fabricaClaudeCli, rotaPreToolUse, type AberturaMcp } from "./provedores/claude-cli/claude-cli.ts";
 import { detectar } from "./provedores/deteccao.ts";
+import { listarModelos } from "./provedores/openai-compativel/modelos.ts";
 import { fabricaOpenAiCompativel } from "./provedores/openai-compativel/openai-compativel.ts";
 import { RepositorioProvedores, ServicoProvedores } from "./provedores/provedores.ts";
 import { RegistroProvedores } from "./provedores/registro.ts";
@@ -446,6 +447,7 @@ const servicoProvedores = new ServicoProvedores(
     credenciais: credenciaisPelaCasca(canal),
     registro: provedores,
     detectar: () => detectar({ atende: (tipo) => provedores.atende(tipo) }),
+    listarModelos: (destino, sinal) => listarModelos(destino, { sinal }),
   },
   {
     provedores: (lista) => servidor?.emitir("provedores.mudou", lista),
@@ -777,6 +779,7 @@ servidor = await abrirServidorWs(token, {
   "provedores.definir": (mudanca) => servicoProvedores.definir(mudanca),
   "provedores.remover": (pedido) => servicoProvedores.remover(pedido),
   "provedores.testar": (pedido) => servicoProvedores.testar(pedido),
+  "provedores.modelos": (pedido) => servicoProvedores.modelos(pedido),
   "notas.listar": (pedido) => notas.listar(pedido),
   "notas.obter": (pedido) => notas.obter(pedido),
   "notas.criar": (nova) => notas.criar(nova),
