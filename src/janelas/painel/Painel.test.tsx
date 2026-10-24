@@ -507,7 +507,11 @@ describe("painel Agentes: pedidos das sessões do terminal", () => {
     await abrir("agentes");
     const sessao = recipiente.querySelector<HTMLElement>(".sessao-cartao")!;
     expect(sessao.querySelector(".sessao-projeto")?.textContent).toBe("moductus");
-    expect(sessao.querySelector(".sessao-ferramenta")?.textContent).toBe("Claude Code · terminal");
+    // Ao lado do projeto só cabe o nome; onde roda vai no title e no nome acessível.
+    const ferramenta = sessao.querySelector(".sessao-ferramenta");
+    expect(ferramenta?.textContent).toBe("Claude Code");
+    expect(ferramenta?.getAttribute("title")).toBe("Claude Code no terminal");
+    expect(ferramenta?.getAttribute("aria-label")).toBe("Claude Code no terminal");
     expect(sessao.querySelector(".sessao-acao")?.textContent).toBe("Editando src-tauri/src/appbar.rs");
     expect(sessao.textContent).toContain("trabalhando");
     expect(recipiente.querySelector(".painel-secao-cabecalho span")?.textContent).toBe("2 projetos");

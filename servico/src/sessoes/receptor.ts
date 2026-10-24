@@ -32,7 +32,7 @@ export const ROTAS_HOOKS: Record<string, FerramentaSessao> = {
  * bandeja depois de fechar a janela.
  */
 export const RECUSA_TOKEN =
-  "Moductus: token dos hooks ausente ou diferente. Este Claude Code abriu antes da ligação: no terminal, abra um novo; no app Claude, saia pela bandeja e abra de novo.";
+  "Moductus: token dos hooks ausente ou diferente. Este Claude Code provavelmente abriu antes da ligação: no terminal, abra um novo; no app Claude, saia pela bandeja e abra de novo.";
 
 /**
  * Atende um evento já autenticado e lido; o que devolve vai como corpo JSON da resposta (a

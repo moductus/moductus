@@ -132,7 +132,7 @@ const pedir = vi.fn(async (metodo: string, dados?: unknown): Promise<unknown> =>
             id: "s1",
             projetoId: "p1",
             ferramenta: "claude-code",
-            ondeRoda: null,
+            ondeRoda: "desktop",
             idExterno: "x",
             modelo: null,
             estado: "esperando",
@@ -235,6 +235,11 @@ describe("Início", () => {
     expect(por('[data-bloco="financas"]')!.textContent).toContain("chega com Finanças");
     expect(por('[data-bloco="dev"]')!.textContent).toContain("api-pedidos #412");
     expect(por('[data-bloco="sessoes"]')!.textContent).toContain("Claude Code · moductus");
+    // Onde roda não cabe na linha: vai no title e no nome acessível do nome da ferramenta.
+    const ferramenta = por('[data-bloco="sessoes"] .inicio-sessao-nome > span[title]');
+    expect(ferramenta?.textContent).toBe("Claude Code");
+    expect(ferramenta?.getAttribute("title")).toBe("Claude Code no Desktop");
+    expect(ferramenta?.getAttribute("aria-label")).toBe("Claude Code no Desktop");
     expect(por('[data-bloco="sessoes"]')!.textContent).toContain("esperando você");
     // Tarefas na primeira coluna; Foco e Finanças na segunda; Dev e Sessões na terceira.
     expect(

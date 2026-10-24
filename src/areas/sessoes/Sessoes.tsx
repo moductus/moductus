@@ -6,7 +6,7 @@ import { CartaoAprovacao } from "../../componentes/CartaoAprovacao.tsx";
 import { Progresso } from "../../componentes/Progresso.tsx";
 import { Selo } from "../../componentes/Selo.tsx";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
-import { NOME_FERRAMENTA, nomeDaSessao } from "../../janelas/painel/PedidosSessoes.tsx";
+import { NOME_FERRAMENTA, ONDE_RODA } from "../../janelas/painel/PedidosSessoes.tsx";
 import { useAcoesSistema } from "../../janelas/sistema/primeiro-uso/estado.ts";
 import { useServico } from "../../nativo/eventos.ts";
 import {
@@ -267,7 +267,15 @@ function LinhaSessao({ sessao, projeto, caminho, dados, hoje, agora }: PropsLinh
       <td className="sessoes-tabela-projeto" data-sem-projeto={projeto === null}>
         {nome}
       </td>
-      <td className="sessoes-tabela-ferramenta">{nomeDaSessao(sessao)}</td>
+      <td className="sessoes-tabela-ferramenta">
+        {NOME_FERRAMENTA[sessao.ferramenta]}
+        {sessao.ondeRoda && (
+          <>
+            <span className="so-leitor">, </span>
+            <span className="sessoes-tabela-onde">{ONDE_RODA[sessao.ondeRoda]}</span>
+          </>
+        )}
+      </td>
       <td>
         <Selo forma="ponto" tom={estado.tom}>
           {estado.texto}
