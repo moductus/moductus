@@ -9,7 +9,8 @@ export interface SobDemanda<P> {
 /**
  * Tela cujo código só vem na primeira vez que ela aparece: o Sistema guarda na memória só as áreas
  * abertas. Enquanto baixa, suspende (o `Suspense` de cima decide o que mostrar); depois de
- * carregada, desenha direto. Falhou, o próximo desenho pede de novo.
+ * carregada, desenha direto. Se o import falha, o erro sobe e o pedido é esquecido: só uma nova
+ * chamada a `carregar()` tenta de novo.
  */
 export function sobDemanda<P extends object>(importar: () => Promise<ComponentType<P>>): SobDemanda<P> {
   let pronto: ComponentType<P> | null = null;
@@ -23,6 +24,7 @@ export function sobDemanda<P extends object>(importar: () => Promise<ComponentTy
       },
     ));
   function Tela(props: P) {
+    // Um import que falhou chega aqui como erro: sem fronteira de erro acima, a tela cai.
     const Componente = pronto ?? use(carregar());
     return <Componente {...props} />;
   }

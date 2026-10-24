@@ -1,6 +1,15 @@
 import type { EstadoPrimeiroUso } from "@moductus/contrato";
 import { listen } from "@tauri-apps/api/event";
-import { startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  startTransition,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AREA_INICIAL, areaDoAtalho, escreverDestino, lerDestino, type Destino } from "../../areas/areas.ts";
 import { useConfig } from "../../areas/configuracoes/useConfig.ts";
 import { PrimeirosPassos, useMostrarPrimeirosPassos } from "../../areas/inicio/PrimeirosPassos.tsx";
@@ -88,6 +97,7 @@ function numeroDoAtalho(e: KeyboardEvent): number | null {
 export function Sistema() {
   const [destino, setDestino] = useState<Destino>(lembrar);
   const busca = useRef<HTMLInputElement>(null);
+  const conteudo = useRef<HTMLElement>(null);
   const [primeiroUso, setPrimeiroUso] = usePrimeiroUso();
   // Banco novo: a configuração inicial ocupa a janela até ser concluída ou pulada.
   const configurando = primeiroUso !== null && !primeiroUso.concluido;
@@ -99,6 +109,11 @@ export function Sistema() {
     startTransition(() => setDestino(novo));
     guardar(novo);
   }, []);
+
+  // A área nova começa do topo: o <main> fica (é dele o Suspense), só o conteúdo é recriado.
+  useLayoutEffect(() => {
+    if (conteudo.current) conteudo.current.scrollTop = 0;
+  }, [destino.area]);
 
   const acoes = useMemo(() => ({ ir, aoMudarPrimeiroUso: setPrimeiroUso }), [ir, setPrimeiroUso]);
 
@@ -172,25 +187,28 @@ export function Sistema() {
       {/* Durante o tour, a janela fica escurecida e fora do teclado; só a camada responde. */}
       <div className="sistema" inert={emTour || undefined}>
         <BarraTitulo />
-        <Suspense fallback={null}>
-          {configurando ? (
+        {configurando ? (
+          <Suspense fallback={null}>
             <PrimeiroUso
               aoConcluir={(estado, depois) => {
-                startTransition(() => setPrimeiroUso(estado));
+                setPrimeiroUso(estado);
                 ir(depois);
                 // O tour começa logo depois da configuração; quem vai importar de outro PC segue lá.
                 if (depois.area === "inicio") andar(1);
               }}
             />
-          ) : (
-            <div className="sistema-corpo">
-              <BarraLateral ativa={destino.area} aoEscolher={(area) => ir({ area })} refBusca={busca} />
-              <main className="sistema-conteudo" key={destino.area} data-area={destino.area}>
-                <ConteudoArea destino={destino} ir={ir} primeiroUso={primeiroUso} />
-              </main>
-            </div>
-          )}
-        </Suspense>
+          </Suspense>
+        ) : (
+          <div className="sistema-corpo">
+            <BarraLateral ativa={destino.area} aoEscolher={(area) => ir({ area })} refBusca={busca} />
+            {/* Enquanto a área baixa, só o conteúdo espera: a lateral e a busca ficam na tela. */}
+            <main className="sistema-conteudo" ref={conteudo} data-area={destino.area}>
+              <Suspense fallback={null}>
+                <ConteudoArea key={destino.area} destino={destino} ir={ir} primeiroUso={primeiroUso} />
+              </Suspense>
+            </main>
+          </div>
+        )}
       </div>
       {emTour && <TourNoSistema tour={tour} />}
     </AcoesSistemaContexto.Provider>

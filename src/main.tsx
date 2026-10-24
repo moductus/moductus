@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { carregarJanela } from "./janelas/Aplicacao.tsx";
 import { janelaDoRotulo } from "./janelas/rotas.ts";
 import { useAcessibilidade } from "./nativo/acessibilidade.ts";
+import { registrar } from "./nativo/eventos.ts";
 import altoContraste from "./tokens/alto-contraste.css?inline";
 import base from "./tokens/base.css?inline";
 import fontes from "./tokens/fontes.css?inline";
@@ -54,11 +55,13 @@ if (parametros.has("personagens")) {
 } else {
   const janela = janelaDoRotulo(getCurrentWindow().label) ?? "sistema";
   document.documentElement.dataset.janela = janela;
-  void carregarJanela(janela).then((Tela) =>
-    raiz.render(
-      <StrictMode>
-        <ComTema Tela={Tela} />
-      </StrictMode>,
-    ),
-  );
+  void carregarJanela(janela)
+    .then((Tela) =>
+      raiz.render(
+        <StrictMode>
+          <ComTema Tela={Tela} />
+        </StrictMode>,
+      ),
+    )
+    .catch((erro: unknown) => registrar(`janela ${janela} não carregou: ${String(erro)}`));
 }
