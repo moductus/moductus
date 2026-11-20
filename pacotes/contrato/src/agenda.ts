@@ -2,44 +2,30 @@ import { z } from "zod";
 import { CamposOrigem, Dia, Id, Instante, InstanteEntrada, Recorrencia } from "./comum.ts";
 
 /**
- * Agenda da Alba (DATA.md §2; migração 014; ADR-0035): calendários, eventos e o dia com os blocos
- * livres. O calendário local e o "Moductus" (o espelho no Google) a Alba escreve sem pedir; os
- * outros que você escolheu ler são só leitura por aqui, e mudar neles é ferramenta `externo`, com
- * cartão. O horário livre e o "dia cheio" são contas do serviço (`areas/agenda`).
+ * Agenda da Alba (DATA.md §2; migração 014): o calendário local, os eventos e o dia com os blocos
+ * livres. A Alba escreve nele sem pedir. O horário livre e o "dia cheio" são contas do serviço
+ * (`areas/agenda`).
  */
 
 /** O calendário que já nasce no banco, com id fixo igual em todo PC (migração 014). */
 export const CALENDARIO_LOCAL = "local";
 
-export const FonteCalendario = z.enum(["local", "google", "outlook"]);
-export type FonteCalendario = z.infer<typeof FonteCalendario>;
-
-/**
- * `espelho` é o "Moductus" criado no Google; `ler`, se a Alba lê os eventos dele (a escolha em
- * Conexões › Google); `sincronizadoEm`, a última leitura de lá (vazio no local).
- */
 export const Calendario = z.object({
   id: Id,
   nome: z.string().trim().min(1),
-  fonte: FonteCalendario,
   cor: z.string().min(1).nullable(),
-  espelho: z.boolean(),
-  podeEscrever: z.boolean(),
-  ler: z.boolean(),
-  sincronizadoEm: Instante.nullable(),
 });
 export type Calendario = z.infer<typeof Calendario>;
 
-/** O que você muda num calendário por aqui: se a Alba o lê, e o nome e a cor do local. */
+/** O que você muda num calendário: o nome e a cor. */
 export const MudancaCalendario = z.object({
   id: Id,
-  ler: z.boolean().optional(),
   nome: z.string().trim().min(1).max(80).optional(),
   cor: z.string().min(1).nullable().optional(),
 });
 export type MudancaCalendario = z.infer<typeof MudancaCalendario>;
 
-/** Minutos antes de cada aviso: até 5, de 0 a 4 semanas, como o `popup` do Google (ADR-0035). */
+/** Minutos antes de cada aviso: até 5, de 0 a 4 semanas. */
 export const Alertas = z.array(z.number().int().min(0).max(40320)).max(5);
 export type Alertas = z.infer<typeof Alertas>;
 
@@ -54,7 +40,7 @@ const ehInstante = (valor: string) => Instante.safeParse(valor).success;
 
 /**
  * Evento com hora vai em instantes UTC; o de dia inteiro, em dias (`AAAA-MM-DD`), com o `fim` no
- * dia seguinte ao último, como o iCalendar e o Google. Vale para o que tem os três campos.
+ * dia seguinte ao último, como o iCalendar. Vale para o que tem os três campos.
  */
 function quandoCoerente(q: Quando): boolean {
   if (q.diaInteiro === undefined || q.inicio === undefined || q.fim === undefined) return true;
@@ -72,18 +58,11 @@ const Ponta = z.union([Instante, Dia]);
 /** O mesmo na entrada: o instante vai no formato do banco, com milissegundos. */
 const PontaEntrada = z.union([InstanteEntrada, Dia]);
 
-/** Na saída o título é livre: evento lido do Google pode não ter; a entrada exige texto. */
-const TituloLido = z.string();
-
-/**
- * Um evento. `editavel` diz se dá para mudar por aqui (local e "Moductus"); o de outro calendário
- * abre só leitura, com "Pedir à Alba para mudar".
- */
 export const EventoAgenda = z
   .object({
     id: Id,
     calendarioId: Id,
-    titulo: TituloLido,
+    titulo: z.string(),
     descricao: z.string().nullable(),
     inicio: Ponta,
     fim: Ponta,
@@ -91,7 +70,6 @@ export const EventoAgenda = z
     local: z.string().nullable(),
     recorrencia: Recorrencia.nullable(),
     alertas: Alertas,
-    editavel: z.boolean(),
     ...CamposOrigem,
     criadoEm: Instante,
     atualizadoEm: Instante,
@@ -119,10 +97,7 @@ export const NovoEvento = z
   .refine(quandoCoerente, MENSAGEM_QUANDO);
 export type NovoEvento = z.infer<typeof NovoEvento>;
 
-/**
- * Mudança parcial. Início, fim e dia inteiro andam juntos: quem muda um manda os três.
- * `calendarioId` passa o evento entre o local e o "Moductus"; para os outros é pedido à Alba.
- */
+/** Mudança parcial. Início, fim e dia inteiro andam juntos: quem muda um manda os três. */
 export const MudancaEvento = z
   .object(camposEvento)
   .partial()
@@ -157,13 +132,12 @@ export const Ocorrencia = z
   .object({
     eventoId: Id,
     calendarioId: Id,
-    titulo: TituloLido,
+    titulo: z.string(),
     inicio: Ponta,
     fim: Ponta,
     diaInteiro: z.boolean(),
     local: z.string().nullable(),
     recorrente: z.boolean(),
-    editavel: z.boolean(),
   })
   .refine(quandoCoerente, MENSAGEM_QUANDO);
 export type Ocorrencia = z.infer<typeof Ocorrencia>;
@@ -223,6 +197,6 @@ export type SugestaoAplicada = z.infer<typeof SugestaoAplicada>;
 export const Agenda = z.object({ ocorrencias: z.array(Ocorrencia), dias: z.array(DiaDaAgenda) });
 export type Agenda = z.infer<typeof Agenda>;
 
-/** O que mudou nos eventos, pela tela, por uma ferramenta ou pela leitura do Google. */
+/** O que mudou nos eventos, pela tela, por uma ferramenta ou pelo desfazer. */
 export const MudancaAgenda = z.object({ eventos: z.array(EventoAgenda), apagados: z.array(Id) });
 export type MudancaAgenda = z.infer<typeof MudancaAgenda>;

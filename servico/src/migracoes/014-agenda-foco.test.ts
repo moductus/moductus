@@ -14,6 +14,9 @@ const posicao = MIGRACOES.findIndex((m) => m.nome === "agenda-foco");
 const DA_060 = MIGRACOES.findIndex((m) => m.nome === "execucoes-falha-do-provedor") + 1;
 
 const TABELAS = ["agenda_saida", "calendarios", "eventos", "rotinas", "rotinas_registro", "sessoes_foco"];
+/** As migrações até esta: a fila de saída sai depois, na agenda-local. */
+const ATE_ESTA = MIGRACOES.slice(0, posicao + 1);
+const TABELAS_HOJE = TABELAS.filter((t) => t !== "agenda_saida");
 const AGORA = new Date("2026-10-16T12:00:00.000Z");
 const INSTANTE = AGORA.toISOString();
 const DEPOIS = "2026-10-16T13:00:00.000Z";
@@ -46,10 +49,10 @@ const PADROES = {
   ],
 };
 
-function bancoNovo(): DatabaseSync {
+function bancoNovo(migracoes = MIGRACOES): DatabaseSync {
   const db = new DatabaseSync(":memory:");
   db.exec("PRAGMA foreign_keys = ON");
-  migrar(db, MIGRACOES);
+  migrar(db, migracoes);
   return db;
 }
 
@@ -96,7 +99,7 @@ describe("migração agenda e foco", () => {
   test("sobe do zero com o calendário local, o briefing e o fechamento, e as chaves conferidas", () => {
     const db = new DatabaseSync(":memory:");
     db.exec("PRAGMA foreign_keys = ON");
-    expect(migrar(db, MIGRACOES)).toEqual({ de: 0, para: MIGRACOES.length });
+    expect(migrar(db, ATE_ESTA)).toEqual({ de: 0, para: posicao + 1 });
     expect(tabelas(db)).toEqual(TABELAS);
     expect(padroes(db)).toEqual(PADROES);
     expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
@@ -114,7 +117,7 @@ describe("migração agenda e foco", () => {
 
     const db = abrirBanco(pasta, { duravel: false });
     expect(versaoAtual(db)).toBe(MIGRACOES.length);
-    expect(tabelas(db)).toEqual(TABELAS);
+    expect(tabelas(db)).toEqual(TABELAS_HOJE);
     expect(padroes(db)).toEqual(PADROES);
     expect(db.prepare("SELECT nome FROM agentes WHERE id = 'alba'").get()).toEqual({ nome: "Albinha" });
     expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
@@ -123,7 +126,7 @@ describe("migração agenda e foco", () => {
 
   test("só o evento aponta para o calendário, sem apagar nem mudar linha viva", () => {
     const db = bancoNovo();
-    const chaves = TABELAS.flatMap((t) =>
+    const chaves = TABELAS_HOJE.flatMap((t) =>
       (
         db
           .prepare('SELECT "from" AS coluna, "table" AS alvo, on_delete FROM pragma_foreign_key_list(?)')
@@ -188,7 +191,7 @@ describe("migração agenda e foco", () => {
   });
 
   test("fila de saída: uma linha por item, operação e tentativas conferidas, próxima tentativa já", () => {
-    const db = bancoNovo();
+    const db = bancoNovo(ATE_ESTA);
     const sair = (id: string, campos: Record<string, string | number | null> = {}) =>
       inserir(db, "agenda_saida", id, { item_tipo: "tarefa", item_id: "t1", operacao: "criar", ...campos });
     sair("s1");

@@ -26,6 +26,7 @@ import { m024 } from "./024-alba-do-dia.ts";
 import { m025 } from "./025-rotinas-curta.ts";
 import { m026 } from "./026-sessoes-ponto-de-entrada.ts";
 import { m027 } from "./027-provedores-ferramentas.ts";
+import { m028 } from "./028-agenda-local.ts";
 
 /** Todas as migrações, em ordem. Migração publicada não muda: corrige-se com outra. */
 export const MIGRACOES: readonly Migracao[] = [
@@ -56,4 +57,5 @@ export const MIGRACOES: readonly Migracao[] = [
   m025,
   m026,
   m027,
+  m028,
 ];

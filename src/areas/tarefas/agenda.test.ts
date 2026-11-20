@@ -1,14 +1,12 @@
-import type { Calendario, Conexao, Ocorrencia } from "@moductus/contrato";
+import type { Ocorrencia } from "@moductus/contrato";
 import { describe, expect, it } from "vitest";
 import {
   emColunas,
   falaDaSugestao,
   falaDoGuardado,
-  fonteDaAgenda,
   horaNaRegua,
   minutoNoDia,
   montarColuna,
-  ocorrenciasDaFonte,
   reguaDoDia,
 } from "./agenda.ts";
 
@@ -30,7 +28,6 @@ const ocorrencia = (extra: Partial<Ocorrencia>): Ocorrencia => ({
   diaInteiro: false,
   local: null,
   recorrente: false,
-  editavel: true,
   ...extra,
 });
 
@@ -145,49 +142,6 @@ describe("emColunas", () => {
       ["c", 0, 2],
       ["d", 0, 1],
     ]);
-  });
-});
-
-describe("fonteDaAgenda", () => {
-  const cal = (extra: Partial<Calendario>): Calendario => ({
-    id: "local",
-    nome: "Local",
-    fonte: "local",
-    cor: null,
-    espelho: false,
-    podeEscrever: true,
-    ler: true,
-    sincronizadoEm: null,
-    ...extra,
-  });
-
-  const google = (estado: Conexao["estado"]): Conexao => ({
-    tipo: "google-agenda",
-    estado,
-    conta: "voce@exemplo.com",
-    ultimoErro: null,
-    conectadaEm: "2026-10-01T12:00:00.000Z",
-  });
-  const espelho = cal({ id: "m", fonte: "google", espelho: true, nome: "Moductus" });
-
-  it("quem diz se há Google é a conexão; os calendários só escolhem o rótulo", () => {
-    expect(fonteDaAgenda(null, [cal({})])).toEqual({ rotulo: "Local", temGoogle: false });
-    // O espelho ainda no banco não conta com a conexão desligada.
-    expect(fonteDaAgenda(google("desligada"), [cal({}), espelho])).toEqual({
-      rotulo: "Local",
-      temGoogle: false,
-    });
-    expect(fonteDaAgenda(google("ligada"), [cal({}), cal({ id: "g", fonte: "google" })])).toEqual({
-      rotulo: "Google",
-      temGoogle: true,
-    });
-    expect(fonteDaAgenda(google("erro"), [cal({}), espelho]).rotulo).toBe("Google · Moductus");
-  });
-
-  it("sem o Google, só as ocorrências do calendário local", () => {
-    const lidas = [ocorrencia({}), ocorrencia({ eventoId: "e2", calendarioId: "m" })];
-    expect(ocorrenciasDaFonte(lidas, [cal({}), espelho], false).map((o) => o.eventoId)).toEqual(["e1"]);
-    expect(ocorrenciasDaFonte(lidas, [cal({}), espelho], true)).toHaveLength(2);
   });
 });
 

@@ -7,7 +7,7 @@ import type { TomSelo } from "../../componentes/Selo.tsx";
 import { abrirSettingsClaude, useAbrir } from "../../nativo/abrir.ts";
 import { useAgora } from "../tempo.ts";
 import { CartaoConexao, Dado } from "./CartaoConexao.tsx";
-import { CartaoGoogle } from "./CartaoGoogle.tsx";
+
 import {
   comandoDoErro,
   eventosDoMoductus,
@@ -23,9 +23,8 @@ import { useConexoes, type ConexoesDaTela } from "./useConexoes.ts";
 import "./Configuracoes.css";
 
 /**
- * Configurações › Conexões (ConfigConexoes, ConfigConexoesPrevia, ConfigConexoesErros,
- * ConfigConexoesVazio e ConfigConexoesGoogle*.dc.html): o que os agentes alcançam fora do
- * Moductus. O Google Agenda da Alba vem primeiro, pelo OAuth no navegador. Ligar o Claude Code
+ * Configurações › Conexões (ConfigConexoes, ConfigConexoesPrevia, ConfigConexoesErros e
+ * ConfigConexoesVazio.dc.html): o que os agentes alcançam fora do Moductus. Ligar o Claude Code
  * mostra antes o que muda no settings.json e só grava com o sim; o GitHub vai pelo gh já logado.
  */
 export function SecaoConexoes() {
@@ -51,7 +50,6 @@ export function SecaoConexoes() {
           </FalaAgente>
         </div>
       )}
-      <CartaoGoogle conexoes={conexoes} />
       <CartaoClaudeCode conexoes={conexoes} />
       <CartaoGithub conexoes={conexoes} />
       <CartaoOpenCode />

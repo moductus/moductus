@@ -11,8 +11,8 @@ import { CamposOrigem, Id, Instante, InstanteEntrada, Recorrencia } from "./comu
 export const EstadoLembrete = z.enum(["agendado", "disparado", "adiado", "perdido"]);
 export type EstadoLembrete = z.infer<typeof EstadoLembrete>;
 
-/** Por onde avisa: só o dock, o aviso do Windows (o padrão) ou o calendário "Moductus". */
-export const CanalLembrete = z.enum(["dock", "windows", "calendario"]);
+/** Por onde avisa: só o dock ou o aviso do Windows (o padrão). */
+export const CanalLembrete = z.enum(["dock", "windows"]);
 export type CanalLembrete = z.infer<typeof CanalLembrete>;
 
 export const Lembrete = z

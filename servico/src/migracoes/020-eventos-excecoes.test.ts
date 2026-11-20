@@ -5,6 +5,8 @@ import { MIGRACOES } from "./index.ts";
 
 // Pela posição do nome, para o teste não mudar se a migração for renumerada.
 const posicao = MIGRACOES.findIndex((m) => m.nome === "eventos-excecoes");
+/** As migrações até esta: as duas colunas saem depois, na agenda-local. */
+const ATE_ESTA = MIGRACOES.slice(0, posicao + 1);
 
 const inserir = (db: DatabaseSync, id: string, excecoes?: string) =>
   db
@@ -20,8 +22,8 @@ describe("migração eventos-excecoes", () => {
     migrar(db, MIGRACOES.slice(0, posicao));
     inserir(db, "e1");
 
-    expect(migrar(db, MIGRACOES)).toEqual({ de: posicao, para: MIGRACOES.length });
-    expect(versaoAtual(db)).toBe(MIGRACOES.length);
+    expect(migrar(db, ATE_ESTA)).toEqual({ de: posicao, para: posicao + 1 });
+    expect(versaoAtual(db)).toBe(posicao + 1);
     expect(db.prepare("SELECT excecoes, fuso FROM eventos WHERE id = 'e1'").get()).toEqual({
       excecoes: "[]",
       fuso: null,
@@ -30,7 +32,7 @@ describe("migração eventos-excecoes", () => {
 
   test("só lista JSON", () => {
     const db = new DatabaseSync(":memory:");
-    migrar(db, MIGRACOES);
+    migrar(db, ATE_ESTA);
     inserir(db, "e1", '["2026-10-27T12:00:00.000Z"]');
     expect(() => inserir(db, "e2", '{"a":1}')).toThrow(/CHECK/);
     expect(() => inserir(db, "e3", "2026-10-27")).toThrow(/CHECK/);
@@ -39,7 +41,7 @@ describe("migração eventos-excecoes", () => {
 
   test("fuso vazio é o do usuário; com nome, até 64 letras", () => {
     const db = new DatabaseSync(":memory:");
-    migrar(db, MIGRACOES);
+    migrar(db, ATE_ESTA);
     inserir(db, "e1");
     expect(db.prepare("SELECT fuso FROM eventos WHERE id = 'e1'").get()).toEqual({ fuso: null });
     const mudar = (fuso: string) => db.prepare("UPDATE eventos SET fuso = ? WHERE id = 'e1'").run(fuso);

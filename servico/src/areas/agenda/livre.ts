@@ -58,17 +58,6 @@ export interface EventoParaExpandir {
   diaInteiro: boolean;
   local: string | null;
   recorrencia: string | null;
-  editavel: boolean;
-  /**
-   * Os inícios que a regra não gera mais (a ocorrência cancelada ou mudada de lugar no Google;
-   * migração 020), no formato do `inicio`: dia no de dia inteiro, instante no com hora.
-   */
-  excecoes?: readonly string[];
-  /**
-   * O fuso em que a regra anda (o `timeZone` do evento do Google; migração 020): "toda segunda às
-   * 10h de Nova York" segue o horário de verão de lá. Vazio é o fuso do usuário.
-   */
-  fuso?: string | null;
 }
 
 /** Uma ocorrência com o começo em ms, para ordenar e somar sem ler o texto de novo. */
@@ -81,8 +70,7 @@ interface Expandida {
  * As vezes em que cada evento acontece de `de` a `ate` (dias no fuso, inclusive): o que encosta no
  * intervalo entra, também o que começou antes e ainda não acabou (a reunião que atravessa a meia-
  * noite, o evento de três dias). O recorrente aparece uma vez por ocorrência, até
- * {@link MAX_OCORRENCIAS_POR_EVENTO} (o corte é avisado por `aoCortar`), menos as exceções (a vez
- * que o Google cancelou ou mudou de lugar); a regra que o Moductus
+ * {@link MAX_OCORRENCIAS_POR_EVENTO} (o corte é avisado por `aoCortar`); a regra que o Moductus
  * não expande fica só com o início, como em `recorrencia.ts`. O calendário vai até 9999-12-31: a
  * ocorrência que acabaria depois dele fica de fora.
  */
@@ -108,14 +96,10 @@ export function ocorrenciasNoIntervalo(
       diaInteiro: e.diaInteiro,
       local: e.local,
       recorrente: e.recorrencia !== null,
-      editavel: e.editavel,
     };
-    const excecoes = e.recorrencia === null ? [] : (e.excecoes ?? []);
     if (e.diaInteiro) {
       const dias = diasEntre(e.inicio, e.fim);
-      const tiradas = new Set(excecoes);
       const anotar = (dia: string) => {
-        if (tiradas.has(dia)) return;
         expandidas.push({
           ocorrencia: { ...base, inicio: dia, fim: somarDias(dia, dias) },
           ordem: inicioDoDia(dia, fuso).getTime(),
@@ -143,9 +127,7 @@ export function ocorrenciasNoIntervalo(
     }
     const inicio = Date.parse(e.inicio);
     const duracao = Date.parse(e.fim) - inicio;
-    const tiradas = new Set(excecoes.map((x) => Date.parse(x)));
     const anotar = (ini: number) => {
-      if (tiradas.has(ini)) return;
       const fim = ini + duracao;
       const encosta = ini < fimDoIntervalo && (fim > comeco || (duracao === 0 && ini >= comeco));
       if (!encosta || fim > ULTIMO_INSTANTE_MS) return;
@@ -158,24 +140,19 @@ export function ocorrenciasNoIntervalo(
       anotar(inicio);
       continue;
     }
-    // A regra anda no fuso do evento; os dias dele podem estar um antes ou um depois dos do
-    // usuário, e a conta exata de quem encosta no intervalo é a do `anotar`.
-    const fusoDaRegra = e.fuso ?? fuso;
-    const outroFuso = fusoDaRegra === fuso ? 0 : 1;
     // Um dia de folga além da duração (a ocorrência de ontem às 23h ainda pode estar no
     // intervalo), mas nunca antes do dia do início, com um de folga para o fuso.
     const desde = Math.max(
-      numeroDe - (Math.ceil(duracao / MS_DIA) + 1) - outroFuso,
+      numeroDe - (Math.ceil(duracao / MS_DIA) + 1),
       Math.floor(inicio / MS_DIA) - 1,
       PRIMEIRO_NUMERO,
     );
-    const ateDaRegra = Math.min(numeroAte + outroFuso, ULTIMO_NUMERO);
     const expansao = instantesNoIntervalo(
       e.recorrencia,
       new Date(inicio),
-      fusoDaRegra,
+      fuso,
       diaDoNumero(desde),
-      diaDoNumero(ateDaRegra),
+      diaDoNumero(numeroAte),
       MAX_OCORRENCIAS_POR_EVENTO,
     );
     if (expansao.cortada) aoCortar(e.id);
@@ -250,8 +227,8 @@ export interface TarefaDoDia {
   prioridade: number;
   ordem: number;
   /**
-   * Já tem lugar na agenda: ligada a um evento vivo (o encaixe aplicado, o espelho da tarefa com
-   * hora). O tempo dela já está no ocupado; contar de novo no planejado seria contar duas vezes.
+   * Já tem lugar na agenda: ligada a um evento vivo (o encaixe aplicado). O tempo dela já está no
+   * ocupado; contar de novo no planejado seria contar duas vezes.
    */
   naAgenda: boolean;
   /** Subtarefa de uma mãe aberta que já tem estimativa: a da mãe cobre a dela. */

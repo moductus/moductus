@@ -42,20 +42,16 @@ export const EXPORTACAO: Readonly<Record<string, Exportacao>> = {
   tarefas: "dado",
   tarefa_etiquetas: "dado",
   lembretes: "dado",
-  // 014-agenda-foco: calendários e rotinas são configuração; eventos e foco, dado. A fila de saída
-  // para o Google e o registro das rotinas são deste PC: o PC novo espelha e conta do zero.
+  // 014-agenda-foco: calendários e rotinas são configuração; eventos e foco, dado. O registro das
+  // rotinas é deste PC: o PC novo conta do zero.
   calendarios: "configuracao",
   rotinas: "configuracao",
   eventos: "dado",
   sessoes_foco: "dado",
-  agenda_saida: "deste_pc",
   rotinas_registro: "deste_pc",
   // 015-notas: o que o usuário escreveu é dado. O índice da busca (`notas_fts`) é tabela virtual,
   // fora desta lista: os gatilhos o refazem com as notas que chegam.
   notas: "dado",
-  // 022-agenda-espelho: os eventos que este PC pôs no "Moductus"; o PC novo espelha do zero e acha
-  // os de lá pelo `moductus_id`.
-  agenda_espelho: "deste_pc",
   // 024-alba-do-dia: até onde os vigias daqui olharam; o PC novo começa a olhar de lá.
   vigias_marcas: "deste_pc",
 };
@@ -74,28 +70,23 @@ export const COLUNAS_QUE_NUNCA_VAO: readonly string[] = [
 /**
  * Colunas que descrevem a situação neste PC, não a configuração. A conexão vai sem credencial, então
  * chega desligada no PC novo: estado, último erro, data de conexão e de leitura daqui não valem lá,
- * nem os escopos que o Google concedeu à autorização daqui (o PC novo pede os dele ao conectar).
- * O calendário vai sem o `nextSyncToken` e a última leitura: o PC novo começa com o cache vazio e
- * tem de ler tudo de novo, não só o que mudou desde a leitura daqui. O provedor vai sem o caminho
- * do CLI neste PC: no PC novo, a detecção acha o de lá. O "Liberar" do teto vale só para o gasto de
- * hoje deste PC.
+ * nem os escopos concedidos aqui. O provedor vai sem o caminho do CLI neste PC: no PC novo, a
+ * detecção acha o de lá. O "Liberar" do teto vale só para o gasto de hoje deste PC.
  */
 const SITUACAO_DESTE_PC: Readonly<Record<string, readonly string[]>> = {
   provedores: ["caminho"],
   agentes: ["teto_liberado_centavos", "teto_liberado_ate"],
   conexoes: ["estado", "ultimo_erro", "conectada_em", "lida_em", "escopos"],
-  calendarios: ["sincronizado_em", "token_sincronizacao"],
 };
 
 /**
  * Linhas que não viajam: regra que já expirou não autoriza mais nada, aqui nem lá; evento de
- * calendário de fora é cache deste PC, e a fonte da verdade é o Google, que o PC novo lê de novo;
- * evento de calendário local na lixeira iria sem o calendário, que não viaja; a etapa de foco em
- * andamento é o relógio deste PC, e só a terminada é histórico.
+ * calendário na lixeira iria sem o calendário, que não viaja; a etapa de foco em andamento é o
+ * relógio deste PC, e só a terminada é histórico.
  */
 const SO_AS_QUE_VALEM: Readonly<Record<string, string>> = {
   regras_permissao: "(expira_em IS NULL OR expira_em > :agora)",
-  eventos: `calendario_id IN (SELECT id FROM calendarios WHERE fonte = 'local' AND ${COLUNA_LIXEIRA} IS NULL)`,
+  eventos: `calendario_id IN (SELECT id FROM calendarios WHERE ${COLUNA_LIXEIRA} IS NULL)`,
   sessoes_foco: "fim IS NOT NULL",
 };
 
@@ -123,7 +114,7 @@ export function lerConfiguracoes(db: DatabaseSync, agora: Date = new Date()): Ma
 /**
  * As linhas de uma tabela como saem deste PC, em qualquer modalidade: sem o que está na lixeira,
  * sem as colunas que nunca vão nem as da situação deste PC, e sem as linhas que não viajam (regra
- * vencida, evento do Google). Tabela deste PC ou sem marcação não sai, nem `config`, que vai pelo
+ * vencida, etapa de foco em andamento). Tabela deste PC ou sem marcação não sai, nem `config`, que vai pelo
  * ServicoConfig. A ordem é a da chave primária, que nem toda tabela tem em `id`.
  */
 export function linhasQueViajam(db: DatabaseSync, tabela: string, agora: Date = new Date()): Linha[] {

@@ -7,9 +7,8 @@ import type { TarefaDoDia } from "./livre.ts";
  * e o encaixe, e a ligação da tarefa com o evento do encaixe. A área Tarefas (F3-15) é a dona da
  * tabela; aqui ficam só essas consultas, direto no banco, para a agenda não esperar por ela.
  *
- * A ligação é `tarefas.evento_id`, que já existe: na tarefa com hora ela aponta para o espelho no
- * "Moductus" (F3-24); na tarefa sem hora, para o evento do encaixe aplicado. O encaixe só vale para
- * tarefa sem hora, então os dois usos não se cruzam.
+ * A ligação é `tarefas.evento_id`, que já existe: aponta para o evento do encaixe aplicado, que só
+ * vale para tarefa sem hora.
  */
 
 interface LinhaTarefaDoDia {

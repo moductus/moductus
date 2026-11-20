@@ -43,9 +43,9 @@ describe("lembretes", () => {
     );
   });
 
-  test("estados e canais são os da migração 013", () => {
+  test("estados da migração 013; canais, o dock e o Windows", () => {
     expect(EstadoLembrete.options).toEqual(["agendado", "disparado", "adiado", "perdido"]);
-    expect(CanalLembrete.options).toEqual(["dock", "windows", "calendario"]);
+    expect(CanalLembrete.options).toEqual(["dock", "windows"]);
   });
 
   test("lembrete agendado passa; adiado pede até quando e disparado, a hora do disparo", () => {

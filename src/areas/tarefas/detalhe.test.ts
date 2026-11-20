@@ -1,22 +1,16 @@
-import type { Calendario, EventoAgenda } from "@moductus/contrato";
 import { describe, expect, it } from "vitest";
 import {
   alternarDiaInteiro,
-  avisosDoCelular,
-  espelhoLigado,
   horaAntes,
   maisNova,
   momentoCurto,
   moverInicio,
-  notaDoCalendario,
   opcoesDuracao,
   opcoesLembrete,
   opcoesRepeticao,
   origemDoItem,
-  pedidoParaAlba,
   quandoNaTela,
   quandoParaGravar,
-  quandoPorExtenso,
   valorDaRepeticao,
 } from "./detalhe.ts";
 import { tarefa } from "./exemplos.ts";
@@ -50,7 +44,9 @@ describe("a origem", () => {
       quem: "Mudada por você",
       quando: "hoje, 09:05",
     });
-    expect(origemDoItem(carimbo({ origem: "conexao" }), "o", FUSO, AGORA).quem).toBe("Criado no Google");
+    expect(origemDoItem(carimbo({ origem: "conexao" }), "o", FUSO, AGORA).quem).toBe(
+      "Criado por uma conexão",
+    );
     expect(origemDoItem(carimbo({ origem: "agente", agenteId: "saiu" }), "a", FUSO, AGORA)).toMatchObject({
       agente: null,
       quem: "Criada por um agente",
@@ -100,13 +96,6 @@ describe("as opções dos campos", () => {
       rotulo: "Toda ter, qui",
     });
     expect(opcoesRepeticao("FREQ=MONTHLY;BYDAY=2TU").at(-1)?.rotulo).toBe("Regra própria");
-  });
-
-  it("o celular avisa do jeito que o quadro escreve", () => {
-    expect(avisosDoCelular([30, 1440])).toBe("o celular avisa 1 dia e 30 min antes");
-    expect(avisosDoCelular([0, 10])).toBe("o celular avisa 10 min antes e na hora");
-    expect(avisosDoCelular([0])).toBe("o celular avisa na hora");
-    expect(avisosDoCelular([])).toBe("sem aviso no celular");
   });
 });
 
@@ -166,69 +155,6 @@ describe("o quando do evento", () => {
       fimHora: "10:00",
     });
     expect(alternarDiaInteiro(ligado, "23:30")).toMatchObject({ fimDia: "2026-10-10", fimHora: "00:30" });
-  });
-
-  it("por extenso no só leitura", () => {
-    expect(quandoPorExtenso(comHora, FUSO)).toBe("sexta, 9 de outubro, 14:00–15:00");
-    expect(quandoPorExtenso({ inicio: "2026-10-12", fim: "2026-10-13", diaInteiro: true }, FUSO)).toBe(
-      "segunda, 12 de outubro, o dia todo",
-    );
-  });
-});
-
-describe("calendários e pedido à Alba", () => {
-  const calendario = (extra: Partial<Calendario>): Calendario => ({
-    id: "m",
-    nome: "Moductus",
-    fonte: "google",
-    cor: null,
-    espelho: true,
-    podeEscrever: true,
-    ler: true,
-    sincronizadoEm: null,
-    ...extra,
-  });
-
-  it("o Moductus só conta com o Google de pé", () => {
-    const conexao = {
-      tipo: "google-agenda" as const,
-      estado: "ligada" as const,
-      conta: "voce@exemplo.com",
-      ultimoErro: null,
-      conectadaEm: "2026-10-01T12:00:00.000Z",
-    };
-    expect(espelhoLigado([calendario({})], conexao)?.id).toBe("m");
-    expect(espelhoLigado([calendario({})], { ...conexao, estado: "desligada" })).toBeNull();
-    expect(espelhoLigado([calendario({ espelho: false })], conexao)).toBeNull();
-  });
-
-  it("a nota de cada calendário vem da fonte dele", () => {
-    expect(notaDoCalendario(calendario({ id: "local", nome: "Local", fonte: "local", espelho: false }))).toBe(
-      "fica só aqui, sem aviso no celular",
-    );
-    expect(notaDoCalendario(calendario({}))).toBe("Google · vai para o celular, sem pedir");
-    expect(notaDoCalendario(calendario({ nome: "Trabalho", espelho: false }))).toBe(
-      "Google · mudar para cá é pedido à Alba",
-    );
-    expect(notaDoCalendario(calendario({ nome: "Empresa", fonte: "outlook", espelho: false }))).toBe(
-      "Outlook · mudar para cá é pedido à Alba",
-    );
-  });
-
-  it("o pedido diz qual evento, de qual calendário e quando", () => {
-    const evento = {
-      id: "p",
-      calendarioId: "g1",
-      titulo: "Planejamento",
-      inicio: sp("2026-10-08", "11:00"),
-      fim: sp("2026-10-08", "12:00"),
-      diaInteiro: false,
-    } as EventoAgenda;
-    expect(
-      pedidoParaAlba(evento, calendario({ nome: "Trabalho", espelho: false }), FUSO, " passar para as 14h "),
-    ).toBe(
-      "Quero mudar o evento “Planejamento” (Trabalho · Google, quinta, 8 de outubro, 11:00–12:00): passar para as 14h",
-    );
   });
 });
 

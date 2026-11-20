@@ -1,6 +1,5 @@
 import { describe, expect, test } from "vitest";
 import {
-  REPETE_DEFINIDO_FORA,
   descreverRegra,
   diaSemanaDe,
   diasNoIntervalo,
@@ -80,7 +79,6 @@ describe("leitura da regra", () => {
     });
     expect(proximoDia(texto, "2026-10-13", "2026-10-13")).toBeNull();
     expect(proximoInstante(texto, inicio, SP, inicio)).toBeNull();
-    expect(REPETE_DEFINIDO_FORA).toBe("repete (definido no Google)");
   });
 
   test("sem regra, só o início", () => {

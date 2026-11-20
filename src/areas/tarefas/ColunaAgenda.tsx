@@ -4,14 +4,12 @@ import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { FalaAgente } from "../../componentes/FalaAgente.tsx";
 import { chaveDoEncaixe, proximoEncaixe, type Encaixe } from "../../janelas/painel/foco.ts";
-import { useAcoesSistema } from "../../janelas/sistema/primeiro-uso/estado.ts";
+
 import { servico } from "../../servico/conexao.ts";
 import {
   falaDaSugestao,
   falaDoGuardado,
-  fonteDaAgenda,
   montarColuna,
-  ocorrenciasDaFonte,
   useAgendaDoDia,
   type BlocoDaColuna,
 } from "./agenda.ts";
@@ -48,10 +46,9 @@ const posicaoDoBloco = (b: BlocoDaColuna, de: number) =>
   });
 
 /**
- * A coluna Agenda das Tarefas (AreaTarefas.dc.html): hoje na régua do expediente, com o local, o
- * "Moductus" e os calendários lidos, a linha de agora e o encaixe que a Alba sugere, tracejado no
- * bloco livre. A sugestão só vira compromisso com o clique em "Guardar o bloco" (`interno`, com
- * desfazer); sem o Google, a coluna mostra só o local e convida a conectar.
+ * A coluna Agenda das Tarefas (AreaTarefas.dc.html): hoje na régua do expediente, com os
+ * compromissos, a linha de agora e o encaixe que a Alba sugere, tracejado no bloco livre. A
+ * sugestão só vira compromisso com o clique em "Guardar o bloco" (`interno`, com desfazer).
  */
 export function ColunaAgenda({
   canal,
@@ -69,7 +66,6 @@ export function ColunaAgenda({
   aoAbrirEvento?: (eventoId: string) => void;
 }) {
   const leitura = useAgendaDoDia(canal, dados.dia);
-  const { ir } = useAcoesSistema();
   const idTitulo = useId();
   const [recusados, setRecusados] = useState<ReadonlySet<string>>(() => new Set());
   const [guardado, setGuardado] = useState<Guardado | null>(null);
@@ -103,9 +99,8 @@ export function ColunaAgenda({
   const encaixe = guardadoAgora
     ? null
     : proximoEncaixe(doDia, [...dados.atrasadas, ...dados.hoje], null, recusados);
-  const fonte = fonteDaAgenda(pronta?.google ?? null, pronta?.calendarios ?? []);
   const coluna = montarColuna({
-    ocorrencias: ocorrenciasDaFonte(agenda?.ocorrencias ?? [], pronta?.calendarios ?? [], fonte.temGoogle),
+    ocorrencias: agenda?.ocorrencias ?? [],
     livres: doDia?.livres ?? [],
     dia,
     fuso: dados.fuso,
@@ -151,7 +146,6 @@ export function ColunaAgenda({
         <h2 id={idTitulo} className="tarefas-agenda-titulo">
           Agenda
         </h2>
-        {pronta && <span>{fonte.rotulo}</span>}
       </div>
       {leitura.estado === "falhou" && (
         <div className="tarefas-agenda-falha" role="alert">
@@ -236,14 +230,7 @@ export function ColunaAgenda({
           {coluna.livres.length === 0 ? "Nenhum bloco livre hoje." : `Livre: ${coluna.livres.join(", ")}.`}
         </p>
       )}
-      {pronta && !fonte.temGoogle && (
-        <div className="tarefas-agenda-convite">
-          <p>Conecte o Google Agenda para ver aqui os seus outros calendários e o “Moductus”.</p>
-          <Botao tamanho="pequeno" onClick={() => ir({ area: "configuracoes", secao: "conexoes" })}>
-            Abrir Conexões
-          </Botao>
-        </div>
-      )}
+
       {pronta && (guardadoAgora ?? encaixe) && (
         <div className="tarefas-agenda-sugestao">
           <FalaAgente

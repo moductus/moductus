@@ -18,16 +18,11 @@ import {
 import { RepositorioTarefasDoDia } from "../../areas/agenda/tarefas-do-dia.ts";
 import { TempoDoDia } from "../../areas/dia/tempo.ts";
 import { abrirBanco } from "../../banco/conexao.ts";
-import { escritaSemGoogle } from "../../conexoes/google/fixtures/google-falso.ts";
+
 import { ProvedorFalso, roteiros, type PassoRoteiro } from "../../provedores/falso.ts";
 import { RegistroProvedores } from "../../provedores/registro.ts";
 import { Catalogo } from "../catalogo.ts";
-import {
-  DURACAO_PADRAO_MIN,
-  MENSAGEM_DIA_INTEIRO_COM_HORA,
-  MENSAGEM_SO_LOCAL_E_MODUCTUS,
-  ferramentasAgenda,
-} from "./agenda.ts";
+import { DURACAO_PADRAO_MIN, MENSAGEM_DIA_INTEIRO_COM_HORA, ferramentasAgenda } from "./agenda.ts";
 
 const pastas: string[] = [];
 const bancos: DatabaseSync[] = [];
@@ -42,8 +37,8 @@ const HOJE = "2026-10-19";
 const sp = (dia: string, hora: string) => new Date(`${dia}T${hora}:00.000-03:00`).toISOString();
 
 /**
- * Banco migrado de verdade (com o calendário local), o "Moductus" e um calendário de fora do Google,
- * a Agenda de verdade, as ferramentas no catálogo e o runtime com um provedor falso na Alba.
+ * Banco migrado de verdade (com o calendário local e um segundo, "Casa"), a Agenda de verdade, as
+ * ferramentas no catálogo e o runtime com um provedor falso na Alba.
  */
 function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-ferramentas-agenda-"));
@@ -53,9 +48,7 @@ function montar() {
   db.exec(`
     INSERT OR IGNORE INTO provedores (id, tipo, nome) VALUES ('p-alba', 'claude-cli', 'Falso');
     UPDATE agentes SET provedor_id = 'p-alba' WHERE id = 'alba';
-    INSERT INTO calendarios (id, nome, fonte, id_externo, espelho, pode_escrever)
-      VALUES ('moductus', 'Moductus', 'google', 'ext-moductus', 1, 1);
-    INSERT INTO calendarios (id, nome, fonte, id_externo, ler) VALUES ('trabalho', 'Trabalho', 'google', 'ext-trabalho', 1);
+    INSERT INTO calendarios (id, nome, fonte) VALUES ('casa', 'Casa', 'local');
   `);
   const relogio = { ms: Date.parse(sp(HOJE, "08:00")) };
   const agora = () => new Date(relogio.ms);
@@ -71,9 +64,7 @@ function montar() {
     { mudou: (mudanca) => avisos.push(mudanca), calendarios: () => {} },
     { agora },
   );
-  const catalogo = new Catalogo(
-    ferramentasAgenda(agenda, new TempoDoDia(() => FUSO, agora), escritaSemGoogle()),
-  );
+  const catalogo = new Catalogo(ferramentasAgenda(agenda, new TempoDoDia(() => FUSO, agora)));
   const falso = new ProvedorFalso("p-alba");
   const runtime = new Runtime(
     {
@@ -97,11 +88,7 @@ function montar() {
     relogio.ms += 1000;
     return historico.obter({ id: r.execucao.id }).chamadas;
   };
-  const fila = () =>
-    db
-      .prepare("SELECT item_id, operacao FROM agenda_saida WHERE item_tipo = 'evento' ORDER BY item_id")
-      .all();
-  return { db, relogio, agenda, catalogo, historico, avisos, alba, fila };
+  return { db, relogio, agenda, catalogo, historico, avisos, alba };
 }
 
 const chamar = (nome: string, entrada: unknown): PassoRoteiro => ({ tipo: "ferramenta", nome, entrada });
@@ -143,13 +130,13 @@ describe("agenda.criar_evento", () => {
     expect(m.avisos.at(-1)).toEqual({ eventos: [], apagados: [evento.id] });
   });
 
-  test('no "Moductus" vai à fila do Google e o desfazer a esvazia; nos outros calendários, não escreve', async () => {
+  test("no calendário pedido; o que não existe é recusado", async () => {
     const m = montar();
-    const [espelho, deFora] = await m.alba(
+    const [naCasa, inexistente] = await m.alba(
       chamar("agenda__criar_evento", {
         titulo: "Consulta",
         quando: { dia: "hoje", hora: "15:00", duracaoMin: 30 },
-        calendarioId: "moductus",
+        calendarioId: "casa",
       }),
       chamar("agenda__criar_evento", {
         titulo: "Daily",
@@ -157,15 +144,10 @@ describe("agenda.criar_evento", () => {
         calendarioId: "trabalho",
       }),
     );
-    const evento = valor(espelho, EventoAgenda);
-    expect(m.fila()).toEqual([{ item_id: evento.id, operacao: "criar" }]);
-    expect((deFora!.resultado as { erro: string }).erro).toBe(
-      `agenda.criar_evento falhou: ${MENSAGEM_SO_LOCAL_E_MODUCTUS}`,
+    expect(valor(naCasa, EventoAgenda)).toMatchObject({ calendarioId: "casa", titulo: "Consulta" });
+    expect((inexistente!.resultado as { erro: string }).erro).toBe(
+      "agenda.criar_evento falhou: calendário não encontrado",
     );
-
-    m.historico.desfazer({ chamadaId: espelho!.id });
-    // Ainda não tinha chegado ao Google: sai da fila sem ir.
-    expect(m.fila()).toEqual([]);
   });
 });
 
@@ -273,16 +255,17 @@ describe("leitura", () => {
     expect(lido.hoje).toBe(HOJE);
     expect(lido.dias.map((d) => d.dia)).toEqual([HOJE, "2026-10-20"]);
     expect(lido.ocorrencias.map((o) => o.titulo)).toEqual(["Reunião"]);
-    expect(valor(calendarios, z.array(z.object({ id: z.string() }))).map((c) => c.id)).toContain("moductus");
+    expect(valor(calendarios, z.array(z.object({ id: z.string() }))).map((c) => c.id)).toEqual([
+      "local",
+      "casa",
+    ]);
 
     const daAlba = m.catalogo.doAgente(DE_FABRICA.alba.ferramentas).ferramentas.map((f) => f.nome);
     expect(daAlba).toEqual([
       "agenda.calendarios",
       "agenda.consultar",
       "agenda.criar_evento",
-      "agenda.criar_evento_em",
       "agenda.mudar_evento",
-      "agenda.mudar_evento_em",
       "agenda.obter_evento",
     ]);
   });

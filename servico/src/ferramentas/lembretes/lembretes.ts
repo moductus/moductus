@@ -105,7 +105,7 @@ export function ferramentasLembretes(lembretes: ServicoLembretes, tempo: TempoDo
           "Regra RRULE do iCalendar, como FREQ=DAILY, para repetir",
         ),
         canal: CanalLembrete.optional().describe(
-          "windows (aviso do Windows, o padrão), dock (só no painel) ou calendario",
+          "windows (aviso do Windows, o padrão) ou dock (só no painel)",
         ),
       }),
       efeito: "interno",

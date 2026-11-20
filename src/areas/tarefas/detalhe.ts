@@ -1,11 +1,10 @@
-import type { Calendario, Conexao, EventoAgenda, MudancaTarefas, Origem, Tarefa } from "@moductus/contrato";
+import type { Calendario, EventoAgenda, MudancaTarefas, Origem, Tarefa } from "@moductus/contrato";
 import { RecusaDoServico, type EstadoConexao } from "@moductus/contrato/cliente";
 import { useEffect, useState } from "react";
 import { DADOS_AGENTES, eAgente, type Agente } from "../../componentes/personagem/agentes.ts";
 import { servico } from "../../servico/conexao.ts";
 import { noGenero } from "../agentes/nomes.ts";
 import {
-  dataDoDia,
   diasEntre,
   formatarAntes,
   formatarDia,
@@ -15,26 +14,18 @@ import {
   relogioNoFuso,
   somarDias,
 } from "../dia.ts";
-import { dataCurta } from "../Pagina.tsx";
 
 /**
  * O detalhe de uma tarefa ou de um evento, ao lado da lista (DetalheTarefa.dc.html,
- * DetalheEvento.dc.html, DetalheEventoLeitura.dc.html): as opções de cada campo em texto, o
- * quando do evento entre a tela e o contrato, e a origem. Quem decide o lembrete que acompanha a
- * hora, a próxima da recorrente e o que vai ao Google é o serviço; aqui só o que se mostra e o
- * que se manda.
+ * DetalheEvento.dc.html): as opções de cada campo em texto, o quando do evento entre a tela e o
+ * contrato, e a origem. Quem decide o lembrete que acompanha a hora e a próxima da recorrente é o
+ * serviço; aqui só o que se mostra e o que se manda.
  */
 
 /** O que está aberto ao lado da lista. */
 export type Aberto = { tipo: "tarefa"; id: string } | { tipo: "evento"; id: string };
 
 const maiuscula = (texto: string) => texto.charAt(0).toUpperCase() + texto.slice(1);
-
-/** "a, b e c". */
-export function juntar(partes: readonly string[]): string {
-  if (partes.length <= 1) return partes.join("");
-  return `${partes.slice(0, -1).join(", ")} e ${partes[partes.length - 1]}`;
-}
 
 // ---------- Origem ----------
 
@@ -75,7 +66,7 @@ export function origemDoItem(
       : item.origem === "importacao"
         ? "pela importação"
         : item.origem === "conexao"
-          ? "no Google"
+          ? "por uma conexão"
           : "por você";
   return {
     agente,
@@ -174,18 +165,8 @@ export const alertasEmOrdem = (alertas: readonly number[]) => [...new Set(alerta
 export const alertasQueFaltam = (alertas: readonly number[]): number[] =>
   ANTECEDENCIAS.filter((m) => !alertas.includes(m));
 
-/** Até cinco, como o `popup` do Google (contrato `Alertas`). */
+/** Até cinco (contrato `Alertas`). */
 export const MAXIMO_ALERTAS = 5;
-
-/** "o celular avisa 1 dia e 30 min antes", a linha do evento no "Moductus". */
-export function avisosDoCelular(alertas: readonly number[]): string {
-  const ordem = alertasEmOrdem(alertas);
-  if (ordem.length === 0) return "sem aviso no celular";
-  const antes = ordem.filter((m) => m > 0).map(formatarMinutos);
-  const naHora = ordem.includes(0);
-  if (antes.length === 0) return "o celular avisa na hora";
-  return `o celular avisa ${juntar(antes)} antes${naHora ? " e na hora" : ""}`;
-}
 
 // ---------- O quando do evento ----------
 
@@ -274,55 +255,6 @@ export function alternarDiaInteiro(q: QuandoNaTela, horaPadrao: string): QuandoN
   };
 }
 
-const diaPorExtensoLongo = (dia: string) => {
-  const texto = dataCurta(dataDoDia(dia));
-  return texto.charAt(0).toLowerCase() + texto.slice(1);
-};
-
-/** "quinta, 8 de outubro, 11:00–12:00", o quando do evento só leitura. */
-export function quandoPorExtenso(e: Quando, fuso: string | null): string {
-  const q = quandoNaTela(e, fuso);
-  if (q.diaInteiro) {
-    if (q.fimDia === q.inicioDia) return `${diaPorExtensoLongo(q.inicioDia)}, o dia todo`;
-    return `${diaPorExtensoLongo(q.inicioDia)} a ${diaPorExtensoLongo(q.fimDia)}`;
-  }
-  if (q.fimDia === q.inicioDia) return `${diaPorExtensoLongo(q.inicioDia)}, ${q.inicioHora}–${q.fimHora}`;
-  return `${diaPorExtensoLongo(q.inicioDia)}, ${q.inicioHora} a ${diaPorExtensoLongo(q.fimDia)}, ${q.fimHora}`;
-}
-
-// ---------- Calendários ----------
-
-/** O "Moductus" com a conexão do Google de pé: o que vai lá chega ao celular. */
-export function espelhoLigado(calendarios: readonly Calendario[], google: Conexao | null): Calendario | null {
-  if (!google || google.estado === "desligada") return null;
-  return calendarios.find((c) => c.fonte === "google" && c.espelho) ?? null;
-}
-
-/** O que cada calendário diz ao lado do nome, na escolha do evento (DetalheEvento.dc.html). */
-export function notaDoCalendario(c: Calendario): string {
-  if (c.fonte === "local") return "fica só aqui, sem aviso no celular";
-  const fonte = c.fonte === "google" ? "Google" : "Outlook";
-  if (c.espelho) return `${fonte} · vai para o celular, sem pedir`;
-  return `${fonte} · mudar para cá é pedido à Alba`;
-}
-
-/** "Trabalho · Google", o calendário do evento só leitura. */
-export function calendarioPorExtenso(c: Calendario | null): string {
-  if (!c) return "outro calendário";
-  return c.fonte === "google" ? `${c.nome} · Google` : c.fonte === "outlook" ? `${c.nome} · Outlook` : c.nome;
-}
-
-/** O pedido à Alba sobre o evento só leitura: o que é, quando e o que mudar. */
-export function pedidoParaAlba(
-  e: EventoAgenda,
-  calendario: Calendario | null,
-  fuso: string | null,
-  oQue: string,
-) {
-  const titulo = e.titulo.trim() === "" ? "Sem título" : e.titulo;
-  return `Quero mudar o evento “${titulo}” (${calendarioPorExtenso(calendario)}, ${quandoPorExtenso(e, fuso)}): ${oQue.trim()}`;
-}
-
 // ---------- Leitura ----------
 
 /**
@@ -358,24 +290,10 @@ export function useTarefaAberta(id: string, daLista: Tarefa | null) {
   return { tarefa: sumiu ? null : tarefa, recebida };
 }
 
-/** Os calendários e a conexão do Google, para a escolha do evento e a linha do "Moductus". */
-export interface Calendarios {
-  calendarios: Calendario[];
-  google: Conexao | null;
-}
-
-export function useCalendarios(canal: EstadoConexao): Calendarios | null {
+/** Os calendários, para a escolha do evento; `null` até chegarem. */
+export function useCalendarios(canal: EstadoConexao): Calendario[] | null {
   const [calendarios, setCalendarios] = useState<Calendario[] | null>(null);
-  const [google, setGoogle] = useState<Conexao | null | undefined>(undefined);
-  useEffect(() => {
-    const paradas = [
-      servico.ouvir("agenda.calendarios", setCalendarios),
-      servico.ouvir("conexoes.mudou", (c) => {
-        if (c.tipo === "google-agenda") setGoogle(c);
-      }),
-    ];
-    return () => paradas.forEach((parar) => parar());
-  }, []);
+  useEffect(() => servico.ouvir("agenda.calendarios", setCalendarios), []);
   useEffect(() => {
     if (canal !== "conectado") return;
     let vivo = true;
@@ -385,21 +303,11 @@ export function useCalendarios(canal: EstadoConexao): Calendarios | null {
         if (vivo) setCalendarios(c);
       })
       .catch(() => undefined);
-    servico
-      .pedir("conexoes.listar")
-      .then((conexoes) => {
-        if (vivo) setGoogle((antes) => antes ?? conexoes.find((c) => c.tipo === "google-agenda") ?? null);
-      })
-      // Sem a lista, o detalhe segue como sem Google: a escolha de calendário não fica esperando.
-      .catch(() => {
-        if (vivo) setGoogle((antes) => antes ?? null);
-      });
     return () => {
       vivo = false;
     };
   }, [canal]);
-  if (calendarios === null || google === undefined) return null;
-  return { calendarios, google };
+  return calendarios;
 }
 
 /** A mensagem do serviço quando o evento não existe mais (`MENSAGEM_EVENTO_NAO_ENCONTRADO`). */
