@@ -55,7 +55,7 @@ export interface LinhaLembrete {
   estado: EstadoLembrete;
   disparado_em: string | null;
   adiado_ate: string | null;
-  canal: "dock" | "windows" | "calendario";
+  canal: "dock" | "windows";
   origem: Origem;
   agente_id: string | null;
   execucao_id: string | null;

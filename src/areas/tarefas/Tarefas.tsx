@@ -24,7 +24,7 @@ import { ColunaAgenda } from "./ColunaAgenda.tsx";
 import { DetalheEvento } from "./DetalheEvento.tsx";
 import { DetalheTarefa } from "./DetalheTarefa.tsx";
 import { dataDoDia } from "../dia.ts";
-import { useCalendarios, useTarefaAberta, type Aberto, type Calendarios } from "./detalhe.ts";
+import { useCalendarios, useTarefaAberta, type Aberto } from "./detalhe.ts";
 import {
   contarLinhas,
   emLotes,
@@ -162,7 +162,6 @@ export function Tarefas() {
           dados={dados}
           listas={dados.listas}
           agora={agora}
-          calendarios={calendarios}
           aoAbrir={(id) => abrir({ tipo: "tarefa", id })}
           aoFechar={fechar}
         />
@@ -196,7 +195,6 @@ function TarefaAberta({
   dados,
   listas,
   agora,
-  calendarios,
   aoAbrir,
   aoFechar,
 }: {
@@ -204,7 +202,6 @@ function TarefaAberta({
   dados: DadosTarefas;
   listas: readonly Lista[];
   agora: Date;
-  calendarios: Calendarios | null;
   aoAbrir: (id: string) => void;
   aoFechar: () => void;
 }) {
@@ -225,7 +222,6 @@ function TarefaAberta({
       listas={listas}
       fuso={dados.fuso}
       agora={agora}
-      calendarios={calendarios}
       aoReceber={recebida}
       aoAbrir={aoAbrir}
       aoFechar={aoFechar}

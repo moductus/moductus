@@ -399,9 +399,8 @@
 }
 
 /* ---------- 5. Conexões (Uso5Conexoes.dc.html) ---------- */
-/* A do Nuno e a do Google abrem embaixo os cartões de Configurações › Conexões. */
-.uso-item--nuno,
-.uso-item--google {
+/* A do Nuno abre embaixo os cartões de Configurações › Conexões. */
+.uso-item--nuno {
   flex-direction: column;
   align-items: stretch;
 }
@@ -423,14 +422,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--esp-10);
-}
-
-/* Os calendários do Google, alinhados ao texto, depois da cabeça da Alba. */
-.uso-google-calendarios {
-  display: flex;
-  flex-direction: column;
-  gap: var(--esp-6);
-  padding-left: var(--recuo-calendarios-uso);
 }
 
 /* ---------- 3. Modelo (Uso3Modelo.dc.html) ---------- */

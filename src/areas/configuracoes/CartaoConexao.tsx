@@ -13,8 +13,6 @@ interface PropsCartao {
   descricao: ReactNode;
   acoes?: ReactNode;
   emBreve?: boolean;
-  /** A borda mais forte do cartão aberto (ConfigConexoesGoogle.dc.html). */
-  destacado?: boolean;
   children?: ReactNode;
 }
 
@@ -29,12 +27,11 @@ export function CartaoConexao({
   descricao,
   acoes,
   emBreve,
-  destacado,
   children,
 }: PropsCartao) {
   const idNome = useId();
   return (
-    <section className="config-conexao" data-destacado={destacado || undefined} aria-labelledby={idNome}>
+    <section className="config-conexao" aria-labelledby={idNome}>
       <div className="config-conexao-topo">
         <Personagem agente={agente} modo="cabeca" tamanho="dock" estado="ocioso" />
         <span className="config-conexao-textos">

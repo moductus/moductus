@@ -12,16 +12,14 @@ import {
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { MENSAGENS_DESFAZER, RepositorioExecucoes, ServicoExecucoes } from "../../agentes/execucoes.ts";
 import { abrirBanco } from "../../banco/conexao.ts";
-import { escritaSemGoogle } from "../../conexoes/google/fixtures/google-falso.ts";
+
 import { Catalogo } from "../../ferramentas/catalogo.ts";
 import { ferramentasAgenda } from "../../ferramentas/agenda/agenda.ts";
 import {
   FERRAMENTA_APLICAR_SUGESTAO,
   MENSAGEM_DURACAO_PASSA_DA_REGRA,
   MENSAGEM_ENCAIXE_MUDOU,
-  MENSAGEM_NOME_SO_DO_LOCAL,
   MENSAGEM_REGRA_DE_FORA,
-  MENSAGEM_SO_LEITURA,
   MENSAGEM_TAREFA_COM_HORA,
   MENSAGEM_TAREFA_FECHADA,
   MENSAGEM_TAREFA_NA_AGENDA,
@@ -85,7 +83,6 @@ function montar(
         () => fuso,
         () => relogio.agora,
       ),
-      escritaSemGoogle(),
     ),
   );
   const historico = new ServicoExecucoes(execucoes, catalogo, { agora: () => relogio.agora });
@@ -99,21 +96,11 @@ function marcar(m: Montado, titulo: string, inicio: string, fim: string, extra: 
   return m.agenda.criarEvento({ titulo, inicio, fim, diaInteiro: false, ...extra });
 }
 
-/** Um calendário do Google lido pela Alba, com o evento em cache (como a F3-23 grava). */
-function googleComEvento(db: DatabaseSync, titulo: string, inicio: string, fim: string, ler = true) {
-  const calendario = `g-${titulo}`;
-  db.prepare(
-    "INSERT INTO calendarios (id, nome, fonte, id_externo, ler) VALUES (?, 'Trabalho', 'google', ?, ?)",
-  ).run(calendario, `ext-${titulo}`, ler ? 1 : 0);
-  db.prepare(
-    `INSERT INTO eventos (id, calendario_id, titulo, inicio, fim, id_externo, origem)
-     VALUES (?, ?, ?, ?, ?, ?, 'conexao')`,
-  ).run(`ev-${titulo}`, calendario, titulo, inicio, fim, `ext-ev-${titulo}`);
-  return { calendario, evento: `ev-${titulo}` };
-}
-
-/** Um evento do cache do Google como veio de lá, sem passar pelas recusas da escrita local. */
-function doGoogle(
+/**
+ * Um evento gravado direto no banco (como chega de outro PC), sem passar pelas recusas da
+ * escrita.
+ */
+function gravado(
   db: DatabaseSync,
   id: string,
   inicio: string,
@@ -121,13 +108,9 @@ function doGoogle(
   extra: { diaInteiro?: boolean; recorrencia?: string } = {},
 ) {
   db.prepare(
-    `INSERT OR IGNORE INTO calendarios (id, nome, fonte, id_externo, ler)
-     VALUES ('g-cache', 'Cache', 'google', 'ext-cache', 1)`,
-  ).run();
-  db.prepare(
-    `INSERT INTO eventos (id, calendario_id, titulo, inicio, fim, dia_inteiro, recorrencia, id_externo, origem)
-     VALUES (?, 'g-cache', ?, ?, ?, ?, ?, ?, 'conexao')`,
-  ).run(id, id, inicio, fim, extra.diaInteiro ? 1 : 0, extra.recorrencia ?? null, `ext-${id}`);
+    `INSERT INTO eventos (id, calendario_id, titulo, inicio, fim, dia_inteiro, recorrencia)
+     VALUES (?, 'local', ?, ?, ?, ?, ?)`,
+  ).run(id, id, inicio, fim, extra.diaInteiro ? 1 : 0, extra.recorrencia ?? null);
 }
 
 /** O que a consulta pode levar, mesmo no pior evento: o serviço é uma linha só. */
@@ -183,11 +166,11 @@ function dia(m: Montado, d = DIA) {
 }
 
 describe("horário livre e dia cheio", () => {
-  test("a fala do AGENTS: 7h planejadas para 5h livres, juntando o local e o cache do Google", () => {
+  test("a fala do AGENTS: 7h planejadas para 5h livres", () => {
     const m = montar();
-    googleComEvento(m.db, "Daily", sp(DIA, "09:30"), sp(DIA, "10:00"));
+    marcar(m, "Daily", sp(DIA, "09:30"), sp(DIA, "10:00"));
     marcar(m, "Foco · PR do relatório", sp(DIA, "10:00"), sp(DIA, "11:00"));
-    googleComEvento(m.db, "Planejamento", sp(DIA, "11:00"), sp(DIA, "12:00"));
+    marcar(m, "Planejamento", sp(DIA, "11:00"), sp(DIA, "12:00"));
     marcar(m, "Almoço", sp(DIA, "12:00"), sp(DIA, "13:00"));
     marcar(m, "Ligar para o contador", sp(DIA, "15:00"), sp(DIA, "15:30"));
     tarefa(m.db, { id: "a", duracao: 120, prioridade: 3 });
@@ -317,9 +300,8 @@ describe("horário livre e dia cheio", () => {
     ]);
   });
 
-  test("calendário que a Alba não lê e evento na lixeira ficam de fora", () => {
+  test("evento na lixeira fica de fora", () => {
     const m = montar();
-    googleComEvento(m.db, "Pessoal", sp(DIA, "10:00"), sp(DIA, "12:00"), false);
     const apagado = marcar(m, "Cancelada", sp(DIA, "14:00"), sp(DIA, "15:00"));
     m.agenda.apagarEvento({ id: apagado.id });
     const d = dia(m);
@@ -370,8 +352,8 @@ describe("horário livre e dia cheio", () => {
 describe("limites do calendário e da expansão", () => {
   test("evento com fim em 9026 não derruba a consulta: aparece e ocupa o dia", () => {
     const m = montar();
-    doGoogle(m.db, "sem-fim", sp(DIA, "10:00"), "9026-01-01T00:00:00.000Z");
-    doGoogle(m.db, "ferias-sem-fim", DIA, "9026-01-01", { diaInteiro: true });
+    gravado(m.db, "sem-fim", sp(DIA, "10:00"), "9026-01-01T00:00:00.000Z");
+    gravado(m.db, "ferias-sem-fim", DIA, "9026-01-01", { diaInteiro: true });
     const { valor: d, ms } = cronometrar(() => dia(m));
     expect(ms).toBeLessThan(PRAZO_MS);
     expect(d.ocorrencias.map((o) => [o.eventoId, o.inicio, o.fim])).toEqual([
@@ -386,11 +368,11 @@ describe("limites do calendário e da expansão", () => {
   test("recorrente que cobre as próprias repetições: teto de ocorrências por consulta, com o corte no log", () => {
     const m = montar();
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    // Diário de 1026 a 2026, como pode vir do Google: cada ocorrência dura mil anos.
-    doGoogle(m.db, "mil-anos", "1026-01-01T13:00:00.000Z", "2026-12-31T13:00:00.000Z", {
+    // Diário de 1026 a 2026, gravado sem a recusa da escrita: cada ocorrência dura mil anos.
+    gravado(m.db, "mil-anos", "1026-01-01T13:00:00.000Z", "2026-12-31T13:00:00.000Z", {
       recorrencia: "FREQ=DAILY",
     });
-    doGoogle(m.db, "mil-anos-dia-inteiro", "1026-01-01", "2026-12-31", {
+    gravado(m.db, "mil-anos-dia-inteiro", "1026-01-01", "2026-12-31", {
       diaInteiro: true,
       recorrencia: "FREQ=DAILY",
     });
@@ -513,7 +495,6 @@ describe("encaixe aplicado e desfeito", () => {
       inicio: sugestao.inicio,
       fim: sugestao.fim,
       diaInteiro: false,
-      editavel: true,
       origem: "usuario",
     });
     expect(aplicada.desfazerAte).toBe(sp("2026-10-20", "07:00"));
@@ -596,25 +577,21 @@ describe("encaixe aplicado e desfeito", () => {
 });
 
 describe("eventos e calendários", () => {
-  test("o local escreve; o calendário do Google é só leitura por aqui", () => {
+  test("criar, mudar e apagar no local; calendário que não existe é recusado", () => {
     const m = montar();
-    const { calendario, evento } = googleComEvento(m.db, "Daily", sp(DIA, "09:30"), sp(DIA, "10:00"));
-    expect(m.agenda.obterEvento({ id: evento }).editavel).toBe(false);
     expect(() =>
       m.agenda.criarEvento({
-        calendarioId: calendario,
+        calendarioId: "nao-existe",
         titulo: "x",
         inicio: DIA,
         fim: "2026-10-20",
         diaInteiro: true,
       }),
-    ).toThrow(MENSAGEM_SO_LEITURA);
-    expect(() => m.agenda.definirEvento({ id: evento, titulo: "y" })).toThrow(MENSAGEM_SO_LEITURA);
-    expect(() => m.agenda.apagarEvento({ id: evento })).toThrow(MENSAGEM_SO_LEITURA);
+    ).toThrow("calendário não encontrado");
 
     const local = marcar(m, "Dentista", sp(DIA, "14:00"), sp(DIA, "15:00"), { alertas: [30] });
     confere("agenda.criarEvento", local);
-    expect(local).toMatchObject({ calendarioId: CALENDARIO_LOCAL, alertas: [30], editavel: true });
+    expect(local).toMatchObject({ calendarioId: CALENDARIO_LOCAL, alertas: [30] });
     const mudado = m.agenda.definirEvento({
       id: local.id,
       inicio: sp(DIA, "15:00"),
@@ -634,74 +611,19 @@ describe("eventos e calendários", () => {
     ).toThrow(MENSAGEM_REGRA_DE_FORA("").slice(0, 30));
   });
 
-  test("o evento do espelho entra na fila de saída para o Google", () => {
+  test("trocar de calendário: vai e volta; para um que não existe, não", () => {
     const m = montar();
-    m.db
-      .prepare(
-        `INSERT INTO calendarios (id, nome, fonte, id_externo, espelho, pode_escrever)
-         VALUES ('moductus', 'Moductus', 'google', 'ext-moductus', 1, 1)`,
-      )
-      .run();
-    const fila = () =>
-      m.db
-        .prepare("SELECT item_id, operacao FROM agenda_saida WHERE item_tipo = 'evento' ORDER BY item_id")
-        .all();
-    const e = marcar(m, "Lembrete", sp(DIA, "10:00"), sp(DIA, "10:15"), { calendarioId: "moductus" });
-    expect(e.editavel).toBe(true);
-    expect(fila()).toEqual([{ item_id: e.id, operacao: "criar" }]);
-    // Ainda não chegou ao Google: mudar continua um criar, e apagar tira da fila sem ir.
-    m.agenda.definirEvento({ id: e.id, titulo: "Lembrete 2" });
-    expect(fila()).toEqual([{ item_id: e.id, operacao: "criar" }]);
-    m.agenda.apagarEvento({ id: e.id });
-    expect(fila()).toEqual([]);
-
-    const f = marcar(m, "Outro", sp(DIA, "11:00"), sp(DIA, "11:15"), { calendarioId: "moductus" });
-    m.db.prepare("UPDATE eventos SET id_externo = 'ext-f' WHERE id = ?").run(f.id);
-    m.db.prepare("DELETE FROM agenda_saida").run();
-    m.agenda.definirEvento({ id: f.id, titulo: "Outro 2" });
-    expect(fila()).toEqual([{ item_id: f.id, operacao: "mudar" }]);
-    m.agenda.apagarEvento({ id: f.id });
-    expect(fila()).toEqual([{ item_id: f.id, operacao: "apagar" }]);
-  });
-
-  test("trocar de calendário: do local ao Moductus cria lá, de volta apaga lá; para o Google de fora, não", () => {
-    const m = montar();
-    m.db
-      .prepare(
-        `INSERT INTO calendarios (id, nome, fonte, id_externo, espelho, pode_escrever)
-         VALUES ('moductus', 'Moductus', 'google', 'ext-moductus', 1, 1)`,
-      )
-      .run();
-    const { calendario: deFora } = googleComEvento(m.db, "Daily", sp(DIA, "09:30"), sp(DIA, "10:00"));
-    const fila = () =>
-      m.db
-        .prepare("SELECT item_id, operacao FROM agenda_saida WHERE item_tipo = 'evento' ORDER BY item_id")
-        .all();
+    m.db.prepare("INSERT INTO calendarios (id, nome, fonte) VALUES ('casa', 'Casa', 'local')").run();
     const e = marcar(m, "Dentista", sp(DIA, "14:00"), sp(DIA, "15:00"));
-    expect(fila()).toEqual([]);
 
-    const noMoductus = m.agenda.definirEvento({ id: e.id, calendarioId: "moductus", titulo: "Dentista 2" });
-    confere("agenda.definirEvento", noMoductus);
-    expect(noMoductus).toMatchObject({ calendarioId: "moductus", titulo: "Dentista 2", editavel: true });
-    expect(fila()).toEqual([{ item_id: e.id, operacao: "criar" }]);
-
-    // Chegou ao Google: voltar ao local apaga lá e esquece o id de lá no evento.
-    m.db.prepare("UPDATE eventos SET id_externo = 'ext-e' WHERE id = ?").run(e.id);
-    m.db.prepare("DELETE FROM agenda_saida").run();
+    const naCasa = m.agenda.definirEvento({ id: e.id, calendarioId: "casa", titulo: "Dentista 2" });
+    confere("agenda.definirEvento", naCasa);
+    expect(naCasa).toMatchObject({ calendarioId: "casa", titulo: "Dentista 2" });
     expect(m.agenda.definirEvento({ id: e.id, calendarioId: CALENDARIO_LOCAL }).calendarioId).toBe(
       CALENDARIO_LOCAL,
     );
-    expect(fila()).toEqual([{ item_id: e.id, operacao: "apagar" }]);
-    expect(m.db.prepare("SELECT id_externo FROM eventos WHERE id = ?").get(e.id)).toEqual({
-      id_externo: null,
-    });
-
-    // Mudar o local depois não manda nada ao Google.
-    m.db.prepare("DELETE FROM agenda_saida").run();
     m.agenda.definirEvento({ id: e.id, titulo: "Dentista 3" });
-    expect(fila()).toEqual([]);
 
-    expect(() => m.agenda.definirEvento({ id: e.id, calendarioId: deFora })).toThrow(MENSAGEM_SO_LEITURA);
     expect(() => m.agenda.definirEvento({ id: e.id, calendarioId: "nao-existe" })).toThrow(
       "calendário não encontrado",
     );
@@ -711,25 +633,25 @@ describe("eventos e calendários", () => {
     });
   });
 
-  test("calendários: o local primeiro; ler muda em todos, nome e cor só no local", () => {
+  test("calendários: o local primeiro; nome e cor mudam, e sem mudança não há aviso", () => {
     const m = montar();
-    const { calendario } = googleComEvento(m.db, "Daily", sp(DIA, "09:30"), sp(DIA, "10:00"));
+    m.db.prepare("INSERT INTO calendarios (id, nome, fonte) VALUES ('casa', 'Casa', 'local')").run();
     const lista = m.agenda.calendarios();
     confere("agenda.calendarios", lista);
-    expect(lista.map((c) => c.id)).toEqual([CALENDARIO_LOCAL, calendario]);
+    expect(lista).toEqual([
+      { id: CALENDARIO_LOCAL, nome: "Local", cor: null },
+      { id: "casa", nome: "Casa", cor: null },
+    ]);
 
-    expect(m.agenda.definirCalendario({ id: calendario, ler: false })).toMatchObject({ ler: false });
-    expect(m.listas).toHaveLength(1);
-    expect(dia(m).ocorrencias).toEqual([]);
-    expect(() => m.agenda.definirCalendario({ id: calendario, nome: "Outro" })).toThrow(
-      MENSAGEM_NOME_SO_DO_LOCAL,
-    );
     const local = m.agenda.definirCalendario({ id: CALENDARIO_LOCAL, nome: "Meu", cor: "ambar" });
     confere("agenda.definirCalendario", local);
-    expect(local).toMatchObject({ nome: "Meu", cor: "ambar", ler: true });
-    // Sem mudança, sem aviso.
-    m.agenda.definirCalendario({ id: CALENDARIO_LOCAL, ler: true });
-    expect(m.listas).toHaveLength(2);
+    expect(local).toEqual({ id: CALENDARIO_LOCAL, nome: "Meu", cor: "ambar" });
+    expect(m.listas).toHaveLength(1);
+    m.agenda.definirCalendario({ id: CALENDARIO_LOCAL, nome: "Meu" });
+    expect(m.listas).toHaveLength(1);
+    expect(() => m.agenda.definirCalendario({ id: "nao-existe", nome: "x" })).toThrow(
+      "calendário não encontrado",
+    );
   });
 });
 

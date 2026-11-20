@@ -2,7 +2,7 @@
 
 > Como os agentes do Moductus funcionam: definição, provedores de modelo, ferramentas, aprovação, e como o app acompanha os agentes de código que rodam fora dele. O produto está em [PRODUCT.md](PRODUCT.md); os processos e o banco, em [ARCHITECTURE.md](ARCHITECTURE.md).
 
-**Status:** fases 0 a 3. O que as fases 2 e 3 entregaram está dito no tempo presente e com o que foi validado: da fase 2, o Nuno e seus vigias, o runtime e os estados dos agentes, o agendador, as conversas, os provedores (Claude Code CLI e APIs compatíveis com a da OpenAI), o catálogo e o servidor MCP, as aprovações com desfazer e as sessões de IA externas; da fase 3, a Alba com as ferramentas do dia, os vigias dela, o briefing e o fechamento, o Google Agenda, o teto de gasto e o "Tentar agora". O resto é desenho e vem marcado como **(previsto)**, com a fase. Itens marcados com **(validar)** dependem de comportamento de ferramenta externa que ainda não foi confirmado; o que a fase 3 validou e o que falta validar com conta real está na tabela de ["O que foi validado"](#o-que-foi-validado).
+**Status:** fases 0 a 3. O que as fases 2 e 3 entregaram está dito no tempo presente e com o que foi validado: da fase 2, o Nuno e seus vigias, o runtime e os estados dos agentes, o agendador, as conversas, os provedores (Claude Code CLI e APIs compatíveis com a da OpenAI), o catálogo e o servidor MCP, as aprovações com desfazer e as sessões de IA externas; da fase 3, a Alba com as ferramentas do dia, os vigias dela, o briefing e o fechamento, o teto de gasto e o "Tentar agora". O resto é desenho e vem marcado como **(previsto)**, com a fase. Itens marcados com **(validar)** dependem de comportamento de ferramenta externa que ainda não foi confirmado; o que a fase 3 validou e o que falta validar no app real está na tabela de ["O que foi validado"](#o-que-foi-validado).
 
 ---
 
@@ -60,17 +60,13 @@ O Nuno tem ferramentas e vigias desde a fase 2, e a Alba, desde a fase 3. Tula e
   - **Foco:** ciclos de foco e pausa (25, 5 e 15 min, quatro focos até a pausa longa; ajustável em Configurações › O dia) contados pelo relógio do dia, ligados a uma tarefa, com `Ctrl+Alt+P`. Ao fim do foco ela avisa uma vez ([Começar a pausa] [Pular a pausa] [+5 min de foco]); o fim da pausa começa o foco seguinte sozinho, sem tocar; o fim da pausa longa fecha a rodada. Com o foco correndo, o Windows só avisa aprovação e lembrete (PRODUCT §5, "Silêncio"); na pausa do ciclo ou com o foco parado, os avisos voltam ao normal. O tempo em que o ciclo ficou parado não conta no histórico.
 - **Gatilhos:** nenhum no agendador. Os vigias dela são código (seção 6), e um gatilho acordaria o modelo com ferramentas, contra o despertar contido.
 - **Ferramentas:**
-  - `agenda.*`: `calendarios`, `consultar`, `obter_evento` (leitura); `criar_evento` e `mudar_evento` (`interno`, no calendário local e no "Moductus"); `criar_evento_em` e `mudar_evento_em` (`externo`, nos outros calendários do Google).
+  - `agenda.*`: `calendarios`, `consultar`, `obter_evento` (leitura); `criar_evento` e `mudar_evento` (`interno`, no calendário local, com desfazer por 24 h).
   - `tarefas.*`: `listar` e `obter` (leitura); `criar`, `definir`, `concluir`, `cancelar` e `adiar` (`interno`). Mais `listas.listar` (leitura).
   - `lembretes.*`: `listar` (leitura); `criar`, `definir`, `adiar`, `concluir` e `cancelar` (`interno`).
   - `foco.*`: `estado` e `historico`, só leitura. `notas.*`: `listar`, `obter` e `buscar` (leitura); `criar` e `salvar` (`interno`). `memoria.*` chega com a fase 5.
   - Ficaram de fora porque não têm volta pelo histórico: apagar tarefa e evento, mover tarefa, iniciar, pausar e terminar o foco, e escrever em listas e etiquetas. Esses a interface faz.
   - O dia vai nas ferramentas como `hoje`, `amanha` ou `AAAA-MM-DD`, e a hora como `HH:MM`, no fuso de `config`; lembrete no passado é recusado.
-- **Agenda e controle fora do PC:** os agentes só trabalham com o PC ligado. Para o que precisa te alcançar longe dele, a Alba escreve na sua agenda: ao conectar o Google Agenda (Outlook depois), o Moductus cria um calendário próprio, **"Moductus"**, e a tarefa com hora, o lembrete com horário e os compromissos criados nele viram eventos com alerta ali. O celular avisa mesmo com o PC desligado. Detalhe na subseção do Google, adiante.
-  - **Escrever no calendário "Moductus":** autorizado uma vez, na conexão; não pede aprovação a cada evento.
-  - **Ler os outros calendários:** sim, para montar o dia e achar horário livre.
-  - **Criar ou mudar evento nos outros calendários:** `externo`, sempre com aprovação.
-  - **Tarefa sem horário:** fica só no Moductus.
+- **Agenda:** os agentes só trabalham com o PC ligado. A agenda é local: um calendário, "Local", com os eventos criados por você ou pela Alba, todos editáveis por aqui. A Alba escreve nele sem pedir (`interno`, com desfazer), e os alertas de compromisso (minutos antes) são avisados pelo Moductus no Windows.
 - **É o agente padrão:** mensagem sem destinatário claro vai para a Alba.
 
 ### Tula — finanças
@@ -115,44 +111,16 @@ O Nuno tem ferramentas e vigias desde a fase 2, e a Alba, desde a fase 3. Tula e
 - **Ferramentas:** `sessoes.listar` e `sessoes.eventos`, `uso.por_dia`, `github.pendencias`, `github.listar`, `github.detalhe` e `github.atualizar` (todas `leitura`) e `github.comentar` (`externo`), mais `tarefas.criar` (`interno`). O GitHub é lido pelo `gh`, com a sua autenticação.
 - **Efeito externo** (comentar, aprovar PR, responder pedido de permissão em nome de regra): sempre por cartão de aprovação ou regra que você criou.
 
-### O Google Agenda da Alba
-
-Conecta em Configurações › Conexões e no passo 5 do primeiro uso. Decisões em ADR-0031 (a conexão) e ADR-0035 (leitura e espelho).
-
-**Conectar**
-- **Cliente:** um cliente OAuth do tipo Desktop app num projeto Google Cloud do autor, publicado "In production" sem verificação (até 100 usuários novos). A tela de consentimento mostra o aviso **"app não verificado"**: é preciso clicar em "Avançado" e em "Acessar Moductus". O client ID e o secret do autor vão no código (`servico/src/conexoes/google/cliente.ts`; o Google trata o secret de app instalado como não confidencial, e a proteção do fluxo é o PKCE). **Esse cliente ainda não existe:** criar o projeto é a F3-21, do humano, e até lá `CLIENTE_DO_AUTOR` é `null` e só conecta quem usa o próprio cliente. Em "Usar meu próprio cliente", o usuário cola o client ID e o secret dele (guardados no Gerenciador de Credenciais), com o passo a passo da documentação do Google; trocar de cliente exige desconectar antes. Se o Google bloquear o cliente do autor, o próprio cliente vira o caminho principal.
-- **Fluxo:** o serviço abre um receptor em `http://127.0.0.1:<porta aleatória>/`, gera PKCE S256 e `state`, pede à casca para abrir a URL de autorização no navegador (só `https`, ADR-0038), troca o código e fecha o receptor. O prazo é de 5 minutos, e "Cancelar" encerra a espera sem desconectar. Pedido ao receptor sem `state` válido é ignorado.
-- **Escopos:** ao conectar, `calendar.app.created` (criar e escrever no "Moductus"), `calendar.calendarlist.readonly` e `calendar.events.readonly` (ler os outros). Os três são exigidos: se você desmarcar uma permissão na tela do Google, o Moductus revoga o token e pede para conectar com tudo marcado. A conta (o e-mail) vem do calendário principal, sem escopo de perfil.
-- **Credencial:** o refresh token, os escopos e a conta ficam no Gerenciador de Credenciais (`Moductus/google-agenda`); no banco, só a linha de `conexoes`. `invalid_grant` põe a conexão em erro, com "Reconectar". Desconectar revoga o token no Google e apaga a credencial mesmo se o revoke falhar (e então diz onde tirar o acesso, em myaccount.google.com/permissions).
-
-**Ler os calendários** (a cada 10 minutos, com variação de 25%, ao abrir a área e na volta da suspensão)
-- Um `nextSyncToken` por calendário; 410 apaga o cache daquele calendário e lê tudo de novo; 403 de cota e 429 esperam com backoff e, esgotado, a leitura para sem pôr a conexão em erro. O cache guarda de 7 dias atrás em diante.
-- O evento recorrente vem como regra, com as ocorrências canceladas ou mudadas de lugar guardadas em `excecoes`, para a reunião cancelada não aparecer na hora de sempre. Regra que o Moductus não sabe expandir fica como "repete (definido no Google)".
-- Se a leitura falha, a Alba avisa uma vez, na passagem de ligada para erro: "Os eventos de hoje podem estar incompletos; tento de novo em 10 minutos."
-
-**O calendário "Moductus"** (o espelho)
-- Criado na primeira conexão, com uma marca na descrição para não criar outro se já existir um com o mesmo nome. Se for apagado no Google, é recriado uma vez, com aviso.
-- Vira evento ali: a tarefa aberta com dia e hora (duração estimada ou 30 min, "disponível", com os lembretes dela como alertas de popup), o lembrete que não é só do painel (15 min de duração, alerta de 0 min; o recorrente vai com a regra e o fuso, para o celular tocar com o PC desligado) e os compromissos que a Alba cria nele. O lembrete do canal `dock` não vai, e as notas também não.
-- A escrita passa por uma fila (`agenda_saida`), derivada do estado: sem rede, a Alba não perde nada, e a fila sai quando a rede volta, com espera de 15 s dobrando até 15 min. O id do evento é escolhido antes do primeiro envio, então repetir um envio depois de uma resposta perdida dá 409 e vira atualização, nunca dois eventos.
-- O calendário "Moductus" também é lido: a hora, o título e a duração que você muda no celular são adotados pela tarefa ou pelo lembrete, e a mudança daqui que ainda está na fila vence a de lá. Evento apagado no Google desliga o espelho daquele item, e a tarefa fica. Um item movido no Google para mais de 7 dias atrás sai da janela da leitura e é tomado por apagado.
-- Falha do espelho não põe a conexão em erro nem faz a Alba falar; só o calendário recriado avisa.
-
-**Escrever nos outros calendários**
-- `externo`: sempre com cartão de aprovação, só em calendário onde a conta é dona ou editora, e o cartão vale para o evento e o dia que ele mostrou (se mudou no Google desde então, pede de novo). A primeira vez pede o **consentimento completo de novo**, com os quatro escopos (`calendar.events` entra): app instalado não tem autorização incremental, e o refresh token novo substitui o anterior. O Moductus confere a conta que autorizou e recusa o token de outra.
-- Não muda o horário de um evento que se repete (moveria a série; a mensagem manda para o Google Agenda), nem a regra. Não há desfazer: o que saiu do Moductus não volta por uma função daqui.
-
-#### O que foi validado
+### O que foi validado
 
 | | Situação |
 |---|---|
 | `claude auth login --claudeai` como comando de "Entrar" | Conferido no `--help` do Claude Code 2.1.287 (F3-02). O roteiro real do terminal fica para o PR |
 | Formato do shim do npm (`.cmd`) | Conferido em shims reais (`gemini.cmd`, `tsc.cmd` e `opencode.cmd`); não testado com um Claude Code instalado pelo npm de verdade (ADR-0037) |
-| Troca do código OAuth sem o secret | Pela documentação de apps nativos, de 18/10 (o secret é opcional). A confirmação é o roteiro com o cliente do autor |
 | Busca sem acento (`remove_diacritics`) | Validada no `node:sqlite` do Node 24.9 em 10/10 (ADR-0036) |
 | Cotação do teto de gasto | Fonte e licença do Frankfurter v2 lidas em 16 e 18/10 (ADR-0040) |
 | Testes da fase | Repetidos 20 vezes seguidas no serviço (em paralelo e em série) e na casca, sem falha (F3-50) |
 | Medições em release | ARCHITECTURE §7, "Medições da fase 3" |
-| **Falta, com conta real** | Conectar e desconectar; os eventos de hoje batem com o Google, inclusive um recorrente com uma ocorrência adiada e outra cancelada; escrever num outro calendário depois do cartão; o lembrete criado pela captura tocar no celular (o `popup` de um calendário secundário); o Google aceitar `recurrence: []` no PATCH e listar os eventos do próprio "Moductus" com `calendar.app.created`; a classificação dos escopos no Console. Tudo depende do cliente OAuth (F3-21) |
 | **Falta, no app real** | Desbloquear a sessão e ver o briefing; `Ctrl+Alt+P`; o Adiar do aviso do Windows; o "Entrar" no terminal; a conferência dos três temas nas telas novas |
 
 ### Roteamento
@@ -191,7 +159,7 @@ Baseada em guias de escrita de interface (Microsoft, Google Conversation Design,
 | **Feito** | "Lembrete criado para quinta, 9h." | "Parcela do cartão registrada. Faltam 4." | "Organizei 214 arquivos em 6 pastas. Dá para desfazer até amanhã." | "O CI do #142 passou depois do segundo push." |
 | **Aprovação** | "A tarefa X não cabe hoje. Passo para amanhã de manhã?" [Passar para amanhã] [Manter] | "Achei 3 assinaturas que não vejo em uso. Quer revisar?" [Revisar assinaturas] | "Vou mover 38 arquivos (1,4 GB) para a Lixeira. A lista está abaixo." [Mover 38 arquivos] [Ver lista] | "A sessão do Codex chegou a 85% do contexto. Compacto agora?" [Compactar] [Depois] |
 | **Má notícia** | "O dia está cheio: 7h planejadas para 5h livres. Sugiro tirar duas tarefas." | "Mercado passou R$ 80 do previsto. Dá para cobrir com o que sobrou de lazer. Quer remanejar?" | "12 arquivos ficaram de fora porque estavam abertos em outro programa." | "Você está em 90% do limite semanal. No ritmo de hoje, acaba quinta às 15h." |
-| **Erro** | "Não consegui ler o Google Agenda. Os eventos de hoje podem estar incompletos; tento de novo em 10 minutos." | "O extrato veio num formato que não reconheço. Nada foi alterado. Pode me mandar em CSV?" | "Não tenho acesso a esta pasta. Parei sem alterar nada." | "Não consegui ler os registros do OpenCode: o arquivo está bloqueado. Tento de novo no próximo ciclo." |
+| **Erro** | "Não consegui salvar o compromisso de quinta. A agenda ficou como estava; pode tentar de novo?" | "O extrato veio num formato que não reconheço. Nada foi alterado. Pode me mandar em CSV?" | "Não tenho acesso a esta pasta. Parei sem alterar nada." | "Não consegui ler os registros do OpenCode: o arquivo está bloqueado. Tento de novo no próximo ciclo." |
 
 ### Briefing da manhã e fechamento do dia
 
@@ -408,7 +376,7 @@ Os agentes ficam **sempre prontos**: o serviço sobe no login, independe das jan
 
 | Agente | Vigias sempre ligados | Quando acorda o modelo |
 |---|---|---|
-| **Alba** | Relógio do dia (lembretes, fim do ciclo do foco, rotinas), compromissos chegando, virada do dia, e a leitura e o espelho do Google | Redigir a abertura do briefing e do fechamento; entender uma captura que o código não entendeu |
+| **Alba** | Relógio do dia (lembretes, fim do ciclo do foco, rotinas), compromissos chegando e virada do dia | Redigir a abertura do briefing e do fechamento; entender uma captura que o código não entendeu |
 | **Tula** | Pasta de extratos, vencimento de parcelas e recorrências, limite de categoria | Ler e categorizar extrato; explicar um estouro |
 | **Faina** | Tamanho de Downloads, caixa de entrada de Arquivos, agenda de limpeza | Montar o plano e a prévia de organização |
 | **Nuno** | Endpoint dos hooks das sessões de IA (tempo real), uso de contexto, GitHub a cada 15 min (as buscas não devolvem ETag, ADR-0022) | Resumir o item do GitHub que passou a precisar de você; priorizar quando há duas ou mais pendências |
@@ -424,7 +392,7 @@ Existem os vigias do Nuno (fase 2) e os da Alba (fase 3); os da Tula e os da Fai
 
 - **O despertar do Nuno é contido:** uma pendência sozinha que não seja do GitHub já aparece no dock sem modelo. O modelo só acorda para resumir ou priorizar, **sem ferramentas** e com prazo, e o texto vindo do GitHub, que qualquer um escreve, chega marcado como dado: uma instrução escondida num PR não tem ferramenta nenhuma para usar. Sem modelo, a pauta fica e o próximo evento tenta de novo.
 - **Lembrete não depende de modelo (Alba):** dispara no horário mesmo sem rede, sem provedor ou com limite estourado. O relógio do dia é um timer só, que acorda no próximo vencimento (de lembrete, de fim de ciclo do foco ou de rotina) e nunca dorme mais de 60 s, por causa do relógio do sistema e da suspensão; em testes, o disparo saiu em 11 ms na mediana ([ARCHITECTURE.md](ARCHITECTURE.md#medições-da-fase-3)).
-- **PC suspenso ou desligado:** ao voltar (evento de retomada do Windows), cada vigia recupera o que perdeu: lembretes vencidos aparecem como atrasados, o GitHub é consultado na hora, e o briefing sai se a manhã ainda não passou. A casca avisa a retomada e o agendador dispara o que venceu, uma vez só, depois de esperar a rede voltar; o GitHub e o Google são lidos na hora. Na Alba, o lembrete que venceu há mais de 2 minutos vira atrasado, sem tocar, e os de uma ausência só chegam num aviso e num cartão só ("3 lembretes passaram enquanto o PC dormia"); o foco que venceu na ausência fecha como interrompido e encerra a rodada; o fechamento que perdeu a hora sai no mesmo dia ou volta como "Ontem" no briefing seguinte.
+- **PC suspenso ou desligado:** ao voltar (evento de retomada do Windows), cada vigia recupera o que perdeu: lembretes vencidos aparecem como atrasados, o GitHub é consultado na hora, e o briefing sai se a manhã ainda não passou. A casca avisa a retomada e o agendador dispara o que venceu, uma vez só, depois de esperar a rede voltar; o GitHub é lido na hora. Na Alba, o lembrete que venceu há mais de 2 minutos vira atrasado, sem tocar, e os de uma ausência só chegam num aviso e num cartão só ("3 lembretes passaram enquanto o PC dormia"); o foco que venceu na ausência fecha como interrompido e encerra a rodada; o fechamento que perdeu a hora sai no mesmo dia ou volta como "Ontem" no briefing seguinte.
 - **Pausar:** pelo menu do ícone na bandeja dá para pausar todos os agentes ou um só, por 30 minutos, 1 hora ou até amanhã (reunião, apresentação), e retomar na hora; o menu mostra o estado de cada um. Os vigias continuam anotando e entregam tudo ao retomar.
 - **Custo de ficar vivo:** vigias contam no orçamento de memória do serviço e não fazem consulta de rede mais frequente que o intervalo configurado.
 

@@ -24,7 +24,6 @@ const evento = {
   local: null,
   recorrencia: null,
   alertas: [10],
-  editavel: true,
   origem: "usuario",
   agenteId: null,
   execucaoId: null,
@@ -35,18 +34,9 @@ const evento = {
 describe("agenda", () => {
   test("o local tem o id da migração 014", () => {
     expect(CALENDARIO_LOCAL).toBe("local");
-    const local = {
-      id: "local",
-      nome: "Local",
-      fonte: "local",
-      cor: null,
-      espelho: false,
-      podeEscrever: true,
-      ler: true,
-      sincronizadoEm: null,
-    };
+    const local = { id: "local", nome: "Local", cor: null };
     expect(Calendario.parse(local)).toEqual(local);
-    expect(Calendario.safeParse({ ...local, fonte: "icloud" }).success).toBe(false);
+    expect(Calendario.safeParse({ ...local, nome: " " }).success).toBe(false);
   });
 
   test("evento com hora vai em instantes; o de dia inteiro, em dias, com o fim no dia seguinte", () => {
@@ -103,7 +93,6 @@ describe("agenda", () => {
           diaInteiro: false,
           local: null,
           recorrente: false,
-          editavel: true,
         },
       ],
       dias: [
@@ -163,18 +152,17 @@ describe("agenda", () => {
     expect(EventoAgenda.safeParse({ ...evento, inicio: semMs }).success).toBe(true);
   });
 
-  test("evento lido sem título passa na saída; criar e mudar exigem texto", () => {
+  test("na saída o título não é conferido; criar e mudar exigem texto", () => {
     expect(EventoAgenda.safeParse({ ...evento, titulo: "" }).success).toBe(true);
     const ocorrencia = {
       eventoId: evento.id,
-      calendarioId: "google-primario",
+      calendarioId: "local",
       titulo: "",
       inicio: evento.inicio,
       fim: evento.fim,
       diaInteiro: false,
       local: null,
       recorrente: false,
-      editavel: false,
     };
     expect(Ocorrencia.safeParse(ocorrencia).success).toBe(true);
     const { inicio, fim } = evento;

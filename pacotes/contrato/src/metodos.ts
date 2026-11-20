@@ -119,13 +119,11 @@ import {
   EventoSessao,
   ListaSessoes,
   MudancaSessao,
-  PedidoClienteGoogle,
   PedidoConexao,
   PedidoEventosSessao,
   PedidoUso,
   PreviaConexao,
   SituacaoGithub,
-  SituacaoGoogle,
   UsoIa,
 } from "./sessoes.ts";
 import {
@@ -211,15 +209,6 @@ export const METODOS = {
   "conexoes.ligar": metodo(PedidoConexao, Conexao),
   "conexoes.desligar": metodo(PedidoConexao, Conexao),
 
-  // O cartão do Google Agenda (F3-44): conectar e desconectar são os de `conexoes`.
-  "google.obter": metodo(z.undefined(), SituacaoGoogle),
-  /** "Ler agora": lê o Calendar já e devolve como ficou; a falha vem na `Conexao`. */
-  "google.atualizar": metodo(z.undefined(), SituacaoGoogle),
-  /** "Cancelar" na espera do navegador: fecha só o receptor; a conexão fica como estava antes. */
-  "google.cancelar": metodo(z.undefined(), Conexao),
-  /** Recusado com a conexão feita: o refresh token é do cliente que o gerou. */
-  "google.definirCliente": metodo(PedidoClienteGoogle, SituacaoGoogle),
-
   "notificacoes.obter": metodo(z.undefined(), EstadoNotificacoes),
   "notificacoes.definir": metodo(MudancaPreferencia, EstadoNotificacoes),
   "notificacoes.restaurar": metodo(PedidoRestaurarPreferencia, EstadoNotificacoes),
@@ -261,10 +250,9 @@ export const METODOS = {
 
   "agenda.calendarios": metodo(z.undefined(), z.array(Calendario)),
   "agenda.definirCalendario": metodo(MudancaCalendario, Calendario),
-  /** Os dias pedidos: as ocorrências de todos os calendários lidos e os blocos livres. */
+  /** Os dias pedidos: as ocorrências e os blocos livres. */
   "agenda.consultar": metodo(PedidoAgenda, Agenda),
   "agenda.obterEvento": metodo(PedidoEvento, EventoAgenda),
-  /** Só no local e no "Moductus"; nos outros, quem escreve é a Alba, com cartão. */
   "agenda.criarEvento": metodo(NovoEvento, EventoAgenda),
   "agenda.definirEvento": metodo(MudancaEvento, EventoAgenda),
   "agenda.apagarEvento": metodo(PedidoEvento, Apagados),
@@ -330,7 +318,6 @@ export const EVENTOS = {
   "sessoes.mudou": MudancaSessao,
   "github.mudou": SituacaoGithub,
   "conexoes.mudou": Conexao,
-  "google.mudou": SituacaoGoogle,
   "notificacoes.mudou": EstadoNotificacoes,
   "notificacoes.nova": Notificacao,
   /** O que ainda não foi visto e pede o ponto no dock, a cada mudança. */

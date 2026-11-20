@@ -5,6 +5,8 @@ import { MIGRACOES } from "./index.ts";
 
 // Pela posição do nome, para o teste não mudar se a migração for renumerada.
 const posicao = MIGRACOES.findIndex((m) => m.nome === "agenda-espelho");
+/** As migrações até esta: a tabela sai depois, na agenda-local. */
+const ATE_ESTA = MIGRACOES.slice(0, posicao + 1);
 
 const inserir = (db: DatabaseSync, id: string, campos: Record<string, string | number | null> = {}) => {
   const linha = { item_tipo: "tarefa", item_id: `t-${id}`, id_externo: `md${id}000`, ...campos };
@@ -18,14 +20,14 @@ describe("migração agenda-espelho", () => {
   test("sobe a partir da anterior, com a tabela vazia", () => {
     const db = new DatabaseSync(":memory:");
     migrar(db, MIGRACOES.slice(0, posicao));
-    expect(migrar(db, MIGRACOES)).toEqual({ de: posicao, para: MIGRACOES.length });
-    expect(versaoAtual(db)).toBe(MIGRACOES.length);
+    expect(migrar(db, ATE_ESTA)).toEqual({ de: posicao, para: posicao + 1 });
+    expect(versaoAtual(db)).toBe(posicao + 1);
     expect(db.prepare("SELECT count(*) AS n FROM agenda_espelho").get()).toEqual({ n: 0 });
   });
 
   test("um evento por item, um item por evento; o que foi enviado é objeto JSON", () => {
     const db = new DatabaseSync(":memory:");
-    migrar(db, MIGRACOES);
+    migrar(db, ATE_ESTA);
     inserir(db, "a1", { enviado: '{"titulo":"Dentista"}', etag_externo: '"e1"' });
     expect(
       db.prepare("SELECT desligado, recusado, enviado FROM agenda_espelho WHERE id = 'a1'").get(),

@@ -3,20 +3,10 @@ import { useId, useState } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { Caixa } from "../../componentes/Caixa.tsx";
 import { Seletor } from "../../componentes/Seletor.tsx";
-import { Selo } from "../../componentes/Selo.tsx";
 import { Icone } from "../../componentes/Icone.tsx";
 import { useAcoesSistema } from "../../janelas/sistema/primeiro-uso/estado.ts";
 import { servico } from "../../servico/conexao.ts";
-import { formatarAntes } from "../dia.ts";
-import {
-  espelhoLigado,
-  horaAntes,
-  opcoesDuracao,
-  opcoesLembrete,
-  opcoesRepeticao,
-  valorDaRepeticao,
-  type Calendarios,
-} from "./detalhe.ts";
+import { opcoesDuracao, opcoesLembrete, opcoesRepeticao, valorDaRepeticao } from "./detalhe.ts";
 import {
   AreaDeTexto,
   ChipQueSai,
@@ -42,8 +32,6 @@ interface PropsDetalheTarefa {
   listas: readonly Lista[];
   fuso: string;
   agora: Date;
-  /** Os calendários e o Google, para a linha do "Moductus"; `null` até chegarem. */
-  calendarios: Calendarios | null;
   /** A tarefa que voltou de um pedido: o detalhe fica com ela mesmo que saia da vista. */
   aoReceber: (tarefa: Tarefa) => void;
   aoAbrir: (id: string) => void;
@@ -53,8 +41,7 @@ interface PropsDetalheTarefa {
 /**
  * O detalhe da tarefa (DetalheTarefa.dc.html): título, notas, prioridade, lista, dia, hora,
  * duração, repetição, lembrete, subtarefas e etiquetas, cada um gravado sozinho ao mudar. Mudar a
- * hora leva o lembrete junto e, com o Google, o evento do "Moductus": quem faz isso é o serviço
- * (`tarefas.definir`), que avisa o espelho.
+ * hora leva o lembrete junto: quem faz isso é o serviço (`tarefas.definir`).
  */
 export function DetalheTarefa({
   tarefa,
@@ -62,7 +49,6 @@ export function DetalheTarefa({
   listas,
   fuso,
   agora,
-  calendarios,
   aoReceber,
   aoAbrir,
   aoFechar,
@@ -80,7 +66,6 @@ export function DetalheTarefa({
   const opcoesLista = listas
     .filter((l) => !l.arquivada || l.id === tarefa.listaId)
     .map((l) => ({ valor: l.id, rotulo: l.nome }));
-  const espelho = calendarios && espelhoLigado(calendarios.calendarios, calendarios.google);
 
   return (
     <PainelDetalhe
@@ -188,21 +173,6 @@ export function DetalheTarefa({
           aoMudar={(m) => definir({ lembreteMinutosAntes: m === "" ? null : Number(m) })}
         />
       </div>
-      {tarefa.hora !== null && espelho && calendarios?.google && (
-        <div className="tarefas-detalhe-faixa">
-          <Icone nome="calendario" tamanho={14} />
-          <span className="tarefas-detalhe-faixa-texto">{textoDoMoductus(tarefa)}</span>
-          {calendarios.google.estado === "erro" ? (
-            <Selo tom="aviso" forma="ponto">
-              Google com erro
-            </Selo>
-          ) : (
-            <Selo tom="sucesso" forma="ponto">
-              vai ao Google
-            </Selo>
-          )}
-        </div>
-      )}
       {!ehSubtarefa && (
         <Subtarefas mae={tarefa} subtarefas={subtarefas} aoAbrir={aoAbrir} gravar={gravacao.gravar} />
       )}
@@ -223,16 +193,6 @@ export function DetalheTarefa({
       />
     </PainelDetalhe>
   );
-}
-
-/** "Com hora, vira evento no calendário “Moductus”: o celular avisa às 09:45." */
-function textoDoMoductus(t: Tarefa): string {
-  const base = "Com hora, vira evento no calendário “Moductus”";
-  if (t.hora === null || t.lembreteMinutosAntes === null) return `${base}.`;
-  const toca = horaAntes(t.hora, t.lembreteMinutosAntes);
-  return toca === null
-    ? `${base}: o celular avisa ${formatarAntes(t.lembreteMinutosAntes)}.`
-    : `${base}: o celular avisa às ${toca}.`;
 }
 
 /** As subtarefas: marcar, abrir e acrescentar, com o "1 de 3" no alto. */

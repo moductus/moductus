@@ -646,8 +646,8 @@ mod testes {
             Ok("https://github.com/moductus/moductus/pull/12")
         );
         assert_eq!(
-            validar_endereco("HTTPS://accounts.google.com/o/oauth2/v2/auth?client_id=a&state=b%20c#x").as_deref(),
-            Ok("https://accounts.google.com/o/oauth2/v2/auth?client_id=a&state=b%20c#x")
+            validar_endereco("HTTPS://example.com/caminho?a=1&b=c%20d#x").as_deref(),
+            Ok("https://example.com/caminho?a=1&b=c%20d#x")
         );
         assert_eq!(validar_endereco("https://localhost:8443/").as_deref(), Ok("https://localhost:8443/"));
     }

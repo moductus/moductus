@@ -2,7 +2,6 @@
 import type {
   Agenda,
   Calendario,
-  Conexao,
   DiaDaAgenda,
   Lembrete,
   Lista,
@@ -70,27 +69,9 @@ interface Mundo {
   pendentes?: number;
   agenda?: Agenda;
   calendarios?: Calendario[];
-  google?: Conexao | null;
 }
 
-const conexaoGoogle = (estado: Conexao["estado"]): Conexao => ({
-  tipo: "google-agenda",
-  estado,
-  conta: estado === "desligada" ? null : "voce@exemplo.com",
-  ultimoErro: null,
-  conectadaEm: estado === "desligada" ? null : "2026-10-01T12:00:00.000Z",
-});
-
-const CALENDARIO_LOCAL: Calendario = {
-  id: "local",
-  nome: "Local",
-  fonte: "local",
-  cor: null,
-  espelho: false,
-  podeEscrever: true,
-  ler: true,
-  sincronizadoEm: null,
-};
+const CALENDARIO_LOCAL: Calendario = { id: "local", nome: "Local", cor: null };
 
 const diaDaAgenda = (extra: Partial<DiaDaAgenda> = {}): DiaDaAgenda => ({
   dia: "2026-10-08",
@@ -111,7 +92,6 @@ function responder({
   pendentes = 0,
   agenda = { ocorrencias: [], dias: [diaDaAgenda()] },
   calendarios = [CALENDARIO_LOCAL],
-  google = conexaoGoogle("desligada"),
 }: Mundo) {
   const todas = abertas ?? [...atrasadas, ...hoje.filter((t) => t.estado === "aberta"), ...proximas];
   falso.servidor = {
@@ -144,7 +124,6 @@ function responder({
     "lembretes.concluir": { lembretes: [], removidos: [] },
     "agenda.consultar": agenda,
     "agenda.calendarios": calendarios,
-    "conexoes.listar": google ? [google] : [],
   };
 }
 
@@ -717,16 +696,8 @@ describe("Tarefas · a coluna Agenda", () => {
     diaInteiro: false,
     local: null,
     recorrente: false,
-    editavel: true,
     ...extra,
   });
-  const ESPELHO: Calendario = {
-    ...CALENDARIO_LOCAL,
-    id: "m",
-    nome: "Moductus",
-    fonte: "google",
-    espelho: true,
-  };
   const comprovantes = tarefa({ id: "c1", titulo: "Separar comprovantes" });
   const planilha = tarefa({ id: "c2", titulo: "Revisar a planilha" });
   const sugestao = { tarefaId: "c1", inicio: as("15:00"), fim: as("16:00") };
@@ -754,13 +725,12 @@ describe("Tarefas · a coluna Agenda", () => {
   const fala = () => por(".tarefas-agenda-sugestao .fala-texto")?.textContent;
   const horas = () => todos(".tarefas-agenda-hora-rotulo").map((h) => h.textContent);
 
-  it("com o Google, mostra o local, o Moductus e os lidos, na régua do expediente, com a linha de agora", async () => {
+  it("mostra os compromissos na régua do expediente, com a linha de agora", async () => {
     responder({
       agenda: {
         ocorrencias: [
           ocorrencia({
             eventoId: "p",
-            calendarioId: "g1",
             titulo: "Planejamento",
             inicio: as("11:00"),
             fim: as("12:00"),
@@ -769,16 +739,10 @@ describe("Tarefas · a coluna Agenda", () => {
         ],
         dias: [diaDaAgenda()],
       },
-      calendarios: [
-        CALENDARIO_LOCAL,
-        ESPELHO,
-        { ...CALENDARIO_LOCAL, id: "g1", nome: "Trabalho", fonte: "google", podeEscrever: false },
-      ],
-      google: conexaoGoogle("ligada"),
     });
     await montar();
     expect(pedidosDe("agenda.consultar")).toEqual([{ de: HOJE, ate: HOJE }]);
-    expect(por(".tarefas-agenda-cabeca")?.textContent).toBe("AgendaGoogle · Moductus");
+    expect(por(".tarefas-agenda-cabeca")?.textContent).toBe("Agenda");
     expect(blocos()).toEqual([
       ["evento", "Daily", "9:30–10h"],
       ["evento", "Planejamento", "11h–12h"],
@@ -790,33 +754,7 @@ describe("Tarefas · a coluna Agenda", () => {
     // Abaixo de uma hora, nome e hora numa linha.
     expect(por(".tarefas-agenda-bloco")?.hasAttribute("data-curto")).toBe(true);
     expect(todos(".tarefas-agenda-bloco")[1]?.hasAttribute("data-curto")).toBe(false);
-    expect(por(".tarefas-agenda-convite")).toBeNull();
     expect(auditar(recipiente)).toEqual([]);
-  });
-
-  it("com a conexão desligada e o Moductus ainda no banco, só o local e o convite para conectar", async () => {
-    responder({
-      agenda: {
-        ocorrencias: [
-          ocorrencia({}),
-          ocorrencia({ eventoId: "m1", calendarioId: "m", titulo: "Do espelho" }),
-        ],
-        dias: [diaDaAgenda()],
-      },
-      calendarios: [CALENDARIO_LOCAL, ESPELHO],
-      google: conexaoGoogle("desligada"),
-    });
-    await montar();
-    expect(por(".tarefas-agenda-cabeca")?.textContent).toBe("AgendaLocal");
-    expect(blocos()).toEqual([["evento", "Daily", "9:30–10h"]]);
-    expect(por(".tarefas-agenda-convite")?.textContent).toContain("Conecte o Google Agenda");
-    await act(async () => botao("Abrir Conexões")!.click());
-    expect(ir).toHaveBeenCalledWith({ area: "configuracoes", secao: "conexoes" });
-    // Conectar em Conexões chega pelo conexoes.mudou: o convite sai e o espelho entra.
-    await avisar("conexoes.mudou", conexaoGoogle("ligada"));
-    expect(por(".tarefas-agenda-cabeca")?.textContent).toBe("AgendaGoogle · Moductus");
-    expect(blocos()).toHaveLength(2);
-    expect(por(".tarefas-agenda-convite")).toBeNull();
   });
 
   it("a sugestão fica tracejada e só vira compromisso com o clique, que espera a resposta e dá para desfazer", async () => {

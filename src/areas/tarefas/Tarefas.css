@@ -491,20 +491,6 @@
   content: "";
 }
 
-.tarefas-agenda-convite {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--esp-8);
-  font-size: var(--tipo-12);
-  color: var(--texto-3);
-}
-
-.tarefas-agenda-convite p {
-  margin: 0;
-  text-wrap: pretty;
-}
-
 /* A fala da Alba na coluna: o texto em 12, como no quadro. */
 .tarefas-agenda-sugestao .fala-texto {
   font-size: var(--tipo-12);

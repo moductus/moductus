@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { Calendario, Conexao, EventoAgenda, Lista, Ocorrencia, Tarefa } from "@moductus/contrato";
+import type { Calendario, EventoAgenda, Lista, Ocorrencia, Tarefa } from "@moductus/contrato";
 import { RecusaDoServico } from "@moductus/contrato/cliente";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -51,26 +51,8 @@ const LISTAS: Lista[] = [
   { id: "trabalho", nome: "Trabalho", ordem: 1, cor: null, arquivada: false },
 ];
 
-const LOCAL: Calendario = {
-  id: "local",
-  nome: "Local",
-  fonte: "local",
-  cor: null,
-  espelho: false,
-  podeEscrever: true,
-  ler: true,
-  sincronizadoEm: null,
-};
-const ESPELHO: Calendario = { ...LOCAL, id: "m", nome: "Moductus", fonte: "google", espelho: true };
-const TRABALHO: Calendario = { ...LOCAL, id: "g1", nome: "Trabalho", fonte: "google", podeEscrever: false };
-
-const GOOGLE: Conexao = {
-  tipo: "google-agenda",
-  estado: "ligada",
-  conta: "voce@exemplo.com",
-  ultimoErro: null,
-  conectadaEm: "2026-10-01T12:00:00.000Z",
-};
+const LOCAL: Calendario = { id: "local", nome: "Local", cor: null };
+const CASA: Calendario = { id: "casa", nome: "Casa", cor: null };
 
 const revisar = tarefa({
   id: "t1",
@@ -98,7 +80,7 @@ const conferir = tarefa({ id: "s2", titulo: "Conferir os totais", tarefaPaiId: "
 
 const evento = (extra: Partial<EventoAgenda> = {}): EventoAgenda => ({
   id: "ev1",
-  calendarioId: "m",
+  calendarioId: "casa",
   titulo: "Consulta no dentista",
   descricao: "Levar os exames de setembro.",
   inicio: as("14:00"),
@@ -107,7 +89,6 @@ const evento = (extra: Partial<EventoAgenda> = {}): EventoAgenda => ({
   local: "Rua das Acácias, 120",
   recorrencia: null,
   alertas: [30, 1440],
-  editavel: true,
   origem: "usuario",
   agenteId: null,
   execucaoId: null,
@@ -124,17 +105,20 @@ const ocorrenciaDe = (e: EventoAgenda): Ocorrencia => ({
   diaInteiro: e.diaInteiro,
   local: e.local,
   recorrente: e.recorrencia !== null,
-  editavel: e.editavel,
 });
 
 interface Mundo {
   hoje?: Tarefa[];
   eventos?: EventoAgenda[];
-  google?: Conexao | null;
+  calendarios?: Calendario[];
 }
 
 /** As respostas do serviço; o que muda volta como o serviço devolveria. */
-function responder({ hoje = [revisar, ler, conferir], eventos = [], google = GOOGLE }: Mundo = {}) {
+function responder({
+  hoje = [revisar, ler, conferir],
+  eventos = [],
+  calendarios = [LOCAL, CASA],
+}: Mundo = {}) {
   const porId = new Map(hoje.map((t) => [t.id, t]));
   const mudar = (id: string, { etiquetas, ...campos }: { etiquetas?: string[] }) => {
     const nova = {
@@ -171,8 +155,7 @@ function responder({ hoje = [revisar, ler, conferir], eventos = [], google = GOO
       ocorrencias: eventos.map(ocorrenciaDe),
       dias: [{ dia: HOJE, livres: [], livreMin: 0, planejadoMin: 0, cheio: false, sugestoes: [] }],
     },
-    "agenda.calendarios": [LOCAL, ESPELHO, TRABALHO],
-    "conexoes.listar": google ? [google] : [],
+    "agenda.calendarios": calendarios,
     "agenda.obterEvento": ({ id }: { id: string }) => {
       const e = eventosPorId.get(id);
       if (!e) throw new RecusaDoServico("evento não encontrado");
@@ -234,7 +217,8 @@ const botao = (texto: string) => todos("button").find((b) => b.textContent === t
 const pedidosDe = (metodo: string) => falso.pedidos.filter((p) => p.metodo === metodo).map((p) => p.dados);
 /** O campo pelo rótulo, dentro do detalhe. */
 function campo<T extends HTMLElement = HTMLInputElement>(rotulo: string): T {
-  const label = [...detalhe()!.querySelectorAll("label")].find((l) => l.textContent === rotulo);
+  // O rótulo ligado por `for`: o rádio do calendário "Local" leva o mesmo texto do campo Local.
+  const label = [...detalhe()!.querySelectorAll("label")].find((l) => l.htmlFor && l.textContent === rotulo);
   if (!label) throw new Error(`sem o campo ${rotulo}`);
   return document.getElementById(label.htmlFor) as unknown as T;
 }
@@ -294,9 +278,6 @@ describe("o detalhe da tarefa", () => {
     expect(campo<HTMLSelectElement>("Duração").selectedOptions[0]?.textContent).toBe("50 min");
     expect(campo<HTMLSelectElement>("Repetir").selectedOptions[0]?.textContent).toBe("Não repete");
     expect(campo<HTMLSelectElement>("Lembrete").selectedOptions[0]?.textContent).toBe("15 min antes · 09:45");
-    expect(por(".tarefas-detalhe-faixa")?.textContent).toBe(
-      "Com hora, vira evento no calendário “Moductus”: o celular avisa às 09:45.vai ao Google",
-    );
     expect(por(".tarefas-detalhe-subtarefas-cabeca")?.textContent).toBe("Subtarefas1 de 2");
     expect(todos(".tarefas-detalhe-subtarefa-titulo").map((s) => s.textContent)).toEqual([
       "Ler a descrição",
@@ -319,16 +300,13 @@ describe("o detalhe da tarefa", () => {
     await tecla(titulo, "Enter");
     expect(pedidosDe("tarefas.definir")).toEqual([{ id: "t1", titulo: "Revisar o PR" }]);
 
-    // Mudar a hora: só a hora vai; o lembrete e o Google ficam com o serviço.
+    // Mudar a hora: só a hora vai; o lembrete fica com o serviço.
     await escreverESair(campo("Hora"), "11:30");
     expect(pedidosDe("tarefas.definir").at(-1)).toEqual({ id: "t1", hora: "11:30" });
     expect(campo<HTMLSelectElement>("Lembrete").selectedOptions[0]?.textContent).toBe("15 min antes · 11:15");
 
     await escolher(campo<HTMLSelectElement>("Lembrete"), "1440");
     expect(pedidosDe("tarefas.definir").at(-1)).toEqual({ id: "t1", lembreteMinutosAntes: 1440 });
-    expect(por(".tarefas-detalhe-faixa-texto")?.textContent).toBe(
-      "Com hora, vira evento no calendário “Moductus”: o celular avisa 1 dia antes.",
-    );
 
     await act(async () =>
       todos('[role="radio"]')
@@ -451,11 +429,10 @@ describe("o detalhe da tarefa", () => {
     expect(detalhe()).toBeNull();
   });
 
-  it("a tarefa que vai para a Lixeira por outro caminho fecha o detalhe; sem Google, sem a faixa", async () => {
-    responder({ google: null });
+  it("a tarefa que vai para a Lixeira por outro caminho fecha o detalhe", async () => {
+    responder();
     await montar();
     await abrirTarefa("t1");
-    expect(por(".tarefas-detalhe-faixa")).toBeNull();
     await avisar("tarefas.mudou", { tarefas: [], apagadas: ["t1"] });
     expect(detalhe()).toBeNull();
   });
@@ -465,7 +442,7 @@ describe("o detalhe do evento", () => {
   const abrirEvento = (nome: string) =>
     act(async () => por(`.tarefas-agenda-bloco-abrir[aria-label^="${nome}"]`)!.click());
 
-  it("o do Moductus abre para editar, com calendário, quando, alertas e a linha do Google", async () => {
+  it("abre para editar, com calendário, quando e alertas", async () => {
     responder({ eventos: [evento()] });
     await montar();
     await abrirEvento("Consulta no dentista");
@@ -479,21 +456,16 @@ describe("o detalhe do evento", () => {
       todos(".tarefas-detalhe-calendario").map((c) => [
         c.querySelector(".tarefas-detalhe-calendario-nome")?.textContent,
         c.querySelector("input")!.checked,
-        c.querySelector("input")!.disabled,
       ]),
     ).toEqual([
-      ["Local", false, false],
-      ["Moductus", true, false],
-      ["Trabalho", false, true],
+      ["Local", false],
+      ["Casa", true],
     ]);
     expect(campo("Data de início").value).toBe(HOJE);
     expect(campo("Hora de início").value).toBe("14:00");
     expect(campo("Hora do fim").value).toBe("15:00");
     expect(todos(".tarefas-detalhe-chip").map((c) => c.textContent)).toEqual(["1 dia antes", "30 min antes"]);
-    expect(por(".tarefas-detalhe-google")?.textContent).toBe(
-      "vai ao Google· o celular avisa 1 dia e 30 min antes",
-    );
-    expect(por(".tarefas-detalhe-rodape")?.textContent).toContain("sai também do Google");
+    expect(por(".tarefas-detalhe-rodape")?.textContent).toContain("fica 30 dias na Lixeira");
     expect(auditar(recipiente)).toEqual([]);
   });
 
@@ -517,7 +489,6 @@ describe("o detalhe do evento", () => {
       local.click();
     });
     expect(pedidosDe("agenda.definirEvento").at(-1)).toEqual({ id: "ev1", calendarioId: "local" });
-    expect(por(".tarefas-detalhe-google")?.textContent).toBe("Fica só neste PC, sem aviso no celular.");
 
     await act(async () => por('[aria-label="Tirar o alerta 30 min antes"]')!.click());
     expect(pedidosDe("agenda.definirEvento").at(-1)).toEqual({ id: "ev1", alertas: [1440] });
@@ -532,58 +503,6 @@ describe("o detalhe do evento", () => {
       inicio: HOJE,
       fim: "2026-10-09",
     });
-  });
-
-  it("o de outro calendário abre só leitura, e o pedido vai para a conversa com a Alba", async () => {
-    const planejamento = evento({
-      id: "p",
-      calendarioId: "g1",
-      titulo: "Planejamento",
-      inicio: as("11:00"),
-      fim: as("12:00"),
-      editavel: false,
-      alertas: [10],
-      local: "Sala 3",
-      descricao: null,
-      recorrencia: "FREQ=WEEKLY;BYDAY=TH",
-      origem: "conexao",
-    });
-    responder({ eventos: [planejamento] });
-    await montar();
-    await abrirEvento("Planejamento");
-
-    expect(detalhe()?.getAttribute("aria-label")).toBe("Detalhe do evento, só leitura");
-    expect(detalhe()?.querySelector("input:not([type=radio]), select, textarea")).toBeNull();
-    expect(por(".tarefas-detalhe-rotulo")?.textContent).toBe("Evento · Trabalhosó leitura");
-    expect(todos(".tarefas-detalhe-campo-leitura").map((c) => c.textContent)).toEqual([
-      "CalendárioTrabalho · Google",
-      "Quandoquinta, 8 de outubro, 11:00–12:00",
-      "RepetirToda qui",
-      "Alertas10 min antes, do Google",
-      "LocalSala 3",
-    ]);
-    expect(auditar(recipiente)).toEqual([]);
-
-    await act(async () => botao("Pedir à Alba para mudar")!.click());
-    const pedido = campo("O que mudar?");
-    await act(async () => {
-      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-      set.call(pedido, "passar para as 14h, só esta semana");
-      pedido.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await tecla(pedido, "Enter");
-    expect(pedidosDe("conversas.abrir")).toEqual([{ agenteId: "alba" }]);
-    expect(pedidosDe("conversas.enviar")).toEqual([
-      {
-        conversaId: "c-alba",
-        conteudo:
-          "Quero mudar o evento “Planejamento” (Trabalho · Google, quinta, 8 de outubro, 11:00–12:00): passar para as 14h, só esta semana",
-      },
-    ]);
-    expect(pedidosDe("agenda.definirEvento")).toEqual([]);
-    expect(por(".tarefas-detalhe-enviado")?.textContent).toContain("pede a sua aprovação");
-    await act(async () => botao("Abrir a conversa")!.click());
-    expect(ir).toHaveBeenCalledWith({ area: "agentes", secao: "alba" });
   });
 
   it("o evento apagado por outro caminho diz que saiu", async () => {
@@ -635,23 +554,11 @@ describe("o detalhe do evento", () => {
     expect(campo<HTMLTextAreaElement>("Descrição").value).toBe("Levar os exames de setembro.");
   });
 
-  it("sem a lista de conexões, a escolha de calendário aparece como sem Google", async () => {
-    responder({ eventos: [evento()] });
-    // Só o primeiro pedido falha: o do detalhe, que nasce com a área, antes da coluna Agenda.
-    let pedidos = 0;
-    falso.servidor["conexoes.listar"] = () => {
-      if (pedidos++ === 0) throw new Error("o serviço caiu");
-      return [GOOGLE];
-    };
+  it("com um calendário só, não há o que escolher", async () => {
+    responder({ eventos: [evento({ calendarioId: "local" })], calendarios: [LOCAL] });
     await montar();
     await abrirEvento("Consulta no dentista");
-    expect(todos(".tarefas-detalhe-calendario-nome").map((c) => c.textContent)).toEqual([
-      "Local",
-      "Moductus",
-      "Trabalho",
-    ]);
-    expect(por(".tarefas-detalhe-google")?.textContent).toBe(
-      "Google desconectado· o celular avisa 1 dia e 30 min antes",
-    );
+    expect(campo("Título").value).toBe("Consulta no dentista");
+    expect(por(".tarefas-detalhe-calendarios")).toBeNull();
   });
 });

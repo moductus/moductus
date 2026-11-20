@@ -26,7 +26,7 @@
 
 ## 2. Dia: agenda, tarefas, lembretes e foco (Alba)
 
-Migrações `013-tarefas` a `025-rotinas-curta` (fase 3); os nomes de coluna valem como estão nelas. Listas, tarefas, etiquetas, lembretes, calendários, eventos, rotinas e notas têm lixeira; foco, a fila de saída, o espelho no Google, o registro das rotinas e as marcas dos vigias são histórico ou controle deste PC e não têm. Instante (`quando`, `inicio` de evento com hora, `termina_em`) é UTC no formato da seção 1; dia é `AAAA-MM-DD` e hora do dia é `HH:MM`, sempre no fuso de `config` (`dia.fuso`). Recorrência é uma RRULE do iCalendar, no subconjunto que o Moductus expande (diário, semanal, mensal e anual; `INTERVAL`, `BYDAY`, `BYMONTHDAY`, `COUNT`, `UNTIL`; ADR-0034). Regra fora dele, vinda do Google, fica como texto e aparece como "repete (definido no Google)".
+Migrações `013-tarefas` a `025-rotinas-curta` (fase 3); os nomes de coluna valem como estão nelas. Listas, tarefas, etiquetas, lembretes, calendários, eventos, rotinas e notas têm lixeira; foco, o registro das rotinas e as marcas dos vigias são histórico ou controle deste PC e não têm. Instante (`quando`, `inicio` de evento com hora, `termina_em`) é UTC no formato da seção 1; dia é `AAAA-MM-DD` e hora do dia é `HH:MM`, sempre no fuso de `config` (`dia.fuso`). Recorrência é uma RRULE do iCalendar, no subconjunto que o Moductus expande (diário, semanal, mensal e anual; `INTERVAL`, `BYDAY`, `BYMONTHDAY`, `COUNT`, `UNTIL`; ADR-0034).
 
 ### `listas`
 `id`, `nome`, `ordem`, `cor`, `arquivada`. Três vêm semeadas, com id fixo igual em todo PC: `entrada` (para onde vai a captura sem lista), `trabalho` e `pessoal`. O serviço não as apaga (o banco não tem gatilho para isso).
@@ -37,43 +37,27 @@ Migrações `013-tarefas` a `025-rotinas-curta` (fase 3); os nomes de coluna val
 - `fechada_em` (migração `018`) é o instante em que a tarefa foi concluída ou descartada. O lembrete dela vai à lixeira com o mesmo instante, e reabrir traz de volta o que tem a marca.
 - `gerada_por` (018) é a recorrente de onde esta nasceu: fechar uma recorrente gera a próxima uma vez só, e reabrir leva a que ninguém tocou.
 - "Atrasada" não é coluna: é aberta com `vence_em` antes de hoje.
-- Tarefa aberta com dia e hora vira evento no calendário "Moductus" (ver `agenda_espelho`); tarefa sem hora fica só no Moductus.
 
 ### `etiquetas` e `tarefa_etiquetas`
 Etiquetas livres (`trabalho`, `casa`, `pr-123`). `etiquetas`: `id`, `nome`, `nome_chave`. A `nome_chave` é o nome normalizado (NFC, sem espaço nas pontas, minúsculas em pt-BR) e é única entre as vivas: `Ônibus` e `ônibus` são a mesma etiqueta. `tarefa_etiquetas` (sem lixeira e sem chave): `id`, `tarefa_id`, `etiqueta_id`, com o par único. A ligação fica enquanto uma das pontas está na lixeira e some, por gatilho, quando uma delas sai de vez.
 
 ### `lembretes`
 Lembrete é o que **dispara**; pode estar ligado a uma tarefa, a um evento ou a nada ("beber água às 15h").
-`id`, `texto`, `quando`, `recorrencia`, `inicio_recorrencia`, `tarefa_id`, `evento_id`, `estado` (`agendado`, `disparado`, `adiado`, `perdido`), `disparado_em`, `adiado_ate` (só com `adiado`), `canal` (`windows`, `dock`, `calendario`).
+`id`, `texto`, `quando`, `recorrencia`, `inicio_recorrencia`, `tarefa_id`, `evento_id`, `estado` (`agendado`, `disparado`, `adiado`, `perdido`), `disparado_em`, `adiado_ate` (só com `adiado`), `canal` (`windows`, `dock`).
 - `tarefa_id` é chave estrangeira: o lembrete da tarefa vai junto com ela.
 - Recorrente é uma linha só: o `quando` anda de ocorrência em ocorrência. `inicio_recorrencia` (migração `019`) é de onde a regra conta, como o `DTSTART`: dele vêm a hora local de toda ocorrência (o pulo do horário de verão vale só no dia do pulo) e o `COUNT`. Vazio vale o `quando`.
 - `perdido` é o que o relógio só conferiu mais de 2 minutos depois da hora (PC desligado ou suspenso, serviço parado): aparece como atrasado, num aviso só.
-- `canal`: `windows` (padrão) avisa no Windows e mostra no painel; `dock` só mostra no painel Hoje; `calendario` toca como alerta do evento no Google e só avisa no Windows se o evento ainda não chegou lá.
+- `canal`: `windows` (padrão) avisa no Windows e mostra no painel; `dock` só mostra no painel Hoje.
 
 ### `calendarios`
-Fontes de evento: o local, o "Moductus" criado no Google Agenda e os calendários que você escolheu ler.
-`id`, `nome`, `fonte` (`local`, `google`, `outlook`; no desenho era `origem`, nome que o carimbo já usa), `id_externo`, `cor`, `espelho`, `pode_escrever`, `ler`, `sincronizado_em`, `token_sincronizacao`. Tem lixeira.
-- O local nasce semeado: `id` `local`, nome "Local", `pode_escrever` 1. Só calendário de fora tem `id_externo`.
-- `espelho` marca o "Moductus" (no máximo um vivo por fonte), onde a Alba escreve sem pedir; ele sempre tem `pode_escrever`. Nos outros calendários do Google, `pode_escrever` vem do papel da conta na lista (dono ou editor); o resto é só leitura.
-- `ler` (padrão 1) diz se a Alba usa o calendário no briefing e no horário livre.
-- `token_sincronizacao` é o `nextSyncToken` da última leitura e `sincronizado_em`, a data dela (ADR-0035): situação deste PC. Calendário que some da conta, ou que é desconectado, vai à lixeira sem os eventos e sem o token.
+`id`, `nome`, `cor`. Tem lixeira.
+- Só há o local, semeado: `id` `local`, nome "Local". As colunas `fonte`, `id_externo`, `espelho`, `pode_escrever`, `ler`, `sincronizado_em` e `token_sincronizacao`, da migração `014`, ficam vazias.
 
 ### `eventos`
-`id`, `calendario_id` (chave, em NO ACTION), `titulo`, `descricao`, `inicio`, `fim`, `dia_inteiro`, `local`, `recorrencia`, `id_externo`, `etag_externo`, `alertas`, `excecoes`, `fuso`. Tem lixeira.
-- Evento com hora guarda `inicio` e `fim` como instantes UTC. O de dia inteiro guarda dias (`AAAA-MM-DD`), com o `fim` no dia seguinte ao último, como o iCalendar e o Google.
-- `alertas` é a lista JSON dos minutos antes de cada aviso. `excecoes` (migração `020`), a lista dos inícios que a regra não gera mais: a ocorrência que você cancelou ou mudou de lugar no Google. `fuso` (020) é o fuso em que a regra do recorrente anda (o `timeZone` do evento no Google); vazio é o fuso do usuário.
-- Evento vindo do Google fica em cache aqui, para o briefing e para achar horário livre; a fonte da verdade é o Google. O cache sai de vez (sem lixeira) e guarda de 7 dias atrás em diante; o recorrente fica. Evento recusado por você e os de `workingLocation` não entram.
-- `id_externo` é único dentro do calendário.
-- Um evento passa do calendário local para o "Moductus" e de volta pelo `calendarioId` de `agenda.definirEvento`, e só entre esses dois: a troca cria ou apaga o evento no Google pela fila e limpa o `id_externo`. Evento de outro calendário não muda de calendário nem de horário por aqui; a mudança é um pedido à Alba, com cartão de aprovação.
-
-### `agenda_saida`
-Toda escrita no Google passa por aqui (ADR-0035). Uma linha por item: a nova substitui a pendente, e sai quando o envio dá certo. Sem lixeira e sem chave, porque tarefa, lembrete e evento têm lixeira e apagar no Google é justamente o que fica na fila.
-`id`, `item_tipo` (`tarefa`, `lembrete`, `evento`), `item_id`, `operacao` (`criar`, `mudar`, `apagar`), `tentativas`, `proxima_tentativa_em`, `ultimo_erro`. Controle deste PC.
-
-### `agenda_espelho`
-O que já chegou ao calendário "Moductus" (migração `022`): a `agenda_saida` diz o que falta mandar, esta diz o que foi. Sem lixeira e sem chave. Controle deste PC.
-`id`, `item_tipo`, `item_id` (o par é único), `id_externo` (o id do evento no Google, escolhido aqui antes do primeiro envio: repetir o envio depois de uma resposta perdida dá 409, nunca dois eventos), `etag_externo` (vazio é o evento que ainda não chegou), `enviado` (JSON do que foi mandado por último: título, horário, alertas, regra, para saber se o item mudou desde então e para não tomar o eco da própria escrita por mudança sua), `desligado` (você apagou o evento no Google: o espelho daquele item para e a tarefa fica) e `recusado` (o Google recusou o `enviado` de vez: não vai de novo até o item mudar).
-O evento leva `extendedProperties.private.moductus_id`, e é por ele que um PC novo acha, no Google, o que outro PC pôs lá. O evento da agenda criado diretamente no "Moductus" é evento do calendário `espelho`, e ele não viaja para outro PC (seção 8).
+`id`, `calendario_id` (chave, em NO ACTION), `titulo`, `descricao`, `inicio`, `fim`, `dia_inteiro`, `local`, `recorrencia`, `alertas`. Tem lixeira.
+- Evento com hora guarda `inicio` e `fim` como instantes UTC. O de dia inteiro guarda dias (`AAAA-MM-DD`), com o `fim` no dia seguinte ao último, como o iCalendar.
+- `alertas` é a lista JSON dos minutos antes de cada aviso, que o Moductus dá no Windows.
+- Todo evento é editável por aqui, por você ou pela Alba. As colunas `id_externo` e `etag_externo`, da `014`, ficam vazias.
 
 ### `sessoes_foco`
 Uma linha por etapa do ciclo. Histórico, sem lixeira.
@@ -251,11 +235,10 @@ Chave e valor (JSON). Tema, dock (lado, forma, modo), atalhos (sistema, dock, ca
 
 ### `conexoes`
 Tem lixeira. Migração `004-sessoes-dev`.
-`id`, `tipo` (hoje `github`, `hooks-claude-code` e `google-agenda`; `outlook` e `hooks-opencode` chegam com as áreas), `conta` (e-mail ou usuário), `escopos` (JSON lista), `credencial` (nome no Gerenciador de Credenciais), `estado`, `ultimo_erro`, `conectada_em`.
+`id`, `tipo` (hoje `github` e `hooks-claude-code`; `outlook` e `hooks-opencode` chegam com as áreas), `conta` (e-mail ou usuário), `escopos` (JSON lista), `credencial` (nome no Gerenciador de Credenciais), `estado`, `ultimo_erro`, `conectada_em`.
 `estado` é texto livre no banco; os valores que a interface entende são `ligada`, `desligada` e `erro` (contrato `EstadoLigacao`).
 `lida_em` (migração `006-conexoes-lida-em`): a última leitura que deu certo, mesmo sem item nenhum; é a idade do cache que a conexão alimenta (`github_itens`). Situação deste PC, como `estado`, `ultimo_erro` e `conectada_em`: não vai para outro PC.
 O detalhe da ligação do Claude Code que a tela de Conexões mostra (`Conexao.ligacao` no contrato: o arquivo, quantos eventos avisam o Moductus, em que porta e a cópia de segurança mais recente) **não é coluna**: o serviço o monta na hora, lendo o `settings.json` e o arquivo `ligacao-claude-code.json` da pasta de dados, e só existe com a conexão ligada.
-A conexão `google-agenda` (ADR-0031) guarda em `conta` o e-mail do calendário principal e em `escopos` os que o Google concedeu: os três de ao conectar e, depois do consentimento para escrever nos outros calendários, o quarto (`calendar.events`). No Gerenciador de Credenciais, `Moductus/google-agenda` é um JSON com o refresh token, os escopos e a conta; o token de acesso fica só na memória. O cliente próprio (client ID e secret do usuário) é outra credencial, `Moductus/google-agenda-cliente`, e só se troca com a conexão desligada.
 
 ### `notificacoes_preferencias`
 Configuração, sem lixeira: tirar a preferência é voltar ao padrão. Migração `005-notificacoes`. Uma por agente e tipo (índice único, com o vazio contando como valor). O padrão de fábrica não é gravado: sem linha, vale "só o que precisa de mim" no Windows e no dock, e o Nuno vale "tudo" (`preferenciaPadrao` no contrato).
@@ -279,13 +262,13 @@ Controle deste PC, sem lixeira. Migração `010-agendador-disparos`. Até onde o
 
 | Vai em "só configurações" | Vai só em "configurações e dados" | Nunca vai |
 |---|---|---|
-| `config`, `agentes`, `provedores` (sem credencial), `conexoes` (sem credencial e sem estado), `notificacoes_preferencias`, `regras_permissao` (as que ainda valem), `perfis_importacao`, `regras_categoria`, `categorias`, `listas`, `etiquetas`, `rotinas`, `calendarios`, `pastas_autorizadas` (como sugestão, reconfirmada no PC novo) | Todas as demais tabelas de dados, entre elas `execucoes`, `chamadas_ferramenta`, `aprovacoes`, `conversas`, `mensagens`, `projetos`, `sessoes_ia`, `eventos_sessao`, `uso_ia`, `github_itens`, `notificacoes`, `onboarding`, `tarefas`, `tarefa_etiquetas`, `lembretes`, `eventos`, `sessoes_foco` e `notas` | Credenciais, `transcript_caminho` e a posição da leitura dele (`transcript_lido_bytes`), `uso_ia_mensagens`, `agendador_disparos`, `agenda_saida`, `agenda_espelho`, `rotinas_registro`, `vigias_marcas`, caminhos absolutos que não existem no PC novo, `operacoes_arquivo`, o que está na lixeira |
+| `config`, `agentes`, `provedores` (sem credencial), `conexoes` (sem credencial e sem estado), `notificacoes_preferencias`, `regras_permissao` (as que ainda valem), `perfis_importacao`, `regras_categoria`, `categorias`, `listas`, `etiquetas`, `rotinas`, `calendarios`, `pastas_autorizadas` (como sugestão, reconfirmada no PC novo) | Todas as demais tabelas de dados, entre elas `execucoes`, `chamadas_ferramenta`, `aprovacoes`, `conversas`, `mensagens`, `projetos`, `sessoes_ia`, `eventos_sessao`, `uso_ia`, `github_itens`, `notificacoes`, `onboarding`, `tarefas`, `tarefa_etiquetas`, `lembretes`, `eventos`, `sessoes_foco` e `notas` | Credenciais, `transcript_caminho` e a posição da leitura dele (`transcript_lido_bytes`), `uso_ia_mensagens`, `agendador_disparos`, `rotinas_registro`, `vigias_marcas`, caminhos absolutos que não existem no PC novo, `operacoes_arquivo`, o que está na lixeira |
 
 A marcação de cada tabela mora em `servico/src/outro-pc/tabelas.ts`, e um teste reprova tabela nova sem marcação (na dúvida, é dado). O que "só configurações" tira, além das tabelas de dado:
 
 - **Credencial:** a coluna `credencial` (o nome no Gerenciador de Credenciais) não sai de nenhuma tabela; no PC novo a conexão e o provedor são refeitos.
-- **Situação deste PC:** `conexoes` vai sem `estado`, `ultimo_erro`, `conectada_em`, `lida_em` e `escopos`; chega desligada no PC novo, que pede os escopos dele ao conectar. `provedores` vai sem `caminho`: no PC novo, a detecção acha o CLI de lá. `calendarios` vai sem `sincronizado_em` e `token_sincronizacao`: o PC novo começa com o cache vazio e lê tudo de novo. `agentes` vai sem `teto_liberado_centavos` e `teto_liberado_ate`: o "Liberar" vale só para o gasto de hoje deste PC.
-- **Eventos:** só viajam os do calendário local. O evento de calendário de fora é cache deste PC, e a fonte da verdade é o Google, que o PC novo lê de novo; isso vale também para os eventos da agenda criados no calendário "Moductus", que não viajam para outro PC. A etapa de foco em andamento fica de fora; só a terminada é histórico.
+- **Situação deste PC:** `conexoes` vai sem `estado`, `ultimo_erro`, `conectada_em`, `lida_em` e `escopos`; chega desligada no PC novo, que pede os escopos dele ao conectar. `provedores` vai sem `caminho`: no PC novo, a detecção acha o CLI de lá. `agentes` vai sem `teto_liberado_centavos` e `teto_liberado_ate`: o "Liberar" vale só para o gasto de hoje deste PC.
+- **Foco:** a etapa em andamento fica de fora; só a terminada é histórico.
 - **Regras vencidas:** `regras_permissao` com `expira_em` no passado não saem. As de escopo `projeto` viajam, e a importação descarta as de projeto que não existe no PC novo.
 - **Lixeira:** linha com `apagado_em` não sai.
 

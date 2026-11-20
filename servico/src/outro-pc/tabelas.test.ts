@@ -164,53 +164,28 @@ describe("configuração × dado", () => {
     expect(tabelas.get("regras_permissao")?.map((r) => r.id)).toEqual(["r-no-prazo", "r-sem-prazo"]);
   });
 
-  test("o calendário do Google vai sem a leitura daqui; o evento dele, a fila de saída e o registro das rotinas não vão", () => {
+  test("o calendário e o evento vivo vão; o evento na lixeira e o registro das rotinas não vão", () => {
     const db = bancoNovo();
-    db.prepare(
-      `INSERT INTO calendarios (id, nome, fonte, id_externo, espelho, pode_escrever, sincronizado_em, token_sincronizacao)
-       VALUES ('g1', 'Moductus', 'google', 'abc@group.calendar.google.com', 1, 1, ?, 'token-daqui')`,
-    ).run(AGORA);
     const evento = db.prepare(
-      "INSERT INTO eventos (id, calendario_id, titulo, inicio, fim, id_externo, apagado_em) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO eventos (id, calendario_id, titulo, inicio, fim, apagado_em) VALUES (?, ?, ?, ?, ?, ?)",
     );
     const fim = "2026-10-09T13:00:00.000Z";
-    evento.run("ev-local", "local", "dentista", AGORA, fim, null, null);
-    evento.run("ev-local-apagado", "local", "velho", AGORA, fim, null, AGORA);
-    evento.run("ev-google", "g1", "reunião", AGORA, fim, "gev1", null);
+    evento.run("ev-local", "local", "dentista", AGORA, fim, null);
+    evento.run("ev-local-apagado", "local", "velho", AGORA, fim, AGORA);
     db.prepare(
       "INSERT INTO sessoes_foco (id, tipo, inicio, fim, duracao_planejada_min, duracao_real_min) VALUES ('f1', 'foco', ?, ?, 25, 25)",
     ).run(AGORA, fim);
     db.prepare(
-      "INSERT INTO agenda_saida (id, item_tipo, item_id, operacao) VALUES ('s1', 'evento', 'ev-local', 'criar')",
-    ).run();
-    db.prepare(
       "INSERT INTO rotinas_registro (id, rotina_id, dia, conteudo) VALUES ('rr1', 'briefing', '2026-10-09', '{}')",
     ).run();
 
-    const [google, local] = lerConfiguracoes(db, new Date(AGORA)).get("calendarios") ?? [];
-    expect(google).toEqual(
-      expect.objectContaining({
-        id: "g1",
-        fonte: "google",
-        id_externo: "abc@group.calendar.google.com",
-        ler: 1,
-      }),
-    );
-    expect(google).not.toHaveProperty("sincronizado_em");
-    expect(google).not.toHaveProperty("token_sincronizacao");
-    expect(local).toEqual(expect.objectContaining({ id: "local", fonte: "local" }));
-
+    const calendarios = lerConfiguracoes(db, new Date(AGORA)).get("calendarios") ?? [];
+    expect(calendarios).toEqual([expect.objectContaining({ id: "local", nome: "Local" })]);
     expect(linhasQueViajam(db, "eventos").map((e) => e.id)).toEqual(["ev-local"]);
     expect(linhasQueViajam(db, "sessoes_foco").map((s) => s.id)).toEqual(["f1"]);
-    expect(linhasQueViajam(db, "agenda_saida")).toEqual([]);
     expect(linhasQueViajam(db, "rotinas_registro")).toEqual([]);
     expect(EXPORTACAO).toEqual(
-      expect.objectContaining({
-        eventos: "dado",
-        sessoes_foco: "dado",
-        agenda_saida: "deste_pc",
-        rotinas_registro: "deste_pc",
-      }),
+      expect.objectContaining({ eventos: "dado", sessoes_foco: "dado", rotinas_registro: "deste_pc" }),
     );
   });
 

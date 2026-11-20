@@ -19,7 +19,7 @@ interface LinhaConexao {
   lida_em: string | null;
   /** Nome no Gerenciador de Credenciais; o valor nunca está no banco. */
   credencial: string | null;
-  /** JSON lista dos escopos concedidos (a do Google); `[]` nas que não têm. */
+  /** JSON lista dos escopos concedidos; `[]` nas que não têm. */
   escopos: string;
 }
 
@@ -107,7 +107,7 @@ export class RepositorioConexoes {
   }
 }
 
-/** Uma conexão que cuida de si e avisa as janelas ela mesma: o GitHub, o Google Agenda. */
+/** Uma conexão que cuida de si e avisa as janelas ela mesma: o GitHub. */
 export interface ConexaoPropria {
   conexao(): Conexao;
   ligar(): Promise<Conexao>;
@@ -121,8 +121,6 @@ export interface DependenciasConexoes {
   token: () => Promise<string>;
   /** A do GitHub (`ServicoGithub`). */
   github: ConexaoPropria;
-  /** A do Google Agenda da Alba (`ServicoGoogleAgenda`, F3-22). */
-  google: ConexaoPropria;
   agora?: () => Date;
 }
 
@@ -132,8 +130,7 @@ const mensagem = (erro: unknown) => (erro instanceof Error ? erro.message : Stri
  * Conexões da tela de Configurações › Conexões. A do Claude Code (F2-22): ligar mostra antes o que
  * muda no `settings.json`, publica `MODUCTUS_HOOKS_TOKEN` e grava os hooks; desligar tira só o que
  * é do Moductus e apaga a variável. A do GitHub (F2-25) não mexe em arquivo nenhum: ligar é ler o
- * GitHub pelo `gh` já autenticado, e o `ServicoGithub` cuida dela. A do Google Agenda (F3-22) é o
- * OAuth no navegador, e o `ServicoGoogleAgenda` cuida dela.
+ * GitHub pelo `gh` já autenticado, e o `ServicoGithub` cuida dela.
  */
 export class ServicoConexoes {
   private readonly agora: () => Date;
@@ -147,7 +144,7 @@ export class ServicoConexoes {
   }
 
   listar(): Conexao[] {
-    return [this.claudeCode(), this.deps.github.conexao(), this.deps.google.conexao()];
+    return [this.claudeCode(), this.deps.github.conexao()];
   }
 
   previa(pedido: PedidoConexao): PreviaConexao {
@@ -234,7 +231,6 @@ export class ServicoConexoes {
   /** As que não mexem em arquivo do usuário; `null` é a do Claude Code, que mora aqui. */
   private propria(tipo: TipoConexao): ConexaoPropria | null {
     if (tipo === "github") return this.deps.github;
-    if (tipo === "google-agenda") return this.deps.google;
     return null;
   }
 

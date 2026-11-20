@@ -208,33 +208,6 @@
   color: var(--agente-nuno);
 }
 
-/* ---------- O "Moductus" ---------- */
-.tarefas-detalhe-faixa {
-  display: flex;
-  align-items: center;
-  gap: var(--esp-8);
-  padding: var(--esp-8) var(--esp-10);
-  border-radius: var(--raio-controle);
-  background: var(--fundo-chip);
-  color: var(--texto-2);
-}
-
-.tarefas-detalhe-faixa-texto {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--tipo-12);
-}
-
-.tarefas-detalhe-google {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--esp-8);
-  margin: 0;
-  font-size: var(--tipo-12);
-  color: var(--texto-2);
-}
-
 /* ---------- Subtarefas e etiquetas ---------- */
 .tarefas-detalhe-subtarefas {
   display: flex;
@@ -397,10 +370,6 @@
   box-shadow: var(--sombra-opcao-marcada) var(--destaque);
 }
 
-.tarefas-detalhe-calendario[data-desativada] {
-  cursor: default;
-}
-
 .tarefas-detalhe-calendario:has(input:focus-visible) {
   outline: var(--espessura-foco) solid var(--cor-foco);
   outline-offset: var(--recuo-foco);
@@ -418,106 +387,6 @@
 .tarefas-detalhe-calendario-nome {
   flex: none;
   font-weight: var(--peso-forte);
-}
-
-.tarefas-detalhe-calendario[data-desativada] .tarefas-detalhe-calendario-nome {
-  color: var(--texto-2);
-}
-
-.tarefas-detalhe-calendario-nota {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--tipo-12);
-  color: var(--texto-3);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ---------- Só leitura ---------- */
-.tarefas-detalhe-titulo-leitura {
-  margin: 0;
-  font-size: var(--tipo-17);
-  font-weight: var(--peso-forte);
-  letter-spacing: var(--tracado-titulo-detalhe-area);
-}
-
-.tarefas-detalhe-campos-leitura {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-}
-
-.tarefas-detalhe-campo-leitura {
-  display: grid;
-  grid-template-columns: var(--largura-rotulo-leitura-area) minmax(0, 1fr);
-  gap: var(--esp-10);
-  padding: var(--esp-7) 0;
-  border-bottom: var(--espessura-borda) solid var(--borda);
-}
-
-.tarefas-detalhe-campo-leitura dd {
-  margin: 0;
-  text-wrap: pretty;
-}
-
-.tarefas-detalhe-acoes-leitura {
-  display: flex;
-  gap: var(--esp-8);
-}
-
-.tarefas-detalhe-acoes-leitura .botao[aria-expanded="true"] {
-  background: var(--fundo-ativo);
-}
-
-.tarefas-detalhe-pedido {
-  display: flex;
-  align-items: center;
-  gap: var(--esp-8);
-  height: var(--altura-campo-frase-area);
-  padding: 0 var(--esp-10);
-  border: var(--espessura-borda) solid var(--borda-forte);
-  border-radius: var(--raio-controle);
-  background: var(--fundo-campo);
-}
-
-.tarefas-detalhe-pedido:focus-within {
-  border-color: var(--cor-foco);
-  outline: var(--espessura-borda) solid var(--cor-foco);
-}
-
-.tarefas-detalhe-pedido-entrada {
-  flex: 1;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--texto);
-  font-size: var(--tipo-13);
-}
-
-.tarefas-detalhe-atalho {
-  padding: var(--esp-1) var(--esp-5);
-  border-radius: var(--raio-atalho);
-  background: var(--fundo-chip);
-  font-family: var(--fonte-mono);
-  font-size: var(--tipo-11);
-  color: var(--texto-2);
-}
-
-.tarefas-detalhe-enviado {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--esp-8);
-  font-size: var(--tipo-12);
-  color: var(--texto-2);
-}
-
-.tarefas-detalhe-enviado p {
-  margin: 0;
-  text-wrap: pretty;
 }
 
 /* ---------- Rodapé ---------- */

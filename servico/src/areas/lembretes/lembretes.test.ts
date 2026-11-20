@@ -56,7 +56,6 @@ function montar(
   opcoes: {
     agora?: Date;
     ligar?: boolean;
-    noGoogle?: (lembreteId: string) => boolean;
     guardaMs?: number;
   } = {},
 ) {
@@ -91,7 +90,7 @@ function montar(
   const eventos = { mudou: [] as MudancaLembretes[], hoje: [] as LembretesDeHoje[] };
   const lembretes = new ServicoLembretes(
     new RepositorioLembretes(db),
-    { lerFuso: () => config.fuso, notificacoes, relogio, noGoogle: opcoes.noGoogle },
+    { lerFuso: () => config.fuso, notificacoes, relogio },
     { mudou: (m) => eventos.mudou.push(m), hoje: (h) => eventos.hoje.push(h) },
   );
   relogio.registrar(lembretes);
@@ -607,28 +606,6 @@ describe("volta 1", () => {
     await relogio.retomar();
     expect(casca.mostrados).toEqual([]);
     expect(unico(lembretes.hoje().atrasados).texto).toBe("Postura");
-  });
-
-  test("canal calendario: no Google, toca pelo celular; com o envio na fila ou sem Google, pelo Windows", async () => {
-    const chegaram = new Set<string>();
-    const { casca, relogio, lembretes } = montar({
-      agora: sp(HOJE, "14:20"),
-      noGoogle: (id) => chegaram.has(id),
-    });
-    await relogio.ligar();
-    const noCelular = await lembretes.criar({
-      texto: "Remédio",
-      quando: iso(sp(HOJE, "14:30")),
-      canal: "calendario",
-    });
-    chegaram.add(noCelular.id);
-    await lembretes.criar({ texto: "Ainda na fila", quando: iso(sp(HOJE, "14:40")), canal: "calendario" });
-    // O do canal Windows que também foi ao Google avisa nos dois: o canal é dele.
-    const windows = await lembretes.criar({ texto: "Reunião", quando: iso(sp(HOJE, "14:50")) });
-    chegaram.add(windows.id);
-    await vi.advanceTimersByTimeAsync(31 * MIN);
-    expect(casca.mostrados.map((a) => a.titulo)).toEqual(["Ainda na fila", "Reunião"]);
-    expect(lembretes.hoje().tocando.map((l) => l.texto)).toEqual(["Remédio", "Ainda na fila", "Reunião"]);
   });
 
   test("cada atrasado com a ausência em que venceu: o cartão só mostra a que vale para todos", async () => {

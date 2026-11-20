@@ -16,23 +16,21 @@ function canal(respostas: Record<string, unknown>[]) {
 }
 
 describe("abrir pela casca", () => {
-  test("endereço, arquivo e projetos vão pelo canal com o pedido que a casca entende", async () => {
+  test("arquivo e projetos vão pelo canal com o pedido que a casca entende", async () => {
     const { canal: c, pedidos } = canal([]);
     const abrir = abrirPelaCasca(c);
-    await abrir.endereco("https://accounts.google.com/o/oauth2/v2/auth?state=x");
     await abrir.arquivo("C:\\Users\\voce\\.claude\\settings.json");
     await abrir.projetos(["V:\\moductus"]);
     expect(pedidos).toEqual([
-      { tipo: "abrir", op: "endereco", endereco: "https://accounts.google.com/o/oauth2/v2/auth?state=x" },
       { tipo: "abrir", op: "arquivo", caminho: "C:\\Users\\voce\\.claude\\settings.json" },
       { tipo: "abrir", op: "projetos", pastas: ["V:\\moductus"] },
     ]);
   });
 
   test("a recusa da casca vira exceção com o motivo; sem confirmação também", async () => {
-    const { canal: c } = canal([{ erro: "só endereço https:// abre no navegador" }, {}]);
+    const { canal: c } = canal([{ erro: "fora das pastas autorizadas" }, {}]);
     const abrir = abrirPelaCasca(c);
-    await expect(abrir.endereco("http://github.com")).rejects.toThrow("só endereço https://");
+    await expect(abrir.arquivo("C:\\Windows\\win.ini")).rejects.toThrow("fora das pastas autorizadas");
     await expect(abrir.arquivo("C:\\x.txt")).rejects.toThrow("não confirmou");
   });
 });

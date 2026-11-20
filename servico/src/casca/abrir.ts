@@ -1,13 +1,11 @@
 import type { CanalCasca } from "./canal.ts";
 
 /**
- * O que a casca abre fora do Moductus (`src-tauri/src/abrir.rs`, ADR-0038): endereço `https://` no
- * navegador padrão e arquivo ou pasta dentro das raízes autorizadas. Quem decide o que pode abrir é
- * a casca; aqui só se pede. Nenhuma ferramenta do catálogo chega aqui: só o fluxo de autorização e
- * o que o usuário clicou.
+ * O que o serviço pede à casca para abrir fora do Moductus (`src-tauri/src/abrir.rs`, ADR-0038):
+ * arquivo ou pasta dentro das raízes autorizadas. Quem decide o que pode abrir é a casca; aqui só
+ * se pede. Nenhuma ferramenta do catálogo chega aqui: só o que o usuário clicou.
  */
 export interface AbrirNaCasca {
-  endereco(endereco: string): Promise<void>;
   arquivo(caminho: string): Promise<void>;
   /** As pastas de projeto que a casca aceita abrir; substituem as de antes. */
   projetos(pastas: readonly string[]): Promise<void>;
@@ -21,7 +19,6 @@ export function abrirPelaCasca(canal: Pick<CanalCasca, "pedir">): AbrirNaCasca {
     if (r.ok !== true) throw new Error("a casca não confirmou que abriu");
   };
   return {
-    endereco: (endereco) => pedir({ op: "endereco", endereco }),
     arquivo: (caminho) => pedir({ op: "arquivo", caminho }),
     projetos: (pastas) => pedir({ op: "projetos", pastas: [...pastas] }),
   };

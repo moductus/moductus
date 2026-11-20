@@ -13,8 +13,8 @@ import {
 /**
  * Recorrência (ADR-0034): o subconjunto de RRULE do RFC 5545 que o Moductus expande sozinho,
  * `FREQ` (DAILY, WEEKLY, MONTHLY, YEARLY), `INTERVAL`, `BYDAY`, `BYMONTHDAY`, `COUNT`, `UNTIL` e
- * `WKST`. O que passa disso (vindo do Google) é guardado como texto e mostrado como "repete
- * (definido no Google)": o Moductus não inventa ocorrência que não sabe calcular.
+ * `WKST`. O que passa disso fica só com o início: o Moductus não inventa ocorrência que não sabe
+ * calcular.
  *
  * O início (o DTSTART do RFC) não mora na regra: é o dia da tarefa ou o início do evento ou do
  * lembrete. Ele conta sempre como a primeira ocorrência, como diz o RFC, e o `COUNT` o inclui.
@@ -54,9 +54,6 @@ export interface Regra {
 
 export type LeituraRecorrencia =
   { entendida: true; regra: Regra; texto: string } | { entendida: false; texto: string; motivo: string };
-
-/** Como a regra que o Moductus não expande aparece. */
-export const REPETE_DEFINIDO_FORA = "repete (definido no Google)";
 
 const FREQUENCIAS: readonly string[] = ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"];
 const DIA_DA_REGRA = /^([+-]?\d{1,2})?(SU|MO|TU|WE|TH|FR|SA)$/;
