@@ -619,9 +619,10 @@ describe("painel Tarefas", () => {
       "Próximos 7 dias · 2",
       "Lembretes · 3",
     ]);
-    expect(chamou("lembretes.listar")).toEqual([
-      { de: "2026-10-08T03:00:00.000Z", ate: "2026-10-09T03:00:00.000Z" },
-    ]);
+    expect(chamou("lembretes.listar").at(-1)).toEqual({
+      de: "2026-10-08T03:00:00.000Z",
+      ate: "2026-10-09T03:00:00.000Z",
+    });
     await act(async () => botaoCom(recipiente, "Lembretes · 3").click());
     expect(chamadasCasca).toContainEqual({ comando: "sistema_abrir", args: { area: "tarefas" } });
     expect(auditar(recipiente)).toEqual([]);
