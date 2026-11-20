@@ -55,7 +55,6 @@ import { RepositorioConexoes, ServicoConexoes } from "./conexoes/conexoes.ts";
 import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts";
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
-
 import { ferramentasAgenda } from "./ferramentas/agenda/agenda.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
 import { ferramentasFoco } from "./ferramentas/foco/foco.ts";
@@ -598,7 +597,6 @@ servidor = await abrirServidorWs(token, {
   "conexoes.previa": (pedido) => conexoes.previa(pedido),
   "conexoes.ligar": (pedido) => conexoes.ligar(pedido),
   "conexoes.desligar": (pedido) => conexoes.desligar(pedido),
-
   "github.obter": () => github.obter(),
   "github.atualizar": () => github.atualizar(),
   "agentes.listar": () => agentes.listar(),

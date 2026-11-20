@@ -17,6 +17,7 @@ describe("migração agenda-local", () => {
   test('o que era do Google sai; os eventos do "Moductus" ficam no local; o resto não muda', () => {
     expect(posicao).toBeGreaterThan(0);
     const db = new DatabaseSync(":memory:");
+    db.exec("PRAGMA foreign_keys = ON");
     migrar(db, MIGRACOES.slice(0, posicao));
     db.exec(`
       INSERT INTO calendarios (id, nome, fonte, id_externo, espelho, pode_escrever)

@@ -7,7 +7,6 @@ import type { TomSelo } from "../../componentes/Selo.tsx";
 import { abrirSettingsClaude, useAbrir } from "../../nativo/abrir.ts";
 import { useAgora } from "../tempo.ts";
 import { CartaoConexao, Dado } from "./CartaoConexao.tsx";
-
 import {
   comandoDoErro,
   eventosDoMoductus,

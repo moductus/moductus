@@ -24,7 +24,6 @@ import {
   type SetStateAction,
 } from "react";
 import type { Destino } from "../../../areas/areas.ts";
-
 import { CartaoClaudeCode, CartaoGithub } from "../../../areas/configuracoes/Conexoes.tsx";
 import { AVISO_SEM_FERRAMENTAS } from "../../../areas/configuracoes/modelos.ts";
 import { useConexoes } from "../../../areas/configuracoes/useConexoes.ts";

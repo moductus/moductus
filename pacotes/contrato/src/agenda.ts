@@ -114,7 +114,7 @@ export type MudancaEvento = z.infer<typeof MudancaEvento>;
 export const PedidoEvento = z.object({ id: Id });
 export type PedidoEvento = z.infer<typeof PedidoEvento>;
 
-/** Os dias de `de` a `ate`, inclusive, no fuso do usuário; até 62 dias, a janela do cache. */
+/** Os dias de `de` a `ate`, inclusive, no fuso do usuário; até 62 dias. */
 export const PedidoAgenda = z
   .object({ de: Dia, ate: Dia })
   .refine((p) => p.ate >= p.de, { path: ["ate"], message: "o fim não vem antes do início" })

@@ -3,11 +3,9 @@ import { useId, useState } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { Caixa } from "../../componentes/Caixa.tsx";
 import { Seletor } from "../../componentes/Seletor.tsx";
-
 import { Icone } from "../../componentes/Icone.tsx";
 import { useAcoesSistema } from "../../janelas/sistema/primeiro-uso/estado.ts";
 import { servico } from "../../servico/conexao.ts";
-
 import { opcoesDuracao, opcoesLembrete, opcoesRepeticao, valorDaRepeticao } from "./detalhe.ts";
 import {
   AreaDeTexto,
@@ -175,7 +173,6 @@ export function DetalheTarefa({
           aoMudar={(m) => definir({ lembreteMinutosAntes: m === "" ? null : Number(m) })}
         />
       </div>
-
       {!ehSubtarefa && (
         <Subtarefas mae={tarefa} subtarefas={subtarefas} aoAbrir={aoAbrir} gravar={gravacao.gravar} />
       )}

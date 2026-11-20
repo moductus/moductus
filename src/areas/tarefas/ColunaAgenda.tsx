@@ -4,7 +4,6 @@ import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { FalaAgente } from "../../componentes/FalaAgente.tsx";
 import { chaveDoEncaixe, proximoEncaixe, type Encaixe } from "../../janelas/painel/foco.ts";
-
 import { servico } from "../../servico/conexao.ts";
 import {
   falaDaSugestao,
@@ -230,7 +229,6 @@ export function ColunaAgenda({
           {coluna.livres.length === 0 ? "Nenhum bloco livre hoje." : `Livre: ${coluna.livres.join(", ")}.`}
         </p>
       )}
-
       {pronta && (guardadoAgora ?? encaixe) && (
         <div className="tarefas-agenda-sugestao">
           <FalaAgente
