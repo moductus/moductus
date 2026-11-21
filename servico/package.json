@@ -14,6 +14,7 @@
   "dependencies": {
     "@moductus/contrato": "workspace:*",
     "fflate": "^0.8.3",
+    "ofx-js": "1.1.2",
     "ws": "^8.22.0",
     "zod": "^4.6.5"
   },
