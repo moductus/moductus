@@ -8,6 +8,7 @@ export * from "./captura.ts";
 export * from "./comum.ts";
 export * from "./config.ts";
 export * from "./conversas.ts";
+export * from "./dinheiro.ts";
 export * from "./foco.ts";
 export * from "./lembretes.ts";
 export * from "./metodos.ts";

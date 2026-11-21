@@ -1,10 +1,11 @@
-import type {
-  CampoCaptura,
-  CamposCaptura,
-  Lista,
-  PreviaCaptura,
-  TipoCaptura,
-  TipoLancavel,
+import {
+  type CampoCaptura,
+  type CamposCaptura,
+  formatarCentavos,
+  type Lista,
+  type PreviaCaptura,
+  type TipoCaptura,
+  type TipoLancavel,
 } from "@moductus/contrato";
 import {
   diaDoCalendario,
@@ -150,8 +151,6 @@ export interface Contexto {
   listas: readonly Pick<Lista, "id" | "nome">[];
 }
 
-const REAIS = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-
 /** O texto do campo na tela; vazio quando a frase não disse (o espaço mostra o "sem dia"). */
 export function formatarCampo(campo: CampoCaptura, campos: CamposCaptura, contexto: Contexto): string {
   switch (campo) {
@@ -171,7 +170,7 @@ export function formatarCampo(campo: CampoCaptura, campos: CamposCaptura, contex
       if (campos.listaId === null) return "Entrada";
       return contexto.listas.find((l) => l.id === campos.listaId)?.nome ?? "Outra lista";
     case "valorCentavos":
-      return campos.valorCentavos === null ? "" : REAIS.format(campos.valorCentavos / 100);
+      return campos.valorCentavos === null ? "" : formatarCentavos(campos.valorCentavos);
   }
 }
 

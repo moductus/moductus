@@ -1,4 +1,10 @@
-import type { CampoCaptura, CamposCaptura, TipoCaptura, TrechoReconhecido } from "@moductus/contrato";
+import {
+  type CampoCaptura,
+  type CamposCaptura,
+  lerValor,
+  type TipoCaptura,
+  type TrechoReconhecido,
+} from "@moductus/contrato";
 import {
   type DiaSemana,
   type Frequencia,
@@ -1068,18 +1074,16 @@ function reconhecerLista(p: readonly Palavra[], i: number, listas: readonly List
 
 // Valor em reais: "R$ 45", "R$32,90", "28 reais", "gastei 120", "45 de mercado".
 
-/** "45", "45,90", "1.285,00", "45.90". */
-const VALOR = /^(?:(\d{1,3}(?:\.\d{3})+|\d{1,9})(?:,(\d{1,2}))?|(\d{1,9})\.(\d{1,2}))$/;
 const VERBOS_DE_GASTO = new Set(["gastei", "paguei", "gastou", "pagou", "gasto", "custou"]);
 const DEPOIS_DO_VALOR_SOLTO = new Set(termos("de do da no na em com pro pra pelo pela"));
 
+/** Na frase, número de dez dígitos ou mais é telefone ou código, não gasto. */
+const MAIOR_VALOR_DA_FRASE = 99_999_999_999;
+
+/** "45", "45,90", "1.285,00", "45.90": a palavra já vem sem sinal e sem o "R$", que são palavras à parte. */
 function centavos(f: string | undefined): number | null {
-  const m = VALOR.exec(f ?? "");
-  if (m === null) return null;
-  const reais = Number((m[1] ?? m[3] ?? "").replaceAll(".", ""));
-  const fracao = m[2] ?? m[4] ?? "0";
-  const valor = reais * 100 + Number(fracao.padEnd(2, "0"));
-  return valor > 0 ? valor : null;
+  const valor = lerValor(f ?? "");
+  return valor !== null && valor > 0 && valor <= MAIOR_VALOR_DA_FRASE ? valor : null;
 }
 
 function reconhecerValor(p: readonly Palavra[], i: number): Achado | null {

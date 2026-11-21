@@ -137,6 +137,9 @@ describe("custo com a fonte dita", () => {
   it("menos de um centavo não vira zero", () => {
     expect(custoEmTexto(4_000)).toBe("menos de US$ 0,01");
     expect(custoEmTexto(1_234_567)).toBe("US$ 1,23");
+    // Meio centavo sobe.
+    expect(custoEmTexto(15_000)).toBe("US$ 0,02");
+    expect(custoEmTexto(1_234_999)).toBe("US$ 1,23");
     expect(custoEmTexto(0)).toBe("US$ 0,00");
   });
 

@@ -38,6 +38,9 @@ describe("teto em texto", () => {
     expect(lerTeto("10,5")).toBe(1050);
     expect(lerTeto(" 1.234,56 ")).toBe(123_456);
     expect(lerTeto("10.50")).toBe(1050);
+    // O leitor do contrato: ponto com três casas é milhar, e o símbolo do real pode vir junto.
+    expect(lerTeto("1.234")).toBe(123_400);
+    expect(lerTeto("R$ 10")).toBe(1000);
     expect(lerTeto("0")).toBe(0);
     expect(lerTeto("-3")).toBeUndefined();
     expect(lerTeto("10,555")).toBeUndefined();
