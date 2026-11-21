@@ -5,6 +5,7 @@ import {
   CODIFICACOES,
   DECIMAIS,
   ErroDoCsv,
+  mesmoCabecalho,
   FORMATOS_DATA,
   MapeamentoCsv,
   SEPARADORES,
@@ -76,9 +77,6 @@ function paraPerfil(l: LinhaPerfil): PerfilCsv | null {
   };
 }
 
-const mesmoCabecalho = (a: readonly string[], b: readonly string[]) =>
-  a.length === b.length && a.every((t, i) => t.trim() === (b[i] ?? "").trim());
-
 export class PerfisCsv {
   constructor(
     private readonly db: DatabaseSync,
@@ -99,22 +97,35 @@ export class PerfisCsv {
     return linhas.map(paraPerfil).filter((p): p is PerfilCsv => p !== null);
   }
 
-  /**
-   * O perfil cujo cabeçalho é exatamente este (mesmos títulos, na mesma ordem, maiúsculas como
-   * vieram; só o espaço em volta não conta). Arquivo sem títulos não tem o que reconhecer.
-   */
-  reconhecer(cabecalho: readonly string[] | null): PerfilCsv | null {
-    if (cabecalho === null) return null;
-    return (
-      this.perfis().find(
-        (p) => p.mapeamento.cabecalho !== null && mesmoCabecalho(p.mapeamento.cabecalho, cabecalho),
-      ) ?? null
+  /** O perfil deste tipo de conta com exatamente este cabeçalho (`mesmoCabecalho`). */
+  private comCabecalho(
+    perfis: readonly PerfilCsv[],
+    cabecalho: readonly string[],
+    tipoConta: TipoContaPerfil,
+  ): PerfilCsv | undefined {
+    return perfis.find(
+      (p) =>
+        p.tipoConta === tipoConta &&
+        p.mapeamento.cabecalho !== null &&
+        mesmoCabecalho(p.mapeamento.cabecalho, cabecalho),
     );
   }
 
   /**
-   * Salva o perfil confirmado no mapeamento guiado. Se o usuário já tem perfil com este cabeçalho,
-   * ele é atualizado em vez de duplicado; o de fábrica nunca é tocado (o do usuário passa a vencer).
+   * O perfil cujo cabeçalho é exatamente este (mesmos títulos, na mesma ordem, maiúsculas como
+   * vieram; só o espaço em volta não conta), para o tipo da conta de destino: o banco pode exportar
+   * conta e cartão com os mesmos títulos e o sinal ao contrário. Arquivo sem títulos não tem o que
+   * reconhecer.
+   */
+  reconhecer(cabecalho: readonly string[] | null, tipoConta: TipoContaPerfil): PerfilCsv | null {
+    if (cabecalho === null) return null;
+    return this.comCabecalho(this.perfis(), cabecalho, tipoConta) ?? null;
+  }
+
+  /**
+   * Salva o perfil confirmado no mapeamento guiado. Se o usuário já tem perfil com este cabeçalho e
+   * este tipo de conta, ele é atualizado em vez de duplicado; o de fábrica nunca é tocado (o do
+   * usuário passa a vencer).
    */
   salvar(novo: NovoPerfilCsv, carimbo: Carimbo = DO_USUARIO): PerfilCsv {
     const mapeamento = MapeamentoCsv.parse(novo.mapeamento);
@@ -124,11 +135,10 @@ export class PerfisCsv {
     const existente =
       mapeamento.cabecalho === null
         ? undefined
-        : this.perfis().find(
-            (p) =>
-              !p.deFabrica &&
-              p.mapeamento.cabecalho !== null &&
-              mesmoCabecalho(p.mapeamento.cabecalho, mapeamento.cabecalho ?? []),
+        : this.comCabecalho(
+            this.perfis().filter((p) => !p.deFabrica),
+            mapeamento.cabecalho,
+            novo.tipoConta,
           );
     const valores = [
       novo.banco.trim(),

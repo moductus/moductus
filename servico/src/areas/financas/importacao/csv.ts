@@ -306,6 +306,10 @@ export function lerValorCsv(texto: string, decimal: Decimal): number | null {
 
 const celula = (campos: readonly string[], i: number) => (campos[i] ?? "").trim();
 
+/** Mesmos títulos, na mesma ordem e com a mesma caixa; só o espaço em volta não conta. */
+export const mesmoCabecalho = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((t, i) => t.trim() === (b[i] ?? "").trim());
+
 function colunasDoMapeamento(m: MapeamentoCsv): number[] {
   const valor = m.valor.modo === "sinal" ? [m.valor.coluna] : [m.valor.debito, m.valor.credito];
   return [m.data, ...m.descricao, ...valor, ...(m.identificador === null ? [] : [m.identificador])];
@@ -344,21 +348,41 @@ export function lerCsv(bytes: Uint8Array, mapeamentoBruto: MapeamentoCsv, opcoes
       : detectarTexto(texto, codificacao, opcoes.separador ?? null);
   const separador = opcoes.separador ?? deteccao?.separador ?? ";";
   const formatoDecimal = opcoes.formatoDecimal ?? deteccao?.formatoDecimal ?? ",";
-  const registros = separarRegistros(texto, separador).slice(mapeamento.pularLinhas);
-  const primeira = registros[0];
-  if (primeira === undefined) throw new ErroDoCsv("O arquivo não tem linhas.");
+  const todos = separarRegistros(texto, separador);
+  let registros: Registro[];
+  let referencia: Registro | undefined;
+  const cabecalho = mapeamento.cabecalho;
+  if (cabecalho === null) {
+    registros = todos.slice(mapeamento.pularLinhas);
+    referencia = registros[0];
+  } else {
+    // A linha de títulos onde o perfil diz e, se o preâmbulo do banco mudou de tamanho, nas
+    // primeiras linhas: pular às cegas descartaria um lançamento ou leria o título como dado.
+    const onde = [mapeamento.pularLinhas, ...todos.slice(0, PROCURA_CABECALHO).keys()].find(
+      (i) => todos[i] !== undefined && mesmoCabecalho(todos[i]?.campos ?? [], cabecalho),
+    );
+    if (onde === undefined) {
+      throw new ErroDoCsv("Não achei neste arquivo a linha de títulos do perfil: ele é mesmo deste banco?");
+    }
+    referencia = todos[onde];
+    registros = todos.slice(onde + 1);
+  }
+  if (referencia === undefined) throw new ErroDoCsv("O arquivo não tem linhas.");
   const maior = Math.max(...colunasDoMapeamento(mapeamento));
-  if (maior >= primeira.campos.length) {
+  if (maior >= referencia.campos.length) {
     throw new ErroDoCsv(
-      `O mapeamento usa a coluna ${maior + 1}, e o arquivo tem ${primeira.campos.length}: confira o separador.`,
+      `O mapeamento usa a coluna ${maior + 1}, e o arquivo tem ${referencia.campos.length}: confira o separador.`,
     );
   }
-  if (mapeamento.cabecalho !== null) registros.shift();
   if (registros.length === 0) throw new ErroDoCsv("O arquivo só tem o cabeçalho, sem lançamentos.");
-  // A coluna de data já é conhecida: o formato sai dela, e só então da amostra inteira.
+  // A coluna de data já é conhecida: vale o formato que lê mais células dela, em todo o arquivo; o
+  // que ele não lê vai para as recusadas. Só sem nenhuma, a amostra inteira decide.
   const formatoData =
     opcoes.formatoData ??
-    formatosQueLeem(registros.slice(0, AMOSTRA).map((r) => celula(r.campos, mapeamento.data)))[0] ??
+    formatosQueLeem(
+      registros.map((r) => celula(r.campos, mapeamento.data)),
+      0,
+    )[0] ??
     deteccao?.formatoData;
   if (!formatoData) throw new ErroDoCsv("Não achei o formato das datas: escolha no mapeamento.");
 
@@ -397,8 +421,10 @@ export function lerCsv(bytes: Uint8Array, mapeamentoBruto: MapeamentoCsv, opcoes
 // ---------------------------------------------------------------------------------------------
 // Detecção por amostra
 
-/** Quantos registros a detecção lê. */
+/** Quantos registros a detecção lê para achar separador e colunas. */
 const AMOSTRA = 50;
+/** Em quantas linhas do começo o leitor procura a linha de títulos do perfil. */
+const PROCURA_CABECALHO = 50;
 /** Quantas linhas de dados a tabela do mapeamento mostra. */
 const LINHAS_DA_AMOSTRA = 5;
 
@@ -455,15 +481,16 @@ function detectarSeparador(texto: string): Separador {
 const PARTE_QUE_E_DATA = 0.8;
 
 /**
- * Os formatos que leem mais células preenchidas, se leem quase todas (linha de saldo ou de total no
- * meio não tira a coluna de data), na ordem de preferência.
+ * Os formatos que leem mais células preenchidas, na ordem de preferência, se leem pelo menos
+ * `parteMinima` delas. Na detecção, quase todas (linha de saldo ou de total no meio não tira a coluna
+ * de data); com a coluna já escolhida, basta uma.
  */
-function formatosQueLeem(celulas: readonly string[]): FormatoData[] {
+function formatosQueLeem(celulas: readonly string[], parteMinima = PARTE_QUE_E_DATA): FormatoData[] {
   const cheias = celulas.filter((c) => c !== "");
   if (cheias.length === 0) return [];
   const lidas = FORMATOS_DATA.map((f) => cheias.filter((c) => lerData(c, f) !== null).length);
   const melhor = Math.max(...lidas);
-  if (melhor === 0 || melhor < cheias.length * PARTE_QUE_E_DATA) return [];
+  if (melhor === 0 || melhor < cheias.length * parteMinima) return [];
   return FORMATOS_DATA.filter((_, i) => lidas[i] === melhor);
 }
 
@@ -623,7 +650,8 @@ function detectarTexto(
   const dadosTodos = (temTitulo ? resto.slice(1) : resto).map((r) => r.campos);
   const dados = dadosTodos.slice(0, AMOSTRA);
 
-  // O formato que lê alguma coluna inteira, preferindo a de título de data.
+  // O formato que lê alguma coluna, preferindo a de título de data; a coluna inteira, não só a
+  // amostra, para dia acima de 12 no fim do arquivo desempatar dia e mês.
   let formatoData: FormatoData | null = null;
   const titulos = nomes.map(simples);
   const ordem = Array.from({ length: nomes.length }, (_, i) => i).sort(
@@ -631,7 +659,7 @@ function detectarTexto(
   );
   for (const i of ordem) {
     // FORMATOS_DATA vem em ordem de preferência: dia e mês trocáveis ficam com o brasileiro.
-    formatoData = formatosQueLeem(dados.map((r) => (r[i] ?? "").trim()))[0] ?? null;
+    formatoData = formatosQueLeem(dadosTodos.map((r) => (r[i] ?? "").trim()))[0] ?? null;
     if (formatoData !== null) break;
   }
 

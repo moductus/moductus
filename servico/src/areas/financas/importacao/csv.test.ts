@@ -315,6 +315,62 @@ describe("leitura com o perfil", () => {
     ).toThrow(new ErroDoCsv("O arquivo só tem o cabeçalho, sem lançamentos."));
   });
 
+  test("preâmbulo menor ou maior que o do perfil: o cabeçalho é achado e nenhum lançamento some", () => {
+    const comPreambulo = { ...mapeamento, pularLinhas: 2 };
+    const corpo = [
+      "DT_MOV;HISTORICO;VLR;SALDO",
+      "01/09/2026;PIX RECEBIDO;10,00;1,00",
+      "02/09/2026;COMPRA;-2,00;0,00",
+    ];
+    const menor = ["Extrato da conta", ...corpo].join("\n");
+    const maior = ["Extrato da conta", "Agência 0001", "Conta 123-4", "Período: setembro", ...corpo].join(
+      "\n",
+    );
+    for (const texto of [menor, maior, corpo.join("\n")]) {
+      const lido = lerCsv(utf8(texto), comPreambulo);
+      expect(lido.linhas.map((l) => [l.descricao, l.valorCentavos])).toEqual([
+        ["PIX RECEBIDO", 1000],
+        ["COMPRA", -200],
+      ]);
+      expect(lido.recusadas).toEqual([]);
+    }
+  });
+
+  test("arquivo sem a linha de títulos do perfil é erro legível", () => {
+    const texto = "Data;Descrição;Valor;Saldo\n01/09/2026;PIX;10,00;1,00\n";
+    expect(() => lerCsv(utf8(texto), mapeamento)).toThrow(
+      new ErroDoCsv("Não achei neste arquivo a linha de títulos do perfil: ele é mesmo deste banco?"),
+    );
+  });
+
+  test("mais de 50 linhas trocáveis: o dia acima de 12 no fim decide o formato, no leitor e na detecção", () => {
+    const linhas = Array.from(
+      { length: 60 },
+      (_, i) => `0${(i % 9) + 1}/0${(i % 9) + 1}/2026;LINHA ${i};-1,00;0,00`,
+    );
+    linhas.push("09/13/2026;ULTIMA;-1,00;0,00");
+    const texto = ["DT_MOV;HISTORICO;VLR;SALDO", ...linhas].join("\n");
+    expect(detectarCsv(utf8(texto)).formatoData).toBe("mm/dd/aaaa");
+    const lido = lerCsv(utf8(texto), mapeamento, { separador: ";", formatoDecimal: "," });
+    expect(lido.formatoData).toBe("mm/dd/aaaa");
+    expect(lido.linhas).toHaveLength(61);
+    expect(lido.linhas.at(-1)?.data).toBe("2026-09-13");
+  });
+
+  test("com a coluna conhecida, vale o formato que lê mais células, mesmo com muita linha ilegível", () => {
+    const texto = [
+      "DT_MOV;HISTORICO;VLR;SALDO",
+      "01/09/2026;PIX;10,00;1,00",
+      "SALDO;;;0,00",
+      "TOTAL;;;0,00",
+      "RESUMO;;;0,00",
+    ].join("\n");
+    const lido = lerCsv(utf8(texto), mapeamento, { separador: ";", formatoDecimal: "," });
+    expect(lido.formatoData).toBe("dd/mm/aaaa");
+    expect(lido.linhas.map((l) => l.descricao)).toEqual(["PIX"]);
+    expect(lido.recusadas.map((r) => r.linha)).toEqual([3, 4, 5]);
+  });
+
   test("o extrato do quadro sai em centavos, com o período", () => {
     const lido = lerCsv(utf8(COOPERATIVA), mapeamento);
     expect(lido.linhas.map((l) => l.valorCentavos)).toEqual([486000, -13218, -9990, -145000, -4100]);
