@@ -333,7 +333,10 @@ export const EVENTOS = {
   "foco.mudou": EstadoFoco,
   "notas.mudou": MudancaNotas,
   "rotinas.mudou": z.array(Rotina),
-  /** Um briefing ou fechamento que acabou de aparecer: abre o painel Hoje. */
+  /**
+   * Um briefing ou fechamento que acabou de aparecer: abre o painel Hoje. Volta com a mesma vez
+   * quando a frase da Alba chega e troca a de molde.
+   */
   "rotinas.apareceu": ApresentacaoRotina,
   "areas.contagens": ContagensAreas,
 } as const;

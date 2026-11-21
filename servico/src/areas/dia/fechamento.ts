@@ -27,6 +27,7 @@ import {
   quantos,
   referenciaDoBriefing,
   resumosDosAgentes,
+  trocarPelaFraseDaAlba,
   umaLinha,
   type DadosDoBriefing,
   type DiaSemFechamento,
@@ -43,8 +44,8 @@ import { diaDaSemana, diaNoFuso, horaNoFuso, instanteNoFuso, somarDias } from ".
  * 18:00, o vigia da Alba avisa), as linhas saem por código: o que foi feito (tarefas e foco), o que
  * ficou aberto (com Amanhã, Outra data e Descartar, que a janela faz pelas Tarefas), amanhã numa
  * linha e o resumo dos outros agentes (hoje o Nuno). A Alba só redige a abertura, sem ferramentas
- * e com prazo; sem modelo, sai o molde. O painel Hoje se abre e, fechado 10 minutos sem resposta,
- * vira aviso do Windows, como o briefing.
+ * e com prazo: o painel Hoje abre na hora com o molde, e a frase dela troca o molde quando chega,
+ * como no briefing. Fechado 10 minutos sem resposta, o painel vira aviso do Windows.
  *
  * "Adiar 30 min" faz o fechamento voltar, montado de novo; "Encerrar o dia" responde "Dia
  * encerrado." e cala o aviso do Windows até a manhã, menos aprovações e lembretes (o silêncio mora
@@ -185,7 +186,7 @@ export interface DependenciasFechamento {
   redigir: Redigir;
   registro: Pick<
     RepositorioRegistroRotinas,
-    "doDia" | "porId" | "gravar" | "agir" | "reabrir" | "fecharSozinhas"
+    "doDia" | "porId" | "gravar" | "trocarAbertura" | "agir" | "reabrir" | "fecharSozinhas"
   >;
   /** A rotina do fechamento: a hora e os dias, para o "Ontem". */
   rotinas: Pick<RepositorioAtividade, "fechamento">;
@@ -259,12 +260,12 @@ export class ServicoFechamento implements FonteDoRelogio {
   }
 
   /**
-   * A hora de parar chegou: monta, pede a abertura à Alba (até 15 s; sem modelo, o molde), grava,
-   * avisa as janelas e abre o painel Hoje. O fechamento do dia que já apareceu não repete. Se falhar
-   * aqui, o vigia não tenta de novo no mesmo dia: o dia fica sem fechamento e vira o "Ontem" do
-   * briefing seguinte. Os briefings e fechamentos de antes de hoje sem resposta fecham sozinhos; o
-   * de hoje fica para o briefing seguinte fechar (ele pode ter aparecido agora, depois da hora de
-   * parar).
+   * A hora de parar chegou: monta, grava com o molde, avisa as janelas e abre o painel Hoje, sem
+   * esperar o modelo; a frase da Alba (até 15 s) troca o molde quando chega. O fechamento do dia
+   * que já apareceu não repete. Se falhar aqui, o vigia não tenta de novo no mesmo dia: o dia fica
+   * sem fechamento e vira o "Ontem" do briefing seguinte. Os briefings e fechamentos de antes de
+   * hoje sem resposta fecham sozinhos; o de hoje fica para o briefing seguinte fechar (ele pode ter
+   * aparecido agora, depois da hora de parar).
    */
   async aparecer(hora: HoraDoFechamento): Promise<ApresentacaoRotina> {
     const ja = this.deps.registro.doDia(FECHAMENTO, hora.dia);
@@ -272,16 +273,15 @@ export class ServicoFechamento implements FonteDoRelogio {
     this.deps.registro.fecharSozinhas(BRIEFING, hora.dia);
     this.deps.registro.fecharSozinhas(FECHAMENTO, hora.dia);
     const montagem = this.montar(hora.dia);
-    const redacao = await this.redigir(montagem);
     const apresentacao = this.deps.registro.gravar({
       rotinaId: FECHAMENTO,
       dia: hora.dia,
-      abertura: redacao.texto,
+      abertura: montagem.molde,
       linhas: montagem.linhas,
       abertas: montagem.abertas,
-      daExecucaoId: redacao.execucaoId,
+      daExecucaoId: null,
     });
-    await this.mostrar(apresentacao);
+    await this.mostrar(apresentacao, montagem);
     return apresentacao;
   }
 
@@ -392,8 +392,9 @@ export class ServicoFechamento implements FonteDoRelogio {
   }
 
   /**
-   * Passados 30 minutos do adiar, o fechamento volta montado de novo, como se acabasse de aparecer.
-   * O adiado que a manhã seguinte já alcançou fica como está: vira o "Ontem" do briefing.
+   * Passados 30 minutos do adiar, o fechamento volta montado de novo, como se acabasse de aparecer:
+   * com o molde, e a frase da Alba depois. O adiado que a manhã seguinte já alcançou fica como está:
+   * vira o "Ontem" do briefing.
    */
   private async voltarDoAdiar(agora: Date): Promise<void> {
     const adiado = this.adiadoAgora();
@@ -408,22 +409,14 @@ export class ServicoFechamento implements FonteDoRelogio {
       return;
     }
     const montagem = this.montar(atual.dia);
-    const redacao = await this.redigir(montagem);
-    // Outra ação pode ter chegado enquanto a Alba redigia: "Encerrar o dia" ou um novo "Adiar",
-    // com outra hora. Vale a dela, e a volta que ela programou (`agir`) fica.
-    const depois = this.deps.registro.porId(adiado.id);
-    if (depois?.acao !== "adiar" || depois.acaoEm !== atual.acaoEm) {
-      if (this.adiado === adiado) this.adiado = null;
-      return;
-    }
     const reaberta = this.deps.registro.reabrir(adiado.id, {
-      abertura: redacao.texto,
+      abertura: montagem.molde,
       linhas: montagem.linhas,
       abertas: montagem.abertas,
-      daExecucaoId: redacao.execucaoId,
+      daExecucaoId: null,
     });
-    if (this.adiado === adiado) this.adiado = null;
-    if (reaberta) await this.mostrar(reaberta);
+    this.adiado = null;
+    if (reaberta) await this.mostrar(reaberta, montagem);
   }
 
   /**
@@ -457,9 +450,19 @@ export class ServicoFechamento implements FonteDoRelogio {
     });
   }
 
-  /** Avisa as janelas, abre o painel Hoje e programa o aviso dos 10 minutos. */
-  private async mostrar(apresentacao: ApresentacaoRotina): Promise<void> {
+  /**
+   * Avisa as janelas, pede a frase à Alba (ela troca o molde quando chega), abre o painel Hoje e
+   * programa o aviso dos 10 minutos.
+   */
+  private async mostrar(apresentacao: ApresentacaoRotina, montagem: MontagemFechamento): Promise<void> {
     this.deps.apareceu(apresentacao);
+    void trocarPelaFraseDaAlba(this.deps, apresentacao, {
+      gatilho: "horario",
+      pedido: PEDIDO_DO_FECHAMENTO,
+      linhas: montagem.paraModelo,
+      dados: montagem.dados,
+      molde: montagem.molde,
+    });
     try {
       await this.deps.painel.mostrar();
     } catch (erro) {
@@ -472,16 +475,6 @@ export class ServicoFechamento implements FonteDoRelogio {
       ate: this.agora().getTime() + ESPERA_DO_AVISO_MS,
     };
     this.deps.relogio.mudou();
-  }
-
-  private redigir(montagem: MontagemFechamento) {
-    return this.deps.redigir({
-      gatilho: "horario",
-      pedido: PEDIDO_DO_FECHAMENTO,
-      linhas: montagem.paraModelo,
-      dados: montagem.dados,
-      molde: montagem.molde,
-    });
   }
 
   /** O fechamento adiado de hoje ou de ontem (o adiar perto da meia-noite), lido uma vez do registro. */

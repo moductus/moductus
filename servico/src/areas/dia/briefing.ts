@@ -11,7 +11,7 @@ import {
   type PedidoTarefas,
   type Tarefa,
 } from "@moductus/contrato";
-import type { Redigir } from "../../agentes/vigias/alba.ts";
+import type { PedidoRedacao, Redigir } from "../../agentes/vigias/alba.ts";
 import type { NovoAviso } from "../../notificacoes/notificacoes.ts";
 import { BRIEFING, FECHAMENTO, type InicioDoDia } from "./atividade.ts";
 import type { Conferencia, FonteDoRelogio } from "./relogio.ts";
@@ -23,7 +23,8 @@ import { diaNoFuso, horaNoFuso } from "./tempo.ts";
  * são montadas por código, na ordem do AGENTS (Alba, Ontem, Tula, Nuno, Faina), até 6, a partir da
  * agenda, das tarefas e do resumo que cada agente fornece (`resumoDoDia()`). Agente sem novidade
  * não aparece. A Alba só redige a frase de abertura, sem ferramentas e com prazo (o despertar
- * contido de `agentes/vigias/alba.ts`); sem modelo, sai a frase de molde. O que apareceu fica em
+ * contido de `agentes/vigias/alba.ts`): o painel abre na hora com a frase de molde, e a dela troca
+ * o molde quando chega (plano B do ADR-0039); sem modelo, fica o molde. O que apareceu fica em
  * `rotinas_registro`, o painel Hoje se abre ao lado do dock e, se ele ficar fechado 10 minutos sem
  * resposta, a Alba avisa pelo Windows.
  */
@@ -254,7 +255,10 @@ export interface DependenciasBriefing {
   /** O estado do agente agora: pausado ou desligado, a linha dele não entra. */
   estadoDo: (agenteId: string) => EstadoAgente | null;
   redigir: Redigir;
-  registro: Pick<RepositorioRegistroRotinas, "doDia" | "porId" | "gravar" | "fecharSozinhas">;
+  registro: Pick<
+    RepositorioRegistroRotinas,
+    "doDia" | "porId" | "gravar" | "trocarAbertura" | "fecharSozinhas"
+  >;
   painel: PainelHoje;
   avisar: (aviso: NovoAviso) => Promise<unknown>;
   /** O relógio do dia, para se rearmar pelo aviso dos 10 minutos. */
@@ -320,9 +324,10 @@ export class ServicoBriefing implements FonteDoRelogio {
 
   /**
    * O dia começou: os briefings e fechamentos de antes que ficaram sem resposta fecham sozinhos (o
-   * fechamento ignorado volta resumido no "Ontem"), monta, pede a abertura à Alba (até 15 s; sem
-   * modelo, o molde), grava, confere a pergunta dos ignorados, avisa as janelas e abre o painel
-   * Hoje. O briefing do dia que já apareceu não repete: volta o gravado.
+   * fechamento ignorado volta resumido no "Ontem"), monta, grava com a frase de molde, confere a
+   * pergunta dos ignorados, avisa as janelas e abre o painel Hoje, sem esperar o modelo. A frase da
+   * Alba (até 15 s) troca o molde quando chega ({@link trocarPelaFraseDaAlba}). O briefing do dia
+   * que já apareceu não repete: volta o gravado.
    */
   async aparecer(inicio: InicioDoDia): Promise<ApresentacaoRotina> {
     const ja = this.deps.registro.doDia(BRIEFING, inicio.dia);
@@ -330,20 +335,13 @@ export class ServicoBriefing implements FonteDoRelogio {
     this.deps.registro.fecharSozinhas(BRIEFING, inicio.dia);
     this.deps.registro.fecharSozinhas(FECHAMENTO, inicio.dia);
     const montagem = this.montar(inicio.dia);
-    const redacao = await this.deps.redigir({
-      gatilho: inicio.motivo === "horario" ? "horario" : "evento",
-      pedido: PEDIDO_DA_ABERTURA,
-      linhas: montagem.paraModelo,
-      dados: montagem.dados,
-      molde: montagem.molde,
-    });
     const apresentacao = this.deps.registro.gravar({
       rotinaId: BRIEFING,
       dia: inicio.dia,
-      abertura: redacao.texto,
+      abertura: montagem.molde,
       linhas: montagem.linhas,
       abertas: [],
-      daExecucaoId: redacao.execucaoId,
+      daExecucaoId: null,
     });
     // Antes de avisar as janelas: quem lê `rotinas.hoje` pelo aviso já vê a pergunta. Se a conta
     // falhar, o briefing sai sem ela.
@@ -353,6 +351,13 @@ export class ServicoBriefing implements FonteDoRelogio {
       console.error(`briefing: a pergunta dos ignorados não se conferiu: ${String(erro)}`);
     }
     this.deps.apareceu(apresentacao);
+    void trocarPelaFraseDaAlba(this.deps, apresentacao, {
+      gatilho: inicio.motivo === "horario" ? "horario" : "evento",
+      pedido: PEDIDO_DA_ABERTURA,
+      linhas: montagem.paraModelo,
+      dados: montagem.dados,
+      molde: montagem.molde,
+    });
     try {
       await this.deps.painel.mostrar();
     } catch (erro) {
@@ -409,6 +414,34 @@ export class ServicoBriefing implements FonteDoRelogio {
       // O clique abre o Hoje (aoClicarNoAviso), não o painel do time.
       semPainelDoTime: true,
     });
+  }
+}
+
+/**
+ * O plano B do ADR-0039, no briefing e no fechamento: a rotina já apareceu com a frase de molde, e a
+ * da Alba, quando chega (até 15 s), troca a abertura no registro e nas janelas (`rotinas.apareceu`
+ * de novo, com a mesma vez), sem reabrir o painel. Sem modelo, com a frase recusada ou com a rotina
+ * já respondida ou montada de novo, o molde fica.
+ */
+export async function trocarPelaFraseDaAlba(
+  deps: {
+    redigir: Redigir;
+    registro: Pick<RepositorioRegistroRotinas, "trocarAbertura">;
+    apareceu: (apresentacao: ApresentacaoRotina) => void;
+  },
+  mostrada: ApresentacaoRotina,
+  pedido: PedidoRedacao,
+): Promise<void> {
+  try {
+    const redacao = await deps.redigir(pedido);
+    if (!redacao.doModelo) return;
+    const trocada = deps.registro.trocarAbertura(mostrada, {
+      abertura: redacao.texto,
+      daExecucaoId: redacao.execucaoId,
+    });
+    if (trocada) deps.apareceu(trocada);
+  } catch (erro) {
+    console.error(`rotinas: a frase da Alba não entrou no ${mostrada.tipo}: ${String(erro)}`);
   }
 }
 

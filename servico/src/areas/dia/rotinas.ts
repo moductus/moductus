@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { isDeepStrictEqual } from "node:util";
 import {
   AcaoRotina,
   LinhaRotina,
@@ -128,6 +129,33 @@ export class RepositorioRegistroRotinas {
       .prepare("SELECT acao FROM rotinas_registro WHERE rotina_id = ? AND dia < ? ORDER BY dia DESC LIMIT ?")
       .all(rotinaId, antesDe, quantas) as { acao: string | null }[];
     return linhas.map((l) => l.acao);
+  }
+
+  /**
+   * A frase da Alba que chegou depois do molde (plano B do ADR-0039) troca a abertura só na vez que
+   * apareceu com ele: ainda sem ação, sem frase do modelo e com as mesmas linhas. Respondida,
+   * reaberta com outra montagem ou já trocada, fica como está, e volta `null`.
+   */
+  trocarAbertura(
+    mostrada: ApresentacaoRotina,
+    redacao: { abertura: string; daExecucaoId: string | null },
+  ): ApresentacaoRotina | null {
+    const atual = this.porId(mostrada.id);
+    if (
+      !atual ||
+      atual.acao !== null ||
+      atual.daExecucaoId !== null ||
+      atual.abertura !== mostrada.abertura ||
+      !isDeepStrictEqual(atual.linhas, mostrada.linhas) ||
+      !isDeepStrictEqual(atual.abertas, mostrada.abertas)
+    ) {
+      return null;
+    }
+    const conteudo: Conteudo = { abertura: redacao.abertura, linhas: atual.linhas, abertas: atual.abertas };
+    this.db
+      .prepare("UPDATE rotinas_registro SET conteudo = ?, da_execucao_id = ?, atualizado_em = ? WHERE id = ?")
+      .run(JSON.stringify(conteudo), redacao.daExecucaoId, this.agora().toISOString(), atual.id);
+    return this.porId(atual.id);
   }
 
   /**

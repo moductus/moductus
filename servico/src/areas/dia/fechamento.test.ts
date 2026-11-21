@@ -381,8 +381,17 @@ describe("fechamento com o provedor falso", () => {
 
     const a = await m.fechamento.aparecer({ dia: DIA, previsto: sp(DIA, "18:00"), atrasado: false });
 
-    expect(a.abertura).toBe("Boa tarde. 1 feita hoje e nada ficou aberto.");
-    expect(a.daExecucaoId).not.toBeNull();
+    // Aparece com o molde; a frase dela troca o molde na mesma vez, sem reabrir o painel.
+    expect(a).toMatchObject({ abertura: "Hora de parar: 1 feita. Nada ficou aberto.", daExecucaoId: null });
+    await vi.waitFor(() => expect(m.apareceram).toHaveLength(2));
+    const trocada = m.apareceram[1]!;
+    expect(trocada).toEqual({
+      ...a,
+      abertura: "Boa tarde. 1 feita hoje e nada ficou aberto.",
+      daExecucaoId: expect.any(String),
+    });
+    expect(m.fechamento.hoje().fechamento).toEqual(trocada);
+    expect(m.painel.mostradas).toBe(1);
     const [pedido] = m.alba.pedidos;
     expect(pedido!.ferramentas).toEqual([]);
     const texto = pedido!.mensagens.at(-1)!.texto;
@@ -435,29 +444,30 @@ describe("adiar 30 min", () => {
     expect(outro.apareceram[0]).toMatchObject({ id: m.apareceram[0]!.id, acao: null });
   });
 
-  test("um novo Adiar enquanto a Alba redige a volta vale: a volta fica para 30 min depois dele", async () => {
+  test("um novo Adiar enquanto a Alba redige a volta vale: a volta seguinte fica para 30 min depois dele", async () => {
     const m = await montar();
     await m.ate(sp(DIA, "18:00"));
     const { id } = m.apareceram[0]!;
     await m.ate(sp(DIA, "18:01"));
     m.fechamento.agir({ id, acao: "adiar" });
-    // A segunda redação é a da volta, às 18:31: o painel ainda mostra o adiado e você adia de novo.
+    // A segunda redação é a da volta, às 18:31: o painel já mostra a volta com o molde e você adia
+    // de novo antes de a frase chegar.
     m.ganchos.aoRedigir = (vez) => {
       if (vez === 2) m.fechamento.agir({ id, acao: "adiar" });
     };
 
     await m.ate(sp(DIA, "18:31"));
-    expect(m.apareceram).toHaveLength(1);
+    expect(m.apareceram).toHaveLength(2);
     expect(m.fechamento.hoje().fechamento).toMatchObject({
       acao: "adiar",
       acaoEm: sp(DIA, "18:31").toISOString(),
     });
 
     await m.ate(sp(DIA, "19:00"));
-    expect(m.apareceram).toHaveLength(1);
-    await m.ate(sp(DIA, "19:01"));
     expect(m.apareceram).toHaveLength(2);
-    expect(m.apareceram[1]).toMatchObject({ id, acao: null });
+    await m.ate(sp(DIA, "19:01"));
+    expect(m.apareceram).toHaveLength(3);
+    expect(m.apareceram[2]).toMatchObject({ id, acao: null });
   });
 
   test("encerrar antes da volta cancela a volta", async () => {
