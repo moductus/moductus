@@ -36,7 +36,13 @@ vi.mock("@tauri-apps/api/event", () => ({
     ouvintes.get(evento)!.add(fn);
     return () => ouvintes.get(evento)?.delete(fn);
   }),
+  // O que uma janela emite chega a todas, como na casca.
+  emit: vi.fn(async (evento: string, payload: unknown) => {
+    emitidos.push([evento, payload]);
+    ouvintes.get(evento)?.forEach((fn) => fn({ payload }));
+  }),
 }));
+const emitidos: [string, unknown][] = [];
 
 const { Dock, CONVITE_AGENTES } = await import("./Dock.tsx");
 const { Painel } = await import("../painel/Painel.tsx");
@@ -73,6 +79,7 @@ const focado = () => document.activeElement?.getAttribute("aria-label");
 
 beforeEach(() => {
   chamadas.length = 0;
+  emitidos.length = 0;
   ouvintes.clear();
   estado.midia = null;
   estado.mic = false;
@@ -269,6 +276,57 @@ describe("Painel", () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
     expect(chamadas.map((c) => c.comando)).toContain("painel_fechar");
+  });
+});
+
+describe("tour: o dock e o painel nas paradas 1 e 2 (TutorialTour.dc.html)", () => {
+  const paradas = () => emitidos.filter(([e]) => e === "tour:parada").map(([, p]) => p);
+
+  it("o dock ganha o anel na parada 1, escurece nas outras e não recebe clique durante o tour", async () => {
+    const el = await montar(<Dock />);
+    const dock = el.querySelector<HTMLElement>("nav")!;
+    expect(dock.dataset.tour).toBeUndefined();
+    await emitir("tour:parada", 1);
+    expect(dock.dataset.tour).toBe("parada");
+    expect(dock.inert).toBe(true);
+    await emitir("tour:parada", 3);
+    expect(dock.dataset.tour).toBe("veu");
+    await emitir("tour:parada", null);
+    expect(dock.dataset.tour).toBeUndefined();
+    expect(dock.inert).toBe(false);
+  });
+
+  it("parada 1: o painel mostra só a bolha ao lado do dock, sem cartão; Próximo vai ao Hoje", async () => {
+    const el = await montar(<Painel />);
+    await emitir("painel:area", "tour");
+    await emitir("tour:parada", 1);
+    expect(el.querySelector(".painel-cartao")).toBeNull();
+    const bolha = el.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(bolha.getAttribute("aria-label")).toBe("Tour, 1 de 4");
+    expect(bolha.querySelector("h2")!.textContent).toBe("O dock");
+    expect(Array.from(bolha.querySelectorAll("button")).map((b) => b.textContent)).toEqual([
+      "Pular tour",
+      "Próximo",
+    ]);
+    await act(async () => bolha.querySelector<HTMLButtonElement>(".botao--primario")!.click());
+    expect(paradas()).toEqual([2]);
+    expect(chamadas).toContainEqual({ comando: "painel_abrir", args: { area: "hoje" } });
+    expect(auditar(el)).toEqual([]);
+  });
+
+  it("parada 2: o Hoje fica sob o véu, fora do clique, e o Esc pula o tour (que fecha o painel)", async () => {
+    const el = await montar(<Painel />);
+    await emitir("painel:area", "hoje");
+    await emitir("tour:parada", 2);
+    expect(el.querySelector<HTMLElement>(".painel-cartao")!.inert).toBe(true);
+    expect(el.querySelector('[role="dialog"]')!.getAttribute("aria-label")).toBe("Tour, 2 de 4");
+    chamadas.length = 0;
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(paradas()).toEqual([null]);
+    // Uma vez só: pelo tour, não pelo Esc do painel.
+    expect(chamadas.filter((c) => c.comando === "painel_fechar")).toHaveLength(1);
   });
 });
 

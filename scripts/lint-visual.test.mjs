@@ -23,6 +23,14 @@ describe("lint-visual em CSS", () => {
     expect(motivos('.a { font-family: "Geist"; }', "a.css")).toEqual(["font-family literal"]);
   });
 
+  it("CRLF: a propriedade quebrada em várias linhas só com tokens passa; a literal continua recusada", () => {
+    const ok = ".a {\r\n  box-shadow:\r\n    var(--sombra-painel),\r\n    var(--sombra-dock);\r\n}\r\n";
+    expect(motivos(ok, "a.css")).toEqual([]);
+    expect(verificarConteudo(".a {\r\n  box-shadow: 0 0 0 var(--borda);\r\n}\r\n", "a.css")).toEqual([
+      { linha: 2, motivo: "box-shadow literal" },
+    ]);
+  });
+
   it("ignora comentários", () => {
     expect(motivos("/* antes era #fff e 12px */\n.a { color: var(--texto); }", "a.css")).toEqual([]);
   });

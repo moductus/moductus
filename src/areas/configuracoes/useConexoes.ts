@@ -27,9 +27,9 @@ export interface ConexoesDaTela {
 }
 
 /**
- * As conexões do Nuno pelo canal (F2-22, F2-25): o estado de cada uma, a prévia do Claude Code
- * antes do consentimento, o cache do GitHub e as sessões (para dizer quando chegou o último
- * evento). Acompanha `conexoes.mudou`, `github.mudou` e `sessoes.mudou` de qualquer janela.
+ * As conexões pelo canal (F2-22, F2-25): o estado de cada uma, a prévia do Claude Code antes do
+ * consentimento, o cache do GitHub e as sessões (para dizer quando chegou o último evento).
+ * Acompanha `conexoes.mudou`, `github.mudou` e `sessoes.mudou` de qualquer janela.
  */
 export function useConexoes(): ConexoesDaTela {
   const canal = useCanal(useServico({ silencioso: true }));

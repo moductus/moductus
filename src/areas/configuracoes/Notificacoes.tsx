@@ -186,7 +186,9 @@ export function SecaoNotificacoes() {
           </tbody>
         </table>
       </div>
-      <p className="config-nota">"Só o que precisa de mim" = pedidos de aprovação, lembretes e erros.</p>
+      <p className="config-nota">
+        "Só o que precisa de mim" = pedidos de aprovação, lembretes, erros, briefing e fechamento.
+      </p>
       {erro && <Aviso>{erro}</Aviso>}
       <div className="config-notificacoes-baixo">
         <Cartao como="section" aria-label="Silêncio">

@@ -1,3 +1,4 @@
+import { connect } from "node:net";
 import {
   CONFIG_PADRAO,
   METODOS,
@@ -7,7 +8,7 @@ import {
   type NomeMetodo,
 } from "@moductus/contrato";
 import { ClienteServico } from "@moductus/contrato/cliente";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { abrirServidorWs, semAtendente, type ServidorWs } from "./servidor.ts";
 
 const TOKEN = "a".repeat(64);
@@ -44,6 +45,7 @@ const clientes: ClienteServico[] = [];
 afterEach(async () => {
   for (const c of clientes.splice(0)) c.fechar();
   for (const s of abertos.splice(0)) await s.fechar();
+  vi.restoreAllMocks();
 });
 
 async function servidor(porta = 0) {
@@ -112,6 +114,30 @@ describe("canal WebSocket", () => {
     }
   });
 
+  test("upgrade com request-target que não é URL volta 400 e o canal continua de pé", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const s = await servidor();
+    for (const alvo of ["http://[", "http://[::1"]) {
+      const resposta = await new Promise<string>((pronto, falhou) => {
+        const socket = connect(s.porta, "127.0.0.1", () =>
+          socket.write(
+            `GET ${alvo} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n` +
+              "Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n",
+          ),
+        );
+        let texto = "";
+        socket.on("data", (d) => (texto += String(d)));
+        socket.on("error", falhou);
+        socket.on("close", () => pronto(texto));
+      });
+      expect(resposta, alvo).toMatch(/^HTTP\/1\.1 400 /);
+    }
+    const c = cliente();
+    c.conectar({ porta: s.porta, token: TOKEN });
+    await ate(c, "conectado");
+    await expect(c.pedir("sistema.ping")).resolves.toMatchObject({ protocolo: VERSAO_PROTOCOLO });
+  });
+
   test("método desconhecido e entrada inválida voltam como erro", async () => {
     const s = await servidor();
     const respostas = await pedirCru(
@@ -141,6 +167,34 @@ describe("canal WebSocket", () => {
     expect(respostas[0]).toEqual({ tipo: "resposta", id: 1, ok: false, erro });
     expect(respostas[1]).toEqual({ tipo: "resposta", id: 2, ok: false, erro });
     expect(respostas[2]).toMatchObject({ id: 3, ok: true, dados: { protocolo: VERSAO_PROTOCOLO } });
+  });
+
+  test("janela da versão 2 (fase 2) recebe o erro de versão claro, também nos métodos do dia", async () => {
+    const s = await servidor();
+    const respostas = await pedirCru(`ws://127.0.0.1:${s.porta}/?token=${TOKEN}&protocolo=2`, [
+      { metodo: "agentes.listar" },
+      { metodo: "tarefas.listar", dados: {} },
+      { metodo: "sistema.ping" },
+    ]);
+    expect(VERSAO_PROTOCOLO).toBe(3);
+    const erro =
+      "protocolo incompatível: a janela fala a versão 2 e o serviço, a 3. Feche e abra o Moductus de novo.";
+    expect(respostas[0]).toEqual({ tipo: "resposta", id: 1, ok: false, erro });
+    expect(respostas[1]).toEqual({ tipo: "resposta", id: 2, ok: false, erro });
+    expect(respostas[2]).toMatchObject({ id: 3, ok: true, dados: { protocolo: 3 } });
+  });
+
+  test("método do dia que o serviço ainda não atende responde que não está disponível", async () => {
+    const s = await servidor();
+    const [r] = await pedirCru(`ws://127.0.0.1:${s.porta}/?token=${TOKEN}&protocolo=${VERSAO_PROTOCOLO}`, [
+      { metodo: "captura.entender", dados: { texto: "ligar pro banco amanhã 15h" } },
+    ]);
+    expect(r).toEqual({
+      tipo: "resposta",
+      id: 1,
+      ok: false,
+      erro: "captura.entender ainda não está disponível nesta versão do serviço",
+    });
   });
 
   test("versão declarada que não é número não volta crua no erro", async () => {

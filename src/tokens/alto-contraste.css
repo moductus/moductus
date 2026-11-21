@@ -20,7 +20,7 @@
 
   .campo-caixa:focus-within,
   .busca-caixa:focus-within,
-  .captura-campo:focus-visible {
+  .captura-campo:focus-within {
     border-color: Highlight;
     outline-color: Highlight;
   }
@@ -39,7 +39,8 @@
     color: HighlightText;
   }
 
-  .navegacao-item[aria-current="page"] .navegacao-atalho {
+  .navegacao-item[aria-current="page"] .navegacao-atalho,
+  .navegacao-item[aria-current="page"] .navegacao-contagem {
     color: inherit;
   }
 
@@ -49,7 +50,8 @@
     outline-offset: var(--recuo-foco-interno);
   }
 
-  .uso-opcao[data-marcada="true"] {
+  .uso-opcao[data-marcada="true"],
+  .inicio-editar-bloco[data-selecionado] {
     border-color: Highlight;
     outline: var(--espessura-borda) solid Highlight;
   }
@@ -120,5 +122,30 @@
   .uso-previa,
   .dock-capa-imagem {
     forced-color-adjust: none;
+  }
+
+  /* ---------- tour: o véu escurece como no tema (é sombra e fundo), o anel vai no Highlight ---------- */
+  .tour-veu,
+  .tour-anel,
+  .dock[data-tour="veu"]::after {
+    forced-color-adjust: none;
+  }
+
+  .tour-anel {
+    border-color: Highlight;
+  }
+
+  .dock[data-tour="parada"],
+  .captura[data-tour="parada"] {
+    outline-color: Highlight;
+  }
+
+  .tour-ponto {
+    border: var(--espessura-borda) solid CanvasText;
+  }
+
+  .tour-ponto[data-atual] {
+    forced-color-adjust: none;
+    background: Highlight;
   }
 }

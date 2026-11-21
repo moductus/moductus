@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import type { Agente, Aprovacao, SituacaoAgente } from "@moductus/contrato";
+import type { Agente, SituacaoAgente } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
 import { act, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -24,7 +24,7 @@ vi.mock("../../servico/conexao.ts", () => ({
   },
 }));
 
-const { juntarPendente, useAgentes } = await import("./dados.ts");
+const { useAgentes } = await import("./dados.ts");
 
 const ATIVO: SituacaoAgente = {
   estado: "ativo",
@@ -47,7 +47,17 @@ const agente = (id: string, situacao: Partial<SituacaoAgente> = {}): Agente => (
   gatilhos: [],
   escoposMemoria: [],
   tetoDiarioCentavos: null,
+  tetoMoeda: "BRL",
+  gastoDeHoje: {
+    microdolares: 0,
+    centavos: null,
+    cotacaoDe: null,
+    limiteCentavos: null,
+    liberarCentavos: null,
+    pedeCotacao: false,
+  },
   deFabrica: true,
+  camposPersonalizados: [],
   situacao: { ...ATIVO, ...situacao },
 });
 
@@ -98,29 +108,5 @@ describe("useCarga", () => {
     await act(async () => raiz!.render(<Leitor canal="desconectado" />));
     expect(visto).toBeNull();
     expect(respostas.has("agentes.listar")).toBe(false);
-  });
-});
-
-describe("pendentes do terminal no dock", () => {
-  const pedido = (id: string, estado: Aprovacao["estado"]): Aprovacao => ({
-    id,
-    fonte: "claude-code",
-    agenteId: null,
-    execucaoId: null,
-    sessaoId: "s1",
-    descricao: "Quer rodar o comando abaixo.",
-    acao: { ferramenta: "Bash", entrada: {}, rotulo: null, rotuloRecusar: null, desfazivel: false },
-    estado,
-    criadoEm: "2026-10-09T12:00:00.000Z",
-    decididaEm: null,
-    regraCriadaId: null,
-    admiteSempre: true,
-  });
-
-  it("decidido ou expirado sai; a lista não guarda o que já foi respondido", () => {
-    const lista = juntarPendente([pedido("a1", "pendente")], pedido("a2", "pendente"));
-    expect(lista.map((a) => a.id)).toEqual(["a1", "a2"]);
-    expect(juntarPendente(lista, pedido("a1", "aprovada")).map((a) => a.id)).toEqual(["a2"]);
-    expect(juntarPendente([], pedido("a3", "expirada"))).toEqual([]);
   });
 });

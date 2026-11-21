@@ -1,0 +1,7 @@
+/* O que bateu com a busca, no trecho da área e do painel. */
+.nota-marca {
+  border-radius: var(--raio-caixa);
+  background: var(--fundo-chip);
+  color: var(--texto);
+  font-weight: var(--peso-forte);
+}

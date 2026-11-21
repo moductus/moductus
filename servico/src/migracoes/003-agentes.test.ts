@@ -40,7 +40,8 @@ const TIME_ESPERADO = {
     nome: "Alba",
     funcao: "Cuida do seu dia",
     personagem: { silhueta: "ovo", traco: "raios", tom: "ambar" },
-    ferramentas: ["agenda.*", "tarefas.*", "lembretes.*", "foco.*", "notas.*", "memoria.*"],
+    // `listas.listar` chegou com a migração alba-listas (F3-26).
+    ferramentas: ["agenda.*", "tarefas.*", "listas.listar", "lembretes.*", "foco.*", "notas.*", "memoria.*"],
     escopos_memoria: ["dia", "geral"],
   },
   faina: {
@@ -136,7 +137,7 @@ describe("migração 003-agentes", () => {
     antigo.prepare("INSERT INTO onboarding (passo, estado) VALUES ('tutorial', 'pendente')").run();
     antigo.close();
 
-    const db = abrirBanco(pasta);
+    const db = abrirBanco(pasta, { duravel: false });
     expect(versaoAtual(db)).toBe(MIGRACOES.length);
     expect(tabelas(db)).toEqual(TABELAS);
     conferirTime(db);

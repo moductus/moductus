@@ -83,7 +83,7 @@ test("a ferramenta pedida pela API roda no serviço, fica no histórico e a exec
   const baseUrl = `http://127.0.0.1:${(servidor.address() as AddressInfo).port}/v1`;
 
   pasta = mkdtempSync(join(tmpdir(), "moductus-openai-ciclo-"));
-  db = abrirBanco(pasta);
+  db = abrirBanco(pasta, { duravel: false });
   db.prepare(
     "INSERT INTO provedores (id, tipo, nome, modelo, base_url) VALUES ('p-api', 'openai-compativel', 'Local', 'gpt-5-mini', ?)",
   ).run(baseUrl);

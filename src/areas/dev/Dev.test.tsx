@@ -31,6 +31,9 @@ vi.mock("../../servico/conexao.ts", () => ({
 vi.mock("../../nativo/eventos.ts", () => ({
   useServico: () => ({ estado: "pronto", porta: 1, token: "t" }),
 }));
+// A casca é falsa: nada abre no navegador.
+const casca = vi.hoisted(() => ({ invoke: vi.fn((..._: unknown[]) => Promise.resolve()) }));
+vi.mock("@tauri-apps/api/core", () => ({ invoke: casca.invoke }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -109,6 +112,8 @@ beforeEach(() => {
   falso.pedidos.length = 0;
   falso.ouvintes.clear();
   ir.mockClear();
+  casca.invoke.mockReset();
+  casca.invoke.mockImplementation(() => Promise.resolve());
 });
 afterEach(() => {
   act(() => raiz?.unmount());
@@ -204,6 +209,34 @@ describe("Dev com dados", () => {
     expect(por(".estado-vazio-titulo")?.textContent).toBe("Nada esperando você no GitHub");
     // A área não manda o serviço ir ao GitHub: quem lê é o vigia.
     expect(falso.pedidos).not.toContain("github.atualizar");
+  });
+});
+
+describe("Dev abre no GitHub", () => {
+  it("cada cartão abre o seu endereço pela casca, com nome que diz qual item", async () => {
+    responder({ itens: ITENS, atualizadoEm: null }, conexao("ligada"));
+    await montar();
+    const abrir = por('button[aria-label="Abrir api-pedidos #412 no GitHub"]');
+    expect(abrir?.textContent).toBe("Abrir no GitHub");
+    await act(async () => abrir!.click());
+    expect(casca.invoke).toHaveBeenCalledWith("abrir_endereco", {
+      endereco: "https://github.com/gustavo/api-pedidos/pull/412",
+    });
+    expect(recipiente.querySelectorAll(".dev-item button")).toHaveLength(3);
+    expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("a recusa da casca aparece na fala do Nuno, como erro, e o próximo clique limpa", async () => {
+    responder({ itens: [item()], atualizadoEm: null }, conexao("ligada"));
+    await montar();
+    casca.invoke.mockImplementationOnce(() => Promise.reject("só endereço https:// abre no navegador"));
+    await act(async () => botao("Abrir no GitHub")!.click());
+    expect(por(".faixa-nuno")?.getAttribute("role")).toBe("alert");
+    expect(por(".faixa-nuno-texto")?.textContent).toBe(
+      "Não consegui abrir: só endereço https:// abre no navegador.",
+    );
+    await act(async () => botao("Abrir no GitHub")!.click());
+    expect(por(".faixa-nuno")?.getAttribute("role")).not.toBe("alert");
   });
 });
 

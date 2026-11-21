@@ -47,7 +47,7 @@ pub fn decidir(vidro: bool, sinais: Sinais) -> Material {
     }
 }
 
-fn ler_dword(raiz: HKEY, chave: PCWSTR, valor: PCWSTR) -> Option<u32> {
+pub(crate) fn ler_dword(raiz: HKEY, chave: PCWSTR, valor: PCWSTR) -> Option<u32> {
     let mut dado = 0u32;
     let mut tamanho = size_of::<u32>() as u32;
     let erro = unsafe {

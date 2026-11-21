@@ -4,6 +4,8 @@ export interface PropsAlternavel {
   /** Texto ao lado; vira o nome acessível. Sem ele, passe `aria-label`. */
   children?: ReactNode;
   "aria-label"?: string;
+  /** O que mais o leitor de tela ouve no controle (o atalho de ordenar, numa linha de tarefa). */
+  "aria-describedby"?: string;
   desativado?: boolean;
   /** Força o estado visual (só o catálogo usa). */
   "data-estado"?: "hover" | "foco";

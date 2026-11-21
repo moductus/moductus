@@ -149,6 +149,18 @@ describe("lerSituacao: do runtime para o personagem", () => {
     expect(lerSituacao({ ...ATIVO, atividade: "erro" }).moldura).toBe("perigo");
   });
 
+  it("teto com o gasto: a dica diz o valor e o limite, como estimativa (o dock no Estados.dc.html)", () => {
+    const sono = { ...DORMINDO, motivoSono: "teto" as const };
+    expect(lerSituacao(sono, AGORA, null, "≈ R$ 10,00 de R$ 10,00, estimativa").dica).toBe(
+      "Chegou ao teto de hoje: ≈ R$ 10,00 de R$ 10,00, estimativa",
+    );
+    expect(lerSituacao(sono, AGORA).dica).toBe("Chegou ao teto de hoje");
+    // Fora do teto, o gasto não entra na dica.
+    expect(
+      lerSituacao({ ...DORMINDO, motivoSono: "limite" }, AGORA, null, "≈ R$ 1,00 de R$ 10,00").dica,
+    ).toBe("Volta quando o limite renovar");
+  });
+
   it("a frase de quem está parado é uma só por estado, com a fila; ativo não tem frase", () => {
     expect(fraseDaSituacao({ ...ATIVO, estado: "desligado" }, AGORA)).toBe(
       "Desligado: não trabalha nem responde",

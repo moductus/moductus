@@ -256,6 +256,19 @@ describe("chave pelo Gerenciador de Credenciais", () => {
     expect(recebidos).toHaveLength(0);
   });
 
+  test("chave guardada não vai por http para fora deste PC: falha de credencial, sem ler nem chamar", async () => {
+    let lidas = 0;
+    const contando = new ProvedorOpenAiCompativel(
+      config({ baseUrl: "http://192.168.0.10:11434/v1", credencial: "moductus/provedor/01JA" }),
+      { credenciais: { ler: (nome) => (lidas++, credenciais.ler(nome)) }, agora: () => AGORA },
+    );
+    const eventos = await coletar(contando.executar(pedido(), new AbortController().signal));
+
+    expect(falhaDe(eventos)).toMatchObject({ motivo: "credencial", voltaEm: null });
+    expect(falhaDe(eventos).mensagem).toContain("A chave só vai por https, ou para um endereço deste PC.");
+    expect(lidas).toBe(0);
+  });
+
   test("OpenAI sem chave é falha de credencial", async () => {
     const eventos = await rodar(config({ tipo: "openai", modelo: "gpt-5-mini" }));
 

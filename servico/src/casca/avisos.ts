@@ -28,6 +28,7 @@ export function avisosPelaCasca(canal: Pick<CanalCasca, "pedir">): AvisosDoWindo
         titulo: aviso.titulo,
         corpo: aviso.corpo,
         botoes: aviso.botoes,
+        ...(aviso.semPainelDoTime ? { sem_painel_do_time: true } : {}),
       }),
     retirar: (id) => confirmar({ op: "retirar", notificacao: id }),
     async telaCheia() {

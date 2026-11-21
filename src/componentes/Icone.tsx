@@ -55,6 +55,8 @@ const DESENHOS = {
   // Dois quadros sobrepostos, como o Windows mostra com a janela maximizada.
   restaurar: <path d="M8 8h11v11H8zM5 16V5h11" />,
   fechar: <path d="M6 6l12 12M18 6L6 18" />,
+  // Mais: a captura rápida (Captura.dc.html) e o campo de nova tarefa (AreaTarefas.dc.html).
+  mais: <path d="M12 5v14M5 12h14" />,
   // Seta da lista suspensa (o "Onde" de AreaNotificacoes.dc.html).
   abrirLista: <path d="M6 9l6 6 6-6" />,
   // Escudo do aviso "Tudo fica neste PC" (Uso1Boas.dc.html).
@@ -63,6 +65,34 @@ const DESENHOS = {
   alerta: (
     <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
   ),
+  // Sino cortado: avisos em silêncio durante o foco (PainelFoco.dc.html).
+  silencio: (
+    <path d="M13.7 21a2 2 0 0 1-3.4 0M18.6 13A17.9 17.9 0 0 1 18 8M6.3 6.3A6 6 0 0 0 6 8c0 7-3 9-3 9h14M18 8a6 6 0 0 0-9.3-5M2 2l20 20" />
+  ),
+  // Sino do lembrete (LembreteHoje.dc.html).
+  sino: <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" />,
+  // Calendário da faixa do "Moductus" no detalhe da tarefa (DetalheTarefa.dc.html).
+  calendario: (
+    <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+  ),
+  // Editar os blocos do Início (InicioEditar.dc.html): a alça de arrastar (pontos cheios, que o
+  // traço fino apagaria), mover para cima e para baixo, esconder e mostrar.
+  arrastar: (
+    <g fill="currentColor" stroke="none">
+      <circle cx="9" cy="6" r="1.4" />
+      <circle cx="9" cy="12" r="1.4" />
+      <circle cx="9" cy="18" r="1.4" />
+      <circle cx="15" cy="6" r="1.4" />
+      <circle cx="15" cy="12" r="1.4" />
+      <circle cx="15" cy="18" r="1.4" />
+    </g>
+  ),
+  subir: <path d="M12 19V5M5 12l7-7 7 7" />,
+  descer: <path d="M12 5v14M19 12l-7 7-7-7" />,
+  esconder: (
+    <path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4M6.6 6.6C3.9 8.4 2 12 2 12s4 7 10 7a9.6 9.6 0 0 0 5.4-1.6" />
+  ),
+  mostrar: <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />,
 } satisfies Record<string, ReactElement>;
 
 export type NomeIcone = keyof typeof DESENHOS;

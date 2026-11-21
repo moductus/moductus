@@ -104,7 +104,8 @@ class Component extends DCLogic {
       ? 'width: ' + tam + 'px; height: ' + tam + 'px; display: block;'
       : 'width: ' + Math.round(tam * 100 / 120) + 'px; height: ' + tam + 'px; display: block;';
     var topo = id === 'nuno' ? 16 : (id === 'tula' ? 18 : 14);
-    var caixa = modo === 'cabeca' ? '16 ' + topo + ' 68 68' : '0 0 100 120';
+    var esquerda = id === 'faina' ? 19 : 16;
+    var caixa = modo === 'cabeca' ? esquerda + ' ' + topo + ' 68 68' : '0 0 100 120';
     return { p: p, e: e, raiz: raiz, caixa: caixa, rosto: 'translate(0,' + p.dy + ')', rotulo: p.nome + ', ' + est };
   }
 }

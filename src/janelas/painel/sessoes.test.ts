@@ -18,6 +18,7 @@ const sessao = (id: string, extra: Partial<SessaoIa> = {}): SessaoIa => ({
   id,
   projetoId: "p1",
   ferramenta: "claude-code",
+  ondeRoda: null,
   idExterno: id,
   modelo: null,
   estado: "terminou",

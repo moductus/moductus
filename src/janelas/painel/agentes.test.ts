@@ -51,7 +51,17 @@ const agente = (
   gatilhos: [],
   escoposMemoria: [],
   tetoDiarioCentavos: null,
+  tetoMoeda: "BRL",
+  gastoDeHoje: {
+    microdolares: 0,
+    centavos: null,
+    cotacaoDe: null,
+    limiteCentavos: null,
+    liberarCentavos: null,
+    pedeCotacao: false,
+  },
   deFabrica: true,
+  camposPersonalizados: [],
   situacao: { ...ATIVO, ...situacao },
 });
 
@@ -266,6 +276,11 @@ describe("cartões de estado (Estados.dc.html)", () => {
       AGORA,
     )[0]!;
     expect(fora.texto).toBe("O Claude Code não respondeu. Nada foi alterado; tento de novo às 10:05.");
+    // H2: a falha do provedor deixa tentar já; trocar o modelo fica como segunda saída.
+    expect(fora).toMatchObject({
+      primaria: { texto: "Tentar agora", acao: { tipo: "acordar", agenteIds: ["tula"] } },
+      secundaria: { texto: "Trocar modelo", acao: { tipo: "modelos" } },
+    });
     expect(fora.estado).toEqual({ texto: "erro", tom: "perigo" });
     const chave = cartoesDeEstado(
       timeDoServico([agente("tula", { estado: "dormindo", motivoSono: "credencial" }, "api")]),
@@ -316,7 +331,40 @@ describe("cartões de estado (Estados.dc.html)", () => {
     expect(fora!.texto).toBe("O Claude Code não respondeu. Nada foi alterado; estou tentando de novo.");
   });
 
-  it("teto sem valor (a moeda não foi decidida) e desligado não vira cartão", () => {
+  it("teto com o gasto contado: o valor na moeda do teto, como estimativa, e o Liberar de cada um", () => {
+    const noTeto = (id: string, centavos: number): Agente => ({
+      ...agente(id, { estado: "dormindo", motivoSono: "teto", dormeAte: "2026-10-10T03:00:00.000Z" }),
+      tetoDiarioCentavos: 1000,
+      tetoMoeda: "BRL",
+      gastoDeHoje: {
+        microdolares: 2_000_000,
+        centavos,
+        cotacaoDe: "2026-10-16",
+        limiteCentavos: 1000,
+        liberarCentavos: 200,
+        pedeCotacao: false,
+      },
+    });
+    const cartoes = cartoesDeEstado(
+      timeDoServico([noTeto("nuno", 1000), noTeto("alba", 1080)]),
+      PROVEDORES,
+      AGORA,
+    );
+    // O teto é de cada um: dois cartões, cada um com o seu valor e o seu Liberar.
+    expect(cartoes.map((c) => c.quem)).toEqual(["Alba", "Nuno"]);
+    expect(cartoes[1]).toMatchObject({
+      estado: { texto: "parado", tom: "aviso" },
+      titulo: "Cheguei ao teto de hoje",
+      texto:
+        "Usei cerca de R$ 10,00 de R$ 10,00 na API, estimativa pela cotação de 16/10. " +
+        "Paro até meia-noite, a menos que você libere mais.",
+      primaria: { texto: "Liberar R$ 2,00", acao: { tipo: "liberar", agenteId: "nuno" } },
+      secundaria: { texto: "Parar até amanhã", acao: { tipo: "dispensar" } },
+    });
+    expect(cartoes[0]!.texto).toContain("R$ 10,80 de R$ 10,00");
+  });
+
+  it("teto sem valor (a cotação saiu depois) e desligado não vira cartão", () => {
     const [teto, ...resto] = cartoesDeEstado(
       timeDoServico([
         agente("nuno", { estado: "dormindo", motivoSono: "teto" }),

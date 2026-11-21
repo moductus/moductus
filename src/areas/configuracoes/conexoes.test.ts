@@ -86,6 +86,7 @@ describe("resumo das conexões ligadas", () => {
         id: iniciadaEm.toISOString(),
         projetoId: null,
         ferramenta,
+        ondeRoda: null,
         idExterno: "x",
         modelo: null,
         estado: "trabalhando",
@@ -105,7 +106,9 @@ describe("resumo das conexões ligadas", () => {
         AGORA,
       ),
     ).toBe("há 2 min · 1 sessão hoje");
-    expect(ultimoEventoClaude([], AGORA)).toBe("nenhum ainda: abra um terminal novo e rode o claude");
+    expect(ultimoEventoClaude([], AGORA)).toBe(
+      "nenhum ainda: rode o claude num terminal novo ou reabra o app Claude",
+    );
   });
 
   it("o comando do erro do gh e a leitura do GitHub", () => {

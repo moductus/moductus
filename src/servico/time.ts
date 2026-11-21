@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { eAgente, type Agente } from "../componentes/personagem/agentes.ts";
 import { modeloDoAgente, type ModeloDoAgente } from "../componentes/personagem/situacao.ts";
 import { servico } from "./conexao.ts";
+import { gastoNaDica } from "./teto.ts";
 
 /** O que o runtime diz de cada agente do time; quem não veio fica de fora. */
 export type SituacaoTime = Partial<Record<Agente, SituacaoAgente>>;
@@ -14,8 +15,12 @@ export type ModelosDoTime = Partial<Record<Agente, ModeloDoAgente>>;
 /** O provedor (id) de cada agente, como veio do serviço. */
 type ProvedoresDoTime = Partial<Record<Agente, string | null>>;
 
+/** O gasto de hoje contra o teto de cada agente, já escrito como estimativa; sem número, fica de fora. */
+export type GastosDoTime = Partial<Record<Agente, string>>;
+
 const SEM_NOTICIA: SituacaoTime = {};
 const SEM_PROVEDORES: ProvedoresDoTime = {};
+const SEM_GASTOS: GastosDoTime = {};
 
 /** Junta agentes do serviço ao que já se sabia; agente fora do time de fábrica fica de fora. */
 export function juntarSituacoes(atual: SituacaoTime, agentes: readonly AgenteServico[]): SituacaoTime {
@@ -28,6 +33,18 @@ export function juntarSituacoes(atual: SituacaoTime, agentes: readonly AgenteSer
 function juntarProvedores(atual: ProvedoresDoTime, agentes: readonly AgenteServico[]): ProvedoresDoTime {
   const proximo = { ...atual };
   for (const a of agentes) if (eAgente(a.id)) proximo[a.id] = a.provedorId;
+  return proximo;
+}
+
+/** Junta o gasto contra o teto de cada agente do serviço ao que já se sabia; sem teto, sai. */
+export function juntarGastos(atual: GastosDoTime, agentes: readonly AgenteServico[]): GastosDoTime {
+  const proximo = { ...atual };
+  for (const a of agentes) {
+    if (!eAgente(a.id)) continue;
+    const texto = gastoNaDica(a.gastoDeHoje, a.tetoMoeda);
+    if (texto) proximo[a.id] = texto;
+    else delete proximo[a.id];
+  }
   return proximo;
 }
 
@@ -49,6 +66,8 @@ export interface TimeDoRuntime {
   situacoes: SituacaoTime;
   /** Para dizer a falha do jeito do modelo: CLI sem login não é chave recusada. */
   modelos: ModelosDoTime;
+  /** Para a dica do teto dizer o valor, como estimativa. */
+  gastos: GastosDoTime;
 }
 
 /**
@@ -62,12 +81,14 @@ export function useTime(canal: EstadoConexao): TimeDoRuntime {
   const [time, setTime] = useState<SituacaoTime>(SEM_NOTICIA);
   const [provedoresDoTime, setProvedoresDoTime] = useState<ProvedoresDoTime>(SEM_PROVEDORES);
   const [provedores, setProvedores] = useState<readonly Provedor[] | null>(null);
+  const [gastos, setGastos] = useState<GastosDoTime>(SEM_GASTOS);
 
   useEffect(
     () =>
       servico.ouvir("agentes.mudou", (a) => {
         setTime((t) => juntarSituacoes(t, [a]));
         setProvedoresDoTime((p) => juntarProvedores(p, [a]));
+        setGastos((g) => juntarGastos(g, [a]));
       }),
     [],
   );
@@ -83,6 +104,7 @@ export function useTime(canal: EstadoConexao): TimeDoRuntime {
         if (!vivo) return;
         setTime(juntarSituacoes(SEM_NOTICIA, agentes));
         setProvedoresDoTime(juntarProvedores(SEM_PROVEDORES, agentes));
+        setGastos(juntarGastos(SEM_GASTOS, agentes));
       })
       .catch(() => {
         if (vivo) setTime(SEM_NOTICIA);
@@ -101,9 +123,10 @@ export function useTime(canal: EstadoConexao): TimeDoRuntime {
       setTime(SEM_NOTICIA);
       setProvedoresDoTime(SEM_PROVEDORES);
       setProvedores(null);
+      setGastos(SEM_GASTOS);
     };
   }, [canal]);
 
-  if (canal !== "conectado") return { situacoes: SEM_NOTICIA, modelos: {} };
-  return { situacoes: time, modelos: modelosDoTime(provedoresDoTime, provedores) };
+  if (canal !== "conectado") return { situacoes: SEM_NOTICIA, modelos: {}, gastos: SEM_GASTOS };
+  return { situacoes: time, modelos: modelosDoTime(provedoresDoTime, provedores), gastos };
 }

@@ -209,7 +209,7 @@ function relogio() {
 function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-bandeja-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   db.exec(`
     INSERT INTO provedores (id, tipo, nome, modelo) VALUES

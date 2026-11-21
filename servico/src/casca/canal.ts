@@ -3,7 +3,8 @@ import { createInterface } from "node:readline";
 /**
  * Canal com a casca pelo stdio do sidecar, em linhas JSON.
  * - serviço -> casca (stdout): avisos ({ tipo: "pronto", porta }) e pedidos com id;
- * - casca -> serviço (stdin): respostas com o mesmo id e avisos sem id ({ tipo: "retomou" }).
+ * - casca -> serviço (stdin): respostas com o mesmo id e avisos sem id ({ tipo: "retomou" },
+ *   { tipo: "atividade", motivo: "desbloqueio" }).
  * O stdout é só do canal; log vai para o stderr.
  */
 export interface Saida {

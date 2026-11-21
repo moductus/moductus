@@ -1,18 +1,17 @@
+import type { ComponentType } from "react";
 import type { Janela } from "./rotas.ts";
-import { Captura } from "./captura/Captura.tsx";
-import { Dock } from "./dock/Dock.tsx";
-import { Painel } from "./painel/Painel.tsx";
-import { Sistema } from "./sistema/Sistema.tsx";
 
-export function Aplicacao({ janela }: { janela: Janela }) {
-  switch (janela) {
-    case "dock":
-      return <Dock />;
-    case "painel":
-      return <Painel />;
-    case "sistema":
-      return <Sistema />;
-    case "captura":
-      return <Captura />;
-  }
+/**
+ * A tela de cada janela vem num chunk à parte: as quatro abrem o mesmo index.html, e cada WebView
+ * só baixa, compila e guarda na memória o código do próprio rótulo (o dock não carrega o Sistema).
+ */
+const TELAS: Readonly<Record<Janela, () => Promise<ComponentType>>> = {
+  dock: () => import("./dock/Dock.tsx").then((m) => m.Dock),
+  painel: () => import("./painel/Painel.tsx").then((m) => m.Painel),
+  sistema: () => import("./sistema/Sistema.tsx").then((m) => m.Sistema),
+  captura: () => import("./captura/Captura.tsx").then((m) => m.Captura),
+};
+
+export function carregarJanela(janela: Janela): Promise<ComponentType> {
+  return TELAS[janela]();
 }

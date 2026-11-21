@@ -8,24 +8,61 @@ import { RepositorioExecucoes, ServicoExecucoes } from "./agentes/execucoes.ts";
 import { aberturaMcpDoRuntime } from "./agentes/mcp.ts";
 import { classificadorPeloRuntime, Roteador } from "./agentes/roteador.ts";
 import { encerrarInterrompidas, Runtime } from "./agentes/runtime.ts";
-import { VigiaNuno } from "./agentes/vigias/nuno.ts";
+import { redacaoPelaAlba, VigiaAlba } from "./agentes/vigias/alba.ts";
+import { RepositorioMarcasDosVigias } from "./agentes/vigias/marcas.ts";
+import { resumoDoDiaDoNuno, resumoDoFechamentoDoNuno, VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
-import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
+import { abrirServidorWs, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
+import { RepositorioAgenda, ServicoAgenda } from "./areas/agenda/agenda.ts";
+import { RepositorioTarefasDoDia } from "./areas/agenda/tarefas-do-dia.ts";
+import { ServicoCaptura } from "./areas/captura/captura.ts";
+import { atendentesDaCaptura } from "./areas/captura/canal.ts";
+import { interpretePeloRuntime } from "./areas/captura/modelo.ts";
+import { ServicoContagens, sessoesEsperando } from "./areas/contagens.ts";
+import {
+  motivoDaCasca,
+  PrimeiraAtividade,
+  RepositorioAtividade,
+  type MotivoAtividade,
+} from "./areas/dia/atividade.ts";
+import { ServicoBriefing, type ResumoDoAgente } from "./areas/dia/briefing.ts";
+import { atendentesDasRotinas } from "./areas/dia/canal.ts";
+import { ServicoFechamento } from "./areas/dia/fechamento.ts";
+import { RepositorioRotinas, ServicoRotinas } from "./areas/dia/horarios.ts";
+import { ServicoIgnorados } from "./areas/dia/ignorados.ts";
+import { RelogioDoDia } from "./areas/dia/relogio.ts";
+import { RepositorioRegistroRotinas } from "./areas/dia/rotinas.ts";
+import { TempoDoDia } from "./areas/dia/tempo.ts";
+import { atendentesDoFoco, ouvirAtalhoDoFoco } from "./areas/foco/canal.ts";
+import { RepositorioFoco, ServicoFoco } from "./areas/foco/foco.ts";
+import { RepositorioLembretes, ServicoLembretes } from "./areas/lembretes/lembretes.ts";
+import { RepositorioNotas, ServicoNotas } from "./areas/notas/notas.ts";
+import { atendentesDasTarefas } from "./areas/tarefas/canal.ts";
+import { RepositorioTarefas } from "./areas/tarefas/repositorio.ts";
+import { ServicoTarefas } from "./areas/tarefas/tarefas.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ligarBandeja } from "./bandeja/bandeja.ts";
+import { converterPelaConfig, ServicoCambio, vigiarCotacao } from "./cambio/cambio.ts";
+import { abrirPelaCasca, projetosNaCasca } from "./casca/abrir.ts";
 import { ambientePelaCasca } from "./casca/ambiente.ts";
 import { avisosPelaCasca, CLIQUE_NO_AVISO, lerClique } from "./casca/avisos.ts";
 import { CanalCasca } from "./casca/canal.ts";
 import { credenciaisPelaCasca } from "./casca/credenciais.ts";
+import { painelPelaCasca } from "./casca/painel.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
 import { RepositorioConexoes, ServicoConexoes } from "./conexoes/conexoes.ts";
 import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts";
 import { executorGh } from "./conexoes/github/gh.ts";
 import { RepositorioGithub, ServicoGithub } from "./conexoes/github/github.ts";
+import { ferramentasAgenda } from "./ferramentas/agenda/agenda.ts";
 import { Catalogo } from "./ferramentas/catalogo.ts";
+import { ferramentasFoco } from "./ferramentas/foco/foco.ts";
 import { ferramentasGithub } from "./ferramentas/github/github.ts";
+import { ferramentasLembretes } from "./ferramentas/lembretes/lembretes.ts";
+import { ferramentasNotas } from "./ferramentas/notas/notas.ts";
 import { ferramentasSessoes } from "./ferramentas/sessoes/sessoes.ts";
+import { ferramentasTarefas } from "./ferramentas/tarefas/tarefas.ts";
 import { ferramentasUso } from "./ferramentas/uso/uso.ts";
 import { abrirServidorMcp } from "./mcp/servidor.ts";
 import { MIGRACOES } from "./migracoes/index.ts";
@@ -36,6 +73,7 @@ import { ServicoOutroPc } from "./outro-pc/outro-pc.ts";
 import { RepositorioPrimeiroUso, ServicoPrimeiroUso } from "./primeiro-uso/primeiro-uso.ts";
 import { fabricaClaudeCli, rotaPreToolUse, type AberturaMcp } from "./provedores/claude-cli/claude-cli.ts";
 import { detectar } from "./provedores/deteccao.ts";
+import { listarModelos } from "./provedores/openai-compativel/modelos.ts";
 import { fabricaOpenAiCompativel } from "./provedores/openai-compativel/openai-compativel.ts";
 import { RepositorioProvedores, ServicoProvedores } from "./provedores/provedores.ts";
 import { RegistroProvedores } from "./provedores/registro.ts";
@@ -78,10 +116,32 @@ const nativo: AplicadorNativo = {
 let servidor: ServidorWs | null = null;
 // Os vigias do Nuno (F2-26) nascem com o runtime; os eventos de antes disso não pedem julgamento.
 let vigiaNuno: VigiaNuno | null = null;
+// Os vigias da Alba (F3-28) nascem com o relógio do dia; a agenda que muda antes disso não perde nada.
+let vigiaAlba: VigiaAlba | null = null;
+// O foco (F3-18) nasce com o relógio do dia, mais adiante; até lá, ninguém está em foco.
+let foco: ServicoFoco | null = null;
+// O fechamento do dia (F3-30) também; até lá, o dia não está encerrado.
+let fechamentoDoDia: ServicoFechamento | null = null;
+const repositorioConfig = new RepositorioConfig(banco);
+// A cotação nova vale já (F3-08), venha de config.definir ou de config.importar: os dois passam
+// pelo aviso abaixo. A reação (acordar quem saiu do teto) nasce com o runtime, mais adiante.
+let reagirACotacao: () => void = () => {};
+const cotacaoMudou = vigiarCotacao(repositorioConfig.ler().cambio, () => reagirACotacao());
+// As contagens das áreas (F3-20) nascem depois das áreas que contam; até lá, recontar não faz nada.
+let recontarAreas: () => void = () => {};
+// O relógio do dia (F3-17) nasce mais adiante; o fuso que muda antes disso não tem o que rearmar.
+let rearmarRelogio: () => void = () => {};
 const config = new ServicoConfig(
-  new RepositorioConfig(banco),
+  repositorioConfig,
   nativo,
-  (estado: EstadoConfig) => servidor?.emitir("config.mudou", estado),
+  (estado: EstadoConfig) => {
+    servidor?.emitir("config.mudou", estado);
+    cotacaoMudou(estado.config.cambio);
+    // O fuso pode ter mudado: o "hoje" das tarefas muda junto, e as horas das rotinas e dos
+    // lembretes caem em outro instante.
+    recontarAreas();
+    rearmarRelogio();
+  },
   portable(),
 );
 const primeiroUso = new ServicoPrimeiroUso(new RepositorioPrimeiroUso(banco), (estado) =>
@@ -100,6 +160,10 @@ const notificacoes = new ServicoNotificacoes(
     agentes: () => agentesDoTime.agentes().map((a) => ({ id: a.id, nome: a.nome })),
     silencio: () => config.obter().config.silencio,
     windows: avisosPelaCasca(canal),
+    // Com um foco correndo, o Windows só mostra aprovações e lembretes; na pausa, tudo volta.
+    emFoco: () => foco?.emFoco() ?? false,
+    // Com o dia encerrado, o mesmo até a manhã, venha o silêncio ligado ou não.
+    diaEncerrado: () => fechamentoDoDia?.diaEncerrado() ?? false,
   },
   {
     estado: (estado) => servidor?.emitir("notificacoes.mudou", estado),
@@ -127,10 +191,14 @@ canal.aoAvisar(CLIQUE_NO_AVISO, (aviso) => {
     .catch((erro: unknown) => console.error(`notificações: clique no aviso falhou: ${String(erro)}`));
 });
 const avisarContextoAoUsuario = avisarContexto(notificacoes);
+// A casca só abre arquivo de projeto que conhece (ADR-0038): ela recebe as pastas ao subir e quando
+// chega sessão de projeto novo.
+const projetosDaCasca = projetosNaCasca(abrirPelaCasca(canal), () => sessoes.projetos());
 const sessoes = new ServicoSessoes(
   new RepositorioSessoes(banco),
   (mudanca) => {
     servidor?.emitir("sessoes.mudou", mudanca);
+    projetosDaCasca.aoMudarSessao(mudanca.sessao.projetoId);
     vigiaNuno?.aoMudarSessao(mudanca);
     // A missão do Nuno nos Primeiros passos (F2-32): a primeira sessão do Claude Code que chega.
     if (mudanca.sessao.ferramenta === "claude-code") primeiroUso.sessaoDoClaudeCode();
@@ -144,9 +212,11 @@ const sessoes = new ServicoSessoes(
     },
   },
 );
+projetosDaCasca.mandar();
 const aprovacoes = new ServicoAprovacoes(new RepositorioAprovacoes(banco), {
   aprovacao: (aprovacao) => {
     servidor?.emitir("aprovacoes.mudou", aprovacao);
+    recontarAreas();
     avisarAprovacao(aprovacao).catch((erro: unknown) =>
       console.error(`notificações: aviso da aprovação falhou: ${String(erro)}`),
     );
@@ -159,6 +229,7 @@ const repositorioConexoes = new RepositorioConexoes(banco);
 const github = new ServicoGithub(new RepositorioGithub(banco), repositorioConexoes, executorGh(), {
   github: (situacao) => {
     servidor?.emitir("github.mudou", situacao);
+    recontarAreas();
     vigiaNuno?.aoLerGithub(situacao);
   },
   conexao: (conexao) => servidor?.emitir("conexoes.mudou", conexao),
@@ -210,14 +281,42 @@ const provedores = registrarProvedores(
     ? aberturaMcpDoRuntime(servidorMcp, (execucaoId) => runtime.executorDaExecucao(execucaoId))
     : undefined,
 );
-// As ferramentas de cada área (F2-26: as do Nuno); cada agente só vê as da lista dele.
+const repositorioExecucoes = new RepositorioExecucoes(banco);
+// As horas e os dias do briefing e do fechamento (F3-45, Configurações › O dia); os dias delas são
+// os dias de trabalho, fora dos quais a agenda não tem expediente.
+const repositorioRotinas = new RepositorioRotinas(banco);
+// Agenda (F3-16): o calendário local, o livre no expediente de `config` e o encaixe da Alba, que
+// só o clique aplica e o histórico desfaz.
+const agenda = new ServicoAgenda(
+  {
+    repo: new RepositorioAgenda(banco),
+    tarefas: new RepositorioTarefasDoDia(banco),
+    chamadas: repositorioExecucoes,
+    lerDia: () => ({ ...repositorioConfig.ler().dia, diasDeTrabalho: repositorioRotinas.diasDeTrabalho() }),
+  },
+  {
+    mudou: (mudanca) => {
+      servidor?.emitir("agenda.mudou", mudanca);
+      vigiaAlba?.agendaMudou();
+    },
+    calendarios: (calendarios) => {
+      servidor?.emitir("agenda.calendarios", calendarios);
+      vigiaAlba?.agendaMudou();
+    },
+  },
+);
+// O dia das ferramentas da Alba: "hoje" e "amanhã" no fuso de config, lido a cada pergunta.
+const tempoDoDia = new TempoDoDia(() => repositorioConfig.ler().dia.fuso);
+
+// As ferramentas de cada área (F2-26: as do Nuno; F3-26: as da Alba); cada agente só vê as da lista
+// dele. As das áreas que nascem mais adiante entram quando elas nascem, antes do servidor abrir.
 const catalogo = new Catalogo([
   ...ferramentasSessoes(sessoes),
   ...ferramentasUso(sessoes),
   ...ferramentasGithub(github),
+  ...ferramentasAgenda(agenda, tempoDoDia),
 ]);
 const repositorioAgentes = new RepositorioAgentes(banco);
-const repositorioExecucoes = new RepositorioExecucoes(banco);
 // Quem rodava essas execuções era o serviço que parou: fecham como erro e os cartões delas expiram.
 const interrompidas = encerrarInterrompidas(repositorioExecucoes, aprovacoes);
 if (interrompidas.length > 0)
@@ -231,7 +330,12 @@ const runtime = new Runtime(
     autorizar: autorizarPorAprovacao(aprovacoes),
   },
   {
-    execucao: (execucao) => servidor?.emitir("execucoes.mudou", execucao),
+    execucao: (execucao) => {
+      servidor?.emitir("execucoes.mudou", execucao);
+      // O que custou muda o gasto de hoje contra o teto, que vem com o agente.
+      if (execucao.fim !== null && execucao.custoEstimadoMicrodolares !== null)
+        emitirAgente(execucao.agenteId);
+    },
     agente: (agenteId) => {
       const agente = agentes.procurar(agenteId);
       if (agente) servidor?.emitir("agentes.mudou", agente);
@@ -240,6 +344,8 @@ const runtime = new Runtime(
       bandeja.atualizar();
     },
   },
+  // O teto diário vale na moeda escolhida, pela cotação da configuração (ADR-0040).
+  { emCentavos: converterPelaConfig(() => config.obter().config.cambio) },
 );
 const agentes = new ServicoAgentes(
   repositorioAgentes,
@@ -247,8 +353,23 @@ const agentes = new ServicoAgentes(
   (agente) => runtime.situacao(agente),
   runtime.estados,
 );
+/** Avisa as janelas de um agente que mudou (estado, modelo ou o gasto de hoje). */
+function emitirAgente(agenteId: string): void {
+  const agente = agentes.procurar(agenteId);
+  if (agente) servidor?.emitir("agentes.mudou", agente);
+}
 // Pausar pela bandeja (F2-18): o menu do ícone mostra o estado de cada agente e se refaz quando muda.
 const bandeja = ligarBandeja({ agentes, canal });
+// A cotação mudou: o gasto de hoje muda, e o teto vale de novo para cada agente (acorda ou adormece).
+reagirACotacao = () => {
+  for (const agente of repositorioAgentes.agentes()) {
+    runtime.estados.tetoMudou(agente.id);
+    emitirAgente(agente.id);
+  }
+  bandeja.atualizar();
+};
+// "Buscar cotação" (ADR-0040): só quando o usuário pede, e o valor só vale depois de confirmado.
+const cambio = new ServicoCambio();
 // Provedores (F2-08): detecção dos CLIs, configuração e o teste de verdade, pelo registro do runtime.
 const servicoProvedores = new ServicoProvedores(
   new RepositorioProvedores(banco),
@@ -256,6 +377,7 @@ const servicoProvedores = new ServicoProvedores(
     credenciais: credenciaisPelaCasca(canal),
     registro: provedores,
     detectar: () => detectar({ atende: (tipo) => provedores.atende(tipo) }),
+    listarModelos: (destino, sinal) => listarModelos(destino, { sinal }),
   },
   {
     provedores: (lista) => servidor?.emitir("provedores.mudou", lista),
@@ -293,6 +415,157 @@ const conversas = new ServicoConversas(
     parcial: (parcial) => servidor?.emitir("conversas.parcial", parcial),
   },
 );
+// Notas (F3-19): salvam com a versão que a janela conhece; o bloco rápido fica fixo no topo.
+const notas = new ServicoNotas(new RepositorioNotas(banco), {
+  mudou: (mudanca) => servidor?.emitir("notas.mudou", mudanca),
+});
+// Relógio do dia (F3-17, ADR-0032): lembretes disparam por um timer próprio, sem modelo e sem rede.
+const relogio = new RelogioDoDia();
+rearmarRelogio = () => relogio.mudou();
+// Mudar a hora do briefing ou a de parar rearma o relógio: vale já hoje (F3-45).
+const rotinas = new ServicoRotinas({
+  repo: repositorioRotinas,
+  emitir: (lista) => servidor?.emitir("rotinas.mudou", lista),
+  relogio,
+});
+const lembretes = new ServicoLembretes(
+  new RepositorioLembretes(banco),
+  {
+    lerFuso: () => repositorioConfig.ler().dia.fuso,
+    notificacoes,
+    relogio,
+  },
+  {
+    mudou: (mudanca) => {
+      servidor?.emitir("lembretes.mudou", mudanca);
+      // Disparou, adiou, concluiu ou virou perdido: os atrasados das contagens mudam.
+      recontarAreas();
+    },
+    hoje: (hoje) => servidor?.emitir("lembretes.hoje", hoje),
+  },
+);
+relogio.registrar(lembretes);
+// Foco (F3-18): o fim de cada etapa pelo mesmo relógio; a janela conta o tempo pelo fim planejado.
+const servicoFoco = new ServicoFoco(
+  new RepositorioFoco(banco),
+  { lerDia: () => repositorioConfig.ler().dia, notificacoes, relogio },
+  { mudou: (estado) => servidor?.emitir("foco.mudou", estado) },
+);
+foco = servicoFoco;
+relogio.registrar(servicoFoco);
+// Tarefas (F3-15): "hoje" no fuso de config; a tarefa com hora mantém o lembrete ligado a ela.
+const tarefas = new ServicoTarefas(
+  new RepositorioTarefas(banco),
+  { lerFuso: () => repositorioConfig.ler().dia.fuso, notas },
+  {
+    tarefas: (mudanca) => {
+      servidor?.emitir("tarefas.mudou", mudanca);
+      recontarAreas();
+    },
+    listas: (listas) => servidor?.emitir("listas.mudou", listas),
+    // O lembrete da tarefa muda pelas Tarefas: o relógio se rearma e o aviso da ocorrência trocada sai.
+    lembretes: (mudanca) => {
+      servidor?.emitir("lembretes.mudou", mudanca);
+      lembretes.mudaramPorFora(mudanca);
+      recontarAreas();
+    },
+  },
+);
+// As ferramentas da Alba sobre as áreas do dia (F3-26); o `tarefas.criar` vale também para o Nuno.
+catalogo.registrar(
+  ...ferramentasTarefas(tarefas, tempoDoDia),
+  ...ferramentasLembretes(lembretes, tempoDoDia),
+  ...ferramentasFoco(servicoFoco, tempoDoDia),
+  ...ferramentasNotas(notas),
+);
+// Captura rápida (F3-32, ADR-0034): o entendedor de frases e, quando ele não reconhece nada além do
+// título, o modelo da Alba com prazo de 8 s. Lança pela área de cada tipo; o desfazer vale por 10 s.
+const captura = new ServicoCaptura({
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  tarefas,
+  lembretes,
+  agenda,
+  notas,
+  interpretar: interpretePeloRuntime(runtime, repositorioAgentes),
+  pediuLembrete: () => primeiroUso.lembretePedido(),
+});
+// O briefing e o fechamento leem as rotinas e o registro delas, e abrem o painel Hoje pela casca.
+const repositorioAtividade = new RepositorioAtividade(banco);
+const registroRotinas = new RepositorioRegistroRotinas(banco);
+const painelDoDock = painelPelaCasca(canal);
+const painelHoje = { mostrar: () => painelDoDock.mostrar("hoje"), aberto: () => painelDoDock.aberto("hoje") };
+// O resumo de cada agente nas rotinas (ADR-0039); Tula e Faina chegam nas fases 4 e 5. No briefing,
+// o Nuno conta o que espera você no GitHub; no fechamento, as sessões ainda abertas, PRs e CI.
+const nomeDoNuno = () => agentesDoTime.agente("nuno")?.nome ?? "Nuno";
+const resumosDoTime: ResumoDoAgente[] = [
+  {
+    agenteId: "nuno",
+    get nome() {
+      return nomeDoNuno();
+    },
+    resumoDoDia: () => resumoDoDiaDoNuno(github.obter()),
+  },
+];
+const resumosDoFechamento: ResumoDoAgente[] = [
+  {
+    agenteId: "nuno",
+    get nome() {
+      return nomeDoNuno();
+    },
+    resumoDoDia: () => resumoDoFechamentoDoNuno(sessoes.listar().sessoes, github.obter()),
+  },
+];
+// Pausado ou desligado, o agente não fala nas rotinas.
+const estadoDoAgente = (agenteId: string) => agentes.procurar(agenteId)?.situacao.estado ?? null;
+// O fechamento do dia (F3-30, ADR-0039): na hora de parar que o vigia da Alba avisa, linhas por
+// código e a abertura pela Alba (sem modelo, o molde); "Adiar 30 min" volta pelo relógio do dia e
+// "Encerrar o dia" cala o Windows até a manhã. Atende também `rotinas.hoje` e `rotinas.agir`.
+const fechamento = new ServicoFechamento({
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  agenda,
+  tarefas,
+  foco: servicoFoco,
+  resumos: resumosDoFechamento,
+  estadoDo: estadoDoAgente,
+  redigir: redacaoPelaAlba(runtime, repositorioAgentes),
+  registro: registroRotinas,
+  rotinas: repositorioAtividade,
+  painel: painelHoje,
+  avisar: (aviso) => notificacoes.avisar(aviso),
+  relogio,
+  apareceu: (apresentacao) => servidor?.emitir("rotinas.apareceu", apresentacao),
+});
+fechamentoDoDia = fechamento;
+relogio.registrar(fechamento);
+// Até onde os vigias da Alba olharam, e a pergunta dos ignorados (vigias_marcas, deste PC).
+const marcasDosVigias = new RepositorioMarcasDosVigias(banco);
+// Rituais ignorados (F3-31, AGENTS.md §2 "Se você ignorar"): depois de 3 briefings fechados
+// sozinhos seguidos, a Alba pergunta uma vez se deixa o briefing mais curto ou desliga.
+const ignorados = new ServicoIgnorados({
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  registro: registroRotinas,
+  marcas: marcasDosVigias,
+  rotinas,
+  emitir: (lista) => servidor?.emitir("rotinas.mudou", lista),
+});
+// Contagens das áreas (F3-20): a barra lateral do Sistema e os badges do dock leem daqui. As
+// sessões esperando são os pedidos do terminal, como o Nuno no dock.
+const leituraAprovacoes = new RepositorioAprovacoes(banco);
+const leituraLembretes = new RepositorioLembretes(banco);
+const leituraGithub = new RepositorioGithub(banco);
+const contagens = new ServicoContagens(
+  {
+    tarefasPendentes: () => tarefas.pendentesDeHoje(),
+    lembretesAtrasados: () => leituraLembretes.contarPerdidos(),
+    sessoesEsperando: () => sessoesEsperando(leituraAprovacoes.pendentes()),
+    devPrecisando: () => leituraGithub.contarPrecisandoDeMim(),
+  },
+  (novas) => servidor?.emitir("areas.contagens", novas),
+);
+recontarAreas = () => contagens.recontar();
+contagens.recontar();
+contagens.vigiar();
+
 // Estados (F2-16): acorda quem passou da hora com o serviço parado e programa os despertadores.
 // Depois, a fala que esperava resposta quando o serviço parou vai de novo à fila do agente.
 runtime.estados.vigiar();
@@ -306,6 +579,7 @@ servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
   "config.obter": () => config.obter(),
   "config.definir": (mudanca) => config.definir(mudanca),
+  "cambio.buscar": (pedido) => cambio.buscar(pedido.moeda),
   "config.exportar": (pedido) => outroPc.exportar(pedido),
   "config.previaImportar": (pedido) => outroPc.previa(pedido),
   "config.importar": (pedido) => outroPc.importar(pedido),
@@ -331,9 +605,19 @@ servidor = await abrirServidorWs(token, {
   "agentes.ligar": (pedido) => agentes.ligar(pedido),
   "agentes.pausar": (pedido) => agentes.pausar(pedido),
   "agentes.retomar": (pedido) => agentes.retomar(pedido),
+  "agentes.acordar": (pedido) => agentes.acordar(pedido),
+  // O cartão de teto (F3-08): solta mais até a meia-noite e a fila roda; o aviso sai pelo runtime.
+  "agentes.liberarTeto": (pedido) => agentes.liberarTeto(pedido),
   // Configurações › Modelos (F2-32): vale na próxima execução; as janelas ficam sabendo pelo aviso.
   "agentes.definir": (mudanca) => {
     const agente = agentes.definir(mudanca);
+    servidor?.emitir("agentes.mudou", agente);
+    bandeja.atualizar();
+    return agente;
+  },
+  // A página do agente (F3-04): volta ao de fábrica; o modelo e o estado ficam.
+  "agentes.restaurarPadrao": (pedido) => {
+    const agente = agentes.restaurarPadrao(pedido);
     servidor?.emitir("agentes.mudou", agente);
     bandeja.atualizar();
     return agente;
@@ -347,6 +631,7 @@ servidor = await abrirServidorWs(token, {
   "conversas.enviar": (pedido) => conversas.enviar(pedido),
   "conversas.arquivar": (pedido) => conversas.arquivar(pedido),
   "conversas.apagar": (pedido) => conversas.apagar(pedido),
+  "conversas.parar": (pedido) => conversas.parar(pedido),
   "notificacoes.obter": () => notificacoes.obter(),
   "notificacoes.definir": (mudanca) => notificacoes.definir(mudanca),
   "notificacoes.restaurar": (pedido) => notificacoes.restaurar(pedido),
@@ -359,8 +644,36 @@ servidor = await abrirServidorWs(token, {
   "provedores.definir": (mudanca) => servicoProvedores.definir(mudanca),
   "provedores.remover": (pedido) => servicoProvedores.remover(pedido),
   "provedores.testar": (pedido) => servicoProvedores.testar(pedido),
-  // Contrato da fase 2 (F2-04): cada tarefa tira daqui o que passa a atender.
-  ...semAtendente(["agentes.restaurarPadrao"]),
+  "provedores.modelos": (pedido) => servicoProvedores.modelos(pedido),
+  "notas.listar": (pedido) => notas.listar(pedido),
+  "notas.obter": (pedido) => notas.obter(pedido),
+  "notas.criar": (nova) => notas.criar(nova),
+  "notas.salvar": (pedido) => notas.salvar(pedido),
+  "notas.definir": (mudanca) => notas.definir(mudanca),
+  "notas.apagar": (pedido) => notas.apagar(pedido),
+  "notas.buscar": (pedido) => notas.buscar(pedido),
+  ...atendentesDasTarefas(tarefas),
+  ...atendentesDoFoco(servicoFoco),
+  "agenda.calendarios": () => agenda.calendarios(),
+  "agenda.definirCalendario": (mudanca) => agenda.definirCalendario(mudanca),
+  "agenda.consultar": (pedido) => agenda.consultar(pedido),
+  "agenda.obterEvento": (pedido) => agenda.obterEvento(pedido),
+  "agenda.criarEvento": (novo) => agenda.criarEvento(novo),
+  "agenda.definirEvento": (mudanca) => agenda.definirEvento(mudanca),
+  "agenda.apagarEvento": (pedido) => agenda.apagarEvento(pedido),
+  "agenda.aplicarSugestao": (pedido) => agenda.aplicarSugestao(pedido),
+  "lembretes.listar": (pedido) => lembretes.listar(pedido),
+  "lembretes.hoje": () => lembretes.hoje(),
+  "lembretes.criar": (novo) => lembretes.criar(novo),
+  "lembretes.definir": (mudanca) => lembretes.definir(mudanca),
+  "lembretes.adiar": (pedido) => lembretes.adiar(pedido),
+  "lembretes.concluir": (pedido) => lembretes.concluir(pedido),
+  "lembretes.cancelar": (pedido) => lembretes.cancelar(pedido),
+  ...atendentesDaCaptura(captura),
+  ...atendentesDasRotinas(fechamento, ignorados),
+  "rotinas.listar": () => rotinas.listar(),
+  "rotinas.definir": (mudanca) => rotinas.definir(mudanca),
+  "areas.contagens": () => contagens.obter(),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
 canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });
@@ -373,6 +686,7 @@ sessoes.vigiar();
 aprovacoes.vigiar();
 // GitHub pelo `gh` (F2-25): lê agora e a cada 15 min, se a conexão não estiver desligada.
 github.vigiar();
+
 // Agendador (F2-17): horário, intervalo e evento. As áreas avisam os eventos internos por
 // `agendador.emitir` (o tipo `EmitirEvento`). Na volta da suspensão (a casca avisa), depois do
 // prazo para a rede voltar, o que venceu dispara uma vez só e o GitHub é lido (AGENTS.md §6).
@@ -382,7 +696,96 @@ const agendador = new Agendador({
   runtime,
 });
 agendador.vigiar();
+// A primeira atividade do dia (F3-27, ADR-0033): o desbloqueio ou o logon (a casca avisa
+// `atividade`), a retomada e a subida, depois das 05:00 no fuso de config, ou o horário fixo do
+// briefing, que o vigia da Alba confere no relógio do dia. Uma vez por dia, abre o briefing.
+const leituraNotificacoes = new RepositorioNotificacoes(banco);
+// O briefing da manhã (F3-29, ADR-0039): linhas por código, a abertura pela Alba sem ferramentas e
+// com prazo (sem modelo, o molde), o registro em `rotinas_registro` e o painel Hoje pela casca; se
+// ele ficar fechado 10 min sem resposta, o aviso do Windows sai pelo relógio do dia. O dia que
+// ficou sem fechamento (o PC suspendeu antes da hora de parar) vira o "Ontem" no topo dele.
+const briefing = new ServicoBriefing({
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  agenda,
+  tarefas,
+  resumos: resumosDoTime,
+  estadoDo: estadoDoAgente,
+  redigir: redacaoPelaAlba(runtime, repositorioAgentes),
+  registro: registroRotinas,
+  painel: painelHoje,
+  avisar: (aviso) => notificacoes.avisar(aviso),
+  relogio,
+  apareceu: (apresentacao) => servidor?.emitir("rotinas.apareceu", apresentacao),
+  semFechamento: (hoje) => fechamento.semFechamento(hoje),
+  curto: () => repositorioRotinas.porId("briefing")?.curta ?? false,
+  ignorados,
+});
+relogio.registrar(briefing);
+canal.aoAvisar(CLIQUE_NO_AVISO, (aviso) => {
+  const clique = lerClique(aviso);
+  if (!clique || clique.botao !== null) return;
+  briefing.aoClicarNoAviso(leituraNotificacoes.notificacao(clique.id)?.referencia ?? null);
+});
+const primeiraAtividade = new PrimeiraAtividade(
+  repositorioAtividade,
+  new TempoDoDia(() => repositorioConfig.ler().dia.fuso),
+  // O briefing que falha (agenda, tarefas, banco) libera o dia: o próximo sinal tenta de novo.
+  (inicio) => {
+    console.error(`dia: ${inicio.dia} começou (${inicio.motivo})`);
+    return briefing.aparecer(inicio);
+  },
+);
+// Os vigias da Alba (F3-28, AGENTS.md §6): a virada do dia, os alertas dos compromissos e as horas
+// das rotinas, no relógio do dia, sem modelo. A hora de parar abre o fechamento.
+vigiaAlba = new VigiaAlba({
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  abertasEntre: (desde, ate) => tarefas.abertasQueVenciam(desde, ate),
+  compromissos: (janela) => agenda.alertasDeCompromissos(janela),
+  jaAvisou: (referencia) => leituraNotificacoes.idsDa(referencia).length > 0,
+  avisar: (aviso) => notificacoes.avisar(aviso),
+  rotinas: repositorioAtividade,
+  briefingNoHorario: () => sinalDeAtividade("horario"),
+  marcas: marcasDosVigias,
+  relogio,
+  avisos: {
+    // As abertas de ontem passam à vista das atrasadas, com o dia em que venciam: as janelas e as
+    // contagens não esperam a próxima leitura delas.
+    virou: ({ de, para, abertas }) => {
+      console.error(`dia: virou de ${de} para ${para}, ${abertas.length} aberta(s) vêm para hoje`);
+      if (abertas.length > 0) servidor?.emitir("tarefas.mudou", { tarefas: abertas, apagadas: [] });
+      recontarAreas();
+    },
+    fechamento: (hora) => {
+      console.error(`dia: hora do fechamento de ${hora.dia}${hora.atrasado ? " (atrasado)" : ""}`);
+      fechamento
+        .aparecer(hora)
+        .catch((erro: unknown) => console.error(`dia: o fechamento de ${hora.dia} falhou: ${String(erro)}`));
+    },
+  },
+});
+for (const fonte of vigiaAlba.fontes) relogio.registrar(fonte);
+// O que venceu com o serviço parado vira atrasado, num aviso só; depois o timer fica armado.
+relogio.ligar().catch((erro: unknown) => console.error(`relógio do dia não ligou: ${String(erro)}`));
+/** Um sinal de atividade; banco com problema não derruba quem avisou. */
+function sinalDeAtividade(motivo: MotivoAtividade): void {
+  try {
+    primeiraAtividade.sinal(motivo);
+  } catch (erro) {
+    console.error(`dia: sinal de atividade (${motivo}) falhou: ${String(erro)}`);
+  }
+}
+sinalDeAtividade("subida");
+canal.aoAvisar("atividade", (aviso) => sinalDeAtividade(motivoDaCasca(aviso)));
+// O atalho do foco (Ctrl+Alt+P) vem da casca e inicia, pausa ou retoma.
+ouvirAtalhoDoFoco(canal, servicoFoco);
 canal.aoAvisar("retomou", () => {
+  sinalDeAtividade("retomada");
+  // Na volta da suspensão, os lembretes que venceram com o PC dormindo chegam juntos.
+  relogio
+    .retomar()
+    .catch((erro: unknown) => console.error(`relógio do dia: retomada falhou: ${String(erro)}`));
+  // O PC dormiu: o dia pode ter virado antes da próxima volta do relógio das contagens.
+  recontarAreas();
   agendador
     .retomar()
     .then(() => github.atualizar("conexao"))

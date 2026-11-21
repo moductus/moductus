@@ -1,6 +1,6 @@
 import type { Aprovacao, FalaParcial, Mensagem } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { CartaoAprovacao } from "../../componentes/CartaoAprovacao.tsx";
 import { FalaAgente } from "../../componentes/FalaAgente.tsx";
@@ -13,11 +13,15 @@ import { decidirPedido } from "../../servico/aprovacoes.ts";
 import {
   chaveInterlocutor,
   falhaNaConversa,
+  LINHAS_CODIGO_ABERTO,
   mencionar,
+  partesDaFala,
   previa,
   quandoCurto,
+  recortarFala,
   useConversas,
   type Interlocutor,
+  type ParteDaFala,
 } from "../../servico/conversas.ts";
 import { useTime, type ModelosDoTime, type SituacaoTime } from "../../servico/time.ts";
 import { useAgora } from "../tempo.ts";
@@ -47,6 +51,8 @@ export function Conversas({ canal, com, aoEscolher, aoAbrirPagina, aoAbrirMemori
   const conversas = useConversas(canal, com);
   const { situacoes: time, modelos } = useTime(canal);
   const { conectado, aberta } = conversas;
+  // Alguém respondendo ou na vez de responder: dá para parar.
+  const respondendo = Object.keys(conversas.andamento).length > 0 || conversas.aguardando.length > 0;
   // A frase de quem dorme diz uma hora: o relógio da tela a tira de lá quando ela chega.
   const agora = useAgora();
 
@@ -97,6 +103,8 @@ export function Conversas({ canal, com, aoEscolher, aoAbrirPagina, aoAbrirMemori
           conectado={conectado}
           erro={conversas.erro}
           enviar={conversas.enviar}
+          respondendo={respondendo}
+          parar={conversas.parar}
         />
       </section>
     </div>
@@ -427,7 +435,7 @@ function Fala({ mensagem, falha, cartoes }: PropsFala) {
           )}
         </>
       ) : (
-        conteudo
+        <TextoDaFala texto={conteudo} />
       )}
     </FalaAgente>
   );
@@ -446,9 +454,69 @@ function FalaEmAndamento({ parcial, cartoes }: { parcial: FalaParcial; cartoes: 
         estado={pediu ? "esperando" : "trabalhando"}
         acao={cartoes.length > 0 && <Cartoes cartoes={cartoes} />}
       >
-        {fala ? fala : <span className="conversa-pensando">pensando…</span>}
+        {fala ? <TextoDaFala texto={fala} /> : <span className="conversa-pensando">pensando…</span>}
       </FalaAgente>
     </div>
+  );
+}
+
+/**
+ * O texto da fala com os blocos de código em mono. Bloco longo vem recolhido e a resposta longa
+ * vem cortada, com "Ver tudo": quem pediu uma ação não precisa rolar um script para achar a conversa.
+ */
+function TextoDaFala({ texto }: { texto: string }) {
+  const [inteira, setInteira] = useState(false);
+  const partes = partesDaFala(texto);
+  const recorte = recortarFala(partes);
+  return (
+    <>
+      {(inteira ? partes : recorte.partes).map((parte, i) =>
+        parte.tipo === "texto" ? (
+          <span key={i} className="fala-trecho">
+            {parte.texto}
+          </span>
+        ) : (
+          <BlocoDeCodigo key={i} parte={parte} />
+        ),
+      )}
+      {recorte.cortada && (
+        <Botao
+          variante="fantasma"
+          tamanho="pequeno"
+          className="fala-alternar"
+          aria-expanded={inteira}
+          onClick={() => setInteira((v) => !v)}
+        >
+          {inteira ? "Ver menos" : "Ver tudo"}
+        </Botao>
+      )}
+    </>
+  );
+}
+
+function BlocoDeCodigo({ parte }: { parte: Extract<ParteDaFala, { tipo: "codigo" }> }) {
+  const id = useId();
+  const longo = parte.linhas > LINHAS_CODIGO_ABERTO;
+  const [aberto, setAberto] = useState(false);
+  const visivel = !longo || aberto;
+  return (
+    <>
+      {longo && (
+        <Botao
+          variante="fantasma"
+          tamanho="pequeno"
+          className="fala-alternar"
+          aria-expanded={aberto}
+          aria-controls={id}
+          onClick={() => setAberto((v) => !v)}
+        >
+          {aberto ? "Recolher o código" : `Mostrar ${parte.linhas} linhas de código`}
+        </Botao>
+      )}
+      <code id={id} className="fala-codigo" hidden={!visivel}>
+        {parte.codigo}
+      </code>
+    </>
   );
 }
 
@@ -459,18 +527,42 @@ interface PropsEscrever {
   conectado: boolean;
   erro: string | null;
   enviar: (texto: string) => Promise<boolean>;
+  /** Há resposta em andamento ou esperando a vez: "Parar" aparece. */
+  respondendo: boolean;
+  parar: () => Promise<boolean>;
 }
 
 /**
- * Onde se escreve: Enter manda, Shift+Enter quebra a linha. Na conversa do time, as menções
- * entram com um clique. O texto só some quando o serviço aceitou.
+ * Onde se escreve: Enter manda, Shift+Enter quebra a linha, Esc para a resposta em andamento. Na
+ * conversa do time, as menções entram com um clique. O texto só some quando o serviço aceitou.
  */
-function Escrever({ com, pronto, conectado, erro, enviar }: PropsEscrever) {
+function Escrever({ com, pronto, conectado, erro, enviar, respondendo, parar }: PropsEscrever) {
   const id = useId();
   const campo = useRef<HTMLTextAreaElement>(null);
   const [texto, setTexto] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [parando, setParando] = useState(false);
   const podeMandar = pronto && !enviando && texto.trim() !== "";
+  const podeParar = pronto && respondendo && !parando;
+  const focarCampo = useCallback(() => campo.current?.focus(), []);
+
+  // Sem desabilitar o botão enquanto para: botão desabilitado perde o foco no meio do caminho.
+  const pararAgora = async () => {
+    if (!podeParar) return;
+    setParando(true);
+    await parar();
+    setParando(false);
+    campo.current?.focus();
+  };
+
+  // Esc em qualquer ponto de onde se escreve (campo, menções, Parar, Enviar) para a resposta;
+  // compondo um acento ou um ideograma, o Esc é do teclado, não da conversa.
+  const aoTeclarNaArea = (e: KeyboardEvent<HTMLFormElement>) => {
+    if (e.key !== "Escape" || !respondendo || e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void pararAgora();
+  };
 
   const mandar = async () => {
     if (!podeMandar) return;
@@ -492,6 +584,7 @@ function Escrever({ com, pronto, conectado, erro, enviar }: PropsEscrever) {
   return (
     <form
       className="escrever"
+      onKeyDown={aoTeclarNaArea}
       onSubmit={(e) => {
         e.preventDefault();
         void mandar();
@@ -537,11 +630,44 @@ function Escrever({ com, pronto, conectado, erro, enviar }: PropsEscrever) {
                 {DADOS_AGENTES[a].apelido}
               </button>
             ))}
+          {respondendo && (
+            <BotaoParar disabled={!pronto} aoSumirComFoco={focarCampo} aoParar={() => void pararAgora()} />
+          )}
           <Botao variante="primario" type="submit" className="escrever-enviar" disabled={!podeMandar}>
             Enviar
           </Botao>
         </div>
       </div>
     </form>
+  );
+}
+
+interface PropsBotaoParar {
+  disabled: boolean;
+  /** Chamado se o botão sumir com o foco nele (a resposta acabou ou parou); estável entre renders. */
+  aoSumirComFoco: () => void;
+  aoParar: () => void;
+}
+
+/** "Parar": Esc faz o mesmo em toda a área de escrever; sumindo com o foco, ele volta ao campo. */
+function BotaoParar({ disabled, aoSumirComFoco, aoParar }: PropsBotaoParar) {
+  const botao = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const el = botao.current;
+    // A limpeza roda antes de o botão sair da página: ainda dá para saber se o foco era dele.
+    return () => {
+      if (el && el.ownerDocument.activeElement === el) aoSumirComFoco();
+    };
+  }, [aoSumirComFoco]);
+  return (
+    <Botao
+      ref={botao}
+      className="escrever-parar"
+      aria-keyshortcuts="Escape"
+      disabled={disabled}
+      onClick={aoParar}
+    >
+      Parar
+    </Botao>
   );
 }

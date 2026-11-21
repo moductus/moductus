@@ -1,5 +1,6 @@
 import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { Icone, type NomeIcone } from "../componentes/Icone.tsx";
+import { numeroDaContagem, textoDaContagem, type RotuloContagem } from "../componentes/Selo.tsx";
 import "./ListaNavegacao.css";
 
 export interface ItemNavegacao<T extends string> {
@@ -8,6 +9,8 @@ export interface ItemNavegacao<T extends string> {
   icone?: NomeIcone;
   /** Atalho anunciado (aria-keyshortcuts) e mostrado à direita ao passar o mouse ou focar. */
   atalho?: { aria: string; texto: string };
+  /** O número à direita (Sistema.dc.html); zero não aparece. O leitor de tela ouve no nome do item. */
+  contagem?: { valor: number; rotulo: RotuloContagem };
 }
 
 interface PropsListaNavegacao<T extends string> {
@@ -67,31 +70,41 @@ export function ListaNavegacao<T extends string>({
     <nav aria-label={rotulo} className={["navegacao", className].filter(Boolean).join(" ")}>
       {antes}
       <ul className="navegacao-lista">
-        {itens.map((item, i) => (
-          <li key={item.id}>
-            <button
-              ref={(el) => {
-                botoes.current[i] = el;
-              }}
-              type="button"
-              className="navegacao-item"
-              data-id={item.id}
-              aria-current={item.id === ativo ? "page" : undefined}
-              aria-keyshortcuts={item.atalho?.aria}
-              tabIndex={i === indiceAtivo ? 0 : -1}
-              onClick={() => ir(i)}
-              onKeyDown={(e) => aoTeclar(e, i)}
-            >
-              {item.icone && <Icone nome={item.icone} />}
-              <span className="navegacao-nome">{item.nome}</span>
-              {item.atalho && (
-                <span className="navegacao-atalho" aria-hidden="true">
-                  {item.atalho.texto}
-                </span>
-              )}
-            </button>
-          </li>
-        ))}
+        {itens.map((item, i) => {
+          const contagem = item.contagem && item.contagem.valor > 0 ? item.contagem : null;
+          return (
+            <li key={item.id}>
+              <button
+                ref={(el) => {
+                  botoes.current[i] = el;
+                }}
+                type="button"
+                className="navegacao-item"
+                data-id={item.id}
+                aria-current={item.id === ativo ? "page" : undefined}
+                aria-label={
+                  contagem ? `${item.nome}, ${textoDaContagem(contagem.valor, contagem.rotulo)}` : undefined
+                }
+                aria-keyshortcuts={item.atalho?.aria}
+                tabIndex={i === indiceAtivo ? 0 : -1}
+                onClick={() => ir(i)}
+                onKeyDown={(e) => aoTeclar(e, i)}
+              >
+                {item.icone && <Icone nome={item.icone} />}
+                <span className="navegacao-nome">{item.nome}</span>
+                {/* A contagem e o atalho dividem o canto: o atalho aparece no lugar dela com a atenção. */}
+                {(contagem || item.atalho) && (
+                  <span className="navegacao-fim" aria-hidden="true">
+                    {item.atalho && <span className="navegacao-atalho">{item.atalho.texto}</span>}
+                    {contagem && (
+                      <span className="navegacao-contagem">{numeroDaContagem(contagem.valor)}</span>
+                    )}
+                  </span>
+                )}
+              </button>
+            </li>
+          );
+        })}
       </ul>
       {depois}
     </nav>

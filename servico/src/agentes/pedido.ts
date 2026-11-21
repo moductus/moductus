@@ -15,12 +15,37 @@ export const VOZ_DA_FAMILIA = [
   "- Má notícia: primeiro o impacto, depois o motivo, depois a saída. Nunca insinue que a culpa é do usuário.",
   "- Peça desculpa só quando o erro foi seu, e uma vez.",
   "- Pedido de aprovação diz o que vai acontecer, o tamanho (quantos, quanto) e se dá para desfazer.",
+  "",
+  "Como você age:",
+  "- Você age só pelas ferramentas que recebeu. Pedido que é uma ação: faça por elas; sem ferramenta para isso, ou fora da sua área, diga em uma frase que não faz isso.",
+  "- Nunca responda uma ação com script, comando ou bloco de código para o usuário rodar; código só quando ele pedir o código.",
+  "- Sem passo a passo nem lista longa, a não ser que o usuário peça.",
 ].join("\n");
 
-/** O prompt de sistema: quem o agente é e como fala. Instrução apagada pelo usuário volta à função. */
-export function montarInstrucoes(agente: { nome: string; funcao: string; instrucoes: string }): string {
+const DATA_DE_HOJE = new Intl.DateTimeFormat("pt-BR", {
+  weekday: "long",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+/** "Hoje é sábado, 24/10/2026.", no fuso do PC: sem o dia, "amanhã" e "sexta" não têm data. */
+export function linhaDeHoje(agora: Date): string {
+  return `Hoje é ${DATA_DE_HOJE.format(agora)}.`;
+}
+
+/**
+ * O prompt de sistema: quem o agente é, como fala e, com `agora`, o dia de hoje. Ele é o prompt
+ * inteiro (no Claude Code, `--system-prompt`, ADR-0017): o dia, que vinha do prompt do CLI, vem
+ * daqui. Instrução apagada pelo usuário volta à função.
+ */
+export function montarInstrucoes(
+  agente: { nome: string; funcao: string; instrucoes: string },
+  agora?: Date,
+): string {
   const proprias = agente.instrucoes.trim() || `Você é ${agente.nome}. ${agente.funcao}.`;
-  return `${proprias}\n\n${VOZ_DA_FAMILIA}`;
+  const base = `${proprias}\n\n${VOZ_DA_FAMILIA}`;
+  return agora ? `${base}\n\n${linhaDeHoje(agora)}` : base;
 }
 
 export interface LimiteHistorico {

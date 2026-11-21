@@ -47,7 +47,7 @@ describe("migração 005-notificacoes", () => {
     antigo.prepare("INSERT INTO onboarding (passo, estado) VALUES ('tutorial', 'pendente')").run();
     antigo.close();
 
-    const db = abrirBanco(pasta);
+    const db = abrirBanco(pasta, { duravel: false });
     expect(versaoAtual(db)).toBe(MIGRACOES.length);
     expect(tabelas(db)).toEqual(TABELAS);
     expect(db.prepare("SELECT estado FROM onboarding WHERE passo = 'tutorial'").get()).toEqual({

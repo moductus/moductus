@@ -49,8 +49,9 @@ function proibidos(trecho) {
 export function verificarConteudo(texto, caminho) {
   const achados = [];
   if (caminho.endsWith(".css")) {
+    // O repositório é CRLF: o \r no fim da linha não pode virar valor de propriedade.
     semComentariosCss(texto)
-      .split("\n")
+      .split(/\r?\n/)
       .forEach((linha, i) => {
         for (const motivo of proibidos(linha)) achados.push({ linha: i + 1, motivo });
         for (const prop of linha.matchAll(PROPRIEDADE_CSS)) {
@@ -124,7 +125,9 @@ export function classesDeclaradas(texto) {
 
 /**
  * Classe declarada sozinha em mais de um CSS de `src/` (fora de `src/tokens`, que sobrescreve de
- * propósito). As janelas carregam um bundle só: a regra que chega por último vence nas duas telas.
+ * propósito). O CSS que uma janela já baixou fica no documento, e a ordem depende de qual chunk
+ * chegou antes (no Sistema, de quais áreas já abriram): a regra que chega por último vence nas
+ * duas telas.
  */
 export function colisoesDeClasse(raiz) {
   const src = join(raiz, "src");

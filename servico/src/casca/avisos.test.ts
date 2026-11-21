@@ -43,6 +43,16 @@ describe("aviso do Windows pela casca", () => {
     ]);
   });
 
+  test("o aviso sem o painel do time leva a marca à casca; o comum não leva", async () => {
+    const { canal: c, pedidos } = canal([{ ok: true }, { ok: true }]);
+    const avisos = avisosPelaCasca(c);
+    const aviso = { id: "n1", agente: "Alba", titulo: "Briefing da manhã", corpo: "Bom dia.", botoes: [] };
+    await avisos.mostrar({ ...aviso, semPainelDoTime: true });
+    await avisos.mostrar(aviso);
+    expect(pedidos.map((p) => p.sem_painel_do_time)).toEqual([true, undefined]);
+    expect(Object.keys(pedidos[1]!)).not.toContain("sem_painel_do_time");
+  });
+
   test("erro ou resposta sem confirmação viram exceção; tela cheia sem resposta é não", async () => {
     const { canal: c } = canal([{ erro: "aviso recusado pelo Windows" }, {}, {}]);
     const avisos = avisosPelaCasca(c);

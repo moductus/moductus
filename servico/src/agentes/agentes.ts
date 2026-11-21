@@ -6,6 +6,7 @@ import {
   type ConfigAgente,
   type EstadoAgente,
   type Gatilho,
+  type MoedaTeto,
   type MotivoSono,
   type MudancaAgente,
   type PedidoAgente,
@@ -19,6 +20,12 @@ import {
 import { colunasDeOrigem, DO_USUARIO } from "../banco/tabela.ts";
 import type { Catalogo } from "../ferramentas/catalogo.ts";
 import type { ConfigProvedor } from "../provedores/provedor.ts";
+import {
+  camposPersonalizados,
+  colunasDeFabrica,
+  definicaoDeFabrica,
+  type DefinicaoDeFabrica,
+} from "./de-fabrica.ts";
 import type { EstadosAgentes } from "./estado.ts";
 
 /** Um agente como está no banco: a configuração e o estado guardado, sem o que o runtime vê agora. */
@@ -30,6 +37,9 @@ export interface AgenteGuardado extends ConfigAgente {
   /** Por que dorme; `null` fora do sono. Sem modelo não é guardado: vem de `provedorId`. */
   motivoSono: MotivoSonoGuardado | null;
   pausadoAte: string | null;
+  /** O que o "Liberar" soltou por cima do teto e até quando vale (migração 017); fora disso, `null`. */
+  tetoLiberadoCentavos: number | null;
+  tetoLiberadoAte: string | null;
 }
 
 /** O motivo do sono que fica no banco (migração 011). */
@@ -47,6 +57,9 @@ interface LinhaAgente {
   gatilhos: string;
   escopos_memoria: string;
   teto_diario_centavos: number | null;
+  teto_moeda: MoedaTeto;
+  teto_liberado_centavos: number | null;
+  teto_liberado_ate: string | null;
   estado: EstadoAgente;
   dorme_ate: string | null;
   motivo_sono: MotivoSonoGuardado | null;
@@ -55,7 +68,8 @@ interface LinhaAgente {
 }
 
 const COLUNAS_AGENTE = `id, nome, funcao, instrucoes, personagem, ferramentas, provedor_id, provedor_reserva_id,
-  gatilhos, escopos_memoria, teto_diario_centavos, estado, dorme_ate, motivo_sono, pausado_ate, de_fabrica`;
+  gatilhos, escopos_memoria, teto_diario_centavos, teto_moeda, teto_liberado_centavos, teto_liberado_ate,
+  estado, dorme_ate, motivo_sono, pausado_ate, de_fabrica`;
 
 /** Os de fábrica na ordem do time (AGENTS.md §2); os criados depois, na ordem em que nasceram. */
 const ORDEM_DO_TIME = `CASE id ${AGENTES_DE_FABRICA.map((id, i) => `WHEN '${id}' THEN ${i}`).join(" ")} ELSE ${AGENTES_DE_FABRICA.length} END`;
@@ -72,6 +86,9 @@ const paraAgente = (l: LinhaAgente): AgenteGuardado => ({
   gatilhos: JSON.parse(l.gatilhos) as Gatilho[],
   escoposMemoria: JSON.parse(l.escopos_memoria) as string[],
   tetoDiarioCentavos: l.teto_diario_centavos,
+  tetoMoeda: l.teto_moeda,
+  tetoLiberadoCentavos: l.teto_liberado_centavos,
+  tetoLiberadoAte: l.teto_liberado_ate,
   estado: l.estado,
   dormeAte: l.dorme_ate,
   motivoSono: l.motivo_sono,
@@ -85,6 +102,7 @@ interface LinhaProvedor {
   modelo: string | null;
   base_url: string | null;
   credencial: string | null;
+  caminho: string | null;
 }
 
 /** Leitura de `agentes` e `provedores` (migração 003). O que está na lixeira não aparece. */
@@ -111,7 +129,7 @@ export class RepositorioAgentes {
   provedor(id: string): ConfigProvedor | null {
     const linha = this.db
       .prepare(
-        "SELECT id, tipo, modelo, base_url, credencial FROM provedores WHERE id = ? AND apagado_em IS NULL",
+        "SELECT id, tipo, modelo, base_url, credencial, caminho FROM provedores WHERE id = ? AND apagado_em IS NULL",
       )
       .get(id) as unknown as LinhaProvedor | undefined;
     if (!linha) return null;
@@ -121,28 +139,76 @@ export class RepositorioAgentes {
       modelo: linha.modelo,
       baseUrl: linha.base_url,
       credencial: linha.credencial,
+      caminho: linha.caminho,
     };
   }
 
-  /** Grava o modelo do agente (principal, reserva e teto), com o usuário como origem. */
-  definirModelo(id: string, modelo: ModeloAgente, agora: string): void {
+  /**
+   * Grava o modelo do agente (principal, reserva, teto e a moeda dele), com o usuário como origem.
+   * Com `esquecerLiberado`, o que o "Liberar" soltou hoje sai: valia para o teto de antes.
+   */
+  definirModelo(id: string, modelo: ModeloAgente, agora: string, esquecerLiberado: boolean): void {
     const origem = colunasDeOrigem(DO_USUARIO);
+    const liberado = esquecerLiberado ? "teto_liberado_centavos = NULL, teto_liberado_ate = NULL," : "";
     this.db
       .prepare(
-        `UPDATE agentes SET provedor_id = ?, provedor_reserva_id = ?, teto_diario_centavos = ?,
-                atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
+        `UPDATE agentes SET ${liberado} provedor_id = ?, provedor_reserva_id = ?, teto_diario_centavos = ?,
+                teto_moeda = ?, atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
           WHERE id = ? AND apagado_em IS NULL`,
       )
       .run(
         modelo.provedorId,
         modelo.provedorReservaId,
         modelo.tetoDiarioCentavos,
+        modelo.tetoMoeda,
         agora,
         origem.origem,
         origem.agente_id,
         origem.execucao_id,
         id,
       );
+  }
+
+  /** O "Liberar" do teto: quanto foi solto por cima do teto hoje e até quando vale. */
+  liberarTeto(id: string, centavos: number, ate: string, agora: string): void {
+    const origem = colunasDeOrigem(DO_USUARIO);
+    this.db
+      .prepare(
+        `UPDATE agentes SET teto_liberado_centavos = ?, teto_liberado_ate = ?, atualizado_em = ?,
+                origem = ?, agente_id = ?, execucao_id = ?
+          WHERE id = ? AND apagado_em IS NULL`,
+      )
+      .run(centavos, ate, agora, origem.origem, origem.agente_id, origem.execucao_id, id);
+  }
+
+  /**
+   * Volta nome, função, instruções, personagem, ferramentas, gatilhos e escopos ao de fábrica, com
+   * o usuário como origem. Modelo, reserva, teto e estado ficam. Devolve se havia o que voltar.
+   */
+  restaurarPadrao(id: string, definicao: DefinicaoDeFabrica, agora: string): boolean {
+    const c = colunasDeFabrica(definicao);
+    const origem = colunasDeOrigem(DO_USUARIO);
+    const r = this.db
+      .prepare(
+        `UPDATE agentes SET nome = ?, funcao = ?, instrucoes = ?, personagem = ?, ferramentas = ?,
+                gatilhos = ?, escopos_memoria = ?, atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
+          WHERE id = ? AND de_fabrica = 1 AND apagado_em IS NULL`,
+      )
+      .run(
+        c.nome,
+        c.funcao,
+        c.instrucoes,
+        c.personagem,
+        c.ferramentas,
+        c.gatilhos,
+        c.escopos_memoria,
+        agora,
+        origem.origem,
+        origem.agente_id,
+        origem.execucao_id,
+        id,
+      );
+    return Number(r.changes) > 0;
   }
 
   /**
@@ -189,25 +255,36 @@ export type EstadoGuardado =
 /** O que o runtime vê de um agente agora (fila, trabalhando, esperando você). */
 export type SituacaoDe = (agente: AgenteGuardado) => SituacaoAgente;
 
-/** Quem muda o estado guardado (estado.ts), soltando ou recusando quem espera a vez. */
-export type MudarEstados = Pick<EstadosAgentes, "ligar" | "pausar" | "retomar" | "modeloMudou">;
+/**
+ * Quem muda o estado guardado (estado.ts), soltando ou recusando quem espera a vez, e conta o gasto
+ * de hoje contra o teto.
+ */
+export type MudarEstados = Pick<
+  EstadosAgentes,
+  "ligar" | "pausar" | "retomar" | "tentarAgora" | "modeloMudou" | "liberarTeto" | "tetoMudou" | "gastoDeHoje"
+>;
 
-/** O modelo de um agente: o provedor principal, a reserva e o teto de gasto por dia. */
-export type ModeloAgente = Pick<ConfigAgente, "provedorId" | "provedorReservaId" | "tetoDiarioCentavos">;
+/** O modelo de um agente: o provedor principal, a reserva e o teto de gasto por dia, com a moeda. */
+export type ModeloAgente = Pick<
+  ConfigAgente,
+  "provedorId" | "provedorReservaId" | "tetoDiarioCentavos" | "tetoMoeda"
+>;
 
 /** Os campos que `agentes.definir` muda por enquanto (Configurações › Modelos, F2-32). */
-const CAMPOS_DO_MODELO: readonly string[] = ["provedorId", "provedorReservaId", "tetoDiarioCentavos"];
+const CAMPOS_DO_MODELO: readonly string[] = [
+  "provedorId",
+  "provedorReservaId",
+  "tetoDiarioCentavos",
+  "tetoMoeda",
+];
 
 /** Ditos ao usuário na tela de Modelos (AGENTS.md §2 Voz: o que houve e o que fazer). */
 export const MENSAGEM_SO_MODELO = "Por aqui só mudam o modelo, a reserva e o teto do agente.";
 export const MENSAGEM_PROVEDOR_SAIU = "Esse provedor não existe mais. Escolha outro.";
 export const MENSAGEM_RESERVA_IGUAL = "A reserva precisa ser outro provedor, não o principal.";
 export const MENSAGEM_RESERVA_SEM_PRINCIPAL = "Escolha o principal antes da reserva.";
-/**
- * O teto fica desligado até a moeda dele ser decidida: o custo é medido em dólar e o teto em
- * centavos de uma moeda que ainda não existe. Gravar um valor seria prometer um limite que não vale.
- */
-export const MENSAGEM_TETO_SEM_MOEDA = "O teto por dia ainda não vale: falta decidir a moeda dele.";
+/** Agente criado por você não tem padrão para onde voltar (AGENTS.md §1). */
+export const MENSAGEM_SO_DE_FABRICA = "Só os agentes de fábrica voltam ao padrão.";
 
 /** Os agentes como a interface vê: configuração, estado e o que estão fazendo agora. */
 export class ServicoAgentes {
@@ -256,10 +333,29 @@ export class ServicoAgentes {
   }
 
   /**
-   * Troca o modelo do agente: principal, reserva e teto por dia (Configurações › Modelos). Vale na
-   * próxima execução: o runtime lê a configuração na vez de cada pedido, e a que está rodando
-   * termina no modelo de antes. Trocar o principal ou a reserva esquece a falha do provedor de
-   * antes (estado.ts). O teto fica desligado enquanto a moeda dele não for decidida.
+   * "Tentar agora": acorda quem dorme por falha do provedor, e a fila dele roda já; falhando, ele
+   * volta a dormir com a espera de onde estava. Limite de uso e teto recusam com o motivo.
+   */
+  acordar(pedido: PedidoAgente): Agente {
+    this.estados.tentarAgora(pedido.id);
+    return this.obter(pedido);
+  }
+
+  /**
+   * "Liberar" no cartão de teto (ADR-0040): quem dorme pelo teto ganha mais um passo até a
+   * meia-noite e a fila dele roda. Fora do teto, recusa.
+   */
+  liberarTeto(pedido: PedidoAgente): Agente {
+    this.estados.liberarTeto(pedido.id);
+    return this.obter(pedido);
+  }
+
+  /**
+   * Troca o modelo do agente: principal, reserva e teto por dia, na moeda escolhida (Configurações
+   * › Modelos, ADR-0040). Vale na próxima execução: o runtime lê a configuração na vez de cada
+   * pedido, e a que está rodando termina no modelo de antes. Trocar o principal ou a reserva
+   * esquece a falha do provedor de antes (estado.ts). Trocar o teto ou a moeda esquece o que foi
+   * liberado hoje e acorda quem dormia pelo teto, se o teto novo já não foi atingido.
    */
   definir(mudanca: MudancaAgente): Agente {
     const atual = this.repo.agente(mudanca.id);
@@ -272,10 +368,8 @@ export class ServicoAgentes {
         mudanca.provedorReservaId === undefined ? atual.provedorReservaId : mudanca.provedorReservaId,
       tetoDiarioCentavos:
         mudanca.tetoDiarioCentavos === undefined ? atual.tetoDiarioCentavos : mudanca.tetoDiarioCentavos,
+      tetoMoeda: mudanca.tetoMoeda ?? atual.tetoMoeda,
     };
-    if (mudanca.tetoDiarioCentavos !== undefined && mudanca.tetoDiarioCentavos !== null) {
-      throw new Error(MENSAGEM_TETO_SEM_MOEDA);
-    }
     // Só o que muda precisa existir: o de antes que saiu continua até o usuário trocar.
     for (const id of [mudanca.provedorId, mudanca.provedorReservaId]) {
       if (typeof id === "string" && !this.repo.provedor(id)) throw new Error(MENSAGEM_PROVEDOR_SAIU);
@@ -286,8 +380,25 @@ export class ServicoAgentes {
     }
     const trocouModelo =
       novo.provedorId !== atual.provedorId || novo.provedorReservaId !== atual.provedorReservaId;
-    this.repo.definirModelo(atual.id, novo, this.agora().toISOString());
+    const trocouTeto =
+      novo.tetoDiarioCentavos !== atual.tetoDiarioCentavos || novo.tetoMoeda !== atual.tetoMoeda;
+    this.repo.definirModelo(atual.id, novo, this.agora().toISOString(), trocouTeto);
     if (trocouModelo) this.estados.modeloMudou(atual.id);
+    if (trocouTeto) this.estados.tetoMudou(atual.id);
+    return this.obter({ id: atual.id });
+  }
+
+  /**
+   * Volta um agente de fábrica ao padrão (de-fabrica.ts): nome, função, instruções, visual,
+   * ferramentas, vigias e escopos. Modelo, reserva, estado e histórico ficam como estão. Vale na
+   * próxima execução, como `definir`: a que está rodando termina com a configuração de antes.
+   */
+  restaurarPadrao(pedido: PedidoAgente): Agente {
+    const atual = this.repo.agente(pedido.id);
+    if (!atual) throw new Error("agente não encontrado");
+    const definicao = atual.deFabrica ? definicaoDeFabrica(atual.id) : null;
+    if (!definicao) throw new Error(MENSAGEM_SO_DE_FABRICA);
+    this.repo.restaurarPadrao(atual.id, definicao, this.agora().toISOString());
     return this.obter({ id: atual.id });
   }
 
@@ -308,8 +419,15 @@ export class ServicoAgentes {
       dormeAte: _dormeAte,
       motivoSono: _motivoSono,
       pausadoAte: _pausadoAte,
+      tetoLiberadoCentavos: _tetoLiberadoCentavos,
+      tetoLiberadoAte: _tetoLiberadoAte,
       ...config
     } = agente;
-    return { ...config, situacao: this.situacao(agente) };
+    return {
+      ...config,
+      camposPersonalizados: camposPersonalizados(agente.id, agente.deFabrica, agente),
+      gastoDeHoje: this.estados.gastoDeHoje(agente),
+      situacao: this.situacao(agente),
+    };
   }
 }

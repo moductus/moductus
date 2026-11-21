@@ -47,7 +47,7 @@ export function situacaoDoCli(nome: string, achado: ProvedorDetectado | undefine
     return {
       estado: "instalado pelo npm",
       tom: "aviso",
-      texto: `${versao} · o Moductus usa o ${nome} do instalador nativo. Instale por ele e procure de novo.`,
+      texto: `${versao} · o npm instalou o ${nome} de um jeito que o Moductus não consegue rodar. Instale pelo instalador nativo e procure de novo.`,
       escolhivel: false,
     };
   }
@@ -78,6 +78,32 @@ export function situacaoDoCli(nome: string, achado: ProvedorDetectado | undefine
   return { estado: "detectado", tom: "sucesso", texto: versao, escolhivel: true };
 }
 
+/** A página oficial de instalação de cada CLI, aberta no navegador pelo "Como instalar". */
+export const COMO_INSTALAR: Readonly<Record<TipoProvedorCli, string>> = {
+  "claude-cli": "https://code.claude.com/docs/en/setup",
+  "gemini-cli": "https://geminicli.com/docs/get-started/installation/",
+  "codex-cli": "https://github.com/openai/codex",
+  "opencode-cli": "https://opencode.ai/docs/",
+};
+
+/**
+ * "Como instalar" aparece quando falta instalar: o CLI não está no PATH, ou o npm o instalou de
+ * um jeito que o Moductus não consegue rodar.
+ */
+export function precisaInstalar(achado: ProvedorDetectado | undefined): boolean {
+  return !achado || achado.impedimento === "instalado_pelo_npm";
+}
+
+/**
+ * "Entrar" aparece quando o CLI serve mas está sem login (o selo "sem login"): o terminal abre já
+ * com o comando de login, e "Procurar de novo" confere depois.
+ */
+export function precisaEntrar(achado: ProvedorDetectado | undefined): boolean {
+  return (
+    achado !== undefined && achado.logado === false && achado.impedimento === null && !achado.versaoMinima
+  );
+}
+
 const SEGUNDOS = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 /** "2,1 s": o tempo da resposta inteira, como no quadro. */
@@ -89,6 +115,8 @@ export type TipoApi = "openai" | "openai-compativel";
 
 export interface FormularioApi {
   tipo: TipoApi;
+  /** Como o provedor aparece nas listas; vazio, vale o {@link nomeSugerido}. */
+  nome?: string;
   baseUrl: string;
   modelo: string;
   chave: string;
@@ -96,21 +124,36 @@ export interface FormularioApi {
 
 export const FORMULARIO_API_VAZIO: FormularioApi = { tipo: "openai", baseUrl: "", modelo: "", chave: "" };
 
+const NESTE_PC = new Set(["localhost", "127.0.0.1", "[::1]", "0.0.0.0"]);
+
 /**
- * O pedido de criar o provedor da chave de API. O nome é o do serviço (OpenAI) ou o host do
- * endereço, nunca o endereço inteiro, que pode levar mais do que devia. Campo vazio não vai.
+ * O nome quando o usuário não dá um: o do serviço (OpenAI), "Modelo local" para um endereço neste
+ * PC (roteador local, Ollama, LM Studio) ou o host, nunca o endereço inteiro, que pode levar mais
+ * do que devia.
  */
+export function nomeSugerido(tipo: TipoApi, baseUrl: string): string {
+  if (tipo === "openai") return "OpenAI";
+  try {
+    const endereco = new URL(baseUrl.trim());
+    if (NESTE_PC.has(endereco.hostname)) return "Modelo local";
+    return endereco.host || "Compatível com OpenAI";
+  } catch {
+    return "Compatível com OpenAI";
+  }
+}
+
+/** O pedido de criar o provedor da chave de API. Campo vazio não vai. */
 export function novoDaApi(formulario: FormularioApi): NovoProvedor {
   const modelo = formulario.modelo.trim();
   const chave = formulario.chave.trim();
+  const nome = formulario.nome?.trim() || nomeSugerido(formulario.tipo, formulario.baseUrl);
   if (formulario.tipo === "openai") {
-    return { tipo: "openai", nome: "OpenAI", ...(modelo ? { modelo } : {}), ...(chave ? { chave } : {}) };
+    return { tipo: "openai", nome, ...(modelo ? { modelo } : {}), ...(chave ? { chave } : {}) };
   }
-  const baseUrl = formulario.baseUrl.trim();
   return {
     tipo: "openai-compativel",
-    nome: hostDe(baseUrl) ?? "Compatível com OpenAI",
-    baseUrl,
+    nome,
+    baseUrl: formulario.baseUrl.trim(),
     ...(modelo ? { modelo } : {}),
     ...(chave ? { chave } : {}),
   };
@@ -122,7 +165,8 @@ export type EscolhaModelo = TipoProvedorCli | "api";
 export type ResultadoModelo =
   | { fase: "parado" }
   | { fase: "testando"; nome: string }
-  | { fase: "ok"; nome: string; latenciaMs: number; assinatura: boolean }
+  /** `soConversa`: passou sem chamar a ferramenta do teste; os agentes não consultam nem fazem. */
+  | { fase: "ok"; nome: string; latenciaMs: number; assinatura: boolean; soConversa?: boolean }
   | { fase: "falhou"; nome: string; mensagem: string };
 
 /**
@@ -163,12 +207,4 @@ export function criadosDepois(
   const doPasso = criadoAgora || criadosAqui.includes(alvo);
   if (passou) return doPasso ? [alvo] : [];
   return doPasso && !criadosAqui.includes(alvo) ? [...criadosAqui, alvo] : [...criadosAqui];
-}
-
-function hostDe(endereco: string): string | null {
-  try {
-    return new URL(endereco).host || null;
-  } catch {
-    return null;
-  }
 }

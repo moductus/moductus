@@ -116,8 +116,7 @@ function Exportar({ conectado }: { conectado: boolean }) {
         <p className="config-nota">
           <Icone nome="escudo" tamanho={14} />
           <span>
-            Nunca vão no arquivo: chaves de API, login do Google e do GitHub, tokens. Você conecta de novo no
-            outro PC.
+            Nunca vão no arquivo: chaves de API, login do GitHub, tokens. Você conecta de novo no outro PC.
           </span>
         </p>
         <div className="config-rodape">

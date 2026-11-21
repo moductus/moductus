@@ -71,6 +71,13 @@ export const PedidoApagarConversa = z.object({ id: Id });
 export type PedidoApagarConversa = z.infer<typeof PedidoApagarConversa>;
 
 /**
+ * Para as respostas da conversa, a que roda e as que esperam a vez; volta quantos agentes
+ * pararam. O que já tinha sido dito fica gravado, com o aviso de que você parou.
+ */
+export const PedidoPararConversa = z.object({ id: Id });
+export type PedidoPararConversa = z.infer<typeof PedidoPararConversa>;
+
+/**
  * Resposta em andamento: o texto inteiro até agora, não só o pedaço novo, para a janela que
  * conectar no meio ver a fala certa. Vazio é "pensando".
  */

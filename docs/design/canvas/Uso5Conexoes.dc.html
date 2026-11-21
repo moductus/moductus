@@ -46,14 +46,29 @@ input::placeholder,textarea::placeholder{color:inherit;opacity:0.7}
 <div style="flex: 1; min-height: 0; padding: 40px 48px 0; box-sizing: border-box; display: flex; flex-direction: column; gap: 22px; overflow: hidden">
 <div style="display: flex; flex-direction: column; gap: 6px"><span style="{{s.rot}}">Conexões</span><h1 style="{{s.h1}}">O que cada agente pode alcançar</h1><p style="margin: 0; color: {{t.texto2}}; max-width: 560px; text-wrap: pretty">Tudo opcional. Sem conexão, o agente trabalha só com o que você contar a ele.</p></div>
 <div style="display: flex; flex-direction: column; gap: 8px">
-<sc-for list="{{conexoes}}" as="c" hint-placeholder-count="4">
+<div style="{{s.cartao}}; display: flex; flex-direction: column; gap: 12px; border-color: {{t.bordaForte}}">
+<div style="display: flex; align-items: center; gap: 14px">
+<span style="flex: none; width: 32px; height: 32px; display: flex"><dc-import name="Personagem" agente="alba" estado="descansando" modo="cabeca" tamanho="{{ 32 }}" hint-size="32px,32px"></dc-import></span>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<div style="display: flex; align-items: center; gap: 8px"><span style="font-weight: 600">Google Agenda</span><span style="{{s.rot}}">para a Alba</span><span style="{{okPill}}">conectado</span></div>
+<span style="color: {{t.texto2}}; font-size: 12px">voce@gmail.com · criei o calendário "Moductus" para os lembretes chegarem ao celular.</span>
+</div>
+<button style="{{s.btnG}}">Desconectar</button>
+</div>
+<div style="padding-left: 46px; display: flex; flex-direction: column; gap: 6px">
+<span style="{{s.rot}}">Leio os marcados para montar o seu dia. Mudar evento neles sempre pede sua aprovação.</span>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 20px">
+<sc-for list="{{cals}}" as="c" hint-placeholder-count="4"><label style="display: flex; align-items: center; gap: 10px; height: 30px; cursor: pointer"><span style="{{c.caixa}}"></span><span style="{{c.nomeEstilo}}">{{c.nome}}</span><span style="{{s.rot}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.desc}}</span></label></sc-for>
+</div>
+</div>
+</div>
+<sc-for list="{{conexoes}}" as="c" hint-placeholder-count="3">
 <div style="{{s.cartao}}; display: flex; align-items: center; gap: 14px">
 <span style="flex: none; width: 32px; height: 32px; display: flex"><dc-import name="Personagem" agente="{{c.agente}}" estado="descansando" modo="cabeca" tamanho="{{ 32 }}" hint-size="32px,32px"></dc-import></span>
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-<div style="display: flex; align-items: center; gap: 8px"><span style="font-weight: 600">{{c.nome}}</span><span style="{{s.rot}}">para {{c.quem}}</span><sc-if value="{{c.feito}}" hint-placeholder-val="{{ false }}"><span style="{{c.selo}}">conectado</span></sc-if></div>
+<div style="display: flex; align-items: center; gap: 8px"><span style="font-weight: 600">{{c.nome}}</span><span style="{{s.rot}}">para {{c.quem}}</span><sc-if value="{{c.breve}}" hint-placeholder-val="{{ false }}"><span style="{{c.selo}}">{{c.quando}}</span></sc-if></div>
 <span style="color: {{t.texto2}}; font-size: 12px">{{c.desc}}</span>
 </div>
-<sc-if value="{{c.feito}}" hint-placeholder-val="{{ false }}"><button style="{{s.btnG}}">Desconectar</button></sc-if>
 <sc-if value="{{c.pendente}}" hint-placeholder-val="{{ true }}"><button style="{{s.btnG}}">Agora não</button><button style="{{s.btn}}">{{c.acao}}</button></sc-if>
 </div>
 </sc-for>
@@ -171,13 +186,14 @@ var PASSO = 5;
     });
     var passoTutorial = { bola: 'width: 22px; height: 22px; border-radius: 11px; flex: none; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; box-sizing: border-box; border: 1px dashed ' + t.bordaForte + '; color: ' + t.texto3 + ';', texto: 'font-size: 13px; color: ' + t.texto3 + ';' };
 
+    var cals = [['Pessoal', 'o principal', true], ['Trabalho', 'compartilhado', true], ['Aniversários', 'dos contatos', false], ['Feriados no Brasil', 'público', false]].map(function (c) {
+      return { nome: c[0], desc: c[1], caixa: c[2] ? marcada() : caixa(false), nomeEstilo: c[2] ? '' : 'color: ' + t.texto2 + ';' }; });
     var conexoes = [
-      { agente: 'alba', quem: 'a Alba', nome: 'Google Agenda', desc: 'Lê seus calendários e cria um calendário "Moductus" para os lembretes chegarem ao celular.', feito: true },
-      { agente: 'faina', quem: 'a Faina', nome: 'Pastas autorizadas', desc: 'Downloads e Área de Trabalho sugeridas. Ela nunca sai delas nem toca no Windows.', acao: 'Escolher pastas' },
+      { agente: 'faina', quem: 'a Faina', nome: 'Pastas autorizadas', desc: 'Downloads e Área de Trabalho sugeridas. Ela nunca sai delas nem toca no Windows.', quando: 'chega com Arquivos' },
       { agente: 'nuno', quem: 'o Nuno', nome: 'Sessões de IA e GitHub', desc: 'Instala os hooks do Claude Code e lê PRs, issues e CI dos seus repositórios.', acao: 'Conectar' },
-      { agente: 'tula', quem: 'a Tula', nome: 'Primeiro extrato', desc: 'OFX, CSV ou XML do seu banco. Nubank, Itaú, Inter e outros já têm perfil pronto.', acao: 'Escolher arquivo' }
-    ].map(function (c) { return Object.assign({}, c, { feito: !!c.feito, pendente: !c.feito, selo: pill(t.sucesso) }); });
-    return R({ passos: passos, passoTutorial: passoTutorial, conexoes: conexoes });
+      { agente: 'tula', quem: 'a Tula', nome: 'Primeiro extrato', desc: 'OFX, CSV ou XML do seu banco. Nubank, Itaú, Inter e outros já têm perfil pronto.', quando: 'chega com Finanças' }
+    ].map(function (c) { return Object.assign({}, c, { breve: !!c.quando, pendente: !!c.acao, selo: pill(t.texto3) }); });
+    return R({ passos: passos, passoTutorial: passoTutorial, cals: cals, conexoes: conexoes, okPill: pill(t.sucesso) });
   }
 }
 </script>

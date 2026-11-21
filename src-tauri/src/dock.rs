@@ -112,6 +112,14 @@ pub fn largura_janela(forma: Forma) -> f64 {
     }
 }
 
+/// O que sobra de transparente entre a borda da janela e o dock desenhado, de cada lado.
+pub fn margem_janela(forma: Forma) -> f64 {
+    match forma {
+        Forma::Colada => 0.0,
+        Forma::Flutuante => MARGEM_FLUTUANTE,
+    }
+}
+
 pub fn iniciar(janela: &WebviewWindow, config: Configuracao) {
     let hwnd = hwnd_de(janela);
     sem_ativar(hwnd);
@@ -385,6 +393,8 @@ mod testes {
     fn flutuante_e_mais_larga_que_colada() {
         assert_eq!(largura_janela(Forma::Colada), 64.0);
         assert_eq!(largura_janela(Forma::Flutuante), 80.0);
+        assert_eq!(largura_janela(Forma::Flutuante) - 2.0 * margem_janela(Forma::Flutuante), LARGURA);
+        assert_eq!(margem_janela(Forma::Colada), 0.0);
     }
 
     #[test]

@@ -1,5 +1,7 @@
 import {
   CONFIG_PADRAO,
+  enderecoAceitaChave,
+  MENSAGEM_CHAVE_SEM_HTTPS,
   PASSOS_PRIMEIRO_USO,
   type Config,
   type ConfigDock,
@@ -23,6 +25,7 @@ import {
 } from "react";
 import type { Destino } from "../../../areas/areas.ts";
 import { CartaoClaudeCode, CartaoGithub } from "../../../areas/configuracoes/Conexoes.tsx";
+import { AVISO_SEM_FERRAMENTAS } from "../../../areas/configuracoes/modelos.ts";
 import { useConexoes } from "../../../areas/configuracoes/useConexoes.ts";
 import { Botao } from "../../../componentes/Botao.tsx";
 import { Campo } from "../../../componentes/Campo.tsx";
@@ -31,13 +34,17 @@ import { Personagem } from "../../../componentes/personagem/Personagem.tsx";
 import type { Agente, EstadoPersonagem } from "../../../componentes/personagem/agentes.ts";
 import { Selo } from "../../../componentes/Selo.tsx";
 import { Seletor, type OpcaoSeletor } from "../../../componentes/Seletor.tsx";
+import { abrirEndereco, abrirTerminalDeLogin, useAbrir } from "../../../nativo/abrir.ts";
 import { servico } from "../../../servico/conexao.ts";
 import {
   CLIS,
+  COMO_INSTALAR,
   criadosDepois,
   formatarLatencia,
   MODELO_INICIAL,
   novoDaApi,
+  precisaEntrar,
+  precisaInstalar,
   situacaoDoCli,
   substituicao,
   type EscolhaModelo,
@@ -329,12 +336,14 @@ interface PropsOpcao {
   previa?: ReactNode;
   /** Selo ao lado do título (o estado de cada modelo). */
   selo?: ReactNode;
+  /** Botão à direita, fora do rótulo ("Como instalar", "Entrar"). */
+  acao?: ReactNode;
 }
 
 /** Cartão de opção com rádio de verdade: Tab entra no grupo, as setas trocam, Enter segue. */
-function Opcao({ nome, marcada, aoMarcar, titulo, texto, desativada, previa, selo }: PropsOpcao) {
+function Opcao({ nome, marcada, aoMarcar, titulo, texto, desativada, previa, selo, acao }: PropsOpcao) {
   const id = useId();
-  return (
+  const opcao = (
     <label className="uso-opcao" data-marcada={marcada}>
       {previa}
       <span className="uso-opcao-linha">
@@ -353,6 +362,13 @@ function Opcao({ nome, marcada, aoMarcar, titulo, texto, desativada, previa, sel
         {texto}
       </span>
     </label>
+  );
+  if (!acao) return opcao;
+  return (
+    <div className="uso-opcao-moldura">
+      {opcao}
+      <span className="uso-opcao-acao">{acao}</span>
+    </div>
   );
 }
 
@@ -502,6 +518,8 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
   const [erroDeteccao, setErroDeteccao] = useState<string | null>(null);
   // Cada "Procurar de novo" é uma rodada: depois de instalar ou entrar no CLI, sem reabrir nada.
   const [rodada, setRodada] = useState(0);
+  // "Como instalar" e "Entrar" abrem fora do Moductus; a falha aparece abaixo da lista.
+  const fora = useAbrir();
   const { escolha, formulario, resultado } = estado;
   const testando = resultado.fase === "testando";
 
@@ -573,7 +591,13 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
         ...e,
         criadosAqui: criadosDepois(criadosAqui, alvo, criado === alvo, r.ok),
         resultado: r.ok
-          ? { fase: "ok", nome, latenciaMs: r.latenciaMs, assinatura: escolha !== "api" }
+          ? {
+              fase: "ok",
+              nome,
+              latenciaMs: r.latenciaMs,
+              assinatura: escolha !== "api",
+              soConversa: r.ferramentas === false,
+            }
           : { fase: "falhou", nome, mensagem: r.falha.mensagem },
       }));
     } catch (e) {
@@ -595,6 +619,7 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
       <fieldset className="uso-opcoes uso-opcoes--lista" aria-busy={detectados === null}>
         <legend className="so-leitor">Modelo</legend>
         {CLIS.map((c) => {
+          const achado = detectados?.find((d) => d.tipo === c.tipo);
           const situacao =
             detectados === null
               ? {
@@ -603,10 +628,7 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
                   texto: "Procurando no PATH…",
                   escolhivel: false,
                 }
-              : situacaoDoCli(
-                  c.nome,
-                  detectados.find((d) => d.tipo === c.tipo),
-                );
+              : situacaoDoCli(c.nome, achado);
           return (
             <Opcao
               key={c.tipo}
@@ -617,6 +639,25 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
               titulo={c.nome}
               selo={<Selo tom={situacao.tom}>{situacao.estado}</Selo>}
               texto={situacao.texto}
+              acao={
+                detectados === null ? null : precisaInstalar(achado) ? (
+                  <Botao
+                    tamanho="pequeno"
+                    aria-label={`Como instalar o ${c.nome}`}
+                    onClick={() => fora.abrir(() => abrirEndereco(COMO_INSTALAR[c.tipo]))}
+                  >
+                    Como instalar
+                  </Botao>
+                ) : precisaEntrar(achado) ? (
+                  <Botao
+                    tamanho="pequeno"
+                    aria-label={`Entrar no ${c.nome} pelo terminal`}
+                    onClick={() => fora.abrir(() => abrirTerminalDeLogin(c.tipo))}
+                  >
+                    Entrar
+                  </Botao>
+                ) : null
+              }
             />
           );
         })}
@@ -626,12 +667,17 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
           desativada={testando}
           aoMarcar={() => escolher("api")}
           titulo="Chave de API"
-          texto="OpenAI ou compatível com OpenAI (Ollama, OpenRouter, LM Studio) · paga por uso"
+          texto="OpenAI ou compatível com OpenAI (roteador local, Ollama, LM Studio) · paga por uso"
         />
       </fieldset>
       {erroDeteccao && (
         <p className="uso-erro" role="alert">
           {erroDeteccao}
+        </p>
+      )}
+      {fora.erro && (
+        <p className="uso-erro" role="alert">
+          {fora.erro}
         </p>
       )}
       {detectados !== null && (
@@ -680,7 +726,9 @@ function Modelo({ estado, mudar, ...cabecalho }: PropsModelo) {
             dica={
               formulario.tipo === "openai"
                 ? "Fica no Gerenciador de Credenciais do Windows."
-                : "Opcional para modelo local. Fica no Gerenciador de Credenciais do Windows."
+                : enderecoAceitaChave(formulario.baseUrl.trim())
+                  ? "Opcional para modelo local. Fica no Gerenciador de Credenciais do Windows."
+                  : `${MENSAGEM_CHAVE_SEM_HTTPS} Sem chave, este endereço funciona.`
             }
             value={formulario.chave}
             disabled={testando}
@@ -738,8 +786,17 @@ function ResultadoDoTeste({ estado, aoTestar }: { estado: EstadoModelo; aoTestar
                 ? "Usa a sua assinatura. Os agentes contam o uso no limite semanal dela, e o Nuno avisa quando chegar perto."
                 : "Paga por uso, na conta do provedor. O Nuno mostra o gasto estimado de cada agente."}
             </span>
+            {resultado.soConversa && (
+              <span className="uso-rotulo" data-tom="aviso" role="alert">
+                {AVISO_SEM_FERRAMENTAS}
+              </span>
+            )}
           </span>
-          <Selo tom="sucesso">funcionando</Selo>
+          {resultado.soConversa ? (
+            <Selo tom="aviso">só conversa</Selo>
+          ) : (
+            <Selo tom="sucesso">funcionando</Selo>
+          )}
         </>
       )}
       {resultado.fase === "falhou" && (
@@ -833,28 +890,21 @@ const CONEXOES_DEPOIS: readonly {
   quem: string;
   nome: string;
   texto: string;
-  fase: string;
+  quando: string;
 }[] = [
-  {
-    agente: "alba",
-    quem: "Alba",
-    nome: "Google Agenda",
-    texto: "Lê seus calendários e cria um calendário “Moductus” para os lembretes chegarem ao celular.",
-    fase: "fase 3",
-  },
   {
     agente: "faina",
     quem: "Faina",
     nome: "Pastas autorizadas",
     texto: "Downloads e Área de Trabalho sugeridas. Ela nunca sai delas nem toca no Windows.",
-    fase: "fase 5",
+    quando: "chega com Arquivos",
   },
   {
     agente: "tula",
     quem: "Tula",
     nome: "Primeiro extrato",
     texto: "OFX, CSV ou XML do seu banco. Nubank, Itaú, Inter e outros já têm perfil pronto.",
-    fase: "fase 4",
+    quando: "chega com Finanças",
   },
 ];
 
@@ -869,15 +919,15 @@ function ItemDepois({ conexao }: { conexao: (typeof CONEXOES_DEPOIS)[number] }) 
         </span>
         <span className="uso-item-descricao">{conexao.texto}</span>
       </span>
-      <Selo>{conexao.fase}</Selo>
+      <Selo>{conexao.quando}</Selo>
     </li>
   );
 }
 
 /**
  * Conexões por agente (Uso5Conexoes.dc.html). As do Nuno já são de verdade: "Conectar" abre os
- * mesmos cartões de Configurações › Conexões, com a prévia do settings.json antes do sim e o
- * GitHub pelo gh. As outras chegam com a área de cada agente.
+ * mesmos cartões de Configurações › Conexões, com a prévia do settings.json antes do sim e o GitHub
+ * pelo gh. As outras chegam com a área de cada agente.
  */
 function Conexoes(cabecalho: PropsCabecalho) {
   const conexoes = useConexoes();
@@ -885,19 +935,19 @@ function Conexoes(cabecalho: PropsCabecalho) {
   const [depois, setDepois] = useState(false);
   const doNuno = [conexoes.claude, conexoes.github].filter((c) => c !== null);
   const ligadas = doNuno.filter((c) => c.estado === "ligada").length;
-  const ocupado = Object.values(conexoes.andamento).some((a) => a !== undefined);
+  const ocupado =
+    conexoes.andamento["hooks-claude-code"] !== undefined || conexoes.andamento.github !== undefined;
   // Desconectar desfaz as duas: os hooks saem do settings.json e o GitHub para de ser lido.
   const desconectar = async () => {
     for (const c of doNuno) if (c.estado === "ligada") await conexoes.desligar(c.tipo);
   };
-  const [alba, faina, tula] = CONEXOES_DEPOIS;
+  const [faina, tula] = CONEXOES_DEPOIS;
   return (
     <>
       <Cabecalho {...cabecalho} rotulo="Conexões" titulo="O que cada agente pode alcançar">
         Tudo opcional. Sem conexão, o agente trabalha só com o que você contar a ele.
       </Cabecalho>
       <ul className="uso-lista" aria-label="Conexões por agente">
-        {alba && <ItemDepois conexao={alba} />}
         {faina && <ItemDepois conexao={faina} />}
         <li className="uso-item uso-item--nuno">
           <span className="uso-item-cabeca">

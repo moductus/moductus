@@ -16,13 +16,15 @@ interface PropsCabecalho {
   sistema?: string;
   /** Atalho mostrado ao lado do link, como no Agentes.dc.html. */
   atalho?: string;
+  /** O atalho global da própria área, no alto à direita ("Ctrl Alt P" do PainelFoco.dc.html). */
+  atalhoDaArea?: { teclas: string; acao: string };
 }
 
 /**
  * O alto do painel (Main.dc.html, Agentes.dc.html, PainelDev.dc.html): título, a linha de
  * situação, o "Abrir no sistema" e o fechar (Esc também fecha).
  */
-export function CabecalhoPainel({ titulo, icone, subtitulo, sistema, atalho }: PropsCabecalho) {
+export function CabecalhoPainel({ titulo, icone, subtitulo, sistema, atalho, atalhoDaArea }: PropsCabecalho) {
   return (
     <header className="painel-cabecalho">
       <div className="painel-cabecalho-linha">
@@ -34,6 +36,12 @@ export function CabecalhoPainel({ titulo, icone, subtitulo, sistema, atalho }: P
             {atalho && <Atalho teclas={atalho} />}
           </button>
         )}
+        {atalhoDaArea && (
+          <span className="painel-atalho" title={`${atalhoDaArea.teclas}: ${atalhoDaArea.acao}`}>
+            <span className="so-leitor">{`${atalhoDaArea.acao}: `}</span>
+            <Atalho teclas={atalhoDaArea.teclas} />
+          </span>
+        )}
         <Botao
           variante="fantasma"
           tamanho="pequeno"
@@ -43,7 +51,7 @@ export function CabecalhoPainel({ titulo, icone, subtitulo, sistema, atalho }: P
           onClick={() => void invoke("painel_fechar")}
         />
       </div>
-      {/* Embaixo do título, na largura toda: o painel tem 360 px e a linha não pode quebrar. */}
+      {/* Embaixo do título, na largura toda: o cartão tem 400 px e a linha não pode quebrar. */}
       {subtitulo && <p className="painel-subtitulo">{subtitulo}</p>}
     </header>
   );

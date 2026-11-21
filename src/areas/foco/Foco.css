@@ -1,0 +1,562 @@
+/* Sistema · Foco (AreaFoco.dc.html): o ciclo e as etapas da rodada no alto, o dia, a semana e o
+   relatório por tarefa embaixo. */
+.area-foco-acao {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+/* Lado a lado na janela larga; na estreita, as etapas descem para baixo do ciclo. */
+.area-foco-topo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-16);
+  align-items: flex-start;
+}
+
+.area-foco-ciclo {
+  display: flex;
+  flex: 999 1 var(--largura-min-ciclo-foco);
+  flex-direction: column;
+  gap: var(--esp-8);
+  min-width: 0;
+}
+
+.area-foco-cartao {
+  gap: var(--esp-14);
+  padding: var(--esp-20);
+}
+
+.area-foco-rotulo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-12);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.area-foco-titulo {
+  margin: 0;
+  font: inherit;
+  color: inherit;
+}
+
+.area-foco-relogio-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--esp-16);
+}
+
+.area-foco-relogio {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-relogio-area-foco);
+  line-height: 1;
+  letter-spacing: var(--tracado-relogio-area-foco);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Parado (pausa ou antes de começar): o número fica apagado até continuar. */
+.area-foco-relogio[data-apagado] {
+  color: var(--texto-3);
+}
+
+.area-foco-botoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--esp-8);
+}
+
+.area-foco-barra .progresso,
+.area-foco-barra .progresso-barra {
+  height: var(--altura-barra-ciclo);
+  border-radius: var(--raio-barra-ciclo);
+}
+
+.area-foco-ligado {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  min-width: 0;
+  padding-top: var(--esp-12);
+  border-top: var(--espessura-borda) solid var(--borda);
+}
+
+.area-foco-ligado-rotulo {
+  padding: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
+.area-foco-ligado-titulo {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--peso-forte);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.area-foco-ligado[data-depois] .area-foco-ligado-titulo {
+  font-weight: var(--peso-normal);
+}
+
+.area-foco-ligado-livre {
+  color: var(--texto-3);
+}
+
+.area-foco-nota {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.area-foco-nota .icone {
+  flex: none;
+}
+
+.area-foco-erro {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--perigo);
+}
+
+/* Ciclo terminado: a tarefa ligada num chip, para marcar ali mesmo. */
+.area-foco-feita {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  padding: var(--esp-10) var(--esp-12);
+  border-radius: var(--raio-controle);
+  background: var(--fundo-chip);
+}
+
+.area-foco-feita .area-foco-ligado-titulo {
+  flex: 1;
+  font-weight: var(--peso-normal);
+}
+
+.area-foco-feita-pergunta {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
+/* Começar: as tarefas de hoje como opções, a marcada com a borda do destaque. */
+.area-foco-opcoes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-6);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.area-foco-opcoes legend {
+  margin-bottom: var(--esp-6);
+}
+
+.area-foco-opcao {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-12);
+  padding: var(--esp-8) var(--esp-12);
+  border: var(--espessura-borda) solid var(--borda);
+  border-radius: var(--raio-controle);
+  cursor: pointer;
+}
+
+.area-foco-opcao[data-marcada="true"] {
+  border-color: var(--destaque);
+  background: var(--fundo-cartao);
+  box-shadow: var(--sombra-opcao-marcada) var(--destaque);
+}
+
+.area-foco-opcao:has(input:focus-visible) {
+  outline: var(--espessura-foco) solid var(--cor-foco);
+  outline-offset: var(--recuo-foco);
+}
+
+.area-foco-opcao input {
+  margin: 0;
+  accent-color: var(--destaque);
+}
+
+.area-foco-opcao input:focus-visible {
+  outline: 0;
+}
+
+.area-foco-opcao-titulo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.area-foco-comecar-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-8);
+}
+
+.area-foco-comecar-rodape .botao--primario {
+  margin-inline-start: auto;
+}
+
+.area-foco-meta {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
+.area-foco-numero {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+  white-space: nowrap;
+}
+
+/* ---------- a rodada ---------- */
+.area-foco-etapas {
+  flex: 1 1 var(--largura-etapas-foco);
+  gap: var(--esp-12);
+  min-width: 0;
+}
+
+.area-foco-segmentos {
+  display: flex;
+  gap: var(--esp-3);
+}
+
+/* Cada etapa ocupa o tempo dela; a pausa vai no texto apagado, mais leve que o foco. */
+.area-foco-segmento {
+  flex: 1 1 0;
+  height: var(--altura-segmento-rodada);
+  overflow: hidden;
+  border-radius: var(--raio-segmento-rodada);
+  background: var(--fundo-trilho);
+}
+
+.area-foco-segmento-feito {
+  display: block;
+  width: calc(var(--fracao, 0) * 100%);
+  height: 100%;
+  background: var(--destaque);
+}
+
+.area-foco-segmento:not([data-tipo="foco"]) .area-foco-segmento-feito {
+  background: var(--texto-3);
+  opacity: var(--opacidade-pausa-rodada);
+}
+
+.area-foco-lista-etapas,
+.area-foco-lista-dia,
+.area-foco-lista-tarefas,
+.area-foco-passos,
+.area-foco-grafico {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.area-foco-etapa {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  min-height: var(--altura-linha-etapa);
+  padding: 0 var(--esp-8);
+  border-radius: var(--raio-controle);
+}
+
+.area-foco-etapa[data-situacao="agora"] {
+  background: var(--fundo-ativo);
+}
+
+.area-foco-ponto {
+  flex: none;
+  width: var(--tamanho-ponto-status);
+  height: var(--tamanho-ponto-status);
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--texto-3);
+}
+
+.area-foco-etapa[data-tipo="foco"]:not([data-situacao="falta"]) .area-foco-ponto {
+  background: var(--destaque);
+}
+
+.area-foco-etapa[data-situacao="falta"] .area-foco-ponto {
+  border: var(--espessura-caixa) solid var(--texto-apagado);
+  background: transparent;
+}
+
+.area-foco-etapa-nome {
+  flex: 1;
+  min-width: 0;
+}
+
+.area-foco-etapa[data-situacao="agora"] .area-foco-etapa-nome {
+  font-weight: var(--peso-forte);
+}
+
+.area-foco-etapa[data-situacao="feito"] .area-foco-etapa-nome,
+.area-foco-etapa[data-situacao="parou"] .area-foco-etapa-nome,
+.area-foco-etapa-duracao {
+  color: var(--texto-3);
+}
+
+.area-foco-etapa-duracao {
+  font-weight: var(--peso-normal);
+}
+
+.area-foco-etapa-estado {
+  display: flex;
+  justify-content: flex-end;
+  width: var(--largura-estado-etapa);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.area-foco-passo {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--esp-10);
+  color: var(--texto-2);
+  text-wrap: pretty;
+}
+
+.area-foco-passos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-12);
+}
+
+.area-foco-passo-numero {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--tamanho-numero-passo);
+  height: var(--tamanho-numero-passo);
+  border-radius: 50%;
+  background: var(--fundo-chip);
+  font-size: var(--tipo-11);
+  font-weight: var(--peso-forte);
+  color: var(--texto-2);
+}
+
+/* ---------- o dia, a semana e o relatório ---------- */
+.area-foco-baixo {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(auto-fit, minmax(var(--largura-min-cartao-foco), 1fr));
+  gap: var(--esp-16);
+  align-items: stretch;
+}
+
+.area-foco-cartao-baixo {
+  gap: var(--esp-10);
+  min-width: 0;
+}
+
+/* O vazio não estica até o fundo: fica do tamanho do texto, como no quadro. */
+.area-foco-vazio {
+  display: flex;
+  align-self: start;
+  flex-direction: column;
+  gap: var(--esp-8);
+  min-height: var(--altura-vazio-foco);
+  box-sizing: border-box;
+  padding: var(--esp-14);
+  border: var(--espessura-borda) dashed var(--borda-forte);
+  border-radius: var(--raio-cartao);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.area-foco-vazio p {
+  margin: 0;
+  font-size: var(--tipo-13);
+  color: var(--texto-2);
+  text-wrap: pretty;
+}
+
+.area-foco-ciclo-dia {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  min-height: var(--altura-linha-ciclo);
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.area-foco-ciclo-dia[data-atual] .area-foco-ponto {
+  background: var(--destaque);
+}
+
+.area-foco-ciclo-textos {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.area-foco-ciclo-titulo {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.area-foco-ciclo-dia[data-atual] .area-foco-ciclo-titulo {
+  font-weight: var(--peso-forte);
+}
+
+.area-foco-rodape {
+  margin: auto 0 0;
+  padding-top: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.area-foco-grafico {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  gap: var(--esp-8);
+  min-height: var(--altura-grafico-foco);
+}
+
+.area-foco-dia {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--esp-6);
+  min-width: 0;
+  height: 100%;
+}
+
+.area-foco-dia-numero {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
+/* A barra mede contra o maior dia; hoje vai no destaque, o dia sem foco quase some. */
+.area-foco-dia-barra {
+  width: 100%;
+  max-width: var(--largura-barra-foco);
+  height: calc(var(--altura-barra-foco) * var(--fracao, 0));
+  min-height: var(--altura-barra-minima);
+  border-radius: var(--raio-barra-uso);
+  background: var(--texto-3);
+  opacity: var(--opacidade-barra-passada);
+}
+
+.area-foco-dia[data-vazio] .area-foco-dia-barra {
+  opacity: var(--opacidade-dia-sem-foco);
+}
+
+.area-foco-dia[data-hoje] .area-foco-dia-barra {
+  background: var(--destaque);
+  opacity: 1;
+}
+
+.area-foco-dia-nome {
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.area-foco-dia[data-hoje] .area-foco-dia-numero,
+.area-foco-dia[data-hoje] .area-foco-dia-nome {
+  color: var(--texto);
+}
+
+.area-foco-dia[data-hoje] .area-foco-dia-nome {
+  font-weight: var(--peso-forte);
+}
+
+.area-foco-resumo {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.area-foco-lista-tarefas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-10);
+}
+
+.area-foco-tarefa {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-5);
+}
+
+.area-foco-tarefa-linha {
+  display: flex;
+  align-items: baseline;
+  gap: var(--esp-8);
+}
+
+.area-foco-tarefa-titulo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.area-foco-tarefa[data-sem-tarefa] .area-foco-tarefa-titulo {
+  color: var(--texto-3);
+}
+
+.area-foco-tarefa-ciclos {
+  width: var(--largura-ciclos-tarefa);
+  text-align: right;
+}
+
+.area-foco-tarefa-trilho {
+  display: block;
+  height: var(--altura-progresso);
+  overflow: hidden;
+  border-radius: var(--raio-progresso);
+  background: var(--fundo-trilho);
+}
+
+.area-foco-tarefa-barra {
+  display: block;
+  width: calc(var(--fracao, 0) * 100%);
+  height: 100%;
+  border-radius: var(--raio-progresso);
+  background: var(--destaque);
+}
+
+.area-foco-tarefa[data-sem-tarefa] .area-foco-tarefa-barra {
+  background: var(--texto-3);
+}
+
+/* ---------- a sugestão da Alba ---------- */
+.area-foco-sugestao {
+  padding: var(--esp-14) var(--esp-16);
+}
+
+.area-foco-sugestao-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--esp-8);
+}

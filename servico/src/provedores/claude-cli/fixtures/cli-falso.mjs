@@ -5,6 +5,9 @@
 //   modo "normal": escreve a saída e sai com 0
 //   modo "pendurar": escreve a saída e fica vivo até ser encerrado
 //   modo "falhar": escreve a saída, uma mensagem no stderr e sai com 1
+//   modo "neto": como "pendurar", e antes abre um filho que não sai (um hook em andamento), que
+//     grava o próprio pid em <anotacao>.neto quando está de pé
+import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const [saida, modo, anotacao, separador, ...argumentos] = process.argv.slice(2);
@@ -36,7 +39,16 @@ process.stdin.on("end", () => {
     );
   const linhas = saida === "-" ? [] : readFileSync(saida, "utf8").split(/\r?\n/).filter(Boolean);
   for (const linha of linhas) process.stdout.write(linha + "\n");
-  if (modo === "pendurar") setInterval(() => {}, 60_000);
+  if (modo === "neto") {
+    const neto = `require("node:fs").writeFileSync(process.argv[1], String(process.pid)); setInterval(() => {}, 60000)`;
+    spawn(process.execPath, ["-e", neto, `${anotacao}.neto`], {
+      stdio: "ignore",
+      windowsHide: true,
+      // Fora do job do node, como o filho de um claude.exe nativo: só cai se a árvore cair.
+      detached: true,
+    });
+  }
+  if (modo === "pendurar" || modo === "neto") setInterval(() => {}, 60_000);
   else if (modo === "falhar") {
     process.stderr.write("Error: No conversation found with session ID: 0000\n");
     process.exitCode = 1;

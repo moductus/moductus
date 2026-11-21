@@ -1,10 +1,12 @@
-import { useEffect, useId, useState, type Ref } from "react";
+import type { ContagensAreas } from "@moductus/contrato";
+import { useEffect, useId, useMemo, useState, type Ref } from "react";
 import { AREAS, type IdArea } from "../../areas/areas.ts";
 import { ListaNavegacao, type ItemNavegacao } from "../../areas/ListaNavegacao.tsx";
 import { Icone } from "../../componentes/Icone.tsx";
 import { Seletor, type OpcaoSeletor } from "../../componentes/Seletor.tsx";
 import { useServico } from "../../nativo/eventos.ts";
 import { servico, useCanal } from "../../servico/conexao.ts";
+import { ROTULOS_CONTAGEM, useContagens, type CampoContagem } from "../../servico/contagens.ts";
 import type { Tema } from "../../tokens/tema.ts";
 
 const ITENS: readonly ItemNavegacao<IdArea>[] = AREAS.map((a) => ({
@@ -13,6 +15,21 @@ const ITENS: readonly ItemNavegacao<IdArea>[] = AREAS.map((a) => ({
   icone: a.icone,
   ...(a.atalho ? { atalho: { aria: `Control+${a.atalho}`, texto: `Ctrl ${a.atalho}` } } : {}),
 }));
+
+/** As áreas com número na lateral (Sistema.dc.html) e qual número de `areas.contagens` cada uma mostra. */
+const CONTAGENS: Partial<Record<IdArea, CampoContagem>> = {
+  sessoes: "sessoesEsperando",
+  tarefas: "tarefasPendentes",
+  dev: "devPrecisando",
+};
+
+/** Os itens com a contagem do serviço; zero não mostra número. */
+function itensComContagens(contagens: ContagensAreas): ItemNavegacao<IdArea>[] {
+  return ITENS.map((item) => {
+    const campo = CONTAGENS[item.id];
+    return campo ? { ...item, contagem: { valor: contagens[campo], rotulo: ROTULOS_CONTAGEM[campo] } } : item;
+  });
+}
 
 const TEMAS: readonly OpcaoSeletor<Tema>[] = [
   { valor: "grafite", rotulo: "Grafite" },
@@ -27,13 +44,18 @@ interface PropsBarraLateral {
   refBusca: Ref<HTMLInputElement>;
 }
 
-/** Barra lateral de 232: busca Ctrl+K, as 12 áreas e o tema ao pé (Sistema.dc.html). */
+/**
+ * Barra lateral de 232: busca Ctrl+K, as 12 áreas com as contagens que o serviço conta (as mesmas
+ * dos badges do dock) e o tema ao pé (Sistema.dc.html).
+ */
 export function BarraLateral({ ativa, aoEscolher, refBusca }: PropsBarraLateral) {
+  const contagens = useContagens(useCanal(useServico({ silencioso: true })));
+  const itens = useMemo(() => itensComContagens(contagens), [contagens]);
   return (
     <ListaNavegacao
       rotulo="Áreas"
       className="barra-lateral"
-      itens={ITENS}
+      itens={itens}
       ativo={ativa}
       aoEscolher={aoEscolher}
       antes={<Busca refBusca={refBusca} />}

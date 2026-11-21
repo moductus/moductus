@@ -1,13 +1,5 @@
 // @vitest-environment happy-dom
-import type {
-  Agente,
-  Aprovacao,
-  ItemGithub,
-  Notificacao,
-  Provedor,
-  SituacaoAgente,
-  SituacaoGithub,
-} from "@moductus/contrato";
+import type { Agente, ContagensAreas, Notificacao, Provedor, SituacaoAgente } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -29,19 +21,24 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => undefined) }));
 
+const ZERO: ContagensAreas = {
+  tarefasPendentes: 0,
+  lembretesAtrasados: 0,
+  sessoesEsperando: 0,
+  devPrecisando: 0,
+};
+
 const canal: {
   estado: EstadoConexao;
   lista: () => Promise<Agente[]>;
   naoVistas: () => Promise<Notificacao[]>;
-  pendentes: () => Promise<Aprovacao[]>;
-  github: () => Promise<SituacaoGithub>;
+  contagens: () => Promise<ContagensAreas>;
   provedores: () => Promise<Provedor[]>;
 } = {
   estado: "conectado",
   lista: async () => [],
   naoVistas: async () => [],
-  pendentes: async () => [],
-  github: async () => ({ itens: [], atualizadoEm: null }),
+  contagens: async () => ZERO,
   provedores: async () => [],
 };
 const ouvintes = new Map<string, Set<(dados: unknown) => void>>();
@@ -58,10 +55,7 @@ vi.mock("../../servico/conexao.ts", () => ({
       if (metodo === "agentes.listar") return canal.lista();
       if (metodo === "notificacoes.naoVistas") return canal.naoVistas();
       if (metodo === "notificacoes.marcarVistas") return [];
-      if (metodo === "aprovacoes.pendentes") return canal.pendentes();
-      if (metodo === "sessoes.listar") return { projetos: [], sessoes: [] };
-      if (metodo === "github.obter") return canal.github();
-      if (metodo === "conexoes.listar") return [];
+      if (metodo === "areas.contagens") return canal.contagens();
       if (metodo === "provedores.listar") return canal.provedores();
       throw new Error(`método ${metodo} sem atendente`);
     }),
@@ -98,7 +92,17 @@ function agente(
     gatilhos: [],
     escoposMemoria: [],
     tetoDiarioCentavos: null,
+    tetoMoeda: "BRL",
+    gastoDeHoje: {
+      microdolares: 0,
+      centavos: null,
+      cotacaoDe: null,
+      limiteCentavos: null,
+      liberarCentavos: null,
+      pedeCotacao: false,
+    },
     deFabrica: true,
+    camposPersonalizados: [],
     situacao: { ...ATIVO, ...situacao },
   };
 }
@@ -125,8 +129,7 @@ beforeEach(() => {
   canal.estado = "conectado";
   canal.lista = async () => [];
   canal.naoVistas = async () => [];
-  canal.pendentes = async () => [];
-  canal.github = async () => ({ itens: [], atualizadoEm: null });
+  canal.contagens = async () => ZERO;
   canal.provedores = async () => [];
   vi.mocked(servico.pedir).mockClear();
 });
@@ -329,6 +332,32 @@ describe("estados e sessões no dock (Estados.dc.html, Dock.dc.html)", () => {
     });
   });
 
+  it("no teto, a dica diz o gasto e o limite como estimativa, e acompanha agentes.mudou", async () => {
+    const noTeto = (centavos: number): Agente => ({
+      ...agente("nuno", { estado: "dormindo", motivoSono: "teto" }),
+      tetoDiarioCentavos: 1000,
+      gastoDeHoje: {
+        microdolares: 2_000_000,
+        centavos,
+        cotacaoDe: "2026-10-16",
+        limiteCentavos: 1000,
+        liberarCentavos: 200,
+        pedeCotacao: false,
+      },
+    });
+    canal.lista = async () => [noTeto(1000)];
+    await montar();
+    const nuno = () => recipiente.querySelector<HTMLButtonElement>('[data-agente="nuno"]')!;
+    expect(nuno().getAttribute("aria-label")).toBe(
+      "Nuno, parado. Chegou ao teto de hoje: ≈ R$ 10,00 de R$ 10,00, estimativa pela cotação de 16/10",
+    );
+    expect(nuno().title).toBe(nuno().getAttribute("aria-label"));
+    await act(async () => {
+      ouvintes.get("agentes.mudou")?.forEach((fn) => fn(noTeto(1050)));
+    });
+    expect(nuno().getAttribute("aria-label")).toContain("≈ R$ 10,50 de R$ 10,00");
+  });
+
   it("ocioso tem olhos abertos e nenhum z; só quem dorme ou está em pausa tem", async () => {
     canal.lista = async () => [
       agente("alba"),
@@ -399,54 +428,56 @@ describe("estados e sessões no dock (Estados.dc.html, Dock.dc.html)", () => {
 
   it("sessão do terminal esperando você: o Nuno ganha o ponto e diz no rótulo", async () => {
     canal.lista = async () => ["alba", "tula", "faina", "nuno"].map((id) => agente(id));
-    const pedido = (id: string, sessaoId: string): Aprovacao => ({
-      id,
-      fonte: "claude-code",
-      agenteId: null,
-      execucaoId: null,
-      sessaoId,
-      descricao: "Quer rodar o comando abaixo.",
-      acao: { ferramenta: "Bash", entrada: {}, rotulo: null, rotuloRecusar: null, desfazivel: false },
-      estado: "pendente",
-      criadoEm: "2026-10-09T12:00:00.000Z",
-      decididaEm: null,
-      regraCriadaId: null,
-      admiteSempre: true,
-    });
-    canal.pendentes = async () => [pedido("a1", "s1"), pedido("a2", "s1")];
+    canal.contagens = async () => ({ ...ZERO, sessoesEsperando: 1 });
     await montar();
     expect(comPonto()).toEqual(["nuno"]);
     expect(cabecas()[3]!.rotulo).toBe("Nuno, ocioso. 1 sessão esperando você");
-    // Decidido o pedido, o ponto sai.
+    // Decidido o pedido, o serviço reconta e o ponto sai.
     await act(async () => {
-      for (const id of ["a1", "a2"]) {
-        ouvintes.get("aprovacoes.mudou")?.forEach((fn) => fn({ ...pedido(id, "s1"), estado: "aprovada" }));
-      }
+      ouvintes.get("areas.contagens")?.forEach((fn) => fn(ZERO));
     });
     expect(comPonto()).toEqual([]);
   });
+});
 
-  it("o badge do Dev conta o que precisa de você no GitHub", async () => {
-    const item = (numero: number, precisaDeMim: boolean): ItemGithub => ({
-      id: `g${numero}`,
-      repositorio: "dono/repo",
-      numero,
-      tipo: "pr",
-      titulo: "t",
-      autor: null,
-      estado: "aberto",
-      meuPapel: "revisor",
-      precisaDeMim,
-      ciEstado: null,
-      atualizadoNoGithub: null,
-      url: "https://github.com/dono/repo/pull/1",
-    });
-    canal.github = async () => ({
-      itens: [item(1, true), item(2, true), item(3, false)],
-      atualizadoEm: null,
-    });
+describe("badges das áreas (Dock.dc.html), contados no serviço", () => {
+  const botao = (area: string) => recipiente.querySelector<HTMLElement>(`[data-area="${area}"]`)!;
+
+  it("Tarefas e Dev mostram o número; o leitor de tela ouve o nome com a contagem", async () => {
+    canal.contagens = async () => ({ ...ZERO, tarefasPendentes: 4, devPrecisando: 22 });
     await montar();
-    const dev = recipiente.querySelector<HTMLElement>('[data-area="dev"]')!;
-    expect(dev.querySelector(".contagem")?.textContent).toBe("22 avisos de dev");
+    expect(botao("tarefas").querySelector('.contagem [aria-hidden="true"]')?.textContent).toBe("4");
+    expect(botao("tarefas").getAttribute("aria-label")).toBe("Tarefas, 4 tarefas pendentes");
+    expect(botao("dev").querySelector(".contagem .so-leitor")?.textContent).toBe("22 avisos de dev");
+    expect(botao("dev").getAttribute("aria-label")).toBe("Dev, 22 avisos de dev");
+  });
+
+  it("concluir uma tarefa: o aviso do serviço troca o número, e zero tira o badge", async () => {
+    canal.contagens = async () => ({ ...ZERO, tarefasPendentes: 2 });
+    await montar();
+    await act(async () => {
+      ouvintes.get("areas.contagens")?.forEach((fn) => fn({ ...ZERO, tarefasPendentes: 1 }));
+    });
+    expect(botao("tarefas").getAttribute("aria-label")).toBe("Tarefas, 1 tarefa pendente");
+    await act(async () => {
+      ouvintes.get("areas.contagens")?.forEach((fn) => fn(ZERO));
+    });
+    expect(botao("tarefas").querySelector(".contagem")).toBeNull();
+    expect(botao("tarefas").getAttribute("aria-label")).toBe("Tarefas");
+  });
+
+  it("canal caído ou serviço sem a contagem: nenhum badge", async () => {
+    canal.contagens = async () => ({ ...ZERO, tarefasPendentes: 3 });
+    await montar();
+    expect(botao("tarefas").querySelector(".contagem")).not.toBeNull();
+    canal.estado = "desconectado";
+    await act(async () => raiz!.render(<Dock />));
+    expect(recipiente.querySelector(".contagem")).toBeNull();
+    canal.contagens = async () => {
+      throw new Error("método areas.contagens sem atendente");
+    };
+    canal.estado = "conectado";
+    await act(async () => raiz!.render(<Dock />));
+    expect(recipiente.querySelector(".contagem")).toBeNull();
   });
 });

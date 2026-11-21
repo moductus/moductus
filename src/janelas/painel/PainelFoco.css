@@ -1,0 +1,173 @@
+/*
+ * Painel Foco (PainelFoco.dc.html): o cartão elevado do ciclo, a linha do silêncio, o foco de
+ * hoje em trilhos, o "Depois deste" e a sugestão da Alba. A barra anda pelo token de entrada,
+ * que vai a zero com movimento reduzido (src/tokens/temas.css).
+ */
+
+.foco-cartao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-12);
+  padding: var(--esp-18);
+  border: var(--espessura-borda) solid var(--borda-forte);
+  border-radius: var(--raio-cartao);
+  background: var(--fundo-elevado);
+}
+
+.foco-linha-rotulo {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.foco-relogio {
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-relogio-foco);
+  line-height: 1;
+  letter-spacing: var(--tracado-relogio-foco);
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Pausado ou parado: o número fica apagado até continuar (AreaFocoEstados, "Em pausa"). */
+.foco-relogio[data-pausado] {
+  color: var(--texto-3);
+}
+
+.foco-tarefa {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-8);
+  min-width: 0;
+}
+
+.foco-tarefa-titulo {
+  overflow: hidden;
+  font-weight: var(--peso-forte);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.foco-etiqueta {
+  flex: none;
+  padding: var(--esp-1) var(--esp-5);
+  border-radius: var(--raio-atalho);
+  background: var(--fundo-chip);
+  color: var(--texto);
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+}
+
+.foco-botoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-8);
+}
+
+.foco-silencio {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.foco-silencio .icone {
+  flex: none;
+}
+
+/* ---------- a rodada em trilhos ---------- */
+.foco-ciclos {
+  display: flex;
+  gap: var(--esp-6);
+}
+
+.foco-ciclo {
+  flex: 1;
+  height: var(--altura-trilho-ciclo);
+  border-radius: var(--raio-trilho-ciclo);
+  background: var(--fundo-trilho);
+}
+
+.foco-ciclo[data-situacao="feito"] {
+  background: var(--destaque);
+}
+
+.foco-ciclo[data-situacao="atual"] {
+  background: var(--texto-3);
+}
+
+/* ---------- depois deste ---------- */
+.foco-depois {
+  gap: var(--esp-2);
+}
+
+.foco-lista {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.foco-lista-linha {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-10);
+  height: var(--altura-linha-foco);
+  border-bottom: var(--espessura-borda) solid var(--borda);
+}
+
+.foco-lista-titulo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.foco-lista-meta {
+  flex: none;
+  font-family: var(--fonte-mono);
+  font-size: var(--tipo-11);
+  color: var(--texto-3);
+}
+
+.foco-nada {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+/* ---------- a sugestão da Alba ---------- */
+.foco-sugestao {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-8);
+}
+
+.foco-sugestao-fala {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--esp-10);
+}
+
+.foco-sugestao-fala .personagem {
+  flex: none;
+}
+
+.foco-sugestao-fala p {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+  text-wrap: pretty;
+}
+
+.foco-sugestao-acoes {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--esp-8);
+}

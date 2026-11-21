@@ -35,6 +35,8 @@ export interface NovoAviso {
   referencia?: string | null;
   /** Os botões do aviso do Windows; a ação de cada um mora na área ({@link registrarAcao}). */
   botoes?: readonly BotaoAviso[];
+  /** O clique no corpo do aviso do Windows não abre o painel do time: a área abre o que é dela. */
+  semPainelDoTime?: boolean;
   /** Carimbo da linha; o padrão é `agente` quando há agente e `conexao` quando não há. */
   origem?: Origem;
   execucaoId?: string | null;
@@ -48,6 +50,8 @@ export interface AvisoWindows {
   titulo: string;
   corpo: string | null;
   botoes: readonly BotaoAviso[];
+  /** O clique no corpo não abre o painel do time (a casca só relata o clique). */
+  semPainelDoTime?: boolean;
 }
 
 /** O que só a casca sabe fazer: mostrar e retirar o aviso do Windows e ver a tela cheia. */
@@ -84,10 +88,13 @@ export function entregaPela(
   };
 }
 
-/** Durante o foco ainda chegam aprovações e lembretes; o resto espera no dock. */
+/**
+ * Durante o foco e com o dia encerrado ainda chegam aprovações e lembretes; o resto espera no
+ * dock.
+ */
 const PASSAM_NO_FOCO: readonly TipoNotificacao[] = ["aprovacao", "lembrete"];
 
-export type MotivoSilencio = "horario" | "tela-cheia" | "foco";
+export type MotivoSilencio = "horario" | "dia-encerrado" | "tela-cheia" | "foco";
 
 const minutosDe = (hora: string) => Number(hora.slice(0, 2)) * 60 + Number(hora.slice(3, 5));
 
@@ -102,15 +109,23 @@ export function dentroDoHorario(agora: Date, inicio: string, fim: string): boole
 
 /**
  * Por que o aviso do Windows fica quieto agora, ou `null`. O silêncio só cala o Windows: o ponto
- * no dock e o registro continuam. A tela cheia só é perguntada à casca quando importa.
+ * no dock e o registro continuam. A tela cheia só é perguntada à casca quando importa. O dia
+ * encerrado ("Encerrar o dia", AGENTS.md §2) não depende da configuração do silêncio: foi pedido
+ * na hora.
  */
 export async function motivoDoSilencio(
   silencio: Silencio,
   tipo: TipoNotificacao,
-  situacao: { agora: Date; telaCheia: () => Promise<boolean>; emFoco: () => boolean },
+  situacao: {
+    agora: Date;
+    telaCheia: () => Promise<boolean>;
+    emFoco: () => boolean;
+    diaEncerrado?: () => boolean;
+  },
 ): Promise<MotivoSilencio | null> {
   const { horario } = silencio;
   if (horario.ligado && dentroDoHorario(situacao.agora, horario.inicio, horario.fim)) return "horario";
+  if (!PASSAM_NO_FOCO.includes(tipo) && situacao.diaEncerrado?.() === true) return "dia-encerrado";
   if (silencio.foco && !PASSAM_NO_FOCO.includes(tipo) && situacao.emFoco()) return "foco";
   if (silencio.telaCheia && (await situacao.telaCheia())) return "tela-cheia";
   return null;
@@ -325,6 +340,8 @@ export interface FontesNotificacoes {
    * em foco.
    */
   emFoco?: () => boolean;
+  /** Se você encerrou o dia e a manhã ainda não chegou (`ServicoFechamento.diaEncerrado`). */
+  diaEncerrado?: () => boolean;
 }
 
 export interface OpcoesNotificacoes {
@@ -347,6 +364,7 @@ export type AcaoAviso = (id: string, botao: string) => Promise<boolean>;
 export class ServicoNotificacoes {
   private readonly agora: () => Date;
   private readonly emFoco: () => boolean;
+  private readonly diaEncerrado: () => boolean;
   private readonly acoes = new Map<string, AcaoAviso>();
 
   constructor(
@@ -357,6 +375,7 @@ export class ServicoNotificacoes {
   ) {
     this.agora = opcoes.agora ?? (() => new Date());
     this.emFoco = fontes.emFoco ?? (() => false);
+    this.diaEncerrado = fontes.diaEncerrado ?? (() => false);
   }
 
   obter(): EstadoNotificacoes {
@@ -451,7 +470,9 @@ export class ServicoNotificacoes {
       this.avisos.nova(notificacao);
       this.avisos.naoVistas(this.repo.naoVistas());
     }
-    if (entrega.windows) await this.mostrarNoWindows(notificacao, novo.botoes ?? [], agora);
+    if (entrega.windows) {
+      await this.mostrarNoWindows(notificacao, novo.botoes ?? [], agora, novo.semPainelDoTime === true);
+    }
     return notificacao;
   }
 
@@ -495,19 +516,32 @@ export class ServicoNotificacoes {
     }
   }
 
-  private async mostrarNoWindows(n: Notificacao, botoes: readonly BotaoAviso[], agora: Date): Promise<void> {
+  private async mostrarNoWindows(
+    n: Notificacao,
+    botoes: readonly BotaoAviso[],
+    agora: Date,
+    semPainelDoTime: boolean,
+  ): Promise<void> {
     try {
       const motivo = await motivoDoSilencio(this.fontes.silencio(), n.tipo, {
         agora,
         telaCheia: () => this.fontes.windows.telaCheia(),
         emFoco: this.emFoco,
+        diaEncerrado: this.diaEncerrado,
       });
       // O que gerou o aviso pode ter sido resolvido enquanto a casca respondia a tela cheia.
       if (motivo || this.jaVista(n.id)) return;
       const agente = n.agenteId
         ? (this.fontes.agentes().find((a) => a.id === n.agenteId)?.nome ?? null)
         : null;
-      await this.fontes.windows.mostrar({ id: n.id, agente, titulo: n.titulo, corpo: n.corpo, botoes });
+      await this.fontes.windows.mostrar({
+        id: n.id,
+        agente,
+        titulo: n.titulo,
+        corpo: n.corpo,
+        botoes,
+        ...(semPainelDoTime ? { semPainelDoTime } : {}),
+      });
       // Resolvido durante o `mostrar`: o `retirar` do `resolvido` pode ter chegado antes do aviso.
       if (this.jaVista(n.id)) await this.fontes.windows.retirar(n.id);
     } catch (erro) {

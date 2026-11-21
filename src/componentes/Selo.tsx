@@ -33,20 +33,32 @@ export function Selo({ tom = "neutro", forma = "selo", children, icone }: PropsS
 
 const LIMITE_CONTAGEM = 99;
 
+/** Do que é a contagem; com singular, "1 tarefa pendente" em vez de "1 tarefas pendentes". */
+export type RotuloContagem = string | { um: string; varios: string };
+
+/** O número como aparece: acima de 99, "99+". */
+export const numeroDaContagem = (valor: number) =>
+  valor > LIMITE_CONTAGEM ? `${LIMITE_CONTAGEM}+` : String(valor);
+
+/** O que o leitor de tela lê: "4 tarefas pendentes", sempre o número inteiro. */
+export function textoDaContagem(valor: number, rotulo: RotuloContagem): string {
+  const nome = typeof rotulo === "string" ? rotulo : valor === 1 ? rotulo.um : rotulo.varios;
+  return `${valor} ${nome}`;
+}
+
 interface PropsContagem {
   valor: number;
   /** Do que é a contagem, para o leitor de tela: "4 tarefas pendentes". */
-  rotulo: string;
+  rotulo: RotuloContagem;
 }
 
 /** Badge numérico (o do dock). Zero não aparece; acima de 99 mostra "99+". */
 export function Contagem({ valor, rotulo }: PropsContagem) {
   if (valor <= 0) return null;
-  const visivel = valor > LIMITE_CONTAGEM ? `${LIMITE_CONTAGEM}+` : String(valor);
   return (
     <span className="contagem">
-      <span aria-hidden="true">{visivel}</span>
-      <span className="so-leitor">{`${valor} ${rotulo}`}</span>
+      <span aria-hidden="true">{numeroDaContagem(valor)}</span>
+      <span className="so-leitor">{textoDaContagem(valor, rotulo)}</span>
     </span>
   );
 }

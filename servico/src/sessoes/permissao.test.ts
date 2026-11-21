@@ -57,7 +57,7 @@ const pedidoBash = (command: string) =>
 async function montar(opcoes: OpcoesPermissao = {}) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-permissao-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   let servidor: ServidorWs | null = null;
   const sessoes = new ServicoSessoes(

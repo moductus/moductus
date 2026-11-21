@@ -1,8 +1,11 @@
+// O serviço pede pelo canal do sidecar e a interface por comando; a casca valida o que abre.
+mod abrir;
 mod acessibilidade;
 // O serviço chega aqui pelo canal do sidecar, como às credenciais.
 mod ambiente;
 mod appbar;
 mod atalhos;
+mod clique_fora;
 mod config_nativa;
 mod controles;
 // O serviço chega aqui pelo canal do sidecar; nenhuma janela tem comando para isso.
@@ -20,6 +23,8 @@ mod midia;
 mod notificacao;
 mod registro;
 mod servico;
+// Avisa o serviço pelo canal do sidecar quando a sessão é desbloqueada (a primeira atividade do dia).
+mod sessao_windows;
 mod tela_cheia;
 
 use tauri::{Manager, RunEvent, WindowEvent};
@@ -33,6 +38,7 @@ pub fn run() {
     let pasta = dados::pasta();
     registro::iniciar(&pasta);
     appbar::iniciar(pasta.clone());
+    abrir::iniciar(pasta.clone());
 
     tauri::Builder::default()
         // A instância única vem antes de tudo: a segunda execução sai sem criar janelas.
@@ -45,12 +51,14 @@ pub fn run() {
             janelas::painel_abrir,
             janelas::painel_fechar,
             janelas::painel_pronto,
+            janelas::painel_area_atual,
             janelas::painel_foco,
             janelas::sistema_alternar,
             janelas::sistema_abrir,
             dock::dock_soltar_foco,
             janelas::captura_alternar,
             janelas::captura_fechar,
+            janelas::captura_altura,
             atalhos::atalhos_obter,
             atalhos::atalhos_definir,
             atalhos::atalhos_falhas,
@@ -67,6 +75,10 @@ pub fn run() {
             servico::servico_estado,
             material::tema_material,
             acessibilidade::acessibilidade_estado,
+            abrir::abrir_endereco,
+            abrir::abrir_arquivo,
+            abrir::abrir_settings_claude,
+            abrir::abrir_terminal,
         ])
         .setup(move |app| {
             // Só o dock nasce antes do setup: a faixa fica reservada antes de painel,
@@ -75,6 +87,7 @@ pub fn run() {
             dock::iniciar(&janela_dock, dock::Configuracao::default());
             acessibilidade::iniciar(app.handle().clone(), dock::hwnd_de(&janela_dock));
             energia::iniciar(dock::hwnd_de(&janela_dock));
+            sessao_windows::iniciar(dock::hwnd_de(&janela_dock));
             janelas::criar(app.handle())?;
             for rotulo in JANELAS {
                 if app.get_webview_window(rotulo).is_none() {
@@ -82,10 +95,11 @@ pub fn run() {
                 }
             }
             janelas::iniciar(app.handle(), pasta.clone());
+            clique_fora::iniciar(app.handle().clone());
             tela_cheia::vigiar(app.handle().clone());
             notificacao::iniciar(app.handle());
             atalhos::iniciar(app.handle(), atalhos::padrao());
-            bandeja::iniciar(app.handle())?;
+            bandeja::iniciar(app.handle(), dock::hwnd_de(&janela_dock))?;
             midia::iniciar(app.handle().clone());
             controles::iniciar(app.handle().clone());
             servico::iniciar(app.handle().clone(), pasta.clone());

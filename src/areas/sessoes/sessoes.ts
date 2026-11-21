@@ -142,18 +142,12 @@ export function ultimaAcao(evento: EventoSessao | null, projeto: string | null):
 }
 
 const NUMERO = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
-const DOLAR = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 /** Tokens curtos: "820", "12,4 mil", "1,2 mi". */
 export function formatarTokens(tokens: number): string {
   if (tokens < 1000) return String(tokens);
   if (tokens < 1_000_000) return `${NUMERO.format(tokens / 1000)} mil`;
   return `${NUMERO.format(tokens / 1_000_000)} mi`;
-}
-
-/** Microdólares em "US$ 1,86". */
-export function formatarDolares(microdolares: number): string {
-  return `US$ ${DOLAR.format(microdolares / 1_000_000)}`;
 }
 
 const totalDe = (u: UsoIa) => u.tokensEntrada + u.tokensSaida + u.tokensCache;
@@ -166,10 +160,10 @@ export interface GastoMostrado {
 }
 
 /**
- * O gasto de hoje do projeto da sessão, na ferramenta dela (`uso_ia` não separa por sessão: duas
- * sessões do mesmo projeto mostram o mesmo número, e o rótulo diz que é do projeto). Custo quando
- * todas as linhas têm preço (sempre estimativa, pela tabela do serviço); senão, os tokens.
- * Assinatura e modelo sem preço ficam sem custo, nunca com zero.
+ * O uso de hoje do projeto da sessão, na ferramenta dela (`uso_ia` não separa por sessão: duas
+ * sessões do mesmo projeto mostram o mesmo número, e o rótulo diz que é do projeto). Só os tokens,
+ * nunca dinheiro (H4): a sessão roda na assinatura de quem usa, sem cobrança por token, e um
+ * custo "como se fosse API" seria lido como gasto real. Vale mesmo que alguma linha traga custo.
  */
 export function gastoDeHoje(uso: readonly UsoIa[], sessao: SessaoIa, hoje: string): GastoMostrado {
   const linhas = uso.filter(
@@ -177,11 +171,6 @@ export function gastoDeHoje(uso: readonly UsoIa[], sessao: SessaoIa, hoje: strin
   );
   if (linhas.length === 0)
     return { texto: "sem uso", rotulo: "sem uso do projeto registrado hoje", vazio: true };
-  const comCusto = linhas.every((u) => u.custoEstimadoMicrodolares !== null);
-  if (comCusto) {
-    const custo = formatarDolares(linhas.reduce((s, u) => s + (u.custoEstimadoMicrodolares ?? 0), 0));
-    return { texto: `≈ ${custo}`, rotulo: `cerca de ${custo} hoje no projeto, estimativa`, vazio: false };
-  }
   const tokens = `${formatarTokens(linhas.reduce((s, u) => s + totalDe(u), 0))} tokens`;
   const estimativa = linhas.some((u) => u.fonte === "estimativa");
   return estimativa

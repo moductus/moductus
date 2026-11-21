@@ -1,0 +1,31 @@
+/* ---------- Avisos do salvar (no alto do texto, nunca modal) ---------- */
+.nota-aviso {
+  gap: var(--esp-8);
+  max-width: var(--largura-texto-nota);
+}
+
+.nota-aviso-titulo,
+.nota-aviso-texto {
+  margin: 0;
+}
+
+.nota-aviso-titulo {
+  font-weight: var(--peso-forte);
+}
+
+.nota-aviso-texto {
+  font-size: var(--tipo-12);
+  color: var(--texto-2);
+}
+
+.nota-aviso-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-8);
+}
+
+.nota-aviso-erro {
+  margin: 0;
+  font-size: var(--tipo-12);
+  color: var(--perigo);
+}

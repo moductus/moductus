@@ -21,6 +21,7 @@ import {
 } from "../../componentes/personagem/situacao.ts";
 import type { TomSelo } from "../../componentes/Selo.tsx";
 import { contextoDaSessao } from "../../areas/sessoes/sessoes.ts";
+import { dinheiro, fonteDaEstimativa } from "../../servico/teto.ts";
 
 /**
  * O painel Agentes (Agentes.dc.html) e os estados do time (Estados.dc.html) lidos dos dados
@@ -159,7 +160,11 @@ export type TipoEstado = "pausa" | "limite" | "falha" | "teto";
 
 /** O que os botões do cartão fazem; quem decide é o serviço ou a tela de Modelos. */
 export type AcaoEstado =
-  { tipo: "retomar"; agenteIds?: string[] } | { tipo: "modelos" } | { tipo: "dispensar" };
+  | { tipo: "retomar"; agenteIds?: string[] }
+  | { tipo: "acordar"; agenteIds: string[] }
+  | { tipo: "modelos" }
+  | { tipo: "liberar"; agenteId: string }
+  | { tipo: "dispensar" };
 
 export interface CartaoEstado {
   /** Muda quando o estado muda: dispensar um cartão vale só para aquele sono. */
@@ -190,7 +195,8 @@ const eAssinatura = (p: Provedor) => (TIPOS_PROVEDOR_CLI as readonly string[]).i
 
 /**
  * Os cartões de estado do time, na ordem do Estados.dc.html: pausa, limite, erro de provedor e
- * teto. Quem está no mesmo estado pelo mesmo motivo divide um cartão, e a fala passa ao plural.
+ * teto. Quem está no mesmo estado pelo mesmo motivo divide um cartão, e a fala passa ao plural; o
+ * teto é de cada um (valor, moeda e o "Liberar" são do agente), então cada um tem o seu.
  */
 export function cartoesDeEstado(
   time: TimeDoServico,
@@ -214,7 +220,7 @@ export function cartoesDeEstado(
     if (eFalhaDoProvedor(s.motivoSono)) {
       juntar(`falha:${s.motivoSono}:${sono}`, "falha", id, agente);
     }
-    if (s.motivoSono === "teto") juntar(`teto:${s.dormeAte}`, "teto", id, agente);
+    if (s.motivoSono === "teto") juntar(`teto:${id}:${s.dormeAte}`, "teto", id, agente);
   }
 
   const ordem: TipoEstado[] = ["pausa", "limite", "falha", "teto"];
@@ -264,11 +270,31 @@ export function cartoesDeEstado(
             estado: { texto: "erro", tom: "perigo" },
             titulo: "Não consegui falar com o modelo",
             ...falaDaFalha(motivo, provedor, s.dormeAte, agora, varios),
-            primaria: { texto: "Trocar modelo", acao: { tipo: "modelos" } },
+            // A falha pode já ter passado (H2): tentar agora não espera a hora; cada um do grupo.
+            primaria: { texto: "Tentar agora", acao: { tipo: "acordar", agenteIds: [...agentes] } },
+            secundaria: { texto: "Trocar modelo", acao: { tipo: "modelos" } },
           };
         }
-        case "teto":
-          // Sem a moeda do teto decidida, o valor não aparece (números honestos).
+        case "teto": {
+          // O gasto e o teto vêm do serviço, na moeda do teto; marcados como estimativa (ADR-0040).
+          const g = modelo.gastoDeHoje;
+          if (g.centavos !== null && g.limiteCentavos !== null && g.liberarCentavos !== null) {
+            const moeda = modelo.tetoMoeda;
+            return {
+              ...base,
+              estado: { texto: "parado", tom: "aviso" },
+              titulo: "Cheguei ao teto de hoje",
+              texto:
+                `Usei cerca de ${dinheiro(g.centavos, moeda)} de ${dinheiro(g.limiteCentavos, moeda)} na API, ` +
+                `${fonteDaEstimativa(g)}. Paro até meia-noite, a menos que você libere mais.`,
+              primaria: {
+                texto: `Liberar ${dinheiro(g.liberarCentavos, moeda)}`,
+                acao: { tipo: "liberar", agenteId: agentes[0]! },
+              },
+              secundaria: { texto: "Parar até amanhã", acao: { tipo: "dispensar" } },
+            };
+          }
+          // Sem o número (a cotação saiu depois), o valor não aparece: números honestos.
           return {
             ...base,
             estado: { texto: "parado", tom: "aviso" },
@@ -277,6 +303,7 @@ export function cartoesDeEstado(
             primaria: { texto: "Mudar o teto", acao: { tipo: "modelos" } },
             secundaria: { texto: "Parar até amanhã", acao: { tipo: "dispensar" } },
           };
+        }
       }
     });
 }

@@ -1,11 +1,12 @@
 import type { Conexao, MudancaArquivo } from "@moductus/contrato";
-import { useId, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useState, type KeyboardEvent } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { FalaAgente } from "../../componentes/FalaAgente.tsx";
 import { Icone } from "../../componentes/Icone.tsx";
-import { Personagem } from "../../componentes/personagem/Personagem.tsx";
-import { Selo, type TomSelo } from "../../componentes/Selo.tsx";
+import type { TomSelo } from "../../componentes/Selo.tsx";
+import { abrirSettingsClaude, useAbrir } from "../../nativo/abrir.ts";
 import { useAgora } from "../tempo.ts";
+import { CartaoConexao, Dado } from "./CartaoConexao.tsx";
 import {
   comandoDoErro,
   eventosDoMoductus,
@@ -65,57 +66,6 @@ const SELO_LIGACAO: Readonly<Record<Conexao["estado"], { tom: TomSelo }>> = {
   erro: { tom: "perigo" },
 };
 
-interface PropsCartao {
-  nome: string;
-  /** O selo do estado: o texto diz, a cor acompanha. */
-  estado: { texto: string; tom: TomSelo } | null;
-  descricao: string;
-  acoes?: ReactNode;
-  emBreve?: boolean;
-  children?: ReactNode;
-}
-
-/** Um cartão de conexão: a cabeça do Nuno, o nome, para quem é, o estado e as ações à direita. */
-function CartaoConexao({ nome, estado, descricao, acoes, emBreve, children }: PropsCartao) {
-  const idNome = useId();
-  return (
-    <section className="config-conexao" aria-labelledby={idNome}>
-      <div className="config-conexao-topo">
-        <Personagem agente="nuno" modo="cabeca" tamanho="dock" estado="ocioso" />
-        <span className="config-conexao-textos">
-          <span className="config-conexao-linha">
-            <h3 id={idNome} className="config-conexao-nome">
-              {nome}
-            </h3>
-            <span className="config-conexao-quem">para o Nuno</span>
-            {estado && (
-              <Selo forma="ponto" tom={estado.tom}>
-                {estado.texto}
-              </Selo>
-            )}
-            {emBreve && <Selo>em breve</Selo>}
-          </span>
-          <span className="config-conexao-descricao">{descricao}</span>
-        </span>
-        {acoes && <span className="config-conexao-acoes">{acoes}</span>}
-      </div>
-      {children && <div className="config-conexao-corpo">{children}</div>}
-    </section>
-  );
-}
-
-/** Uma coluna do resumo de uma conexão ligada: rótulo pequeno e o valor. */
-function Dado({ rotulo, children, mono }: { rotulo: string; children: ReactNode; mono?: boolean }) {
-  return (
-    <div className="config-conexao-dado">
-      <dt>{rotulo}</dt>
-      <dd data-mono={mono || undefined} title={typeof children === "string" ? children : undefined}>
-        {children}
-      </dd>
-    </div>
-  );
-}
-
 /* ---------- Claude Code ---------- */
 
 const DESCRICAO_CLAUDE =
@@ -124,6 +74,7 @@ const DESCRICAO_CLAUDE =
 export function CartaoClaudeCode({ conexoes }: { conexoes: ConexoesDaTela }) {
   const agora = useAgora();
   const [vendo, setVendo] = useState(false);
+  const arquivo = useAbrir();
   const { claude, previa, andamento } = conexoes;
   if (!claude) return null;
   const ocupado = andamento["hooks-claude-code"] !== undefined || !conexoes.conectado;
@@ -192,18 +143,27 @@ export function CartaoClaudeCode({ conexoes }: { conexoes: ConexoesDaTela }) {
     );
   }
 
+  // Com erro (ConfigConexoesErros.dc.html), o settings.json abre no editor para corrigir.
   return (
     <CartaoConexao
       nome="Claude Code"
       estado={estado}
       descricao={DESCRICAO_CLAUDE}
       acoes={
-        <Botao variante="primario" disabled={ocupado} onClick={() => void conexoes.verPrevia()}>
-          {claude.estado === "erro" ? "Tentar de novo" : "Ver o que muda"}
-        </Botao>
+        <>
+          {erro && <Botao onClick={() => arquivo.abrir(abrirSettingsClaude)}>Abrir o arquivo</Botao>}
+          <Botao variante="primario" disabled={ocupado} onClick={() => void conexoes.verPrevia()}>
+            {claude.estado === "erro" ? "Tentar de novo" : "Ver o que muda"}
+          </Botao>
+        </>
       }
     >
       {erro && <p className="config-conexao-erro">{erro}</p>}
+      {arquivo.erro && (
+        <p role="alert" className="config-conexao-erro">
+          {arquivo.erro}
+        </p>
+      )}
     </CartaoConexao>
   );
 }

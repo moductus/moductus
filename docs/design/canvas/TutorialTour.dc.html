@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Moductus · tour do tutorial</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&amp;family=Geist+Mono:wght@400;600&amp;family=Instrument+Sans:wght@400;600&amp;family=JetBrains+Mono:wght@400;600&amp;family=Onest:wght@400;600&amp;family=IBM+Plex+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit}a:hover{color:inherit}
+button{font:inherit;cursor:pointer}
+input,textarea{font:inherit}
+input::placeholder,textarea::placeholder{color:inherit;opacity:0.7}
+@keyframes corre{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1480px; position: relative; overflow: hidden; background: {{t.paredeFundo}}; font-family: {{t.fonte}}; color: {{t.texto}}; font-size: 13px; line-height: 1.45">
+<sc-if value="{{t.vidro}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: -120px; top: 80px; width: 720px; height: 720px; border-radius: 360px; background: #2C3A5C"></div>
+<div style="position: absolute; left: 520px; top: -260px; width: 640px; height: 640px; border-radius: 320px; background: #3A2F52"></div>
+<div style="position: absolute; right: -160px; bottom: -220px; width: 760px; height: 760px; border-radius: 380px; background: #1F3B44"></div>
+</sc-if>
+<div style="position: absolute; left: 48px; top: 40px; width: 1344px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 40px">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 2px; padding: 0 4px"><span style="font-size: 12px; font-weight: 600">1 de 4 · O dock</span><span style="{{s.rot}}; text-wrap: pretty">O tour começa logo depois da configuração. Fora da parada, tudo fica escurecido e sem clique.</span></div>
+<div style="position: relative; height: 400px; border-radius: 12px; overflow: hidden; border: 1px solid {{t.borda}}; background: {{t.paredeFundo}}">
+<sc-if value="{{t.vidro}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; left: -120px; top: 40px; width: 520px; height: 520px; border-radius: 260px; background: #2C3A5C"></div><div style="position: absolute; left: 360px; top: -200px; width: 460px; height: 460px; border-radius: 230px; background: #3A2F52"></div></sc-if><div style="position: absolute; left: 140px; top: 30px; right: 24px; bottom: -40px; background: {{t.janelaFantasma}}; border: 1px solid {{t.borda}}; border-radius: 12px; display: flex; flex-direction: column; gap: 14px; padding: 18px 22px; box-sizing: border-box">
+<div style="width: 46%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+<div style="width: 64%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+<div style="width: 38%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+</div><div style="position: absolute; left: 0; top: 0"><dc-import name="Dock" tema="{{nome}}" ativo="hoje" hint-size="88px,900px"></dc-import></div>
+<div aria-hidden="true" style="{{spot}} left: {{spotDock.esq}}; top: {{spotDock.topo}}; width: {{spotDock.larg}}; height: 430px; border-radius: 18px"></div>
+<div role="dialog" aria-label="Tour, 1 de 4" style="{{bolha}} left: 128px; top: 44px; width: 340px">
+<div style="display: flex; align-items: center; justify-content: space-between; {{s.rot}}"><span>1 de 4</span><span aria-hidden="true" style="display: flex; gap: 4px"><sc-for list="{{dots1}}" as="d" hint-placeholder-count="4"><span style="{{d}}"></span></sc-for></span></div>
+<h2 style="{{s.h3}}; font-size: 15px">O dock</h2>
+<p style="margin: 0; color: {{t.texto2}}; text-wrap: pretty">Os painéis abrem daqui, e cada agente mostra o que está fazendo. Ele fica na borda da tela, por cima das janelas.</p>
+<div style="display: flex; gap: 8px; justify-content: flex-end"><button style="{{s.btnG}}">Pular tour</button><button style="{{s.btnPri}}">Próximo</button></div>
+</div>
+</div>
+</div><div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 2px; padding: 0 4px"><span style="font-size: 12px; font-weight: 600">2 de 4 · Um painel</span><span style="{{s.rot}}; text-wrap: pretty">O painel Hoje se abre sozinho para a parada; o anel marca o que está sendo explicado.</span></div>
+<div style="position: relative; height: 400px; border-radius: 12px; overflow: hidden; border: 1px solid {{t.borda}}; background: {{t.paredeFundo}}">
+<sc-if value="{{t.vidro}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; left: -120px; top: 40px; width: 520px; height: 520px; border-radius: 260px; background: #2C3A5C"></div><div style="position: absolute; left: 360px; top: -200px; width: 460px; height: 460px; border-radius: 230px; background: #3A2F52"></div></sc-if><div style="position: absolute; left: 520px; top: 30px; right: 24px; bottom: -40px; background: {{t.janelaFantasma}}; border: 1px solid {{t.borda}}; border-radius: 12px; display: flex; flex-direction: column; gap: 14px; padding: 18px 22px; box-sizing: border-box">
+<div style="width: 46%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+<div style="width: 64%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+<div style="width: 38%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+</div><div style="position: absolute; left: 0; top: 0"><dc-import name="Dock" tema="{{nome}}" ativo="hoje" hint-size="88px,900px"></dc-import></div><section style="position: absolute; left: {{t.painelEsq}}; top: 12px; width: 400px; background: {{t.painel}}; backdrop-filter: {{t.desfoque}}; border: 1px solid {{t.bordaForte}}; border-radius: {{t.raioPainel}}; box-shadow: {{t.sombraPainel}}; padding: 18px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px"><div style="display: flex; flex-direction: column; gap: 2px"><h3 style="{{s.h2}}">Hoje</h3><span style="{{s.rot}}">quinta, 8 de outubro · 14:48</span></div><span style="{{s.atalho}}">Ctrl Alt N</span></div>
+<div style="{{s.elevada}}; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; {{s.rot}}"><span>Foco</span><span>2 de 4</span></div>
+<div style="font-family: {{t.mono}}; font-size: 30px; line-height: 1; letter-spacing: -0.03em">18:42</div>
+<span style="color: {{t.texto2}}">Revisar PR do relatório mensal</span>
+</div>
+</section>
+<div aria-hidden="true" style="{{spot}} left: {{spotPainel.esq}}; top: 8px; width: 408px; height: 216px; border-radius: 18px"></div>
+<div role="dialog" aria-label="Tour, 2 de 4" style="{{bolha}} left: 250px; top: 236px; width: 340px">
+<div style="display: flex; align-items: center; justify-content: space-between; {{s.rot}}"><span>2 de 4</span><span aria-hidden="true" style="display: flex; gap: 4px"><sc-for list="{{dots2}}" as="d" hint-placeholder-count="4"><span style="{{d}}"></span></sc-for></span></div>
+<h2 style="{{s.h3}}; font-size: 15px">Um painel</h2>
+<p style="margin: 0; color: {{t.texto2}}; text-wrap: pretty">Cada ícone abre o seu painel ao lado do dock. <span style="{{s.atalho}}">Esc</span> ou um clique fora fecha.</p>
+<div style="display: flex; gap: 8px; justify-content: flex-end"><button style="{{s.btnG}}">Pular tour</button><button style="{{s.btn}}">Voltar</button><button style="{{s.btnPri}}">Próximo</button></div>
+</div>
+</div>
+</div><div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 2px; padding: 0 4px"><span style="font-size: 12px; font-weight: 600">3 de 4 · O Sistema</span><span style="{{s.rot}}; text-wrap: pretty">O Sistema se abre no Início. A bolha fica ao lado do que aponta, nunca por cima.</span></div>
+<div style="position: relative; height: 400px; border-radius: 12px; overflow: hidden; border: 1px solid {{t.borda}}; background: {{t.paredeFundo}}">
+<sc-if value="{{t.vidro}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; left: -120px; top: 40px; width: 520px; height: 520px; border-radius: 260px; background: #2C3A5C"></div><div style="position: absolute; left: 360px; top: -200px; width: 460px; height: 460px; border-radius: 230px; background: #3A2F52"></div></sc-if><div style="position: absolute; left: 20px; top: 20px; width: 980px; height: 600px; display: flex; flex-direction: column; background: {{t.janela}}; backdrop-filter: {{t.desfoque}}; border: 1px solid {{t.borda}}; border-radius: {{t.raioJanela}}; overflow: hidden; box-shadow: {{t.sombra}}">
+<div style="height: 40px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid {{t.borda}}; font-size: 12px; color: {{t.texto3}}"><div style="width: 16px; height: 16px; position: relative; font-size: 16px; color: {{t.destaque}}; flex: none"><div style="position: absolute; left: 0.24em; top: 0.04em; bottom: 0.04em; width: 0.15em; border-radius: 0.075em; background: currentColor"></div><div style="position: absolute; left: 0.5em; top: 0.08em; width: 0.32em; height: 0.32em; border-radius: 0.16em; background: currentColor"></div></div><span>Moductus</span></div>
+<div style="flex: 1; display: flex">
+<nav aria-label="Áreas" style="width: 232px; flex: none; border-right: 1px solid {{t.borda}}; background: {{t.lateral}}; padding: 14px 10px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px">
+<sc-for list="{{nav}}" as="n" hint-placeholder-count="12"><a href="#" style="{{n.estilo}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="{{n.d}}"></path></svg><span style="flex: 1">{{n.nome}}</span></a></sc-for>
+</nav>
+<div style="flex: 1; padding: 26px 32px; display: flex; flex-direction: column; gap: 14px"><span style="{{s.rot}}">Quinta, 8 de outubro</span><h3 style="{{s.h1}}">Início</h3><div style="display: flex; gap: 14px"><div style="width: 200px; height: 140px; {{s.cartao}}"></div><div style="width: 200px; height: 140px; {{s.cartao}}"></div></div></div>
+</div>
+</div>
+<div aria-hidden="true" style="{{spot}} left: 20px; top: 60px; width: 232px; height: 360px; border-radius: 0 0 0 10px"></div>
+<div role="dialog" aria-label="Tour, 3 de 4" style="{{bolha}} left: 290px; top: 96px; width: 340px">
+<div style="display: flex; align-items: center; justify-content: space-between; {{s.rot}}"><span>3 de 4</span><span aria-hidden="true" style="display: flex; gap: 4px"><sc-for list="{{dots3}}" as="d" hint-placeholder-count="4"><span style="{{d}}"></span></sc-for></span></div>
+<h2 style="{{s.h3}}; font-size: 15px">O Sistema</h2>
+<p style="margin: 0; color: {{t.texto2}}; text-wrap: pretty">Aqui as áreas têm espaço: tarefas, foco, notas e configurações. <span style="{{s.atalho}}">Ctrl Alt N</span> abre e esconde de qualquer lugar.</p>
+<div style="display: flex; gap: 8px; justify-content: flex-end"><button style="{{s.btnG}}">Pular tour</button><button style="{{s.btn}}">Voltar</button><button style="{{s.btnPri}}">Próximo</button></div>
+</div>
+</div>
+</div><div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 2px; padding: 0 4px"><span style="font-size: 12px; font-weight: 600">4 de 4 · A captura rápida</span><span style="{{s.rot}}; text-wrap: pretty">A captura abre com uma frase de exemplo já entendida. Terminar leva aos Primeiros passos.</span></div>
+<div style="position: relative; height: 400px; border-radius: 12px; overflow: hidden; border: 1px solid {{t.borda}}; background: {{t.paredeFundo}}">
+<sc-if value="{{t.vidro}}" hint-placeholder-val="{{ false }}"><div style="position: absolute; left: -120px; top: 40px; width: 520px; height: 520px; border-radius: 260px; background: #2C3A5C"></div><div style="position: absolute; left: 360px; top: -200px; width: 460px; height: 460px; border-radius: 230px; background: #3A2F52"></div></sc-if><div style="position: absolute; left: 140px; top: 30px; right: 24px; bottom: -40px; background: {{t.janelaFantasma}}; border: 1px solid {{t.borda}}; border-radius: 12px; display: flex; flex-direction: column; gap: 14px; padding: 18px 22px; box-sizing: border-box">
+<div style="width: 46%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+<div style="width: 64%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+<div style="width: 38%; height: 10px; border-radius: 5px; background: {{t.linhaFantasma}}"></div>
+</div><div style="position: absolute; left: 0; top: 0"><dc-import name="Dock" tema="{{nome}}" ativo="hoje" hint-size="88px,900px"></dc-import></div><div style="position: absolute; inset: 0; background: {{veuLeve}}"></div><section aria-label="Captura rápida" style="position: absolute; left: 60px; top: 40px; width: 532px; background: {{t.painel}}; backdrop-filter: {{t.desfoque}}; border: 1px solid {{t.bordaForte}}; border-radius: {{t.raioPainel}}; box-shadow: {{t.sombraPainel}}; box-sizing: border-box; display: flex; flex-direction: column">
+<div style="display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid {{t.borda}}"><span aria-hidden="true" style="display: flex; flex: none; color: {{t.texto3}}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg></span><span style="flex: 1; font-size: 16px">ligar pro banco amanhã 15h</span><span style="{{s.atalho}}">Ctrl Alt Espaço</span></div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 18px; {{s.rot}}"><span>Alba entendeu:</span><span style="{{chip}}">tarefa</span><span style="{{chip}}">sex, 9 out</span><span style="{{chip}}">15:00</span><span style="{{chip}}">lembrete 14:45</span></div>
+</section>
+<div aria-hidden="true" style="{{spot}} left: 56px; top: 36px; width: 540px; height: 104px; border-radius: 20px"></div>
+<div role="dialog" aria-label="Tour, 4 de 4" style="{{bolha}} left: 156px; top: 170px; width: 340px">
+<div style="display: flex; align-items: center; justify-content: space-between; {{s.rot}}"><span>4 de 4</span><span aria-hidden="true" style="display: flex; gap: 4px"><sc-for list="{{dots4}}" as="d" hint-placeholder-count="4"><span style="{{d}}"></span></sc-for></span></div>
+<h2 style="{{s.h3}}; font-size: 15px">A captura rápida</h2>
+<p style="margin: 0; color: {{t.texto2}}; text-wrap: pretty"><span style="{{s.atalho}}">Ctrl Alt Espaço</span> abre de qualquer lugar. Escreva do seu jeito e a Alba entende; Enter guarda.</p>
+<div style="display: flex; gap: 8px; justify-content: flex-end"><button style="{{s.btn}}">Voltar</button><button style="{{s.btnPri}}">Terminar o tour</button></div>
+</div>
+</div>
+</div>
+</div>
+<div style="position: absolute; left: 48px; top: 1012px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: baseline; gap: 24px"><span style="font-size: 12px; font-weight: 600">Primeiros passos nesta versão</span><span style="{{s.rot}}">Esc pula o tour; ← e → andam entre as paradas. O tour e a lista voltam pelo menu Ajuda.</span></div>
+<section aria-label="Primeiros passos" style="width: 1104px; {{s.elevada}}; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 14px">
+<div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><h2 style="{{s.h2}}">Primeiros passos</h2><span style="{{s.rot}}">Uma missão por agente. Some quando você terminar e volta pelo menu Ajuda.</span></div>
+<span style="font-family: {{t.mono}}; font-size: 13px">1 de 3</span>
+<div style="width: 120px; {{s.trilho}}"><div style="{{progresso}}"></div></div>
+<button style="{{s.btnG}}">Ver o tour de novo</button><button style="{{s.btnG}}">Pular</button>
+</div>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px">
+<div style="display: flex; flex-direction: column">
+<sc-for list="{{missoes}}" as="m" hint-placeholder-count="3">
+<div style="{{m.linha}}">
+<span style="{{m.caixa}}"></span>
+<span style="flex: none; width: 26px; height: 26px; display: flex"><dc-import name="Personagem" agente="{{m.agente}}" estado="{{m.expr}}" modo="cabeca" tamanho="{{ 26 }}" hint-size="26px,26px"></dc-import></span>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px"><span style="{{m.texto}}">{{m.nome}}</span><span style="{{s.rot}}">{{m.dica}}</span></div>
+<sc-if value="{{m.temAcao}}" hint-placeholder-val="{{ false }}"><button style="{{s.btnP}}">{{m.acao}}</button></sc-if>
+</div>
+</sc-for>
+<div style="padding: 14px 0 2px; {{s.rot}}">Chegam depois · não contam agora</div>
+<sc-for list="{{depois}}" as="m" hint-placeholder-count="2">
+<div style="{{m.linha}}">
+<span style="{{m.caixa}}"></span>
+<span style="flex: none; width: 26px; height: 26px; display: flex; opacity: 0.6"><dc-import name="Personagem" agente="{{m.agente}}" estado="descansando" modo="cabeca" tamanho="{{ 26 }}" hint-size="26px,26px"></dc-import></span>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px"><span style="color: {{t.texto2}}">{{m.nome}}</span><span style="{{s.rot}}">{{m.dica}}</span></div>
+<span style="{{m.selo}}">{{m.quando}}</span>
+</div>
+</sc-for>
+</div>
+<div style="background: {{t.cartao}}; border: 1px dashed {{t.bordaForte}}; border-radius: {{t.raioCartao}}; padding: 14px; display: flex; flex-direction: column; gap: 10px; align-self: start">
+<div style="display: flex; align-items: center; gap: 8px"><span style="flex: none; width: 24px; height: 24px; display: flex"><dc-import name="Personagem" agente="faina" estado="atento" modo="cabeca" tamanho="{{ 24 }}" hint-size="24px,24px"></dc-import></span><span style="font-weight: 600">Faina</span><span style="{{treino}}">treino</span><span style="margin-left: auto; {{s.rot}}">nada de verdade muda</span></div>
+<p style="margin: 0; color: {{t.texto2}}">Vou mover 3 arquivos de exemplo (12 KB) para a Lixeira. Dá para desfazer.</p>
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: {{t.raioControle}}; background: {{t.chip}}; font-family: {{t.mono}}; font-size: 11px; color: {{t.texto2}}"><span>exemplo-1.tmp</span><span>exemplo-2.tmp</span><span>exemplo-3.tmp</span></div>
+<div style="display: flex; gap: 8px; justify-content: flex-end"><button style="{{s.btn}}">Não mover</button><button style="{{s.btnPri}}">Mover 3 arquivos</button></div>
+</div>
+</div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tema": {"editor": "enum", "options": ["Grafite", "Papel", "Vidro"], "default": "Grafite"}, "$preview": {"width": 1440, "height": 1480}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var TEMA_PADRAO = 'Grafite';
+    var NAV_ATIVO = 'inicio';
+    var self = this;
+
+    var TEMAS = {
+      Grafite: {
+        paredeFundo: '#191B1F', janelaFantasma: '#141619', linhaFantasma: '#1E2125', painel: '#131417', janela: '#111214', lateral: '#0D0E10', cartao: '#16181B', elevada: '#1A1C20', campo: '#0F1012', chip: 'rgba(255,255,255,0.06)', trilho: 'rgba(255,255,255,0.08)',
+        borda: 'rgba(255,255,255,0.07)', bordaForte: 'rgba(255,255,255,0.14)', ativo: 'rgba(255,255,255,0.08)',
+        texto: '#E8E9EB', texto2: '#B5B8BD', texto3: '#8C9097', apagado: '#6F737A',
+        destaque: '#E8E9EB', sobreDestaque: '#0D0E10', sucesso: '#7FB89E', aviso: '#E3B262', perigo: '#E5787A',
+        raioJanela: '10px', raioPainel: '12px', raioCartao: '10px', raioControle: '8px', raioBotao: '8px', raioCaixa: '4px',
+        fonte: "'Geist', 'Segoe UI', system-ui, sans-serif", mono: "'Geist Mono', Consolas, monospace",
+        desfoque: 'none', sombra: '0 24px 64px rgba(0,0,0,0.45)', sombraPainel: '0 24px 48px rgba(0,0,0,0.45)', vidro: false, claro: false, painelEsq: '76px'
+      },
+      Papel: {
+        paredeFundo: '#E3E1DC', janelaFantasma: '#F1F0EC', linhaFantasma: '#E6E4DF', painel: '#FFFFFF', janela: '#FFFFFF', lateral: '#F6F5F2', cartao: '#FFFFFF', elevada: '#F6F5F2', campo: '#FFFFFF', chip: '#EFEEEA', trilho: '#E6E4DF',
+        borda: 'rgba(20,20,19,0.08)', bordaForte: 'rgba(20,20,19,0.16)', ativo: '#EAE8E3',
+        texto: '#1A1A18', texto2: '#3E3D39', texto3: '#6B6A64', apagado: '#8A8983',
+        destaque: '#1A1A18', sobreDestaque: '#FBFAF8', sucesso: '#2F7A52', aviso: '#B5761A', perigo: '#B4443C',
+        raioJanela: '14px', raioPainel: '16px', raioCartao: '14px', raioControle: '10px', raioBotao: '17px', raioCaixa: '8px',
+        fonte: "'Instrument Sans', 'Segoe UI', system-ui, sans-serif", mono: "'JetBrains Mono', Consolas, monospace",
+        desfoque: 'none', sombra: '0 24px 64px rgba(40,36,28,0.16)', sombraPainel: '0 16px 40px rgba(40,36,28,0.12)', vidro: false, claro: true, painelEsq: '88px'
+      },
+      Vidro: {
+        paredeFundo: '#161B26', janelaFantasma: 'rgba(18,21,29,0.82)', linhaFantasma: '#222733', painel: 'rgba(22,25,34,0.66)', janela: 'rgba(18,21,29,0.62)', lateral: 'rgba(0,0,0,0.16)', cartao: 'rgba(255,255,255,0.05)', elevada: 'rgba(255,255,255,0.07)', campo: 'rgba(0,0,0,0.18)', chip: 'rgba(255,255,255,0.08)', trilho: 'rgba(255,255,255,0.10)',
+        borda: 'rgba(255,255,255,0.09)', bordaForte: 'rgba(255,255,255,0.18)', ativo: 'rgba(255,255,255,0.10)',
+        texto: '#EEF0F6', texto2: '#C4C9D4', texto3: '#9AA1B1', apagado: '#7C8394',
+        destaque: '#A3B5FF', sobreDestaque: '#10131C', sucesso: '#7CCBA2', aviso: '#E8B86A', perigo: '#F08A8A',
+        raioJanela: '16px', raioPainel: '18px', raioCartao: '14px', raioControle: '10px', raioBotao: '10px', raioCaixa: '5px',
+        fonte: "'Onest', 'Segoe UI', system-ui, sans-serif", mono: "'IBM Plex Mono', Consolas, monospace",
+        desfoque: 'blur(40px) saturate(140%)', sombra: '0 24px 64px rgba(0,0,0,0.35)', sombraPainel: 'none', vidro: true, claro: false, painelEsq: '88px'
+      }
+    };
+    var nome = (this.state && this.state.tema) || this.props.tema || TEMA_PADRAO;
+    if (!TEMAS[nome]) nome = 'Grafite';
+    var t = TEMAS[nome];
+    var ag = t.claro
+      ? { alba: '#9A6A1E', tula: '#2F7A52', faina: '#A34E2E', nuno: '#3F64A8' }
+      : { alba: '#D9A55A', tula: '#6FAE8C', faina: '#D2805E', nuno: '#7C9CD6' };
+    var btnBase = 'height: 32px; padding: 0 14px; border-radius: ' + t.raioBotao + '; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; flex: none; ';
+    var s = {
+      btn: btnBase + 'border: 1px solid ' + t.bordaForte + '; background: transparent; color: ' + t.texto + ';',
+      btnPri: btnBase + 'border: 0; background: ' + t.destaque + '; color: ' + t.sobreDestaque + '; font-weight: 600;',
+      btnG: btnBase + 'border: 0; background: transparent; color: ' + t.texto3 + '; padding: 0 8px;',
+      btnP: 'height: 26px; padding: 0 10px; border-radius: ' + t.raioBotao + '; font-size: 12px; border: 1px solid ' + t.bordaForte + '; background: transparent; color: ' + t.texto + '; white-space: nowrap; flex: none;',
+      btnPPri: 'height: 26px; padding: 0 10px; border-radius: ' + t.raioBotao + '; font-size: 12px; border: 0; background: ' + t.destaque + '; color: ' + t.sobreDestaque + '; font-weight: 600; white-space: nowrap; flex: none;',
+      cartao: 'background: ' + t.cartao + '; border: 1px solid ' + t.borda + '; border-radius: ' + t.raioCartao + '; padding: 14px; box-sizing: border-box;',
+      elevada: 'background: ' + t.elevada + '; border: 1px solid ' + t.bordaForte + '; border-radius: ' + t.raioCartao + '; padding: 14px; box-sizing: border-box;',
+      linha: 'border-bottom: 1px solid ' + t.borda + ';',
+      rot: 'font-size: 12px; color: ' + t.texto3,
+      meta: 'font-family: ' + t.mono + '; font-size: 11px; color: ' + t.texto3 + ';',
+      num: 'font-family: ' + t.mono + '; font-size: 12px; color: ' + t.texto2 + ';',
+      atalho: 'font-family: ' + t.mono + '; font-size: 11px; padding: 1px 5px; border-radius: 4px; background: ' + t.chip + '; color: ' + t.texto2 + ';',
+      codigo: 'font-family: ' + t.mono + '; font-size: 11px; padding: 1px 5px; border-radius: 4px; background: ' + t.chip + '; color: ' + t.texto + ';',
+      campo: 'height: 34px; padding: 0 10px; border-radius: ' + t.raioControle + '; border: 1px solid ' + t.bordaForte + '; background: ' + t.campo + '; color: ' + t.texto + '; display: flex; align-items: center; gap: 8px; box-sizing: border-box;',
+      trilho: 'height: 4px; border-radius: 2px; background: ' + t.trilho + '; overflow: hidden;',
+      h1: 'margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.02em;',
+      h2: 'margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em;',
+      h3: 'margin: 0; font-size: 14px; font-weight: 600;'
+    };
+    var barra = function (pct, cor, alt) { var h = alt || 4; return 'width: ' + pct + '%; height: ' + h + 'px; border-radius: ' + (h / 2) + 'px; background: ' + (cor || t.destaque) + ';'; };
+    var pill = function (cor) { return 'font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid ' + t.borda + '; color: ' + cor + '; white-space: nowrap;'; };
+    var ponto = function (cor) { return 'width: 8px; height: 8px; border-radius: 4px; flex: none; background: ' + cor + ';'; };
+    var caixa = function (feita) { return 'width: 16px; height: 16px; border-radius: ' + t.raioCaixa + '; box-sizing: border-box; flex: none; ' + (feita ? 'background: ' + t.apagado + '; border: 1px solid ' + t.apagado + ';' : 'border: 1.5px solid ' + t.apagado + ';'); };
+    var marcada = function () { var svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='" + t.sobreDestaque + "' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>"; return 'width: 16px; height: 16px; border-radius: ' + t.raioCaixa + '; box-sizing: border-box; flex: none; background: ' + t.destaque + ' url(data:image/svg+xml,' + encodeURIComponent(svg).replace(/'/g, '%27') + ') center / 12px no-repeat;'; };
+    var radio = function (on) { return 'width: 16px; height: 16px; border-radius: 8px; box-sizing: border-box; flex: none; ' + (on ? 'border: 5px solid ' + t.destaque + ';' : 'border: 1.5px solid ' + t.apagado + ';'); };
+    var chave = function (on) { return 'width: 32px; height: 18px; border-radius: 9px; flex: none; position: relative; box-sizing: border-box; ' + (on ? 'background: ' + t.destaque + ';' : 'background: ' + t.trilho + '; border: 1px solid ' + t.bordaForte + ';'); };
+    var chaveBola = function (on) { return 'position: absolute; top: ' + (on ? 3 : 2) + 'px; ' + (on ? 'right: 3px;' : 'left: 2px;') + ' width: 12px; height: 12px; border-radius: 6px; background: ' + (on ? t.sobreDestaque : t.apagado) + ';'; };
+    var segmento = function (on) { return 'height: 28px; padding: 0 12px; border: 0; border-radius: 6px; font-size: 12px; white-space: nowrap; ' + (on ? 'background: ' + (t.claro ? '#FFFFFF' : t.elevada) + '; color: ' + t.texto + '; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.12);' : 'background: transparent; color: ' + t.texto3 + ';'); };
+    var item = 'display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: ' + t.raioControle + '; text-decoration: none; font-size: 13px; ';
+    var nav = [
+      { id: 'inicio', nome: 'Início', d: 'M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z' },
+      { id: 'agentes', nome: 'Agentes', d: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' },
+      { id: 'sessoes', nome: 'Sessões de IA', d: 'M4 17l6-6-6-6M12 19h8', contagem: '3' },
+      { id: 'tarefas', nome: 'Tarefas', d: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11', contagem: '7' },
+      { id: 'foco', nome: 'Foco', d: 'M10 2h4M12 14l3-3M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z' },
+      { id: 'financas', nome: 'Finanças', d: 'M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4' },
+      { id: 'dev', nome: 'Dev', d: 'M6 9v12M18 15V9a3 3 0 0 0-3-3h-4M14 3l-3 3 3 3M9 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM21 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z', contagem: '2' },
+      { id: 'notas', nome: 'Notas', d: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8' },
+      { id: 'arquivos', nome: 'Arquivos', d: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z' },
+      { id: 'memoria', nome: 'Memória', d: 'M12 3a9 9 0 1 0 9 9M12 7v5l3 3M21 3v6h-6' },
+      { id: 'ferramentas', nome: 'Ferramentas', d: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z' },
+      { id: 'config', nome: 'Configurações', d: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4 12h2M18 12h2M12 4v2M12 18v2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4' }
+    ].map(function (n) {
+      var on = n.id === NAV_ATIVO;
+      return Object.assign({}, n, { estilo: item + (on ? 'background: ' + t.ativo + '; color: ' + t.texto + '; font-weight: 600;' : 'background: transparent; color: ' + t.texto2 + ';'), temContagem: !!n.contagem });
+    });
+    var R = function (o) { return Object.assign({ t: t, s: s, nome: nome, nav: nav, ag: ag }, o || {}); };
+
+
+    var COR = { ok: t.sucesso, erro: t.perigo, aviso: t.aviso, testando: t.texto2, off: t.texto3 };
+    var PONTO = { ok: t.sucesso, erro: t.perigo, aviso: t.aviso, testando: t.destaque, off: t.apagado };
+    var seloE = function (tipo) { return 'display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; color: ' + COR[tipo] + ';'; };
+    var pontoDe = function (tipo) { return tipo === 'off' ? 'width: 8px; height: 8px; border-radius: 4px; flex: none; box-sizing: border-box; border: 1.5px solid ' + t.apagado + ';' : ponto(PONTO[tipo]); };
+    var est = function (e, texto) { return { seloEstilo: seloE(e), ponto: pontoDe(e), estado: texto }; };
+    var corre = 'position: absolute; left: 0; top: 0; height: 4px; width: 40%; border-radius: 2px; background: ' + t.destaque + '; animation: corre 1.4s linear infinite;';
+    var veu = t.claro ? 'rgba(40,36,28,0.22)' : (t.vidro ? 'rgba(5,7,12,0.48)' : 'rgba(0,0,0,0.55)');
+    var sombraFlut = t.sombraPainel === 'none' ? '0 16px 40px rgba(0,0,0,0.30)' : t.sombraPainel;
+    var tracejada = function () { return 'width: 16px; height: 16px; border-radius: ' + t.raioCaixa + '; box-sizing: border-box; flex: none; border: 1.5px dashed ' + t.apagado + ';'; };
+    var fmt = function (m) { if (!m) return '—'; var h = Math.floor(m / 60), r = m % 60; return h ? h + 'h' + (r ? (r < 10 ? '0' : '') + r : '') : r + ' min'; };
+
+    var spot = 'position: absolute; box-sizing: border-box; border: 2px solid ' + t.destaque + '; box-shadow: 0 0 0 1600px ' + veu + '; pointer-events: none;';
+    var bolhaE = 'position: absolute; background: ' + (t.vidro ? 'rgba(26,30,41,0.92)' : t.painel) + '; backdrop-filter: ' + t.desfoque + '; border: 1px solid ' + t.bordaForte + '; border-radius: ' + t.raioPainel + '; box-shadow: ' + sombraFlut + '; padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;';
+    var dots = function (n) { return [1, 2, 3, 4].map(function (i) { return 'width: 6px; height: 6px; border-radius: 3px; background: ' + (i === n ? t.destaque : t.trilho) + ';'; }); };
+    var esq = parseInt(t.painelEsq, 10);
+    var lista = [
+      { agente: 'alba', expr: 'descansando', nome: 'Peça um lembrete à Alba', dica: '"me lembra de beber água às 15h", pela captura ou pela conversa', feita: true },
+      { agente: 'faina', expr: 'atento', nome: 'Responda o cartão de aprovação da Faina', dica: 'Um treino: ela pede para mover 3 arquivos de exemplo', atual: true },
+      { agente: 'nuno', expr: 'descansando', nome: 'Abra uma sessão do Claude Code', dica: 'O Nuno mostra o contexto, o gasto e os pedidos dela', acao: 'Como funciona' }
+    ];
+    var linha = 'display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid ' + t.borda + ';';
+    var missoes = lista.map(function (m) { return Object.assign({}, m, { caixa: caixa(!!m.feita), temAcao: !!m.acao, linha: linha,
+      texto: m.feita ? 'color: ' + t.apagado + '; text-decoration: line-through;' : (m.atual ? 'font-weight: 600;' : '') }); });
+    var depois = [
+      { agente: 'tula', nome: 'Mande um extrato para a Tula', dica: 'A Tula começa a ler extratos quando Finanças chegar.', quando: 'chega com Finanças' },
+      { agente: 'faina', nome: 'Peça à Faina para olhar seus Downloads', dica: 'Ela precisa das pastas autorizadas, que chegam com Arquivos.', quando: 'chega com Arquivos' }
+    ].map(function (m) { return Object.assign({}, m, { caixa: tracejada(), selo: pill(t.texto3), linha: linha }); });
+    return R({ spot: spot, bolha: bolhaE, dots1: dots(1), dots2: dots(2), dots3: dots(3), dots4: dots(4),
+      spotDock: { esq: (t.claro || t.vidro ? 8 : 2) + 'px', topo: (t.claro || t.vidro ? 8 : 2) + 'px', larg: (t.claro || t.vidro ? 76 : 70) + 'px' },
+      spotPainel: { esq: (esq - 4) + 'px' }, veuLeve: veu, chip: pill(t.texto2),
+      missoes: missoes, depois: depois, progresso: barra(33), treino: pill(t.aviso) });
+  }
+}
+</script>
+</body>
+</html>

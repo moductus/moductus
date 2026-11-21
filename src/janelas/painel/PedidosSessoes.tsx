@@ -1,4 +1,4 @@
-import type { FerramentaSessao, ListaSessoes, Projeto, SessaoIa } from "@moductus/contrato";
+import type { FerramentaSessao, ListaSessoes, OndeRoda, Projeto, SessaoIa } from "@moductus/contrato";
 import { invoke } from "@tauri-apps/api/core";
 import { useId, type ReactNode } from "react";
 import { contextoDaSessao, estadoDaSessao, ultimaAcao } from "../../areas/sessoes/sessoes.ts";
@@ -21,6 +21,21 @@ export const NOME_FERRAMENTA: Readonly<Record<FerramentaSessao, string>> = {
   antigravity: "Antigravity",
 };
 
+/** Onde roda a sessão do Claude Code, como sai abaixo do nome da ferramenta na tabela. */
+export const ONDE_RODA: Readonly<Record<OndeRoda, string>> = {
+  terminal: "terminal",
+  desktop: "Desktop",
+};
+
+/**
+ * O nome por extenso, para `title` e leitor de tela onde só cabe o nome da ferramenta (dock,
+ * Início): "Claude Code no Desktop". Sem saber onde roda, só a ferramenta.
+ */
+export function nomeCompletoDaSessao(sessao: Pick<SessaoIa, "ferramenta" | "ondeRoda">): string {
+  const ferramenta = NOME_FERRAMENTA[sessao.ferramenta];
+  return sessao.ondeRoda ? `${ferramenta} no ${ONDE_RODA[sessao.ondeRoda]}` : ferramenta;
+}
+
 /** Abre uma área do Sistema e fecha o painel. */
 export function abrirNoSistema(area: string) {
   void invoke("sistema_abrir", { area });
@@ -31,17 +46,24 @@ interface PropsCabeca {
   tom: TomSelo;
   projeto: string | null;
   ferramenta: FerramentaSessao | null;
+  /** O nome por extenso ({@link nomeCompletoDaSessao}), no `title` e no nome acessível. */
+  completo?: string;
   /** O que vai à direita: o tempo, o contexto ou "esperando você". */
   direita?: ReactNode;
 }
 
 /** A linha de cima de cada sessão: ponto do estado, projeto em negrito, ferramenta e o que vai à direita. */
-function CabecaSessao({ tom, projeto, ferramenta, direita }: PropsCabeca) {
+function CabecaSessao({ tom, projeto, ferramenta, completo, direita }: PropsCabeca) {
   return (
     <div className="sessao-cabeca">
       <span className="sessao-ponto" data-tom={tom} aria-hidden="true" />
       <span className="sessao-projeto">{projeto ?? "Sem projeto"}</span>
-      {ferramenta && <span className="sessao-ferramenta">{NOME_FERRAMENTA[ferramenta]}</span>}
+      {ferramenta && (
+        // Só o nome cabe ao lado do projeto: onde roda vai no title e no nome acessível.
+        <span className="sessao-ferramenta" title={completo} aria-label={completo}>
+          {NOME_FERRAMENTA[ferramenta]}
+        </span>
+      )}
       {direita}
     </div>
   );
@@ -52,7 +74,7 @@ function CabecaSessao({ tom, projeto, ferramenta, direita }: PropsCabeca) {
  * a do serviço ("Quer rodar o comando abaixo.") e o comando, o arquivo ou o endereço vem inteiro
  * logo abaixo, de qualquer ferramenta que o traga.
  */
-function PedidoDaSessao({ item }: { item: Extract<ItemSessao, { tipo: "pedido" }> }) {
+export function PedidoDaSessao({ item }: { item: Extract<ItemSessao, { tipo: "pedido" }> }) {
   const { aprovacao } = item;
   const detalhe = detalheDoPedido(aprovacao.acao);
   const pendente = aprovacao.estado === "pendente";
@@ -103,6 +125,7 @@ export function CartaoSessao({ sessao, projeto, agora, comContexto = false }: Pr
         tom={TOM_DA_SESSAO[sessao.estado]}
         projeto={projeto?.nome ?? null}
         ferramenta={sessao.ferramenta}
+        completo={nomeCompletoDaSessao(sessao)}
         direita={
           <>
             <span className="so-leitor">{estado.texto}</span>

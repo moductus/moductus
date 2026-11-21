@@ -40,7 +40,7 @@ const RESPOSTA = readFileSync(
 async function montar() {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-ferramentas-github-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   db.exec(`
     INSERT INTO provedores (id, tipo, nome) VALUES ('p-nuno', 'claude-cli', 'Falso do Nuno');

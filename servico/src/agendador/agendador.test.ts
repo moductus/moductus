@@ -34,7 +34,7 @@ const em = (dia: number, h: number, m: number, s = 0) => new Date(2026, 9, dia, 
 function bancoMigrado(): DatabaseSync {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-agendador-"));
   pastas.push(pasta);
-  const db = abrirBanco(pasta);
+  const db = abrirBanco(pasta, { duravel: false });
   bancos.push(db);
   return db;
 }

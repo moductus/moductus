@@ -178,6 +178,8 @@ export interface PontoDeLeitura {
 export class SomaDaLeitura {
   usado: number | null;
   modelo: string | null;
+  /** O `entrypoint` da última linha que o trouxe (onde a sessão roda); vazio sem nenhuma. */
+  pontoDeEntrada: string | null = null;
   compactou = false;
   /** Leu alguma linha que interessa: há o que gravar. */
   mudou = false;
@@ -198,6 +200,7 @@ export class SomaDaLeitura {
     const lida = lerLinhaTranscript(bruta);
     if (!lida) return;
     this.mudou = true;
+    if (lida.tipo !== "janela" && lida.pontoDeEntrada) this.pontoDeEntrada = lida.pontoDeEntrada;
     if (lida.tipo === "compactacao") {
       this.usado = lida.tokensDepois;
       this.compactou = true;
@@ -337,6 +340,7 @@ export class AcompanhamentoContexto {
         usado: soma.usado,
         janela,
         modelo: soma.modelo,
+        pontoDeEntrada: soma.pontoDeEntrada,
         avisadoEm,
         agora,
       });
