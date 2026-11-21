@@ -26,6 +26,9 @@ export const ConteudoArquivo = z.enum([
   "etiquetas",
   "calendarios",
   "rotinas",
+  "categorias",
+  "regras_categoria",
+  "perfis_importacao",
 ]);
 export type ConteudoArquivo = z.infer<typeof ConteudoArquivo>;
 

@@ -25,12 +25,15 @@ function bancoNovo(): DatabaseSync {
 const CONFIGURACOES = [
   "agentes",
   "calendarios",
+  "categorias",
   "conexoes",
   "config",
   "etiquetas",
   "listas",
   "notificacoes_preferencias",
+  "perfis_importacao",
   "provedores",
+  "regras_categoria",
   "regras_permissao",
   "rotinas",
 ];
@@ -223,6 +226,33 @@ describe("configuração × dado", () => {
     expect(linhasQueViajam(db, "config")).toEqual([]);
     expect(linhasQueViajam(db, "onboarding").map((o) => o.passo)).toEqual(["configuracao", "tutorial"]);
     expect(linhasQueViajam(db, "agentes").map((a) => a.id)).toEqual(["alba", "faina", "nuno", "tula"]);
+  });
+
+  test("categorias, regras e perfis vão em só configurações; as contas não", () => {
+    const db = bancoNovo();
+    db.prepare(
+      "INSERT INTO categorias (id, nome, tipo, apagado_em) VALUES ('cat-apagada', 'Velha', 'gasto', ?)",
+    ).run(AGORA);
+    db.prepare(
+      "INSERT INTO regras_categoria (id, padrao, tipo_padrao, categoria_id) VALUES ('rc1', 'IFOOD', 'contem', 'restaurantes')",
+    ).run();
+    db.prepare(
+      "INSERT INTO perfis_importacao (id, banco, tipo_conta, formato, mapeamento) VALUES ('pi1', 'meu-banco', 'conta', 'csv', ?)",
+    ).run('{"data":0}');
+    db.prepare("INSERT INTO contas (id, nome, tipo) VALUES ('ct1', 'Corrente', 'corrente')").run();
+
+    const tabelas = lerConfiguracoes(db, new Date(AGORA));
+    const categorias = tabelas.get("categorias")?.map((c) => c.id) ?? [];
+    expect(categorias).toContain("mercado");
+    expect(categorias).toContain("transferencia");
+    expect(categorias).not.toContain("cat-apagada");
+    expect(tabelas.get("regras_categoria")?.map((r) => r.id)).toEqual(["rc1"]);
+    expect(tabelas.get("perfis_importacao")).toEqual([
+      expect.objectContaining({ id: "pi1", banco: "meu-banco", mapeamento: '{"data":0}' }),
+    ]);
+    expect(tabelas.has("contas")).toBe(false);
+    expect(EXPORTACAO.contas).toBe("dado");
+    expect(linhasQueViajam(db, "contas").map((c) => c.id)).toEqual(["ct1"]);
   });
 
   test("tabela sem marcação não sai em só configurações", () => {

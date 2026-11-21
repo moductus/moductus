@@ -122,11 +122,14 @@ describe("levar para outro PC: só configurações", () => {
     const tabelas = [
       "agentes",
       "calendarios",
+      "categorias",
       "conexoes",
       "etiquetas",
       "listas",
       "notificacoes_preferencias",
+      "perfis_importacao",
       "provedores",
+      "regras_categoria",
       "regras_permissao",
       "rotinas",
     ];
@@ -154,6 +157,9 @@ describe("levar para outro PC: só configurações", () => {
     expect(ler("etiquetas")).toEqual([]);
     expect(ler("calendarios").map((c) => c.id)).toEqual(["local"]);
     expect(ler("rotinas").map((r) => r.id)).toEqual(["briefing", "fechamento"]);
+    expect(ler("categorias").map((c) => c.id)).toContain("mercado");
+    expect(ler("regras_categoria")).toEqual([]);
+    expect(ler("perfis_importacao")).toEqual([]);
     for (const nome of Object.keys(conteudo)) {
       expect(strFromU8(conteudo[nome]!), nome).not.toContain("moductus:");
     }

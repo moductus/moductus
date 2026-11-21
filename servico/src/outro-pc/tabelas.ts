@@ -54,6 +54,12 @@ export const EXPORTACAO: Readonly<Record<string, Exportacao>> = {
   notas: "dado",
   // 024-alba-do-dia: até onde os vigias daqui olharam; o PC novo começa a olhar de lá.
   vigias_marcas: "deste_pc",
+  // 029-financas-cadastro: categorias, regras e perfis são como o usuário organiza o dinheiro e vão
+  // ao PC do trabalho sem as finanças (PRODUCT §9); as contas são dado.
+  categorias: "configuracao",
+  regras_categoria: "configuracao",
+  perfis_importacao: "configuracao",
+  contas: "dado",
 };
 
 /**
