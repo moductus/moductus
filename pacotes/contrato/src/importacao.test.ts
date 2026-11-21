@@ -8,6 +8,7 @@ import {
   PerfilImportacao,
   PreviaImportacao,
   ProgressoImportacao,
+  tipoDoExtrato,
 } from "./importacao.ts";
 
 const linha = {
@@ -61,14 +62,15 @@ describe("ler o extrato", () => {
     expect(LeituraExtrato.safeParse({ ...ofx, extratos: [] }).success).toBe(false);
   });
 
-  test("CSV traz a detecção da amostra e o perfil reconhecido pelo cabeçalho", () => {
+  test("CSV traz a detecção da amostra e o perfil reconhecido pelo cabeçalho para cada tipo", () => {
     const csv = {
       leitor: "csv",
       leituraId: "01KA0000000000000000000R02",
       arquivoNome: "extrato-cooperativa-set.csv",
       formato: "csv",
       jaImportado: null,
-      perfilId: null,
+      // O mesmo cabeçalho reconheceu o perfil de conta; de cartão, nenhum.
+      perfis: { conta: "01KA0000000000000000000P01", cartao: null },
       deteccao: {
         codificacao: "windows-1252",
         separador: ";",
@@ -84,6 +86,23 @@ describe("ler o extrato", () => {
       },
     };
     expect(LeituraExtrato.parse(csv)).toEqual(csv);
+    const doisTipos = {
+      ...csv,
+      perfis: { conta: "01KA0000000000000000000P01", cartao: "01KA0000000000000000000P02" },
+    };
+    expect(LeituraExtrato.parse(doisTipos)).toEqual(doisTipos);
+    expect(LeituraExtrato.safeParse({ ...csv, perfis: { conta: null, cartao: null } }).success).toBe(true);
+    // Um perfil só, sem o tipo, não serve: a conta de destino ainda não foi escolhida.
+    const { perfis: _perfis, ...semPerfis } = csv;
+    expect(LeituraExtrato.safeParse({ ...semPerfis, perfilId: null }).success).toBe(false);
+    expect(LeituraExtrato.safeParse({ ...csv, perfis: { conta: null } }).success).toBe(false);
+  });
+
+  test("o tipo do extrato sai do tipo da conta: cartão é cartão, o resto é conta", () => {
+    expect(tipoDoExtrato("cartao")).toBe("cartao");
+    for (const tipo of ["corrente", "poupanca", "carteira", "investimento"] as const) {
+      expect(tipoDoExtrato(tipo), tipo).toBe("conta");
+    }
   });
 
   test("o mapeamento do CSV é o do leitor: débito e crédito ou uma coluna com sinal", () => {
@@ -126,15 +145,21 @@ describe("prévia e lançar", () => {
         ...base,
         contaId: "c1",
         csv,
-        salvarPerfil: { banco: "Cooperativa", tipoConta: "conta" },
+        salvarPerfil: { banco: "Cooperativa" },
       }).success,
     ).toBe(true);
+    // O tipo do perfil salvo é o da conta de destino: o pedido não diz outro.
     expect(
       PedidoPreviaImportacao.safeParse({
         ...base,
         contaId: "c1",
-        salvarPerfil: { banco: "Cooperativa", tipoConta: "conta" },
+        csv,
+        salvarPerfil: { banco: "Cooperativa", tipoConta: "cartao" },
       }).success,
+    ).toBe(false);
+    expect(
+      PedidoPreviaImportacao.safeParse({ ...base, contaId: "c1", salvarPerfil: { banco: "Cooperativa" } })
+        .success,
     ).toBe(false);
   });
 

@@ -1,6 +1,14 @@
 import { z } from "zod";
 import { CamposOrigem, Dia, Id, Instante } from "./comum.ts";
-import { Centavos, Moeda, NovaConta, NovaRegraCategoria, PropostaRegra, RegraCategoria } from "./financas.ts";
+import {
+  Centavos,
+  Moeda,
+  NovaConta,
+  NovaRegraCategoria,
+  PropostaRegra,
+  RegraCategoria,
+  type TipoConta,
+} from "./financas.ts";
 
 /**
  * Importar extrato (ADR-0041, ADR-0042, ADR-0045; DATA.md §3 `importacoes`, `perfis_importacao`):
@@ -158,11 +166,17 @@ export const PerfilImportacao = z.object({
 });
 export type PerfilImportacao = z.infer<typeof PerfilImportacao>;
 
-/** "Salvar como perfil" (`Cooperativa · conta corrente`): o mesmo cabeçalho atualiza o que já existe. */
-export const NovoPerfilImportacao = z.object({
-  banco: z.string().trim().min(1).max(60),
-  tipoConta: TipoContaExtrato,
-});
+/** O tipo de extrato de uma conta: o cartão tem extrato de cartão; as outras, de conta. */
+export function tipoDoExtrato(tipo: TipoConta): TipoContaExtrato {
+  return tipo === "cartao" ? "cartao" : "conta";
+}
+
+/**
+ * "Salvar como perfil" (`Cooperativa · conta corrente`): só o banco. O tipo do perfil sai da conta
+ * de destino da prévia ({@link tipoDoExtrato}), nunca do pedido: não há como divergir. O mesmo
+ * cabeçalho do mesmo tipo atualiza o que já existe.
+ */
+export const NovoPerfilImportacao = z.strictObject({ banco: z.string().trim().min(1).max(60) });
 export type NovoPerfilImportacao = z.infer<typeof NovoPerfilImportacao>;
 
 export const PedidoPerfilImportacao = z.object({ id: Id });
@@ -194,8 +208,16 @@ export const ExtratoLido = z.object({
 export type ExtratoLido = z.infer<typeof ExtratoLido>;
 
 /**
- * O que a leitura achou, antes de escolher a conta: os extratos do OFX, ou a detecção do CSV e o
- * perfil reconhecido pelo cabeçalho. `leituraId` segue para a prévia; o arquivo não é lido de novo.
+ * O perfil que o cabeçalho do CSV reconheceu, para cada tipo de extrato: o reconhecimento depende
+ * do tipo (`tipoConta` do perfil), e a conta de destino só é escolhida depois da leitura.
+ */
+export const PerfisReconhecidos = z.object({ conta: Id.nullable(), cartao: Id.nullable() });
+export type PerfisReconhecidos = z.infer<typeof PerfisReconhecidos>;
+
+/**
+ * O que a leitura achou, antes de escolher a conta: os extratos do OFX, ou a detecção do CSV e os
+ * perfis reconhecidos pelo cabeçalho, um por tipo. `leituraId` segue para a prévia; o arquivo não é
+ * lido de novo.
  */
 export const LeituraExtrato = z.discriminatedUnion("leitor", [
   z.object({
@@ -213,7 +235,7 @@ export const LeituraExtrato = z.discriminatedUnion("leitor", [
     arquivoNome: z.string().min(1),
     formato: z.literal("csv"),
     jaImportado: JaImportado,
-    perfilId: Id.nullable(),
+    perfis: PerfisReconhecidos,
     deteccao: DeteccaoCsv,
   }),
 ]);
@@ -224,7 +246,9 @@ export type LeituraExtrato = z.infer<typeof LeituraExtrato>;
 /**
  * Montar a prévia: a conta de destino (uma que existe ou uma nova, criada ao lançar), o extrato do
  * OFX (`extrato`, o primeiro sem o campo) e, no CSV, o perfil ou a leitura pelas colunas, que pode
- * virar perfil (`salvarPerfil`).
+ * virar perfil (`salvarPerfil`, do tipo da conta de destino). CSV sem `perfilId` e sem `csv` é lido
+ * pelo perfil que o cabeçalho reconheceu para o tipo da conta de destino
+ * (`perfis[tipoDoExtrato(conta.tipo)]`); sem perfil desse tipo, o serviço recusa e pede as colunas.
  */
 export const PedidoPreviaImportacao = z
   .object({

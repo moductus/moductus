@@ -14,7 +14,9 @@ const divida = {
   parcelasRestantes: 17,
   diaVencimento: 10,
   quitadaEm: null,
-  custoTotalCentavos: 128_570,
+  // Pela amortização (2,1% sobre o saldo, depois R$ 452,10; a 17ª parcela é menor): R$ 7.674,77
+  // pagos, R$ 1.274,77 de juros. Não é 17 × R$ 452,10 − R$ 6.400.
+  custoTotalCentavos: 127_477,
   proximaParcelaEm: "2026-10-10",
   origem: "usuario",
   agenteId: null,
@@ -30,6 +32,9 @@ describe("dívidas", () => {
     expect(Divida.safeParse({ ...divida, saldoCentavos: -1 }).success).toBe(false);
     expect(Divida.safeParse({ ...divida, parcelaCentavos: 0 }).success).toBe(false);
     expect(Divida.safeParse({ ...divida, tipo: "agiota" }).success).toBe(false);
+    // Sem juros, sem parcela ou com a parcela abaixo dos juros, o custo vem vazio.
+    expect(Divida.safeParse({ ...divida, jurosMensalBp: 0, custoTotalCentavos: null }).success).toBe(true);
+    expect(Divida.safeParse({ ...divida, custoTotalCentavos: -1 }).success).toBe(false);
   });
 
   test("nova dívida pede nome, tipo e saldo numa data; o resto é opcional", () => {

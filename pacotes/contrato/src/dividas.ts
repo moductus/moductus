@@ -36,15 +36,16 @@ const camposDivida = {
 };
 
 /**
- * Uma dívida. `custoTotalCentavos` é a soma das parcelas restantes menos o saldo (os juros que
- * ainda vão), vazio sem parcela ou sem parcelas restantes; `proximaParcelaEm` sai do dia de
- * vencimento. Quitada tem `quitadaEm`.
+ * Uma dívida. `custoTotalCentavos` são os juros que ainda vão: a soma das parcelas pela
+ * amortização mês a mês (juros sobre o saldo, depois a parcela, a última menor, ADR-0046) menos o
+ * saldo. Vem vazio sem parcela, sem juros ou quando a parcela não cobre os juros do mês (a dívida
+ * não acabaria). `proximaParcelaEm` sai do dia de vencimento. Quitada tem `quitadaEm`.
  */
 export const Divida = z.object({
   id: Id,
   ...camposDivida,
   quitadaEm: Dia.nullable(),
-  custoTotalCentavos: Centavos.nullable(),
+  custoTotalCentavos: Centavos.nonnegative().nullable(),
   proximaParcelaEm: Dia.nullable(),
   ...CamposOrigem,
   criadoEm: Instante,

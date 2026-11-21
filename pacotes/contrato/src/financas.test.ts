@@ -286,6 +286,9 @@ describe("resumo, relatórios e vencimentos", () => {
       totalCentavos: 179_230,
     };
     expect(Vencimentos.parse(vencimentos)).toEqual(vencimentos);
+    // Só saídas vencem, sem sinal: uma entrada (salário) não é vencimento.
+    const entrada = { ...vencimentos.itens[0]!, tipo: "recorrente", valorCentavos: -500_000 };
+    expect(Vencimentos.safeParse({ ...vencimentos, itens: [entrada] }).success).toBe(false);
     expect(METODOS["financas.vencimentos"].entrada.safeParse({ dias: 0 }).success).toBe(false);
   });
 });

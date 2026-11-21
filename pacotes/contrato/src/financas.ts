@@ -513,7 +513,10 @@ export type GastoCom = z.infer<typeof GastoCom>;
 export const TipoVencimento = z.enum(["fatura", "divida", "recorrente"]);
 export type TipoVencimento = z.infer<typeof TipoVencimento>;
 
-/** Um vencimento, com o valor (estimado na recorrente) sem sinal e o item de onde veio. */
+/**
+ * Um vencimento, com o item de onde veio. Só saídas vencem: a recorrente de entrada (salário) e a
+ * fatura sem gasto ficam fora, e por isso o valor (estimado na recorrente) vem sem sinal.
+ */
 export const Vencimento = z.object({
   tipo: TipoVencimento,
   itemId: Id,
@@ -529,7 +532,7 @@ export type Vencimento = z.infer<typeof Vencimento>;
 export const PedidoVencimentos = z.object({ dias: z.number().int().min(1).max(60).optional() });
 export type PedidoVencimentos = z.infer<typeof PedidoVencimentos>;
 
-/** Do mais próximo ao mais distante; o total é o do real ("Vence em breve R$ 1.792,30"). */
+/** Do mais próximo ao mais distante; o total é o das saídas em real ("Vence em breve R$ 1.792,30"). */
 export const Vencimentos = z.object({ itens: z.array(Vencimento), totalCentavos: Quantia });
 export type Vencimentos = z.infer<typeof Vencimentos>;
 
