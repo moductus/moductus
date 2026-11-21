@@ -56,7 +56,8 @@ const recorrencias = criarTabela(
     "valor_centavos INTEGER NOT NULL",
     "categoria_id TEXT",
     "conta_id TEXT",
-    "regra TEXT NOT NULL CHECK (regra GLOB 'FREQ=*')",
+    // Validada no serviço, como a de tarefas e eventos: o leitor aceita formas que um GLOB recusaria.
+    "regra TEXT NOT NULL",
     dia("proxima_em"),
     marca("ativa", 1),
     marca("detectada_automaticamente"),

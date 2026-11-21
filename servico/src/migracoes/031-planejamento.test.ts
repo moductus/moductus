@@ -202,7 +202,8 @@ describe("migração planejamento", () => {
     ).toEqual({ ativa: 1, detectada_automaticamente: 0, apagado_em: null });
 
     expect(() => recorrencia(db, "sem-descricao", { descricao: " " })).toThrow(/CHECK/);
-    expect(() => recorrencia(db, "regra", { regra: "todo mês" })).toThrow(/CHECK/);
+    // A regra é validada no serviço (lerRecorrencia), que aceita prefixo, minúsculas e qualquer ordem.
+    recorrencia(db, "rrule", { regra: "RRULE:bymonthday=5;freq=monthly" });
     expect(() => recorrencia(db, "sem-regra", { regra: null })).toThrow(/NOT NULL/);
     expect(() => recorrencia(db, "proxima", { proxima_em: "10/12/2026" })).toThrow(/CHECK/);
     expect(() => recorrencia(db, "real", { valor_centavos: -99.9 })).toThrow(/cannot store REAL/);
