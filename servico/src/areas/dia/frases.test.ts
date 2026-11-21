@@ -242,6 +242,12 @@ const TABELA: [string, Esperado][] = [
   // Zero não é gasto, e número de dez dígitos é telefone.
   ["gastei 0 no estacionamento", { titulo: "gastei 0 no estacionamento" }],
   ["gastei 1199998888 de crédito", { titulo: "gastei 1199998888 de crédito" }],
+  ["paguei 0800123456", { titulo: "paguei 0800123456" }],
+  ["gastei 1.000.000.000 de crédito", { titulo: "gastei 1.000.000.000 de crédito" }],
+  [
+    "gastei 999.999.999,99 de crédito",
+    { tipo: "gasto", titulo: "gastei de crédito", valorCentavos: 99_999_999_999 },
+  ],
   [
     "gastei 120 no posto ontem",
     { tipo: "gasto", titulo: "gastei no posto", dia: "2026-10-07", valorCentavos: 12000 },

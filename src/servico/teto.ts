@@ -67,9 +67,14 @@ function lerDecimal(texto: string, casas: number): number | null {
   return Number.isSafeInteger(valor) ? valor : null;
 }
 
-/** O teto digitado em centavos; vazio é sem teto (`null`), inválido ou negativo é `undefined`. */
-export function lerTeto(texto: string): number | null | undefined {
+/**
+ * O teto digitado em centavos; vazio é sem teto (`null`), inválido ou negativo é `undefined`. O
+ * símbolo é opcional, mas, se vier, é o da moeda do teto: "US$ 10" num teto em real não vale.
+ */
+export function lerTeto(texto: string, moeda: MoedaTeto): number | null | undefined {
   if (!texto.trim()) return null;
+  const simbolo = texto.replace(/[\d.,\s\-−+]/g, "");
+  if (simbolo && simbolo.toUpperCase() !== SIMBOLO[moeda].toUpperCase()) return undefined;
   const centavos = lerValor(texto);
   return centavos !== null && centavos >= 0 ? centavos : undefined;
 }

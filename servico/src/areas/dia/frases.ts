@@ -1077,13 +1077,19 @@ function reconhecerLista(p: readonly Palavra[], i: number, listas: readonly List
 const VERBOS_DE_GASTO = new Set(["gastei", "paguei", "gastou", "pagou", "gasto", "custou"]);
 const DEPOIS_DO_VALOR_SOLTO = new Set(termos("de do da no na em com pro pra pelo pela"));
 
-/** Na frase, número de dez dígitos ou mais é telefone ou código, não gasto. */
-const MAIOR_VALOR_DA_FRASE = 99_999_999_999;
+/**
+ * Na frase, número de dez dígitos ou mais antes dos centavos é telefone ou código, não gasto
+ * ("0800123456"): contam os dígitos, com o zero à esquerda, não o valor.
+ */
+const MAXIMO_DE_DIGITOS = 9;
 
 /** "45", "45,90", "1.285,00", "45.90": a palavra já vem sem sinal e sem o "R$", que são palavras à parte. */
 function centavos(f: string | undefined): number | null {
-  const valor = lerValor(f ?? "");
-  return valor !== null && valor > 0 && valor <= MAIOR_VALOR_DA_FRASE ? valor : null;
+  const palavra = f ?? "";
+  const digitos = palavra.replace(/[.,]\d{1,2}$/, "").replaceAll(".", "");
+  if (digitos.length > MAXIMO_DE_DIGITOS) return null;
+  const valor = lerValor(palavra);
+  return valor !== null && valor > 0 ? valor : null;
 }
 
 function reconhecerValor(p: readonly Palavra[], i: number): Achado | null {

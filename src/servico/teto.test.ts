@@ -33,21 +33,28 @@ describe("teto em texto", () => {
   });
 
   it("o teto digitado: vazio é sem teto, inválido não passa, vírgula ou ponto na casa decimal", () => {
-    expect(lerTeto("")).toBeNull();
-    expect(lerTeto("10")).toBe(1000);
-    expect(lerTeto("10,5")).toBe(1050);
-    expect(lerTeto(" 1.234,56 ")).toBe(123_456);
-    expect(lerTeto("10.50")).toBe(1050);
+    expect(lerTeto("", "BRL")).toBeNull();
+    expect(lerTeto("10", "BRL")).toBe(1000);
+    expect(lerTeto("10,5", "BRL")).toBe(1050);
+    expect(lerTeto(" 1.234,56 ", "BRL")).toBe(123_456);
+    expect(lerTeto("10.50", "BRL")).toBe(1050);
     // O leitor do contrato: ponto com três casas é milhar, e o símbolo do real pode vir junto.
-    expect(lerTeto("1.234")).toBe(123_400);
-    expect(lerTeto("R$ 10")).toBe(1000);
-    expect(lerTeto("0")).toBe(0);
-    expect(lerTeto("-3")).toBeUndefined();
-    expect(lerTeto("10,555")).toBeUndefined();
-    expect(lerTeto("dez")).toBeUndefined();
+    expect(lerTeto("1.234", "BRL")).toBe(123_400);
+    expect(lerTeto("R$ 10", "BRL")).toBe(1000);
+    // Símbolo de outra moeda não passa: o valor seria gravado na moeda do teto.
+    expect(lerTeto("US$ 10", "BRL")).toBeUndefined();
+    expect(lerTeto("€ 10", "BRL")).toBeUndefined();
+    expect(lerTeto("R$ 10", "USD")).toBeUndefined();
+    expect(lerTeto("US$ 10", "USD")).toBe(1000);
+    expect(lerTeto("€10", "EUR")).toBe(1000);
+    expect(lerTeto("10", "GBP")).toBe(1000);
+    expect(lerTeto("0", "BRL")).toBe(0);
+    expect(lerTeto("-3", "BRL")).toBeUndefined();
+    expect(lerTeto("10,555", "BRL")).toBeUndefined();
+    expect(lerTeto("dez", "BRL")).toBeUndefined();
     // Com vírgula, ponto só antes dela, como milhar.
-    expect(lerTeto("10,5.0")).toBeUndefined();
-    expect(lerTeto("1.000,5.")).toBeUndefined();
+    expect(lerTeto("10,5.0", "BRL")).toBeUndefined();
+    expect(lerTeto("1.000,5.", "BRL")).toBeUndefined();
   });
 
   it("a cotação acima do máximo do contrato não passa, e a tela tem como dizer", () => {
