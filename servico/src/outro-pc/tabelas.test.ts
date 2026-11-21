@@ -283,6 +283,32 @@ describe("configuração × dado", () => {
     expect(linhasQueViajam(db, "importacao_lapides").map((l) => l.id)).toEqual(["lp1"]);
   });
 
+  test("orçamentos, recorrências, dívidas e planos são dado: nenhum vai em só configurações", () => {
+    const db = bancoNovo();
+    db.prepare(
+      "INSERT INTO orcamentos (id, categoria_id, limite_centavos) VALUES ('or1', 'mercado', 80000)",
+    ).run();
+    db.prepare(
+      "INSERT INTO recorrencias (id, descricao, valor_centavos, regra) VALUES ('re1', 'Internet', -9990, 'FREQ=MONTHLY')",
+    ).run();
+    db.prepare(
+      "INSERT INTO dividas (id, nome, tipo, saldo_centavos, saldo_em, apagado_em) VALUES ('dv-apagada', 'Cartão', 'cartao', 640000, '2026-11-01', ?)",
+    ).run(AGORA);
+    db.prepare("INSERT INTO planos (id, nome, valor_alvo_centavos) VALUES ('pl1', 'Reserva', 1000000)").run();
+    db.prepare(
+      "INSERT INTO plano_movimentos (id, plano_id, data, valor_centavos) VALUES ('pm1', 'pl1', '2026-11-05', 20000)",
+    ).run();
+
+    const tabelas = lerConfiguracoes(db, new Date(AGORA));
+    for (const tabela of ["orcamentos", "recorrencias", "dividas", "planos", "plano_movimentos"]) {
+      expect(EXPORTACAO[tabela]).toBe("dado");
+      expect(tabelas.has(tabela)).toBe(false);
+    }
+    expect(linhasQueViajam(db, "orcamentos").map((l) => l.id)).toEqual(["or1"]);
+    expect(linhasQueViajam(db, "dividas")).toEqual([]);
+    expect(linhasQueViajam(db, "plano_movimentos").map((l) => l.id)).toEqual(["pm1"]);
+  });
+
   test("tabela sem marcação não sai em só configurações", () => {
     const db = bancoNovo();
     db.exec(criarTabela("esquecida", ["texto TEXT"], { lixeira: false }));
