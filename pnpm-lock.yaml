@@ -108,6 +108,9 @@ importers:
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
+      ofx-js:
+        specifier: 1.1.2
+        version: 1.1.2
       ws:
         specifier: ^8.22.0
         version: 8.22.0
@@ -1147,6 +1150,9 @@ packages:
   obug@2.2.1:
     resolution: {integrity: sha512-XrsrhT5sybtKI6wakr2SPOlGZWWYbUXZ7a0jT8/QOeAPau+1X/bSegNe5YR75oJmEZQbKningirmGOEJCIk61Q==}
     engines: {node: '>=12.20.0'}
+
+  ofx-js@1.1.2:
+    resolution: {integrity: sha512-aKGgu+/vF70vvPpjSuAiTy+jroSb2JVtKDf72U9ZgCf8/zZk/lOuzRbOc73Fn9xdecolBOBW5i1c6uVkj0r1zw==}
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -2323,6 +2329,8 @@ snapshots:
   node-releases@2.0.57: {}
 
   obug@2.2.1: {}
+
+  ofx-js@1.1.2: {}
 
   optionator@0.9.4:
     dependencies:
