@@ -69,11 +69,11 @@ export interface ArquivoOfx {
 export function lerOfx(bytes: Uint8Array): ArquivoOfx {
   const { texto, codificacao, versao } = decodificar(bytes);
   if (!texto.includes("<OFX>")) throw new ErroDoOfx(MENSAGEM_NAO_E_OFX);
-  // O `ofx-js` só separa o cabeçalho por LF; arquivo com CR sozinho viraria uma linha só.
-  const normalizado = texto.replace(/\r\n?/g, "\n");
+  // CR sem LF não precisa de troca: a versão e a codificação saem do cabeçalho lido aqui, e o SGML
+  // trata CR como espaço entre as tags. O cabeçalho que o `ofx-js` monta não é usado.
   let raiz: unknown;
   try {
-    raiz = parseSync(normalizado).OFX;
+    raiz = parseSync(texto).OFX;
   } catch {
     throw new ErroDoOfx(MENSAGEM_CORTADO);
   }
@@ -105,6 +105,7 @@ function lerExtrato(rs: Objeto): ExtratoOfx {
   if (conta === null) throw new ErroDoOfx(MENSAGEM_CORTADO);
   const lote = objeto(rs.BANKTRANLIST);
   const saldo = objeto(rs.LEDGERBAL);
+  // Saldo é informação, não lançamento: BALAMT ilegível vira `null` de propósito, sem recusar o arquivo.
   const valorDoSaldo = saldo ? lerValorOfx(folha(saldo.BALAMT)) : null;
   return {
     tipo: deConta ? "conta" : "cartao",
@@ -123,10 +124,14 @@ function lerExtrato(rs: Objeto): ExtratoOfx {
 function lerTransacao(bruta: unknown): TransacaoOfx {
   const t = objeto(bruta);
   if (t === null) throw new ErroDoOfx(MENSAGEM_CORTADO);
-  const data = lerData(folha(t.DTPOSTED)) ?? lerData(folha(t.DTUSER));
   const fitid = folha(t.FITID);
+  const qual = fitid ? ` (${fitid})` : "";
+  // DTUSER só na falta do DTPOSTED: DTPOSTED que veio e não é data recusa o arquivo.
+  const dataBruta = folha(t.DTPOSTED) ?? folha(t.DTUSER);
+  if (dataBruta === null) throw new ErroDoOfx(`Uma transação do extrato está sem data${qual}.`);
+  const data = lerData(dataBruta);
   if (data === null) {
-    throw new ErroDoOfx(`Uma transação do extrato está sem data${fitid ? ` (${fitid})` : ""}.`);
+    throw new ErroDoOfx(`A data "${dataBruta}" de uma transação do extrato não deu para ler${qual}.`);
   }
   const bruto = folha(t.TRNAMT);
   const valor = lerValorOfx(bruto);
@@ -173,22 +178,73 @@ function decodificar(bytes: Uint8Array): { texto: string; codificacao: string; v
     const ofx2 = /<\?OFX\b[^>]*?\bVERSION\s*=\s*["']?(\d+)/i.exec(cabecalho);
     if (/^\s*<\?(?:xml|OFX)\b/i.test(cabecalho)) {
       versao = ofx2?.[1] ?? null;
-      codificacao ??= xml?.[1]?.toLowerCase() ?? "utf-8";
+      codificacao ??= xml?.[1] ?? "utf-8";
     } else {
       versao = /^\s*VERSION:\s*(\d+)/im.exec(cabecalho)?.[1] ?? null;
       codificacao ??= codificacaoDoSgml(cabecalho);
     }
   }
 
+  // O nome canônico do WHATWG: "ISO-8859-1" é "windows-1252", "UTF8" é "utf-8".
+  let canonica: string;
   try {
-    return { texto: new TextDecoder(codificacao, { fatal: true }).decode(corpo), codificacao, versao };
-  } catch (erro) {
-    // Banco que declara UTF-8 e manda 1252 existe; o 1252 decodifica qualquer byte.
-    if (codificacao === "utf-8" && erro instanceof TypeError) {
-      return { texto: new TextDecoder("windows-1252").decode(corpo), codificacao: "windows-1252", versao };
-    }
+    canonica = new TextDecoder(codificacao).encoding;
+  } catch {
     throw new ErroDoOfx(`O arquivo OFX usa uma codificação que não dá para ler: ${codificacao}.`);
   }
+  try {
+    return { texto: new TextDecoder(canonica, { fatal: true }).decode(corpo), codificacao: canonica, versao };
+  } catch {
+    // Só o UTF-8 (e o UTF-16) recusa byte. Banco que declara UTF-8 e manda 1252 existe, às vezes
+    // misturado: o que é UTF-8 válido fica UTF-8 e cada byte solto vai pelo 1252. O rótulo devolvido
+    // diz que o arquivo não era UTF-8 puro.
+    if (canonica !== "utf-8") {
+      throw new ErroDoOfx(`O arquivo OFX usa uma codificação que não dá para ler: ${codificacao}.`);
+    }
+    return { texto: utf8ComReserva1252(corpo), codificacao: "windows-1252", versao };
+  }
+}
+
+/** UTF-8 onde a sequência é válida; cada byte que não forma sequência, pelo 1252. */
+function utf8ComReserva1252(bytes: Uint8Array): string {
+  const utf8 = new TextDecoder("utf-8");
+  const cp1252 = new TextDecoder("windows-1252");
+  let texto = "";
+  let inicio = 0;
+  let i = 0;
+  while (i < bytes.length) {
+    const tamanho = sequenciaUtf8(bytes, i);
+    if (tamanho > 0) {
+      i += tamanho;
+      continue;
+    }
+    texto += utf8.decode(bytes.subarray(inicio, i)) + cp1252.decode(bytes.subarray(i, i + 1));
+    i += 1;
+    inicio = i;
+  }
+  return texto + utf8.decode(bytes.subarray(inicio));
+}
+
+/** Tamanho da sequência UTF-8 válida que começa em `i` (tabela do WHATWG), ou 0. */
+function sequenciaUtf8(bytes: Uint8Array, i: number): number {
+  const b = bytes[i] ?? 0;
+  if (b < 0x80) return 1;
+  const segue = (n: number, min = 0x80, max = 0xbf): boolean => {
+    const c = bytes[i + n];
+    return c !== undefined && c >= min && c <= max;
+  };
+  if (b >= 0xc2 && b <= 0xdf) return segue(1) ? 2 : 0;
+  if (b >= 0xe0 && b <= 0xef) {
+    const min = b === 0xe0 ? 0xa0 : 0x80;
+    const max = b === 0xed ? 0x9f : 0xbf;
+    return segue(1, min, max) && segue(2) ? 3 : 0;
+  }
+  if (b >= 0xf0 && b <= 0xf4) {
+    const min = b === 0xf0 ? 0x90 : 0x80;
+    const max = b === 0xf4 ? 0x8f : 0xbf;
+    return segue(1, min, max) && segue(2) && segue(3) ? 4 : 0;
+  }
+  return 0;
 }
 
 /**
@@ -215,9 +271,10 @@ function lerData(bruto: string | null): string | null {
 
 /**
  * `TRNAMT` em centavos. O OFX não tem separador de milhar, então um separador só é o decimal, seja
- * ponto ou vírgula ("-45.90", "-45,90", "1.234" é 1,234 e fica recusado por ter três casas).
- * Zero sobrando depois da segunda casa ("45.900") não muda o valor. Com os dois separadores, vale a
- * leitura pt-BR de `lerValor` ("1.234,56").
+ * ponto ou vírgula ("-45.90", "-45,90"). Exatamente três casas é recusado sempre: "1.500" pode ser
+ * 1,50 pelo OFX ou 1.500 pelo costume daqui, e número na dúvida não entra. Com quatro casas ou mais,
+ * zero sobrando no fim não muda o valor ("45.9000"). Com os dois separadores, vale a leitura pt-BR
+ * de `lerValor` ("1.234,56").
  */
 export function lerValorOfx(bruto: string | null): number | null {
   if (bruto === null) return null;
@@ -227,7 +284,8 @@ export function lerValorOfx(bruto: string | null): number | null {
     const partes = /^([-+]?)(\d*)[.,](\d+)$/.exec(texto);
     if (!partes) return null;
     const [, sinal = "", inteiro = "", fracao = ""] = partes;
-    const casas = fracao.length > 2 ? fracao.replace(/0+$/, "") : fracao;
+    if (fracao.length === 3) return null;
+    const casas = fracao.length > 3 ? fracao.replace(/0+$/, "") : fracao;
     if (casas.length > 2) return null;
     texto = `${sinal}${inteiro || "0"}${casas ? `,${casas}` : ""}`;
   }

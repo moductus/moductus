@@ -275,6 +275,33 @@ describe("lerOfx", () => {
     expect(arquivo.extratos[0]?.transacoes[0]?.descricao).toBe("Pão & Café Ação");
   });
 
+  test("UTF-8 misturado com byte 1252 solto: o válido fica UTF-8, o solto vai pelo 1252", () => {
+    const [antes = "", depois = ""] = XML_CONTA.split("Pão &amp; Café Ação");
+    // "São" em UTF-8 válido seguido de 0xC9 ("É" no 1252) sozinho, que não forma sequência UTF-8.
+    const misto = new Uint8Array([...emUtf8(`${antes}São `), 0xc9, ...emUtf8(` Ação${depois}`)]);
+    const arquivo = lerOfx(misto);
+    expect(arquivo.codificacao).toBe("windows-1252");
+    expect(arquivo.extratos[0]?.transacoes[0]?.descricao).toBe("São É Ação");
+  });
+
+  test("rótulo de codificação vira o nome canônico", () => {
+    const iso = SGML_CONTA.map((linha) => (linha === "CHARSET:1252" ? "CHARSET:8859-1" : linha));
+    expect(lerOfx(em1252(iso.join("\r\n"))).codificacao).toBe("windows-1252");
+    const utf8 = XML_CONTA.replace('encoding="UTF-8"', 'encoding="utf8"');
+    expect(lerOfx(emUtf8(utf8)).codificacao).toBe("utf-8");
+    const latin = XML_CONTA.replace('encoding="UTF-8"', 'encoding="ISO-8859-1"');
+    const arquivo = lerOfx(em1252(latin));
+    expect(arquivo.codificacao).toBe("windows-1252");
+    expect(arquivo.extratos[0]?.transacoes[0]?.descricao).toBe("Pão & Café Ação");
+  });
+
+  test("codificação desconhecida é erro legível", () => {
+    const estranha = XML_CONTA.replace('encoding="UTF-8"', 'encoding="x-inventada"');
+    expect(() => lerOfx(emUtf8(estranha))).toThrow(
+      new ErroDoOfx("O arquivo OFX usa uma codificação que não dá para ler: x-inventada."),
+    );
+  });
+
   test("cartão com uma transação só vira lista de uma, sem banco nem agência", () => {
     const arquivo = lerOfx(em1252(SGML_CARTAO.join("\r\n")));
     expect(arquivo.organizacao).toBeNull();
@@ -340,7 +367,18 @@ describe("lerOfx", () => {
     const dataRuim = SGML_CONTA.map((linha) =>
       linha === "<DTPOSTED>20251015" ? "<DTPOSTED>20250231" : linha,
     );
-    expect(() => lerOfx(em1252(dataRuim.join("\r\n")))).toThrow(ErroDoOfx);
+    expect(() => lerOfx(em1252(dataRuim.join("\r\n")))).toThrow(
+      new ErroDoOfx('A data "20250231" de uma transação do extrato não deu para ler (20251015002).'),
+    );
+  });
+
+  test("DTPOSTED que não é data recusa mesmo com DTUSER válido", () => {
+    const comReserva = SGML_CONTA.flatMap((linha) =>
+      linha === "<DTPOSTED>20251015" ? ["<DTPOSTED>2025-10-15", "<DTUSER>20251015"] : [linha],
+    );
+    expect(() => lerOfx(em1252(comReserva.join("\r\n")))).toThrow(
+      new ErroDoOfx('A data "2025-10-15" de uma transação do extrato não deu para ler (20251015002).'),
+    );
   });
 });
 
@@ -353,13 +391,20 @@ describe("lerValorOfx", () => {
     ["100", 10000],
     ["-0.01", -1],
     ["-.5", -50],
-    ["45.900", 4590],
+    ["45.9000", 4590],
+    ["-45.90000", -4590],
     ["  -12,30  ", -1230],
     ["1.234,56", 123456],
     ["-1.234,56", -123456],
     ["1234567.89", 123456789],
-    // Um separador só é o decimal: três casas que não são zero não são centavos.
+    // Um separador só com exatamente três casas: milhar ou decimal, na dúvida não entra.
     ["1.234", null],
+    ["1.500", null],
+    ["10.000", null],
+    ["45.900", null],
+    ["-1,500", null],
+    // Quatro casas ou mais: só zero sobrando no fim.
+    ["45.1230", null],
     ["1,234.56", null],
     ["45,", null],
     ["", null],
