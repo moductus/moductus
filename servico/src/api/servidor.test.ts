@@ -176,24 +176,49 @@ describe("canal WebSocket", () => {
       { metodo: "tarefas.listar", dados: {} },
       { metodo: "sistema.ping" },
     ]);
-    expect(VERSAO_PROTOCOLO).toBe(3);
     const erro =
-      "protocolo incompatível: a janela fala a versão 2 e o serviço, a 3. Feche e abra o Moductus de novo.";
+      `protocolo incompatível: a janela fala a versão 2 e o serviço, a ${VERSAO_PROTOCOLO}. ` +
+      "Feche e abra o Moductus de novo.";
     expect(respostas[0]).toEqual({ tipo: "resposta", id: 1, ok: false, erro });
     expect(respostas[1]).toEqual({ tipo: "resposta", id: 2, ok: false, erro });
-    expect(respostas[2]).toMatchObject({ id: 3, ok: true, dados: { protocolo: 3 } });
+    expect(respostas[2]).toMatchObject({ id: 3, ok: true, dados: { protocolo: VERSAO_PROTOCOLO } });
   });
 
-  test("método do dia que o serviço ainda não atende responde que não está disponível", async () => {
+  test("janela da versão 3 (fase 3) recebe o erro de versão claro, nos métodos do dia e do dinheiro", async () => {
     const s = await servidor();
-    const [r] = await pedirCru(`ws://127.0.0.1:${s.porta}/?token=${TOKEN}&protocolo=${VERSAO_PROTOCOLO}`, [
-      { metodo: "captura.entender", dados: { texto: "ligar pro banco amanhã 15h" } },
+    const respostas = await pedirCru(`ws://127.0.0.1:${s.porta}/?token=${TOKEN}&protocolo=3`, [
+      { metodo: "areas.contagens" },
+      { metodo: "financas.resumo", dados: {} },
+      { metodo: "sistema.ping" },
     ]);
-    expect(r).toEqual({
+    expect(VERSAO_PROTOCOLO).toBe(4);
+    const erro =
+      "protocolo incompatível: a janela fala a versão 3 e o serviço, a 4. Feche e abra o Moductus de novo.";
+    expect(respostas[0]).toEqual({ tipo: "resposta", id: 1, ok: false, erro });
+    expect(respostas[1]).toEqual({ tipo: "resposta", id: 2, ok: false, erro });
+    expect(respostas[2]).toMatchObject({ id: 3, ok: true, dados: { protocolo: 4 } });
+  });
+
+  test("método que o serviço ainda não atende responde que não está disponível", async () => {
+    const s = await servidor();
+    const respostas = await pedirCru(
+      `ws://127.0.0.1:${s.porta}/?token=${TOKEN}&protocolo=${VERSAO_PROTOCOLO}`,
+      [
+        { metodo: "captura.entender", dados: { texto: "ligar pro banco amanhã 15h" } },
+        { metodo: "financas.resumo", dados: { mes: "2026-10" } },
+      ],
+    );
+    expect(respostas[0]).toEqual({
       tipo: "resposta",
       id: 1,
       ok: false,
       erro: "captura.entender ainda não está disponível nesta versão do serviço",
+    });
+    expect(respostas[1]).toEqual({
+      tipo: "resposta",
+      id: 2,
+      ok: false,
+      erro: "financas.resumo ainda não está disponível nesta versão do serviço",
     });
   });
 

@@ -421,7 +421,8 @@ export interface Lancamento {
  * "comprar pão" no Hoje é para hoje, numa lista é para ela.
  */
 export function lancamentoDaPrevia(previa: PreviaCaptura, contexto: ContextoDaFrase): Lancamento {
-  const lancavel = TipoLancavel.safeParse(previa.tipo);
+  // O contrato já lança gasto, mas quem o lança é a captura com a Tula; aqui ele segue a prévia.
+  const lancavel = TipoLancavel.exclude(["gasto"]).safeParse(previa.tipo);
   // O que ainda não chegou vai como a primeira alternativa que a captura oferece (memória é nota).
   const tipo: TipoLancavel = lancavel.success ? lancavel.data : (previa.alternativas[0] ?? "tarefa");
   if (tipo !== "tarefa") return { tipo, campos: previa.campos };
@@ -441,6 +442,7 @@ const NOME_TIPO: Record<TipoLancavel, string> = {
   lembrete: "lembrete",
   evento: "evento",
   nota: "nota",
+  gasto: "gasto",
 };
 
 /**

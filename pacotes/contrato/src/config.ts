@@ -105,6 +105,13 @@ const BlocosSemRepetir = z
 export const ConfigInicio = z.object({ ordem: BlocosSemRepetir, escondidos: BlocosSemRepetir });
 export type ConfigInicio = z.infer<typeof ConfigInicio>;
 
+/**
+ * O modo privacidade (ADR-0047): esconde valores e textos sensíveis na tela e nos avisos do Windows.
+ * Estado deste PC, que sobrevive a reiniciar e não vai para outro PC.
+ */
+export const Privacidade = z.object({ ativo: z.boolean() });
+export type Privacidade = z.infer<typeof Privacidade>;
+
 export const Config = z.object({
   tema: Tema,
   dock: ConfigDock,
@@ -115,6 +122,7 @@ export const Config = z.object({
   /** As cotações do teto diário (ADR-0040): digitadas ou buscadas e confirmadas; nenhuma de fábrica. */
   cambio: Cambio,
   inicio: ConfigInicio,
+  privacidade: Privacidade,
 });
 export type Config = z.infer<typeof Config>;
 
@@ -135,7 +143,11 @@ export const CONFIG_PADRAO: Config = {
   },
   cambio: { cotacoes: {} },
   inicio: { ordem: [...BLOCOS_INICIO], escondidos: [] },
+  privacidade: { ativo: false },
 };
+
+/** As chaves que são estado deste PC: não vão no arquivo de levar para outro PC nem vêm dele. */
+export const CHAVES_DESTE_PC: readonly (keyof Config)[] = ["privacidade"];
 
 /** Mudança parcial: só as chaves de primeiro nível que mudam. */
 export const MudancaConfig = Config.partial();

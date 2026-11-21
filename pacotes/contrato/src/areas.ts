@@ -14,5 +14,7 @@ export const ContagensAreas = z.object({
   sessoesEsperando: Contagem,
   /** PRs, issues e CI do Dev que pedem você. */
   devPrecisando: Contagem,
+  /** Faturas, parcelas de dívida e recorrentes que vencem em até 3 dias. */
+  financasVencendo: Contagem,
 });
 export type ContagensAreas = z.infer<typeof ContagensAreas>;

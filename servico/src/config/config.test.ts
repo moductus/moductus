@@ -100,6 +100,8 @@ describe("configuração", () => {
         ordem: ["briefing", "foco", "tarefas", "dev", "sessoes", "financas"],
         escondidos: ["financas"],
       },
+      // O modo privacidade ligado continua ligado depois de reiniciar (ADR-0047).
+      privacidade: { ativo: true },
     };
     // Uma chave por vez, como a interface manda.
     for (const [chave, valor] of Object.entries(escolhida))

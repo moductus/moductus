@@ -4,8 +4,8 @@ import type { Aprovacao, ContagensAreas } from "@moductus/contrato";
  * As contagens das áreas (PRODUCT.md §4; contrato `areas.contagens`): o número da barra lateral
  * do Sistema e dos badges do dock. Uma conta só, aqui, para as duas janelas mostrarem o mesmo; a
  * janela não soma nada. Cada área diz o seu número (a regra de "hoje" é das Tarefas, a do atrasado
- * é dos Lembretes, a de "precisa de você" é do GitHub); este serviço junta os quatro e avisa quando
- * algum muda.
+ * é dos Lembretes, a de "precisa de você" é do GitHub, a do que vence é das Finanças); este serviço
+ * junta os cinco e avisa quando algum muda.
  *
  * Quem muda o que é contado (tarefa, lembrete, pedido de aprovação, leitura do GitHub, fuso) chama
  * {@link ServicoContagens.recontar}. A virada do dia não tem quem avise: {@link ServicoContagens.vigiar}
@@ -15,7 +15,13 @@ import type { Aprovacao, ContagensAreas } from "@moductus/contrato";
 /** De quanto em quanto a contagem é refeita sem aviso de ninguém (a virada do dia no fuso). */
 export const INTERVALO_CONTAGENS_MS = 60_000;
 
-const CAMPOS = ["tarefasPendentes", "lembretesAtrasados", "sessoesEsperando", "devPrecisando"] as const;
+const CAMPOS = [
+  "tarefasPendentes",
+  "lembretesAtrasados",
+  "sessoesEsperando",
+  "devPrecisando",
+  "financasVencendo",
+] as const satisfies readonly (keyof ContagensAreas)[];
 
 /** De onde vem cada número; cada um é lido a cada contagem. */
 export type FontesContagens = Readonly<Record<keyof ContagensAreas, () => number>>;

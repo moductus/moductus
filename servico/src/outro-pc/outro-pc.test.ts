@@ -61,7 +61,11 @@ const MINHA: Config = {
   cambio: { cotacoes: { EUR: { milionesimos: 920_000, data: "2026-10-16", fonte: "frankfurter" } } },
   // Os blocos do Início são preferência: vão junto para o outro PC.
   inicio: { ordem: ["briefing", "foco", "tarefas", "financas", "dev", "sessoes"], escondidos: ["financas"] },
+  privacidade: { ativo: false },
 };
+
+/** O que vai no arquivo: tudo menos o estado deste PC. */
+const { privacidade: _privacidade, ...MINHA_NO_ARQUIVO } = MINHA;
 
 const manifestoValido = (extra: Partial<Record<string, unknown>> = {}) => ({
   formato: "moductus",
@@ -90,7 +94,11 @@ describe("levar para outro PC: só configurações", () => {
     await casa.config.definir(MINHA);
     const caminho = join(pasta(), "casa-2026-10-08.moductus");
     const r = await casa.outro.exportar({ caminho });
-    expect(r).toEqual({ caminho, bytes: readFileSync(caminho).byteLength, chaves: Object.keys(MINHA) });
+    expect(r).toEqual({
+      caminho,
+      bytes: readFileSync(caminho).byteLength,
+      chaves: Object.keys(MINHA_NO_ARQUIVO),
+    });
     expect(r.bytes).toBeGreaterThan(0);
 
     const aplicados: Aplicacao[] = [];
@@ -140,7 +148,7 @@ describe("levar para outro PC: só configurações", () => {
     const manifesto = Manifesto.parse(JSON.parse(strFromU8(conteudo["manifesto.json"]!)));
     expect(manifesto).toEqual(manifestoValido({ conteudo: ["config", ...tabelas] }));
     const config = JSON.parse(strFromU8(conteudo["config.json"]!)) as Record<string, unknown>;
-    expect(config).toEqual(MINHA);
+    expect(config).toEqual(MINHA_NO_ARQUIVO);
     expect(Object.keys(config)).not.toContain("portable");
 
     const ler = (tabela: string) =>
@@ -241,6 +249,32 @@ describe("levar para outro PC: só configurações", () => {
     });
     expect(substituir.mudancas.map((m) => m.chave)).toEqual(["tema", "dock"]);
     expect(substituir.mudancas[0]).toEqual({ chave: "tema", atual: "papel", novo: CONFIG_PADRAO.tema });
+  });
+
+  test("o modo privacidade é deste PC: não vai no arquivo e o do PC que importa fica como estava", async () => {
+    const casa = pc();
+    await casa.config.definir({ ...MINHA, privacidade: { ativo: true } });
+    const caminho = join(pasta(), "casa.moductus");
+    const r = await casa.outro.exportar({ caminho });
+    expect(r.chaves).not.toContain("privacidade");
+    const conteudo = unzipSync(new Uint8Array(readFileSync(caminho)));
+    const config = JSON.parse(strFromU8(conteudo["config.json"]!)) as Record<string, unknown>;
+    expect(Object.keys(config)).not.toContain("privacidade");
+
+    // O PC do trabalho, em apresentação, não sai do modo ao importar, nem substituindo tudo.
+    const trabalho = pc();
+    await trabalho.config.definir({ privacidade: { ativo: true } });
+    const substituido = await trabalho.outro.importar({ caminho, modo: "substituir" });
+    expect(substituido.config.privacidade).toEqual({ ativo: true });
+    // E um arquivo que traga a chave não liga nem desliga o modo daqui.
+    const comChave = arquivo({
+      "manifesto.json": manifestoValido(),
+      "config.json": { tema: "papel", privacidade: { ativo: false } },
+    });
+    const previa = await trabalho.outro.previa({ caminho: comChave, modo: "juntar" });
+    expect(previa.mudancas.map((m) => m.chave)).toEqual(["tema"]);
+    const juntado = await trabalho.outro.importar({ caminho: comChave, modo: "juntar" });
+    expect(juntado.config.privacidade).toEqual({ ativo: true });
   });
 
   test("portable: o autostart do arquivo fica de fora, o resto entra", async () => {

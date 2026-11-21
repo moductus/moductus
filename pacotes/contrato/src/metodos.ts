@@ -30,6 +30,7 @@ import {
 } from "./agenda.ts";
 import { Aprovacao, PedidoDecidir, PedidoRegra, RegraPermissao } from "./aprovacoes.ts";
 import { ContagensAreas } from "./areas.ts";
+import { AutorizacaoArquivo, PedidoAutorizarArquivo } from "./arquivos.ts";
 import { CotacaoBuscada, PedidoBuscarCotacao } from "./cambio.ts";
 import { metodo } from "./canal.ts";
 import {
@@ -40,7 +41,7 @@ import {
   PreviaCaptura,
 } from "./captura.ts";
 import { Apagados, PedidoPagina } from "./comum.ts";
-import { EstadoConfig, MudancaConfig } from "./config.ts";
+import { EstadoConfig, MudancaConfig, Privacidade } from "./config.ts";
 import {
   Conversa,
   FalaParcial,
@@ -55,12 +56,88 @@ import {
   ResultadoEnviar,
 } from "./conversas.ts";
 import {
+  Divida,
+  MudancaDivida,
+  NovaDivida,
+  PagamentoDivida,
+  PedidoDivida,
+  PedidoDividas,
+  PedidoPagamentoDivida,
+  PedidoQuitar,
+  PedidoSimulacao,
+  Simulacao,
+} from "./dividas.ts";
+import {
+  Categoria,
+  Conta,
+  DefinicaoOrcamento,
+  DetalheLancamento,
+  Fatura,
+  GastoCom,
+  Lancamento,
+  LancamentoEditado,
+  MudancaCategoria,
+  MudancaConta,
+  MudancaFinancas,
+  MudancaLancamento,
+  MudancaRecorrente,
+  MudancaRegraCategoria,
+  NovaCategoria,
+  NovaConta,
+  NovaRecorrente,
+  NovaRegraCategoria,
+  NovaTransferencia,
+  NovoLancamento,
+  Orcamento,
+  OrcamentoMes,
+  PaginaLancamentos,
+  PedidoApagarCategoria,
+  PedidoConta,
+  PedidoContas,
+  PedidoDesfazerRemanejar,
+  PedidoFatura,
+  PedidoFaturas,
+  PedidoGastoCom,
+  PedidoLancamento,
+  PedidoLancamentos,
+  PedidoMes,
+  PedidoOrcamento,
+  PedidoPagarFatura,
+  PedidoRecorrente,
+  PedidoRegraCategoria,
+  PedidoRemanejar,
+  PedidoSugestaoRecorrente,
+  PedidoVencimentos,
+  Recorrente,
+  RegraCategoria,
+  RelatorioMes,
+  Remanejamento,
+  ResultadoApagarCategoria,
+  ResumoMes,
+  SugestaoRecorrente,
+  Vencimentos,
+} from "./financas.ts";
+import {
   EstadoFoco,
   HistoricoFoco,
   PedidoEstenderFoco,
   PedidoHistoricoFoco,
   PedidoIniciarFoco,
 } from "./foco.ts";
+import {
+  Importacao,
+  ImportacaoConcluida,
+  LeituraExtrato,
+  PedidoConfirmarImportacao,
+  PedidoImportacao,
+  PedidoImportacoes,
+  PedidoLerExtrato,
+  PedidoPerfilImportacao,
+  PedidoPreviaImportacao,
+  PerfilImportacao,
+  PreviaImportacao,
+  ProgressoImportacao,
+} from "./importacao.ts";
 import {
   Lembrete,
   LembretesDeHoje,
@@ -94,6 +171,15 @@ import {
   PedidoRestaurarPreferencia,
 } from "./notificacoes.ts";
 import { PedidoExportar, PedidoImportar, PreviaImportar, ResultadoExportar } from "./outro-pc.ts";
+import {
+  MovimentoPlano,
+  MudancaPlano,
+  NovoPlano,
+  PedidoMovimentarPlano,
+  PedidoPlano,
+  Plano,
+  PlanoMovimentado,
+} from "./planos.ts";
 import { EstadoPrimeiroUso, PedidoConcluirPrimeiroUso, PedidoMarcarTutorial } from "./primeiro-uso.ts";
 import {
   MudancaProvedor,
@@ -294,6 +380,92 @@ export const METODOS = {
   "captura.desfazer": metodo(PedidoDesfazerCaptura, LancamentoCaptura),
 
   "areas.contagens": metodo(z.undefined(), ContagensAreas),
+
+  // O dinheiro (fase 4): a regra de cada um mora em `servico/src/areas/financas`.
+  "financas.contas": metodo(PedidoContas, z.array(Conta)),
+  "financas.obterConta": metodo(PedidoConta, Conta),
+  "financas.criarConta": metodo(NovaConta, Conta),
+  "financas.definirConta": metodo(MudancaConta, Conta),
+  /** Manda à lixeira; conta com lançamento só arquiva (`definirConta` com `ativa: false`). */
+  "financas.apagarConta": metodo(PedidoConta, Apagados),
+  "financas.faturas": metodo(PedidoFaturas, z.array(Fatura)),
+  /** Registra o pagamento que você fez no banco: transferência da conta de pagamento, fatura paga. */
+  "financas.pagarFatura": metodo(PedidoPagarFatura, Fatura),
+  "financas.desfazerPagamento": metodo(PedidoFatura, Fatura),
+
+  "financas.lancamentos": metodo(PedidoLancamentos, PaginaLancamentos),
+  "financas.obterLancamento": metodo(PedidoLancamento, DetalheLancamento),
+  /** A parcelada volta com as N parcelas, uma por fatura. */
+  "financas.lancar": metodo(NovoLancamento, z.array(Lancamento).min(1)),
+  "financas.transferir": metodo(NovaTransferencia, z.array(Lancamento).length(2)),
+  "financas.definirLancamento": metodo(MudancaLancamento, LancamentoEditado),
+  /** Manda à lixeira; o outro lado da transferência vai junto. */
+  "financas.apagarLancamento": metodo(PedidoLancamento, Apagados),
+  "financas.restaurarLancamento": metodo(PedidoLancamento, z.array(Lancamento).min(1)),
+
+  "financas.categorias": metodo(z.undefined(), z.array(Categoria)),
+  "financas.criarCategoria": metodo(NovaCategoria, Categoria),
+  "financas.definirCategoria": metodo(MudancaCategoria, Categoria),
+  "financas.apagarCategoria": metodo(PedidoApagarCategoria, ResultadoApagarCategoria),
+  "financas.regras": metodo(z.undefined(), z.array(RegraCategoria)),
+  "financas.criarRegra": metodo(NovaRegraCategoria, RegraCategoria),
+  "financas.definirRegra": metodo(MudancaRegraCategoria, RegraCategoria),
+  "financas.apagarRegra": metodo(PedidoRegraCategoria, Apagados),
+
+  "financas.orcamento": metodo(PedidoMes, OrcamentoMes),
+  "financas.definirOrcamento": metodo(DefinicaoOrcamento, Orcamento),
+  /** Tira o limite: a categoria volta a não ter orçamento (no mês, ou em todo mês). */
+  "financas.removerOrcamento": metodo(PedidoOrcamento, Apagados),
+  "financas.remanejar": metodo(PedidoRemanejar, Remanejamento),
+  "financas.desfazerRemanejar": metodo(PedidoDesfazerRemanejar, OrcamentoMes),
+
+  "financas.recorrentes": metodo(z.undefined(), z.array(Recorrente)),
+  "financas.criarRecorrente": metodo(NovaRecorrente, Recorrente),
+  "financas.definirRecorrente": metodo(MudancaRecorrente, Recorrente),
+  "financas.apagarRecorrente": metodo(PedidoRecorrente, Apagados),
+  "financas.sugestoesRecorrentes": metodo(z.undefined(), z.array(SugestaoRecorrente)),
+  "financas.aceitarRecorrente": metodo(PedidoSugestaoRecorrente, Recorrente),
+  /** Recusada não volta; devolve as que sobraram. */
+  "financas.recusarRecorrente": metodo(PedidoSugestaoRecorrente, z.array(SugestaoRecorrente)),
+
+  "financas.resumo": metodo(PedidoMes, ResumoMes),
+  "financas.relatorio": metodo(PedidoMes, RelatorioMes),
+  "financas.gastoCom": metodo(PedidoGastoCom, GastoCom),
+  "financas.vencimentos": metodo(PedidoVencimentos, Vencimentos),
+
+  "dividas.listar": metodo(PedidoDividas, z.array(Divida)),
+  "dividas.obter": metodo(PedidoDivida, Divida),
+  "dividas.criar": metodo(NovaDivida, Divida),
+  "dividas.definir": metodo(MudancaDivida, Divida),
+  "dividas.apagar": metodo(PedidoDivida, Apagados),
+  "dividas.registrarPagamento": metodo(PedidoPagamentoDivida, PagamentoDivida),
+  "dividas.quitar": metodo(PedidoQuitar, Divida),
+  /** Calculada na hora, nada gravado. */
+  "dividas.simular": metodo(PedidoSimulacao, Simulacao),
+
+  "planos.listar": metodo(z.undefined(), z.array(Plano)),
+  "planos.obter": metodo(PedidoPlano, Plano),
+  "planos.criar": metodo(NovoPlano, Plano),
+  "planos.definir": metodo(MudancaPlano, Plano),
+  "planos.apagar": metodo(PedidoPlano, Apagados),
+  /** Guardar (positivo) ou retirar (negativo). */
+  "planos.movimentar": metodo(PedidoMovimentarPlano, PlanoMovimentado),
+  "planos.movimentos": metodo(PedidoPlano, z.array(MovimentoPlano)),
+
+  /** O caminho escolhido no diálogo ou arrastado vira uma autorização de uso único (ADR-0044). */
+  "arquivos.autorizar": metodo(PedidoAutorizarArquivo, AutorizacaoArquivo),
+
+  "importacao.ler": metodo(PedidoLerExtrato, LeituraExtrato),
+  "importacao.previa": metodo(PedidoPreviaImportacao, PreviaImportacao),
+  /** Lança numa transação, com a importação em cada lançamento. */
+  "importacao.confirmar": metodo(PedidoConfirmarImportacao, ImportacaoConcluida),
+  /** Larga a prévia sem lançar nada. */
+  "importacao.cancelar": metodo(PedidoImportacao, Apagados),
+  /** Tira só o que a importação trouxe. */
+  "importacao.desfazer": metodo(PedidoImportacao, Importacao),
+  "importacao.listar": metodo(PedidoImportacoes, z.array(Importacao)),
+  "importacao.perfis": metodo(z.undefined(), z.array(PerfilImportacao)),
+  "importacao.apagarPerfil": metodo(PedidoPerfilImportacao, Apagados),
 } as const;
 
 export type Metodos = typeof METODOS;
@@ -339,6 +511,12 @@ export const EVENTOS = {
    */
   "rotinas.apareceu": ApresentacaoRotina,
   "areas.contagens": ContagensAreas,
+
+  /** O que mudou no dinheiro, de qualquer caminho: as janelas recarregam as partes que vieram. */
+  "financas.mudou": MudancaFinancas,
+  "importacao.progresso": ProgressoImportacao,
+  /** O modo privacidade ligou ou desligou (atalho, bandeja ou Configurações): as janelas mascaram. */
+  "privacidade.mudou": Privacidade,
 } as const;
 
 export type NomeEvento = keyof typeof EVENTOS;

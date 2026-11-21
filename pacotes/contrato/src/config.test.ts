@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  CHAVES_DESTE_PC,
   CONFIG_PADRAO,
   Config,
   ConfigDia,
@@ -8,6 +9,8 @@ import {
   FUSO_RESERVA,
   Fuso,
   fusoDoSistema,
+  MudancaConfig,
+  Privacidade,
 } from "./config.ts";
 
 describe("config do dia", () => {
@@ -60,6 +63,14 @@ describe("config do dia", () => {
     expect(ConfigInicio.safeParse({ ordem: ["foco", "foco"], escondidos: [] }).success).toBe(false);
     expect(ConfigInicio.safeParse({ ordem: ["foco"], escondidos: ["dev", "dev"] }).success).toBe(false);
     expect(ConfigInicio.safeParse({ ordem: ["clima"], escondidos: [] }).success).toBe(false);
+  });
+
+  test("o modo privacidade nasce desligado e é estado deste PC", () => {
+    expect(CONFIG_PADRAO.privacidade).toEqual({ ativo: false });
+    expect(Privacidade.safeParse({ ativo: true }).success).toBe(true);
+    expect(Privacidade.safeParse({ ativo: "sim" }).success).toBe(false);
+    expect(MudancaConfig.parse({ privacidade: { ativo: true } })).toEqual({ privacidade: { ativo: true } });
+    expect(CHAVES_DESTE_PC).toEqual(["privacidade"]);
   });
 
   test("o foco pode ficar sem atalho (vazio); os outros, não", () => {

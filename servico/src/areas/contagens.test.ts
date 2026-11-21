@@ -35,7 +35,7 @@ function montar() {
   bancos.push(db);
   const relogio = { agora: new Date(DOMINGO_23H30) };
   const avisos: { contagens: ContagensAreas; ms: number }[] = [];
-  const outras = { sessoes: 0 };
+  const outras = { sessoes: 0, vencendo: 0 };
   let recontar = () => {};
   const notas = new ServicoNotas(
     new RepositorioNotas(db),
@@ -56,6 +56,7 @@ function montar() {
       lembretesAtrasados: () => lembretes.contarPerdidos(),
       sessoesEsperando: () => outras.sessoes,
       devPrecisando: () => github.contarPrecisandoDeMim(),
+      financasVencendo: () => outras.vencendo,
     },
     (c) => avisos.push({ contagens: c, ms: performance.now() }),
   );
@@ -68,6 +69,7 @@ const ZERO: ContagensAreas = {
   lembretesAtrasados: 0,
   sessoesEsperando: 0,
   devPrecisando: 0,
+  financasVencendo: 0,
 };
 
 describe("contagens das áreas", () => {
@@ -135,6 +137,10 @@ describe("contagens das áreas", () => {
     outras.sessoes = 3;
     contagens.recontar();
     expect(avisos.map((a) => a.contagens.sessoesEsperando)).toEqual([0, 3]);
+    // Os vencimentos do dinheiro também contam como mudança.
+    outras.vencendo = 2;
+    contagens.recontar();
+    expect(avisos.map((a) => a.contagens.financasVencendo)).toEqual([0, 0, 2]);
   });
 
   test("fonte que falha não derruba quem avisou: fica o último número dela", () => {
@@ -149,6 +155,7 @@ describe("contagens das áreas", () => {
       },
       sessoesEsperando: () => sessoes,
       devPrecisando: () => (falhar ? -1 : 0),
+      financasVencendo: () => 0,
     };
     const avisos: ContagensAreas[] = [];
     const contagens = new ServicoContagens(fontes, (c) => avisos.push(c));
@@ -161,6 +168,7 @@ describe("contagens das áreas", () => {
       lembretesAtrasados: 4,
       sessoesEsperando: 3,
       devPrecisando: 0,
+      financasVencendo: 0,
     });
     // O aviso que falha também não sobe para a área que gravou.
     const quebrado = new ServicoContagens(fontes, () => {
