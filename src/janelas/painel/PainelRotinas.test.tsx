@@ -385,6 +385,23 @@ describe("briefing da manhã", () => {
     expect(titulo()).toBe("Bom dia");
   });
 
+  it("a frase da Alba que chega depois do molde troca a abertura no painel aberto", async () => {
+    const molde = { ...BRIEFING, linhas: [], abertura: "Bom dia. Nada marcado para hoje." };
+    servidor.rotinas = { briefing: molde, fechamento: null, diaEncerrado: false, pergunta: null };
+    await abrir();
+    const fala = () => recipiente.querySelector(".fala-texto")?.textContent;
+    expect(fala()).toBe("Bom dia. Nada marcado para hoje.");
+    const lidas = chamou("rotinas.hoje").length;
+    await avisar("rotinas.apareceu", {
+      ...molde,
+      abertura: "Bom dia. A agenda está livre hoje.",
+      daExecucaoId: "01K7A0000000000000000000E1",
+    });
+    expect(fala()).toBe("Bom dia. A agenda está livre hoje.");
+    expect(titulo()).toBe("Bom dia");
+    expect(chamou("rotinas.hoje")).toHaveLength(lidas);
+  });
+
   it("sem linha nenhuma, a abertura da Alba é o briefing", async () => {
     servidor.rotinas = {
       briefing: { ...BRIEFING, linhas: [], abertura: "Bom dia. Nada marcado para hoje." },
