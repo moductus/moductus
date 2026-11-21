@@ -71,6 +71,7 @@ const ONDE_TIRAR: Record<TipoLancavel, string> = {
   lembrete: "O lembrete ficou; para tirar, cancele pelos lembretes.",
   evento: "O evento ficou; para tirar, apague pela Agenda.",
   nota: "A nota ficou; para tirar, apague pela área Notas.",
+  gasto: "O lançamento ficou; para tirar, apague pela área Finanças.",
 };
 export const MENSAGEM_PRAZO_DESFAZER = (tipo: TipoLancavel) =>
   `Já passaram os 10 s para desfazer. ${ONDE_TIRAR[tipo]}`;
@@ -185,6 +186,8 @@ export class ServicoCaptura {
   /** Lança o que a prévia mostrou, pela área do tipo, e devolve até quando dá para desfazer. */
   async lancar(pedido: PedidoLancar): Promise<LancamentoCaptura> {
     const { texto, tipo, campos } = PedidoLancar.parse(pedido);
+    // O contrato já deixa lançar gasto; a área que o recebe chega com a captura da Tula.
+    if (tipo === "gasto") throw new ErroDaCaptura(AVISO_GASTO);
     conferir(tipo, campos);
     if (tipo === "lembrete" && this.avisoMudaODia(campos)) {
       throw new ErroDaCaptura(MENSAGEM_LEMBRETE_MUDA_O_DIA);
@@ -245,6 +248,9 @@ export class ServicoCaptura {
             return this.deps.agenda.apagarEvento(item);
           case "nota":
             return this.deps.notas.apagar(item);
+          case "gasto":
+            // Nenhum gasto é lançado pela captura ainda: não há o que desfazer.
+            throw new ErroDaCaptura(MENSAGEM_DESFAZER_SUMIU);
         }
       });
     } catch (erro) {
@@ -426,7 +432,8 @@ export class ServicoCaptura {
 export function alternativasDe(tipo: TipoCaptura): TipoLancavel[] {
   if (tipo === "gasto") return ["tarefa", "nota"];
   if (tipo === "memoria") return ["nota", "tarefa"];
-  return TipoLancavel.options.filter((t) => t !== tipo);
+  // Gasto não é alternativa de quem não tem valor: o "Na verdade é" fica como era.
+  return TipoLancavel.options.filter((t) => t !== tipo && t !== "gasto");
 }
 
 /** O que cada tipo precisa para ser lançado; o que falta a pessoa preenche com Tab. */

@@ -152,6 +152,7 @@ const CRIADO: Readonly<Record<TipoLancavel, string>> = {
   nota: "criada",
   lembrete: "criado",
   evento: "criado",
+  gasto: "lançado",
 };
 
 interface PropsCampoFrase {

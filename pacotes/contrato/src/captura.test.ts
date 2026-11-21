@@ -23,10 +23,20 @@ const campos = {
 };
 
 describe("captura", () => {
-  test("gasto e memória são reconhecidos, mas não se lançam nesta versão", () => {
+  test("gasto se lança desde a fase 4; memória é reconhecida, mas ainda não se lança", () => {
     expect(TipoCaptura.options).toEqual(["tarefa", "lembrete", "evento", "nota", "gasto", "memoria"]);
-    expect(TipoLancavel.options).toEqual(["tarefa", "lembrete", "evento", "nota"]);
-    expect(PedidoLancar.safeParse({ texto: "45 de mercado", tipo: "gasto", campos }).success).toBe(false);
+    expect(TipoLancavel.options).toEqual(["tarefa", "lembrete", "evento", "nota", "gasto"]);
+    const gasto = {
+      ...campos,
+      titulo: "Mercado",
+      hora: null,
+      lembreteMinutosAntes: null,
+      valorCentavos: -4500,
+    };
+    expect(PedidoLancar.safeParse({ texto: "45 de mercado", tipo: "gasto", campos: gasto }).success).toBe(
+      true,
+    );
+    expect(PedidoLancar.safeParse({ texto: "lembrar disso", tipo: "memoria", campos }).success).toBe(false);
     expect(
       PedidoLancar.safeParse({ texto: "ligar pro banco amanhã 15h", tipo: "tarefa", campos }).success,
     ).toBe(true);
@@ -46,7 +56,7 @@ describe("captura", () => {
       entendidoPor: "codigo",
     };
     expect(PreviaCaptura.parse(previa)).toEqual(previa);
-    expect(PreviaCaptura.safeParse({ ...previa, alternativas: ["gasto"] }).success).toBe(false);
+    expect(PreviaCaptura.safeParse({ ...previa, alternativas: ["memoria"] }).success).toBe(false);
     expect(
       PreviaCaptura.safeParse({ ...previa, trechos: [{ campo: "cor", inicio: 0, fim: 1 }] }).success,
     ).toBe(false);
@@ -82,9 +92,19 @@ describe("captura", () => {
 
 describe("contagens das áreas", () => {
   test("só números inteiros, sem negativo", () => {
-    const contagens = { tarefasPendentes: 4, lembretesAtrasados: 0, sessoesEsperando: 1, devPrecisando: 2 };
+    const contagens = {
+      tarefasPendentes: 4,
+      lembretesAtrasados: 0,
+      sessoesEsperando: 1,
+      devPrecisando: 2,
+      financasVencendo: 3,
+    };
     expect(ContagensAreas.parse(contagens)).toEqual(contagens);
     expect(ContagensAreas.safeParse({ ...contagens, tarefasPendentes: -1 }).success).toBe(false);
+    expect(ContagensAreas.safeParse({ ...contagens, financasVencendo: 1.5 }).success).toBe(false);
+    // A janela da fase 3 não conhece os vencimentos: a contagem sem eles não serve mais.
+    const { financasVencendo: _vencendo, ...daFase3 } = contagens;
+    expect(ContagensAreas.safeParse(daFase3).success).toBe(false);
     expect(METODOS["areas.contagens"].saida.safeParse(contagens).success).toBe(true);
   });
 });

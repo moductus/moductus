@@ -1,6 +1,7 @@
 import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import type { DatabaseSync } from "node:sqlite";
 import {
+  CHAVES_DESTE_PC,
   CONFIG_PADRAO,
   Config,
   ConteudoArquivo,
@@ -41,7 +42,8 @@ export class ArquivoRecusado extends Error {}
  * e um JSON por tabela de configuração (agentes, provedores, regras, conexões, preferências de
  * aviso, listas, etiquetas, calendários, rotinas, categorias, regras de categoria e perfis de
  * importação), e importa a config passando pelo ServicoConfig, para a casca aplicar o que é nativo e
- * nada ser gravado se ela recusar. Credenciais e a pasta portable nunca entram. A importação
+ * nada ser gravado se ela recusar. Credenciais, a pasta portable e o estado deste PC (o modo
+ * privacidade) nunca entram. A importação
  * das tabelas ainda não existe: o arquivo já as leva, e o PC novo por ora lê só a config.
  */
 export class ServicoOutroPc {
@@ -54,7 +56,8 @@ export class ServicoOutroPc {
 
   async exportar(entrada: PedidoExportar): Promise<ResultadoExportar> {
     const { caminho } = PedidoExportar.parse(entrada);
-    const config = this.config.obter().config;
+    // O que é estado deste PC (o modo privacidade) não vai.
+    const config = semAsDestePc(this.config.obter().config);
     const chaves = Object.keys(config);
     const agora = this.agora();
     // As demais tabelas de configuração, uma por arquivo, já sem credencial nem o que é deste PC.
@@ -112,10 +115,17 @@ export class ServicoOutroPc {
     const { manifesto, chaves } = lerConfigDoArquivo(await lerZip(caminho));
     // Cópia portable não liga o início com o Windows: essa chave do arquivo fica de fora.
     if (this.config.obter().portable) delete chaves.autostart;
-    // Substituir: o que o arquivo não traz volta ao padrão. Juntar: só o que ele traz.
-    const mudanca: MudancaConfig = modo === "substituir" ? { ...CONFIG_PADRAO, ...chaves } : chaves;
+    // Substituir: o que o arquivo não traz volta ao padrão. Juntar: só o que ele traz. O estado
+    // deste PC fica como está nos dois, mesmo que o arquivo o traga.
+    const mudanca = semAsDestePc(modo === "substituir" ? { ...CONFIG_PADRAO, ...chaves } : chaves);
     return { manifesto, mudanca };
   }
+}
+
+function semAsDestePc(config: MudancaConfig): MudancaConfig {
+  const resto: MudancaConfig = { ...config };
+  for (const chave of CHAVES_DESTE_PC) delete resto[chave];
+  return resto;
 }
 
 function motivo(erro: unknown): string {

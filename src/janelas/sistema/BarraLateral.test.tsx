@@ -24,6 +24,7 @@ const ZERO: ContagensAreas = {
   lembretesAtrasados: 0,
   sessoesEsperando: 0,
   devPrecisando: 0,
+  financasVencendo: 0,
 };
 const canal: { estado: EstadoConexao; contagens: () => Promise<ContagensAreas> } = {
   estado: "conectado",
@@ -85,6 +86,7 @@ describe("contagens na barra lateral do Sistema (Sistema.dc.html)", () => {
       lembretesAtrasados: 2,
       sessoesEsperando: 3,
       devPrecisando: 1,
+      financasVencendo: 0,
     });
     await montar();
     expect([numero("sessoes"), numero("tarefas"), numero("dev"), numero("inicio")]).toEqual([

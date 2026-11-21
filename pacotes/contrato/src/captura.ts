@@ -6,15 +6,15 @@ import { MinutosAntes } from "./tarefas.ts";
 /**
  * Captura rápida (PRODUCT.md §3; ADR-0034): uma frase solta vira tarefa, lembrete, evento ou nota.
  * O entendedor de frases do serviço devolve a prévia ("entendeu como") antes de lançar; nada é
- * criado sem ela. Gasto e memória são reconhecidos, mas só chegam com a Tula e a Memória (fases 4 e
- * 5): a prévia diz isso e oferece tarefa ou nota.
+ * criado sem ela. Gasto se lança com a Tula (fase 4); memória é reconhecida, mas só chega com a
+ * Memória (fase 5): a prévia diz isso e oferece nota ou tarefa.
  */
 
 export const TipoCaptura = z.enum(["tarefa", "lembrete", "evento", "nota", "gasto", "memoria"]);
 export type TipoCaptura = z.infer<typeof TipoCaptura>;
 
 /** O que dá para lançar nesta versão. */
-export const TipoLancavel = TipoCaptura.extract(["tarefa", "lembrete", "evento", "nota"]);
+export const TipoLancavel = TipoCaptura.extract(["tarefa", "lembrete", "evento", "nota", "gasto"]);
 export type TipoLancavel = z.infer<typeof TipoLancavel>;
 
 /**

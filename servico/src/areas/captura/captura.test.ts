@@ -197,10 +197,11 @@ describe("entender", () => {
       aviso: AVISO_MEMORIA,
       alternativas: ["nota", "tarefa"],
     });
-    // O contrato não deixa lançar gasto.
+    // O contrato já deixa lançar gasto, mas a captura ainda o recusa com o aviso, sem criar nada.
     await expect(
-      m.captura.lancar({ texto: "45 de mercado no débito", tipo: "gasto", campos: gasto.campos } as never),
-    ).rejects.toThrow();
+      m.captura.lancar({ texto: "45 de mercado no débito", tipo: "gasto", campos: gasto.campos }),
+    ).rejects.toThrow(new ErroDaCaptura(AVISO_GASTO));
+    expect(m.tarefas.listar({})).toEqual([]);
   });
 
   test("a lista citada na frase vem pelo id", async () => {

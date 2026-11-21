@@ -12,7 +12,7 @@ import { redacaoPelaAlba, VigiaAlba } from "./agentes/vigias/alba.ts";
 import { RepositorioMarcasDosVigias } from "./agentes/vigias/marcas.ts";
 import { resumoDoDiaDoNuno, resumoDoFechamentoDoNuno, VigiaNuno } from "./agentes/vigias/nuno.ts";
 import { Agendador, RepositorioDisparos } from "./agendador/agendador.ts";
-import { abrirServidorWs, type ServidorWs } from "./api/servidor.ts";
+import { abrirServidorWs, semAtendente, type ServidorWs } from "./api/servidor.ts";
 import { RepositorioAprovacoes, ServicoAprovacoes } from "./aprovacoes/aprovacoes.ts";
 import { RepositorioAgenda, ServicoAgenda } from "./areas/agenda/agenda.ts";
 import { RepositorioTarefasDoDia } from "./areas/agenda/tarefas-do-dia.ts";
@@ -559,6 +559,8 @@ const contagens = new ServicoContagens(
     lembretesAtrasados: () => leituraLembretes.contarPerdidos(),
     sessoesEsperando: () => sessoesEsperando(leituraAprovacoes.pendentes()),
     devPrecisando: () => leituraGithub.contarPrecisandoDeMim(),
+    // Os vencimentos do dinheiro chegam com os relatórios das Finanças (F4-15); até lá, nenhum.
+    financasVencendo: () => 0,
   },
   (novas) => servidor?.emitir("areas.contagens", novas),
 );
@@ -674,6 +676,73 @@ servidor = await abrirServidorWs(token, {
   "rotinas.listar": () => rotinas.listar(),
   "rotinas.definir": (mudanca) => rotinas.definir(mudanca),
   "areas.contagens": () => contagens.obter(),
+  // O dinheiro (F4-07): o contrato já tem os métodos e o serviço responde que ainda não estão
+  // disponíveis. Cada tarefa que implementa uma área (F4-08 a F4-15, F4-19, F4-20) tira os dela daqui.
+  ...semAtendente([
+    "financas.contas",
+    "financas.obterConta",
+    "financas.criarConta",
+    "financas.definirConta",
+    "financas.apagarConta",
+    "financas.faturas",
+    "financas.pagarFatura",
+    "financas.desfazerPagamento",
+    "financas.lancamentos",
+    "financas.obterLancamento",
+    "financas.lancar",
+    "financas.transferir",
+    "financas.definirLancamento",
+    "financas.apagarLancamento",
+    "financas.restaurarLancamento",
+    "financas.categorias",
+    "financas.criarCategoria",
+    "financas.definirCategoria",
+    "financas.apagarCategoria",
+    "financas.regras",
+    "financas.criarRegra",
+    "financas.definirRegra",
+    "financas.apagarRegra",
+    "financas.orcamento",
+    "financas.definirOrcamento",
+    "financas.removerOrcamento",
+    "financas.remanejar",
+    "financas.desfazerRemanejar",
+    "financas.recorrentes",
+    "financas.criarRecorrente",
+    "financas.definirRecorrente",
+    "financas.apagarRecorrente",
+    "financas.sugestoesRecorrentes",
+    "financas.aceitarRecorrente",
+    "financas.recusarRecorrente",
+    "financas.resumo",
+    "financas.relatorio",
+    "financas.gastoCom",
+    "financas.vencimentos",
+    "dividas.listar",
+    "dividas.obter",
+    "dividas.criar",
+    "dividas.definir",
+    "dividas.apagar",
+    "dividas.registrarPagamento",
+    "dividas.quitar",
+    "dividas.simular",
+    "planos.listar",
+    "planos.obter",
+    "planos.criar",
+    "planos.definir",
+    "planos.apagar",
+    "planos.movimentar",
+    "planos.movimentos",
+    "arquivos.autorizar",
+    "importacao.ler",
+    "importacao.previa",
+    "importacao.confirmar",
+    "importacao.cancelar",
+    "importacao.desfazer",
+    "importacao.listar",
+    "importacao.perfis",
+    "importacao.apagarPerfil",
+  ]),
 });
 console.error(`servico pronto na porta ${servidor.porta}, pid ${process.pid}`);
 canal.avisar({ tipo: "pronto", porta: servidor.porta, pid: process.pid });

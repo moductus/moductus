@@ -13,6 +13,7 @@ export const ROTULOS_CONTAGEM: Readonly<Record<CampoContagem, RotuloContagem>> =
   lembretesAtrasados: { um: "lembrete atrasado", varios: "lembretes atrasados" },
   sessoesEsperando: { um: "sessão esperando você", varios: "sessões esperando você" },
   devPrecisando: { um: "aviso de dev", varios: "avisos de dev" },
+  financasVencendo: { um: "conta vencendo", varios: "contas vencendo" },
 };
 
 export const SEM_CONTAGENS: ContagensAreas = {
@@ -20,6 +21,7 @@ export const SEM_CONTAGENS: ContagensAreas = {
   lembretesAtrasados: 0,
   sessoesEsperando: 0,
   devPrecisando: 0,
+  financasVencendo: 0,
 };
 
 /**

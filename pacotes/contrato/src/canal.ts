@@ -43,8 +43,12 @@ export function metodo<E extends z.ZodType, S extends z.ZodType>(entrada: E, sai
  * áreas, e o agente diz o que tem de personalizado e o gasto de hoje contra o teto, na moeda do
  * teto com a cotação da configuração, e a sessão do Claude Code diz se roda no terminal ou no
  * app Desktop (fase 3).
+ * 4: o dinheiro: contas, cartões e faturas, lançamentos, categorias e regras, orçamento,
+ * recorrentes, resumo e relatórios, dívidas, planos, importação de extrato, a autorização de arquivo,
+ * o modo privacidade na configuração, os vencimentos nas contagens e o gasto lançável pela captura
+ * (fase 4).
  */
-export const VERSAO_PROTOCOLO = 3;
+export const VERSAO_PROTOCOLO = 4;
 
 /** Nome do parâmetro de URL que leva o token: o WebSocket do navegador não manda cabeçalho. */
 export const PARAMETRO_TOKEN = "token";

@@ -26,6 +26,7 @@ const ZERO: ContagensAreas = {
   lembretesAtrasados: 0,
   sessoesEsperando: 0,
   devPrecisando: 0,
+  financasVencendo: 0,
 };
 
 const canal: {
