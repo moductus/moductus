@@ -60,6 +60,12 @@ export const EXPORTACAO: Readonly<Record<string, Exportacao>> = {
   regras_categoria: "configuracao",
   perfis_importacao: "configuracao",
   contas: "dado",
+  // 030-lancamentos: o movimento do dinheiro e as importações são as finanças, que não vão ao PC do
+  // trabalho em "só configurações".
+  lancamentos: "dado",
+  faturas: "dado",
+  importacoes: "dado",
+  importacao_lapides: "dado",
 };
 
 /**
