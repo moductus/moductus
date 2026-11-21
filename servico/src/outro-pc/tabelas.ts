@@ -66,6 +66,13 @@ export const EXPORTACAO: Readonly<Record<string, Exportacao>> = {
   faturas: "dado",
   importacoes: "dado",
   importacao_lapides: "dado",
+  // 031-planejamento: orçamento, recorrências, dívidas e planos são as finanças do usuário, como os
+  // lançamentos, e ficam fora de "só configurações".
+  orcamentos: "dado",
+  recorrencias: "dado",
+  dividas: "dado",
+  planos: "dado",
+  plano_movimentos: "dado",
 };
 
 /**
