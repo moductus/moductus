@@ -235,6 +235,19 @@ const TABELA: [string, Esperado][] = [
   ["R$ 32,90 farmácia", { tipo: "gasto", titulo: "farmácia", valorCentavos: 3290 }],
   ["almoço 28 reais", { tipo: "gasto", titulo: "almoço", valorCentavos: 2800 }],
   ["uber R$1.285,50", { tipo: "gasto", titulo: "uber", valorCentavos: 128550 }],
+  // O valor sai do leitor do contrato: vírgula com uma casa, ponto decimal, milhar sem centavos.
+  ["gastei 45,9 de pão", { tipo: "gasto", titulo: "gastei de pão", valorCentavos: 4590 }],
+  ["café R$ 7.50", { tipo: "gasto", titulo: "café", valorCentavos: 750 }],
+  ["aluguel 1.800 reais", { tipo: "gasto", titulo: "aluguel", valorCentavos: 180000 }],
+  // Zero não é gasto, e número de dez dígitos é telefone.
+  ["gastei 0 no estacionamento", { titulo: "gastei 0 no estacionamento" }],
+  ["gastei 1199998888 de crédito", { titulo: "gastei 1199998888 de crédito" }],
+  ["paguei 0800123456", { titulo: "paguei 0800123456" }],
+  ["gastei 1.000.000.000 de crédito", { titulo: "gastei 1.000.000.000 de crédito" }],
+  [
+    "gastei 999.999.999,99 de crédito",
+    { tipo: "gasto", titulo: "gastei de crédito", valorCentavos: 99_999_999_999 },
+  ],
   [
     "gastei 120 no posto ontem",
     { tipo: "gasto", titulo: "gastei no posto", dia: "2026-10-07", valorCentavos: 12000 },

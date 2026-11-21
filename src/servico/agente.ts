@@ -12,7 +12,7 @@ import type {
   TipoConexao,
   TipoGatilho,
 } from "@moductus/contrato";
-import { TIPOS_PROVEDOR_CLI } from "@moductus/contrato";
+import { formatarCentavos, TIPOS_PROVEDOR_CLI } from "@moductus/contrato";
 import type { EstadoConexao } from "@moductus/contrato/cliente";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -116,10 +116,8 @@ export function textoDaExecucao(execucao: Execucao, modelo: ModeloDoAgente | nul
  */
 export function custoEmTexto(microdolares: number): string {
   if (microdolares > 0 && microdolares < 10_000) return "menos de US$ 0,01";
-  const valor = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
-    microdolares / 1_000_000,
-  );
-  return `US$ ${valor}`;
+  // Dez mil microdólares são um centavo; a metade sobe, como no arredondamento de antes.
+  return formatarCentavos(Math.floor((microdolares + 5_000) / 10_000), { moeda: "USD" });
 }
 
 /**

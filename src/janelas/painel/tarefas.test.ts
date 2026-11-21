@@ -149,7 +149,7 @@ describe("a prévia da frase", () => {
     ).toEqual(["lembrete", "15:00"]);
     expect(chipsDaPrevia(previa({ tipo: "gasto", campos: { valorCentavos: 4500 } }))).toEqual([
       "gasto",
-      "R$ 45,00",
+      "R$ 45,00",
     ]);
   });
 });

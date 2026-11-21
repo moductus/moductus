@@ -1,4 +1,5 @@
 import {
+  formatarCentavos,
   LISTA_ENTRADA,
   type Lista,
   type PreviaCaptura,
@@ -153,8 +154,6 @@ export const NOME_DO_TIPO: Readonly<Record<TipoCaptura, string>> = {
   memoria: "memória",
 };
 
-const reais = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-
 /**
  * Os chips do "Entendi:" (PainelTarefas.dc.html): o tipo e o que a frase deu, na ordem do quadro
  * (tipo, dia, hora, lembrete). O que a frase não disse não aparece.
@@ -170,7 +169,7 @@ export function chipsDaPrevia(previa: PreviaCaptura): string[] {
     chips.push(lembreteDaTarefa(campos.hora, campos.lembreteMinutosAntes));
   }
   if (previa.tipo === "gasto" && campos.valorCentavos !== null) {
-    chips.push(reais.format(campos.valorCentavos / 100));
+    chips.push(formatarCentavos(campos.valorCentavos));
   }
   return chips;
 }

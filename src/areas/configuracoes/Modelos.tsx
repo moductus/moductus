@@ -1387,7 +1387,7 @@ function PainelAgente({
     if (id === reserva) setReserva(principal);
     setPrincipal(id);
   };
-  const teto = lerTeto(textoTeto);
+  const teto = lerTeto(textoTeto, moeda);
   const tetoInvalido = teto === undefined;
   const mudanca = tetoInvalido
     ? null

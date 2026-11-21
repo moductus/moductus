@@ -1,9 +1,13 @@
 import {
   COTACAO_MAXIMA_MILIONESIMOS,
   type Cotacao,
+  formatarCentavos,
   type GastoDeHoje,
+  lerValor,
+  MOEDAS_TETO,
   type MoedaComCotacao,
   type MoedaTeto,
+  simboloDaMoeda,
 } from "@moductus/contrato";
 
 /**
@@ -12,7 +16,9 @@ import {
  * vem marcado como estimativa: o custo é da tabela de preços, e fora do dólar passa pela cotação.
  */
 
-export const SIMBOLO: Readonly<Record<MoedaTeto, string>> = { BRL: "R$", USD: "US$", EUR: "€", GBP: "£" };
+export const SIMBOLO = Object.fromEntries(MOEDAS_TETO.map((m) => [m, simboloDaMoeda(m)])) as Readonly<
+  Record<MoedaTeto, string>
+>;
 
 /** "em real", "em euro": para dizer de que moeda é a cotação. */
 export const NOME_DA_MOEDA: Readonly<Record<MoedaTeto, string>> = {
@@ -22,17 +28,17 @@ export const NOME_DA_MOEDA: Readonly<Record<MoedaTeto, string>> = {
   GBP: "libra",
 };
 
-const DUAS_CASAS = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// A cotação não é dinheiro em centavos: é um número de até seis casas.
 const ATE_SEIS_CASAS = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 
 /** "R$ 10,00", "US$ 1.234,56". */
 export function dinheiro(centavos: number, moeda: MoedaTeto): string {
-  return `${SIMBOLO[moeda]} ${DUAS_CASAS.format(centavos / 100)}`;
+  return formatarCentavos(centavos, { moeda });
 }
 
 /** "10,00" para o campo, sem o símbolo; vazio sem teto. */
 export function valorNoCampo(centavos: number | null): string {
-  return centavos === null ? "" : DUAS_CASAS.format(centavos / 100);
+  return centavos === null ? "" : formatarCentavos(centavos, { semSimbolo: true });
 }
 
 /** "2026-10-16" vira "16/10". */
@@ -61,10 +67,16 @@ function lerDecimal(texto: string, casas: number): number | null {
   return Number.isSafeInteger(valor) ? valor : null;
 }
 
-/** O teto digitado em centavos; vazio é sem teto (`null`), inválido é `undefined`. */
-export function lerTeto(texto: string): number | null | undefined {
+/**
+ * O teto digitado em centavos; vazio é sem teto (`null`), inválido ou negativo é `undefined`. O
+ * símbolo é opcional, mas, se vier, é o da moeda do teto: "US$ 10" num teto em real não vale.
+ */
+export function lerTeto(texto: string, moeda: MoedaTeto): number | null | undefined {
   if (!texto.trim()) return null;
-  return lerDecimal(texto, 2) ?? undefined;
+  const simbolo = texto.replace(/[\d.,\s\-−+]/g, "");
+  if (simbolo && simbolo.toUpperCase() !== SIMBOLO[moeda].toUpperCase()) return undefined;
+  const centavos = lerValor(texto);
+  return centavos !== null && centavos >= 0 ? centavos : undefined;
 }
 
 /** A cotação digitada em milionésimos ("5,43" é 5.430.000); zero, inválido e acima do máximo são `null`. */
