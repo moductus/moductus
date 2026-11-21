@@ -255,6 +255,34 @@ describe("configuração × dado", () => {
     expect(linhasQueViajam(db, "contas").map((c) => c.id)).toEqual(["ct1"]);
   });
 
+  test("lançamentos, faturas, importações e lápides são dado: nenhum vai em só configurações", () => {
+    const db = bancoNovo();
+    const impressao = "a".repeat(64);
+    db.prepare("INSERT INTO contas (id, nome, tipo) VALUES ('ct1', 'Corrente', 'corrente')").run();
+    db.prepare(
+      "INSERT INTO importacoes (id, conta_id, arquivo_nome, arquivo_hash, formato, estado) VALUES ('im1', 'ct1', 'extrato.ofx', ?, 'ofx', 'concluida')",
+    ).run(impressao);
+    db.prepare(
+      "INSERT INTO faturas (id, conta_id, mes_referencia, fecha_em, vence_em) VALUES ('fa1', 'ct1', '2026-11', '2026-11-03', '2026-11-10')",
+    ).run();
+    const lancamento = db.prepare(
+      "INSERT INTO lancamentos (id, conta_id, data, descricao, valor_centavos, impressao, apagado_em) VALUES (?, 'ct1', '2026-11-05', 'Mercado', -4500, ?, ?)",
+    );
+    lancamento.run("la1", impressao, null);
+    lancamento.run("la-apagado", impressao, AGORA);
+    db.prepare("INSERT INTO importacao_lapides (id, conta_id, impressao) VALUES ('lp1', 'ct1', ?)").run(
+      impressao,
+    );
+
+    const tabelas = lerConfiguracoes(db, new Date(AGORA));
+    for (const tabela of ["lancamentos", "faturas", "importacoes", "importacao_lapides"]) {
+      expect(EXPORTACAO[tabela]).toBe("dado");
+      expect(tabelas.has(tabela)).toBe(false);
+    }
+    expect(linhasQueViajam(db, "lancamentos").map((l) => l.id)).toEqual(["la1"]);
+    expect(linhasQueViajam(db, "importacao_lapides").map((l) => l.id)).toEqual(["lp1"]);
+  });
+
   test("tabela sem marcação não sai em só configurações", () => {
     const db = bancoNovo();
     db.exec(criarTabela("esquecida", ["texto TEXT"], { lixeira: false }));
