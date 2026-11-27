@@ -40,6 +40,10 @@ windows = { version = "0.62", features = [
   "Storage_Streams",
   "UI_Notifications",
   "Data_Xml_Dom",
+  "Media_Ocr",
+  "Graphics_Imaging",
+  "Globalization",
+  "Storage",
 ] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-single-instance = "2"
