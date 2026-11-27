@@ -8,7 +8,7 @@ import { LinhaLancamento } from "./LinhaLancamento.tsx";
 import { Lista } from "./ItemLista.tsx";
 import { PrivacidadeContexto } from "./privacidade.ts";
 import { TextoSensivel } from "./TextoSensivel.tsx";
-import { falarCentavos, Valor } from "./Valor.tsx";
+import { Valor } from "./Valor.tsx";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -62,24 +62,6 @@ const lidoNaLinha = (el: Element) =>
     no.getAttribute("aria-hidden") === "true" ? null : (no.getAttribute("aria-label") ?? undefined),
   );
 
-describe("falarCentavos", () => {
-  it("diz o valor em palavras, com o sinal", () => {
-    expect(falarCentavos(-4500)).toBe("menos 45 reais");
-    expect(falarCentavos(4500)).toBe("45 reais");
-    expect(falarCentavos(1000, { sinal: true })).toBe("mais 10 reais");
-    expect(falarCentavos(123456)).toBe("1.234 reais e 56 centavos");
-    expect(falarCentavos(100)).toBe("1 real");
-    expect(falarCentavos(-1)).toBe("menos 1 centavo");
-    expect(falarCentavos(0, { sinal: true })).toBe("0 reais");
-  });
-
-  it("arredonda como a tela no sem centavos e dá nome a outra moeda", () => {
-    expect(falarCentavos(123456, { semCentavos: true })).toBe("1.235 reais");
-    expect(falarCentavos(-1999, { moeda: "USD" })).toMatch(/^menos 19,99 dólares/);
-    expect(falarCentavos(100, { moeda: "EUR", semCentavos: true })).toBe("1 euro");
-  });
-});
-
 describe("Valor", () => {
   it("mostra o formato do contrato e o leitor de tela lê em palavras, não o R$", () => {
     const tela = montar(<Valor centavos={-4500} />);
@@ -117,6 +99,28 @@ describe("Valor", () => {
     const escondido = valor.querySelector(".sensivel-texto")!;
     expect(escondido.textContent).toBe("− R$ 45,00");
     expect(escondido.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("reserva a largura da máscara nos dois modos, para ela caber sobre um valor curto", () => {
+    for (const privacidade of [false, true]) {
+      const tela = montar(
+        <>
+          <Valor centavos={0} semCentavos />
+          <Valor centavos={9900} moeda="USD" semCentavos />
+          <TextoSensivel>Pix</TextoSensivel>
+        </>,
+        privacidade,
+      );
+      const [real, dolar, texto] = [...tela.querySelectorAll<HTMLElement>(".sensivel")];
+      // "R$ •••" e "US$ •••" em mono; "•••••" na fonte da interface, onde o ponto é mais estreito que o 0.
+      expect(real!.style.getPropertyValue("--largura-mascara")).toBe("6ch");
+      expect(dolar!.style.getPropertyValue("--largura-mascara")).toBe("7ch");
+      expect(texto!.style.getPropertyValue("--largura-mascara")).toBe("5ch");
+      act(() => raiz!.unmount());
+      recipiente!.remove();
+      raiz = null;
+      recipiente = undefined;
+    }
   });
 
   it("mascarado em outra moeda usa o símbolo dela", () => {
@@ -251,22 +255,28 @@ describe("LinhaLancamento", () => {
     expect(lidoNaLinha(linha)).toBe("Transferência Nubank → Poupança você · 10:05 500 reais");
   });
 
-  it("com o modo privacidade, descrição, conta e valor somem; categoria e origem ficam", () => {
+  it("com o modo privacidade, descrição, conta, a conta na origem e o valor somem; categoria fica", () => {
     const tela = montar(
       <Lista>
         <LinhaLancamento
           lancamento={{ ...BASE, descricao: "Farmácia", valorCentavos: -4180 }}
           categoria="Saúde"
-          origem="importado do Nubank hoje"
+          origem={
+            <>
+              importado do <TextoSensivel>Nubank</TextoSensivel> hoje
+            </>
+          }
           conta="Cartão Nubank"
         />
       </Lista>,
       true,
     );
     const linha = tela.querySelector(".linha-lancamento")!;
-    expect(textoNaTela(linha)).toBe("••••• Saúde · importado do Nubank hoje ••••• R$ •••");
+    expect(textoNaTela(linha)).toBe("••••• Saúde · importado do ••••• hoje ••••• R$ •••");
     const lido = lidoNaLinha(linha);
-    expect(lido).not.toMatch(/Farmácia|Cartão|41|R\$/);
-    expect(lido).toBe("texto escondido Saúde importado do Nubank hoje texto escondido valor escondido");
+    expect(lido).not.toMatch(/Farmácia|Nubank|41|R\$/);
+    expect(lido).toBe(
+      "texto escondido Saúde importado do texto escondido hoje texto escondido valor escondido",
+    );
   });
 });

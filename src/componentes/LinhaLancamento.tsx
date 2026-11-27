@@ -1,5 +1,5 @@
 import type { Lancamento } from "@moductus/contrato";
-import type { HTMLAttributes } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 import { Icone } from "./Icone.tsx";
 import type { Agente } from "./personagem/agentes.ts";
 import { Personagem } from "./personagem/Personagem.tsx";
@@ -20,8 +20,11 @@ interface PropsLinhaLancamento extends HTMLAttributes<HTMLLIElement> {
   >;
   /** Nome da categoria ("Casa › Mercado"); `null` é "sem categoria", menos na transferência. */
   categoria: string | null;
-  /** Quem lançou e de onde (DESIGN §5, origem): "Tula leu o extrato", "você, pela captura". */
-  origem: string;
+  /**
+   * Quem lançou e de onde (DESIGN §5, origem): "Tula leu o extrato", "você, pela captura". Nome de
+   * conta na origem ("importado do Nubank") vai num `TextoSensivel`, para sumir com o modo ligado.
+   */
+  origem: ReactNode;
   /** Agente que lançou: a cabeça dele vem antes da origem. */
   agente?: Agente;
   /** A conta, quando a lista mistura contas. */

@@ -312,13 +312,21 @@ function AmostrasDinheiro() {
           <LinhaLancamento
             lancamento={{ ...LANCAMENTO, descricao: "PAG*JOSEFA ARTES", valorCentavos: -6400 }}
             categoria={null}
-            origem="importado do Nubank hoje"
+            origem={
+              <>
+                importado do <TextoSensivel>Nubank</TextoSensivel> hoje
+              </>
+            }
             conta="Cartão Nubank"
           />
           <LinhaLancamento
             lancamento={{ ...LANCAMENTO, descricao: "Salário", valorCentavos: 620000 }}
             categoria="Renda"
-            origem="importado da Cooperativa ontem"
+            origem={
+              <>
+                importado da <TextoSensivel>Cooperativa</TextoSensivel> ontem
+              </>
+            }
           />
           <LinhaLancamento
             lancamento={{
@@ -340,7 +348,11 @@ function AmostrasDinheiro() {
               conciliado: true,
             }}
             categoria="Compras"
-            origem="importado do Nubank em 12/11"
+            origem={
+              <>
+                importado do <TextoSensivel>Nubank</TextoSensivel> em 12/11
+              </>
+            }
           />
         </Lista>
       </Cartao>

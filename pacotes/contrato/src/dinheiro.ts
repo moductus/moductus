@@ -40,6 +40,69 @@ export function simboloDaMoeda(moeda: string): string {
 /** "1234567" vira "1.234.567". */
 const milhar = (inteiro: number): string => String(inteiro).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 
+const NOMES = new Map<string, string>();
+
+/**
+ * O nome da moeda em pt-BR, no singular ou no plural ("dólar americano", "euros"), para o leitor
+ * de tela; código fora do formato ISO fica com o código.
+ */
+export function nomeDaMoeda(moeda: string, plural: boolean): string {
+  const codigo = moeda.toUpperCase();
+  const chave = `${codigo}:${plural ? "varios" : "um"}`;
+  let nome = NOMES.get(chave);
+  if (nome === undefined) {
+    try {
+      const partes = new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: codigo,
+        currencyDisplay: "name",
+      }).formatToParts(plural ? 2 : 1);
+      nome = partes.find((p) => p.type === "currency")?.value.toLocaleLowerCase("pt-BR") ?? codigo;
+    } catch {
+      nome = codigo;
+    }
+    NOMES.set(chave, nome);
+  }
+  return nome;
+}
+
+export interface FalaDinheiro {
+  /** Código ISO 4217 da moeda; padrão, real. */
+  moeda?: string;
+  /** Entrada com "mais", como o "+" da tela. */
+  sinal?: boolean;
+  /** Arredondado como na tela: inteiro mais perto, meio para cima. */
+  semCentavos?: boolean;
+}
+
+/**
+ * O valor como o leitor de tela deve dizer: "menos 45 reais", "mais 1.234 reais e 56 centavos",
+ * "1 real", "19,99 dólares americanos". O "R$" e o "−" da tela viram palavras, porque o leitor lê
+ * "R$" letra por letra e pode calar o sinal. Conta nos centavos, como `formatarCentavos`.
+ */
+export function falarCentavos(centavos: number, fala: FalaDinheiro = {}): string {
+  if (!Number.isSafeInteger(centavos)) throw new RangeError(`Valor em centavos inválido: ${centavos}`);
+  const moeda = (fala.moeda ?? MOEDA_PADRAO).toUpperCase();
+  const absoluto = Math.abs(centavos);
+  let resto = absoluto % 100;
+  let unidades = (absoluto - resto) / 100;
+  if (fala.semCentavos) {
+    if (resto >= 50) unidades += 1;
+    resto = 0;
+  }
+  const zero = unidades === 0 && resto === 0;
+  const prefixo = zero ? "" : centavos < 0 ? "menos " : fala.sinal ? "mais " : "";
+  const inteiro = milhar(unidades);
+  if (moeda !== MOEDA_PADRAO) {
+    const numero = fala.semCentavos ? inteiro : `${inteiro},${String(resto).padStart(2, "0")}`;
+    return `${prefixo}${numero} ${nomeDaMoeda(moeda, unidades !== 1 || resto > 0)}`;
+  }
+  const partes: string[] = [];
+  if (unidades > 0 || resto === 0) partes.push(`${inteiro} ${unidades === 1 ? "real" : "reais"}`);
+  if (resto > 0) partes.push(`${resto} ${resto === 1 ? "centavo" : "centavos"}`);
+  return prefixo + partes.join(" e ");
+}
+
 /**
  * Centavos em texto pt-BR: "R$ 1.234,56", "− R$ 45,00", "+ R$ 10,00" (com `sinal`), "R$ 1.235"
  * (com `semCentavos`). Zero não leva sinal. Recusa o que não é centavo inteiro: número sem fonte

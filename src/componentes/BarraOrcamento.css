@@ -9,6 +9,7 @@
 
 .barra-orcamento-cabeca {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--esp-8);

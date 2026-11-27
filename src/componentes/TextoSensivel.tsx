@@ -1,4 +1,4 @@
-import type { HTMLAttributes } from "react";
+import type { CSSProperties, HTMLAttributes } from "react";
 import { usePrivacidade } from "./privacidade.ts";
 import "./TextoSensivel.css";
 
@@ -13,13 +13,16 @@ interface PropsSensivel extends HTMLAttributes<HTMLSpanElement> {
 
 /**
  * Conteúdo que o modo privacidade esconde (ADR-0047): mascarado, o texto fica invisível no mesmo
- * lugar e a máscara se desenha por cima, então a linha não muda de tamanho e nada some, só o
- * desenho. O leitor de tela não recebe o valor escondido.
+ * lugar e a máscara se desenha por cima; a célula tem ao menos a largura da máscara, então a
+ * linha não muda de tamanho e nada some, só o desenho. O leitor de tela não recebe o valor escondido.
  */
 export function Sensivel({ mascarado, mascara, lido, className, children, ...resto }: PropsSensivel) {
   const classes = ["sensivel", className].filter(Boolean).join(" ");
+  // A largura da máscara fica reservada nos dois modos: ligar o modo não mexe na linha e a
+  // máscara cabe inteira mesmo sobre "R$ 0" ou "Pix".
+  const largura = { "--largura-mascara": `${mascara.length}ch` } as CSSProperties;
   return (
-    <span className={classes} data-mascarado={mascarado || undefined} {...resto}>
+    <span className={classes} data-mascarado={mascarado || undefined} style={largura} {...resto}>
       <span className="sensivel-texto" aria-hidden={mascarado || lido !== undefined || undefined}>
         {children}
       </span>
