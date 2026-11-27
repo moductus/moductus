@@ -91,23 +91,33 @@ const soltas = (formas: readonly string[]): string[] => formas.flatMap((f) => f.
 
 const ehPalavra = (forma: string): boolean => /\p{L}/u.test(forma);
 
+/** Palavra que pode ser rótulo: o "R$" tem letra, mas é do valor. */
+const ehDoRotulo = (forma: string): boolean => forma !== "r$" && ehPalavra(forma);
+
 /**
- * O rótulo de um achado: as palavras antes dele na linha ou, quando ele abre a linha, as da linha de
- * cima ("Valor" numa linha, "R$ 45,90" na outra).
+ * O rótulo de um achado: as palavras antes dele na linha, a partir do último número, valor ou data
+ * ("Desconto: R$ 0,00 Valor Pago: R$ 234,56" dá "Valor Pago"), ou, quando ele abre a linha, as da
+ * linha de cima ("Valor" numa linha, "R$ 45,90" na outra), se ela não tem número ("12 parcelas" é
+ * dado, não rótulo). Depois de outro número sem palavra no meio, não há rótulo.
  */
 function rotulo(linhas: readonly Linha[], i: number, j: number): string[] {
-  const antes = linhas[i]!.formas.slice(0, j);
-  if (antes.some(ehPalavra)) return soltas(antes);
-  return soltas(linhas[i - 1]?.formas ?? []);
+  const formas = linhas[i]!.formas;
+  let de = 0;
+  for (let k = 0; k < j; k++) if (/\d/.test(formas[k]!)) de = k + 1;
+  const antes = formas.slice(de, j);
+  if (antes.some(ehDoRotulo)) return soltas(antes.filter((f) => f !== "r$"));
+  const acima = linhas[i - 1]?.formas ?? [];
+  if (de > 0 || acima.some((f) => /\d/.test(f))) return [];
+  return soltas(acima);
 }
 
 // ---------------------------------------------------------------------------------------------
 // Valor
 
-/** Rótulos do valor que vale mais que os outros: o pago, o total. */
-const VALOR_FORTE = ["valor pago", "total pago", "valor total", "total", "valor cobrado", "valor final"].map(
-  frase,
-);
+/** O que de fato foi pago vale mais que tudo: num boleto com desconto, não é o cobrado. */
+const VALOR_PAGO = ["valor pago", "total pago"].map(frase);
+/** Rótulos do valor que vale mais que o só "valor": o total, o cobrado. */
+const VALOR_FORTE = ["valor total", "total", "valor cobrado", "valor final"].map(frase);
 /** "Valor", "Valor do Pix", "Você recebeu R$ 80,50". */
 const VALOR_ROTULADO = ["valor", "voce recebeu", "voce pagou", "voce enviou", "voce transferiu"].map(frase);
 /** O que não é o valor do comprovante, mesmo sendo dinheiro ou maior. */
@@ -134,6 +144,7 @@ interface AchadoValor extends Achado {
 
 function forcaDoValor(r: readonly string[]): number {
   if (r.some((f) => NAO_E_O_VALOR.has(f) || VEZES.test(f))) return -1;
+  if (tem(r, VALOR_PAGO)) return 4;
   if (tem(r, VALOR_FORTE)) return 3;
   if (tem(r, VALOR_ROTULADO)) return 2;
   return 0;
@@ -144,10 +155,13 @@ function lerValorDoTexto(linhas: readonly Linha[]): AchadoValor | null {
   linhas.forEach((l, i) => {
     for (let j = 0; j < l.p.length; j++) {
       const comCifrao = l.formas[j] === "r$";
-      const k = comCifrao ? j + 1 : j;
+      // "R$ -45,90": o sinal do texto não conta; quem diz se entrou ou saiu é o comprovante.
+      const comSinal = comCifrao && (l.formas[j + 1] === "-" || l.formas[j + 1] === "−");
+      const k = comCifrao ? (comSinal ? j + 2 : j + 1) : j;
       const numero = l.formas[k];
       if (numero === undefined || (!comCifrao && !NUMERO_COM_CENTAVOS.test(numero))) continue;
-      if (!comCifrao && l.formas[j - 1] === "r$") continue;
+      if (!comCifrao && (l.formas[j - 1] === "r$" || l.formas[j - 2] === "r$")) continue;
+      if (VEZES.test(l.formas[j - 1] ?? "")) continue;
       const valor = centavos(numero);
       if (valor === null) continue;
       const forca = forcaDoValor(rotulo(linhas, i, j));
@@ -171,8 +185,10 @@ const DATA_FORTE = new Set(
     "pagamento pago paga pagto transferencia realizado realizada efetuado efetuada debitado compra operacao transacao",
   ),
 );
-/** Datas que não são a do comprovante. */
-const NAO_E_A_DATA = new Set(frase("vencimento venc vence validade nascimento"));
+/** Datas que não são a do comprovante; "Parcela: 1/3" não é data. */
+const NAO_E_A_DATA = new Set(frase("vencimento venc vence validade nascimento parcela parcelas prestacao"));
+/** Depois destas, dia e mês sem ano é a parcela ("Compra 1/3"), não a data. */
+const ANTES_DA_PARCELA = new Set(frase("compra parcela parcelas prestacao"));
 
 const DATA_COM_BARRA = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?$/;
 const DATA_COM_PONTO = /^(\d{1,2})[.-](\d{1,2})[.-](\d{4})$/;
@@ -208,26 +224,25 @@ function dia(d: number, m: number, ano: number | null, hoje: string): string | n
 const anoDe = (texto: string | undefined): number | null => (texto === undefined ? null : Number(texto));
 
 /** A data que começa na palavra `j`: o dia e onde ela termina. */
-function dataEm(l: Linha, j: number, hoje: string): { dia: string; fim: number } | null {
+function dataEm(l: Linha, j: number, hoje: string): { dia: string; fim: number; semAno: boolean } | null {
   const f = l.formas[j]!;
-  if (l.formas[j - 1] === "parcela" || l.formas[j - 1] === "parcelas") return null;
-  if (f === "hoje") return { dia: hoje, fim: j + 1 };
-  if (f === "ontem") return { dia: somarDias(hoje, -1), fim: j + 1 };
+  if (f === "hoje") return { dia: hoje, fim: j + 1, semAno: false };
+  if (f === "ontem") return { dia: somarDias(hoje, -1), fim: j + 1, semAno: false };
   let m = DATA_COM_BARRA.exec(f) ?? DATA_COM_PONTO.exec(f);
   if (m !== null) {
     const d = dia(Number(m[1]), Number(m[2]), anoDe(m[3]), hoje);
-    return d === null ? null : { dia: d, fim: j + 1 };
+    return d === null ? null : { dia: d, fim: j + 1, semAno: m[3] === undefined };
   }
   m = DATA_ISO.exec(f);
   if (m !== null) {
     const d = dia(Number(m[3]), Number(m[2]), Number(m[1]), hoje);
-    return d === null ? null : { dia: d, fim: j + 1 };
+    return d === null ? null : { dia: d, fim: j + 1, semAno: false };
   }
   m = DATA_COM_MES.exec(f);
   if (m !== null) {
     const mes = MESES.get(m[2]!);
     const d = mes === undefined ? null : dia(Number(m[1]), mes, anoDe(m[3]), hoje);
-    return d === null ? null : { dia: d, fim: j + 1 };
+    return d === null ? null : { dia: d, fim: j + 1, semAno: false };
   }
   // "27 NOV 2026", "21 de novembro de 2026", "12 nov.", "15 NOV".
   if (!/^\d{1,2}$/.test(f)) return null;
@@ -239,7 +254,7 @@ function dataEm(l: Linha, j: number, hoje: string): { dia: string; fim: number }
   const comDe = l.formas[k] === "de" ? k + 1 : k;
   const ano = /^\d{4}$/.test(l.formas[comDe] ?? "") ? Number(l.formas[comDe]) : null;
   const d = dia(Number(f), mes, ano, hoje);
-  return d === null ? null : { dia: d, fim: ano === null ? k : comDe + 1 };
+  return d === null ? null : { dia: d, fim: ano === null ? k : comDe + 1, semAno: false };
 }
 
 function lerDataDoTexto(linhas: readonly Linha[], hoje: string): AchadoData | null {
@@ -249,7 +264,9 @@ function lerDataDoTexto(linhas: readonly Linha[], hoje: string): AchadoData | nu
       const achou = dataEm(l, j, hoje);
       if (achou === null) continue;
       const r = rotulo(linhas, i, j);
-      const forca = r.some((f) => NAO_E_A_DATA.has(f)) ? -1 : r.some((f) => DATA_FORTE.has(f)) ? 2 : 1;
+      const daParcela = achou.semAno && r.some((f) => ANTES_DA_PARCELA.has(f));
+      const forca =
+        daParcela || r.some((f) => NAO_E_A_DATA.has(f)) ? -1 : r.some((f) => DATA_FORTE.has(f)) ? 2 : 1;
       if (forca > 0 && (melhor === null || forca > melhor.forca)) {
         melhor = {
           dia: achou.dia,
@@ -362,18 +379,24 @@ function lerMeioDoTexto(linhas: readonly Linha[]): AchadoMeio | null {
   return como("transferencia", primeiro(palavra("transferencia")));
 }
 
-/** O que diz que o dinheiro entrou; o resto é saída. "Quem recebeu" é rótulo do Pix enviado. */
+/**
+ * O que diz que o dinheiro entrou; o resto é saída. "Quem recebeu" é rótulo do Pix enviado, e
+ * "recebimento" sozinho aparece no boleto pago ("Confirmamos o recebimento do pagamento").
+ */
 const ENTRADA = [
   "pix recebido",
   "voce recebeu",
   "transferencia recebida",
   "ted recebida",
   "deposito recebido",
-  "recebimento",
 ].map(frase);
+/** Com beneficiário, "valor pago" ou "pagador" é o boleto ou a conta que você pagou: saída. */
+const PAGOU = ["valor pago", "pagador"].map(frase);
 
 function entrou(linhas: readonly Linha[]): boolean {
-  return linhas.some((l) => tem(l.formas, ENTRADA));
+  const pagou =
+    linhas.some((l) => soltas(l.formas).includes("beneficiario")) && linhas.some((l) => tem(l.formas, PAGOU));
+  return !pagou && linhas.some((l) => tem(l.formas, ENTRADA));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -592,8 +615,14 @@ export function lerCamposDoComprovante(texto: string, hoje: string): CamposLidos
 
 /** CPF inteiro ou já com asteriscos: "123.456.789-09", "***.456.789-**". */
 const CPF = /[\d*•xX]{3}\.[\d*•xX]{3}\.[\d*•xX]{3}-[\d*•xX]{2}/g;
-/** Números colados por ponto, barra ou hífen: CNPJ, código de barras, telefone, conta longa. */
-const NUMERO_LONGO = /\d+(?:[./-]\d+)*/g;
+/**
+ * Grupos de dígitos colados por ponto, vírgula, barra ou hífen, com espaço opcional do OCR ("123. 456.
+ * 789-09", "123.456,789-09"): CNPJ, código de barras, telefone, conta longa. O grupo seguido de ":"
+ * é a hora ("27/11/2026, 14:32"): fica de fora.
+ */
+const NUMERO_LONGO = /\d+(?:\s?[.,/-]\s?\d+(?![\d:]))*/g;
+/** Três grupos ou mais de 2 a 5 dígitos separados por espaço: cartão, telefone ("11 98765 4321"). */
+const GRUPOS_COM_ESPACO = /(?<!\d)\d{2,5}(?![\d:])(?: \d{2,5}(?![\d:])){2,}/g;
 const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.\p{L}{2,}/gu;
 /** Mais que isto, um número não sai do PC: CPF, CNPJ, cartão, conta, código de barras. */
 const DIGITOS_MAXIMOS = 8;
@@ -601,23 +630,23 @@ const DIGITOS_MAXIMOS = 8;
 const cobrir = (trecho: string) => trecho.replace(/\d/g, "•");
 
 /**
- * O texto que pode ir ao modelo (ADR-0043): CPF, CNPJ e números com mais de 8 dígitos viram "•",
- * a linha que diz CPF ou CNPJ (e a de baixo, quando o rótulo vem sozinho) perde todos os dígitos,
- * e o e-mail (chave Pix) sai. Datas ("27/11/2026") e valores ficam.
+ * O texto que pode ir ao modelo (ADR-0043): CPF, CNPJ e números com mais de 8 dígitos (colados por
+ * pontuação ou em grupos separados por espaço) viram "•"; a linha que diz CPF ou CNPJ perde todos
+ * os dígitos e, quando ela não tem dígito ("CPF do pagador"), a de baixo também; o e-mail (chave
+ * Pix) sai. Datas ("27/11/2026"), horas e valores ficam.
  */
 export function mascararDocumentos(texto: string): string {
-  let rotuloSozinho = false;
+  let documentoAbaixo = false;
+  const longo = (n: string) => (n.replace(/\D/g, "").length > DIGITOS_MAXIMOS ? cobrir(n) : n);
   return texto
     .split("\n")
     .map((linha) => {
       const formas = soltas(palavras(linha).map((x) => x.forma));
       const doDocumento = formas.includes("cpf") || formas.includes("cnpj");
       let saida = linha.replace(EMAIL, "[e-mail]").replace(CPF, cobrir);
-      saida = saida.replace(NUMERO_LONGO, (n) =>
-        n.replace(/\D/g, "").length > DIGITOS_MAXIMOS ? cobrir(n) : n,
-      );
-      if (doDocumento || rotuloSozinho) saida = cobrir(saida);
-      rotuloSozinho = doDocumento && formas.every((f) => f === "cpf" || f === "cnpj" || SEPARADORES.has(f));
+      saida = saida.replace(NUMERO_LONGO, longo).replace(GRUPOS_COM_ESPACO, longo);
+      if (doDocumento || documentoAbaixo) saida = cobrir(saida);
+      documentoAbaixo = doDocumento && !/\d/.test(linha);
       return saida;
     })
     .join("\n");
@@ -777,15 +806,22 @@ export interface OpcoesComprovante {
   agora?: () => Date;
 }
 
-/** O mesmo nome, sem acento, caixa nem pontuação, um dentro do outro ("Mercado X" e "MERCADO X LTDA"). */
+/** Nome mais curto que isto não basta para dizer que é o mesmo ("Bar" em "Barbearia"). */
+const LETRAS_DO_NOME = 4;
+
+/**
+ * O mesmo nome, sem acento, caixa nem pontuação, um dentro do outro em palavras inteiras ("Mercado
+ * X" e "MERCADO X LTDA"); o menor com pelo menos 4 letras.
+ */
 function mesmoNome(nome: string, l: Lancamento): boolean {
   const limpo = (t: string) => normalizarTexto(t.replace(/[^\p{L}\p{N}]+/gu, " "));
+  const dentro = (menor: string, maior: string) =>
+    (menor.match(/\p{L}/gu)?.length ?? 0) >= LETRAS_DO_NOME && ` ${maior} `.includes(` ${menor} `);
   const procurado = limpo(nome);
-  if (procurado === "") return false;
   return [l.descricao, l.descricaoOriginal].some((d) => {
     if (d === null) return false;
     const outro = limpo(d);
-    return outro !== "" && (outro.includes(procurado) || procurado.includes(outro));
+    return procurado.length <= outro.length ? dentro(procurado, outro) : dentro(outro, procurado);
   });
 }
 
@@ -850,18 +886,19 @@ export class ServicoComprovante {
       campos,
       trechos,
       pelaTula,
-      jaLancado: this.jaLancado(campos),
+      jaLancado: this.jaLancado(campos, entrada),
     };
   }
 
-  /** O lançamento vivo com o mesmo valor (sem olhar o sinal), o mesmo dia e o mesmo nome. */
-  private jaLancado(campos: CamposComprovante): Lancamento | null {
+  /** O lançamento vivo com o mesmo valor, o mesmo dia e o mesmo nome ("já lançado"). */
+  private jaLancado(campos: CamposComprovante, entrada: boolean): Lancamento | null {
     const { valorCentavos, data, nome } = campos;
     if (valorCentavos === null || data === null || nome === null) return null;
+    // Quando o texto diz que o dinheiro entrou, só a entrada é a mesma (o Pix devolvido no dia não);
+    // a saída é o padrão do código e pode ter sido trocada na tela, então vale o valor sem sinal.
+    const mesmoValor = (l: Lancamento) =>
+      entrada ? l.valorCentavos === valorCentavos : Math.abs(l.valorCentavos) === Math.abs(valorCentavos);
     const doDia = this.deps.lancamentos.lancamentos({ inicio: data, fim: data, limite: LANCAMENTOS_DO_DIA });
-    return (
-      doDia.itens.find((l) => Math.abs(l.valorCentavos) === Math.abs(valorCentavos) && mesmoNome(nome, l)) ??
-      null
-    );
+    return doDia.itens.find((l) => mesmoValor(l) && mesmoNome(nome, l)) ?? null;
   }
 }

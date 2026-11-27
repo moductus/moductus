@@ -228,7 +228,7 @@ const TABELA: Caso[] = [
     campos: campos(-6437, "2026-11-21", "17:55", "Supermercado Dia a Dia", "debito"),
   },
   {
-    caso: "boleto, Itaú: valor pago acima do documento, pagamento e não vencimento",
+    caso: "boleto, Itaú: valor pago com juros vence o do documento, pagamento e não vencimento",
     texto: linhas(
       "Comprovante de pagamento de boleto",
       "Beneficiário",
@@ -239,11 +239,11 @@ const TABELA: Caso[] = [
       "Data de vencimento 25/11/2026",
       "Data do pagamento 27/11/2026",
       "Valor do documento R$ 234,56",
-      "Juros/Multa R$ 0,00",
-      "Valor pago R$ 234,56",
+      "Juros/Multa R$ 2,35",
+      "Valor pago R$ 236,91",
       "Pagador ANA PAULA SOUZA",
     ),
-    campos: campos(-23456, "2026-11-27", null, "ENEL DISTRIBUICAO SAO PAULO", "boleto"),
+    campos: campos(-23691, "2026-11-27", null, "ENEL DISTRIBUICAO SAO PAULO", "boleto"),
   },
   {
     caso: "boleto, Nubank: rótulos em cima, sem hora",
@@ -263,7 +263,7 @@ const TABELA: Caso[] = [
     campos: campos(-8990, "2026-11-15", null, "Vivo Telefônica Brasil S.A.", "boleto"),
   },
   {
-    caso: "boleto, Caixa: cedente, valor cobrado e desconto de fora",
+    caso: "boleto, Caixa: cedente, o pago com desconto vence o cobrado",
     texto: linhas(
       "Comprovante de Pagamento",
       "Pagamento de Boleto",
@@ -271,11 +271,32 @@ const TABELA: Caso[] = [
       "Vencimento: 10/11/2026",
       "Data de Pagamento: 09/11/2026",
       "Valor Cobrado: R$ 750,00",
-      "Desconto: R$ 0,00",
-      "Valor Pago: R$ 750,00",
+      "Desconto: R$ 50,00",
+      "Valor Pago: R$ 700,00",
       "Autenticação: A1B2C3D4E5F6",
     ),
-    campos: campos(-75000, "2026-11-09", null, "Condomínio Edifício Primavera", "boleto"),
+    campos: campos(-70000, "2026-11-09", null, "Condomínio Edifício Primavera", "boleto"),
+  },
+  {
+    caso: "boleto: dois campos na mesma linha, o rótulo começa depois do número anterior",
+    texto: linhas(
+      "Pagamento de boleto",
+      "Beneficiário: Sabesp",
+      "Vencimento: 25/11/2026 Pagamento: 27/11/2026",
+      "Desconto: R$ 0,00 Valor Pago: R$ 234,56",
+    ),
+    campos: campos(-23456, "2026-11-27", null, "Sabesp", "boleto"),
+  },
+  {
+    caso: "conta paga: 'recebimento do pagamento' com beneficiário e pagador é saída",
+    texto: linhas(
+      "Confirmamos o recebimento do pagamento",
+      "Beneficiário: Enel SP",
+      "Pagador: Ana Paula Souza",
+      "Valor pago: R$ 234,56",
+      "Data do pagamento: 27/11/2026",
+    ),
+    campos: campos(-23456, "2026-11-27", null, "Enel SP", null),
   },
   {
     caso: "TED: a hora numa linha própria, 'conta de débito' não é o meio",
@@ -389,6 +410,21 @@ const TABELA: Caso[] = [
     campos: campos(-5000, HOJE, "09:12", "Maria Souza", "pix"),
   },
   {
+    caso: "crédito: 'Parcela: 1/3' não é a data",
+    texto: linhas("Compra no crédito", "Loja Esportiva Max", "Parcela: 1/3", "R$ 100,00", "20/11/2026"),
+    campos: campos(-10000, "2026-11-20", null, "Loja Esportiva Max", "credito"),
+  },
+  {
+    caso: "crédito: 'Compra 1/3' não é a data",
+    texto: linhas("Compra 1/3 no crédito", "Loja Esportiva Max", "R$ 100,00", "20/11/2026"),
+    campos: campos(-10000, "2026-11-20", null, "Loja Esportiva Max", "credito"),
+  },
+  {
+    caso: "valor com sinal no texto e rótulo na linha de cima",
+    texto: linhas("Pix enviado", "Valor", "R$ -45,90", "27/11/2026"),
+    campos: campos(-4590, "2026-11-27", null, null, "pix"),
+  },
+  {
     caso: "só o valor: o resto fica vazio para editar",
     texto: linhas("Comprovante", "R$ 12,00"),
     campos: campos(-1200, null, null, null, null),
@@ -443,6 +479,16 @@ describe("campos por código", () => {
   });
 });
 
+/** Como o OCR do Windows devolve documentos que escapavam: espaço depois do ponto, rótulo em cima, grupos. */
+const DOCUMENTOS_DO_OCR = [
+  "CPF do pagador",
+  "123. 456. 789-09",
+  "CPF/CNPJ do pagador",
+  "123.456,789-09",
+  "Cartão: 4532 1234 5678 9012",
+  "Chave 11 98765 4321",
+];
+
 describe("documentos mascarados", () => {
   test("CPF, CNPJ, números com mais de 8 dígitos e e-mail não saem; data, valor e nome ficam", () => {
     const texto = linhas(
@@ -474,6 +520,38 @@ describe("documentos mascarados", () => {
       expect(mascarado).toContain(fica);
     }
     expect(mascarado.split("\n")).toHaveLength(texto.split("\n").length);
+  });
+
+  test("CPF com espaço do OCR, rótulo composto na linha de cima, cartão e telefone em grupos não saem", () => {
+    const texto = linhas(
+      ...DOCUMENTOS_DO_OCR,
+      "Pago em 27/11/2026, 14:32",
+      "Data 21 11 2026",
+      "Valor R$ 1.234,56",
+    );
+    const mascarado = mascararDocumentos(texto);
+    for (const sai of [
+      "123. 456. 789-09",
+      "456. 789",
+      "123.456,789-09",
+      "456,789",
+      "4532 1234 5678 9012",
+      "5678",
+      "98765 4321",
+      "4321",
+    ]) {
+      expect(mascarado).not.toContain(sai);
+    }
+    // A linha do rótulo fica; datas, horas e valores também.
+    for (const fica of [
+      "CPF do pagador",
+      "CPF/CNPJ do pagador",
+      "27/11/2026, 14:32",
+      "21 11 2026",
+      "R$ 1.234,56",
+    ]) {
+      expect(mascarado).toContain(fica);
+    }
   });
 
   test("o pedido ao modelo leva o texto mascarado entre delimitadores que o texto não fecha", () => {
@@ -515,6 +593,7 @@ const SEM_DATA = [
   "Para: Feira do Seu Antônio",
   "CPF: 123.456.789-09",
   "CNPJ do recebedor 12.345.678/0001-90",
+  ...DOCUMENTOS_DO_OCR,
 ];
 
 /** Banco migrado de verdade, lançamentos reais, a Tula num provedor falso: nenhum modelo, nenhuma rede. */
@@ -570,7 +649,7 @@ function montar(opcoes: { comTula?: boolean; prazoMs?: number } = {}) {
       : { estruturar: estruturadorPeloRuntime(runtime, agentes, { prazoMs: opcoes.prazoMs ?? 2_000 }) }),
   };
   const comprovante = new ServicoComprovante(deps, { agora: relogio });
-  return { db, pasta, tula, execucoes, lancamentos, conta, comprovante, imagem };
+  return { db, pasta, tula, execucoes, lancamentos, conta, comprovante, imagem, autorizacoes };
 }
 
 /** A resposta passa pelo schema de saída do contrato, como no canal. */
@@ -629,7 +708,17 @@ describe("prévia do comprovante", () => {
     expect(pedido!.instrucoes).toContain("comprovante de pagamento");
     const enviado = JSON.stringify(pedido);
     expect(enviado).toContain("Feira do Seu Antônio");
-    for (const sai of ["123.456.789-09", "12.345.678/0001-90", "12345678909", "Comprovante Pix.png", pasta]) {
+    for (const sai of [
+      "123.456.789-09",
+      "12.345.678/0001-90",
+      "12345678909",
+      "123. 456. 789-09",
+      "123.456,789-09",
+      "4532 1234 5678 9012",
+      "98765 4321",
+      "Comprovante Pix.png",
+      pasta,
+    ]) {
       expect(enviado).not.toContain(sai);
     }
     expect(enviado).not.toMatch(/\.png|base64|image/i);
@@ -696,6 +785,36 @@ describe("prévia do comprovante", () => {
     expect(outra.estado === "lido" && outra.jaLancado).toBeNull();
   });
 
+  test("nome curto ou pedaço de palavra não basta para dizer que já foi lançado", async () => {
+    const { comprovante, imagem, lancamentos, conta } = montar();
+    for (const descricao of ["Bom", "Merc", "Preço Ltda Mercado"]) {
+      lancamentos.lancar({ contaId: conta.id, data: "2026-11-27", descricao, valorCentavos: -4590 });
+    }
+    const previa = await comprovante.ler({ autorizacaoId: imagem(TABELA[0]!.texto.split("\n")) });
+    expect(previa.estado === "lido" && previa.jaLancado).toBeNull();
+  });
+
+  test("Pix recebido só é o mesmo de uma entrada: o devolvido no dia não conta", async () => {
+    const { comprovante, imagem, lancamentos, conta } = montar();
+    const recebido = TABELA[2]!.texto.split("\n");
+    lancamentos.lancar({
+      contaId: conta.id,
+      data: "2026-11-25",
+      descricao: "Carlos Eduardo Lima",
+      valorCentavos: -25000,
+    });
+    const devolvido = await comprovante.ler({ autorizacaoId: imagem(recebido) });
+    expect(devolvido.estado === "lido" && devolvido.jaLancado).toBeNull();
+    const [entrada] = lancamentos.lancar({
+      contaId: conta.id,
+      data: "2026-11-25",
+      descricao: "Pix de Carlos Eduardo Lima",
+      valorCentavos: 25000,
+    });
+    const previa = await comprovante.ler({ autorizacaoId: imagem(recebido) });
+    expect(previa.estado === "lido" && previa.jaLancado?.id).toBe(entrada!.id);
+  });
+
   test("sem o pt-BR no Windows, a prévia diz como instalar", async () => {
     const { comprovante, imagem } = montar();
     const previa = await comprovante.ler({ autorizacaoId: imagem(new ErroSemIdioma()) });
@@ -714,10 +833,18 @@ describe("prévia do comprovante", () => {
     expect(vazia).toEqual({ estado: "ilegivel", mensagem: MENSAGEM_SEM_TEXTO });
   });
 
-  test("a autorização usada ou de extrato não é lida", async () => {
+  test("a autorização já usada não é lida de novo", async () => {
     const { comprovante, imagem } = montar({ comTula: false });
     const id = imagem(SEM_DATA);
     await comprovante.ler({ autorizacaoId: id });
+    await expect(comprovante.ler({ autorizacaoId: id })).rejects.toBeInstanceOf(ErroDoArquivo);
+  });
+
+  test("autorização de extrato não vira comprovante", async () => {
+    const { comprovante, autorizacoes, pasta } = montar({ comTula: false });
+    const caminho = join(pasta, "extrato.ofx");
+    writeFileSync(caminho, "OFXHEADER:100");
+    const { id } = autorizacoes.autorizar({ caminho, finalidade: "extrato" });
     await expect(comprovante.ler({ autorizacaoId: id })).rejects.toBeInstanceOf(ErroDoArquivo);
   });
 });
@@ -735,8 +862,9 @@ describe("canal", () => {
     ).rejects.toThrow(MENSAGEM_ERRO_INTERNO);
   });
 
-  test("o schema do contrato aceita os três estados", () => {
+  test("o schema do contrato aceita sem pt-BR e ilegível com a mensagem e recusa o lido sem os campos", () => {
     expect(ComprovanteLido.safeParse({ estado: "sem_idioma", mensagem: "x" }).success).toBe(true);
+    expect(ComprovanteLido.safeParse({ estado: "ilegivel", mensagem: "x" }).success).toBe(true);
     expect(ComprovanteLido.safeParse({ estado: "lido", mensagem: "x" }).success).toBe(false);
   });
 });
