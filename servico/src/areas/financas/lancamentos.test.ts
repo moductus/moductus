@@ -14,10 +14,15 @@ import {
   MENSAGEM_CATEGORIA_ARQUIVADA,
   MENSAGEM_CATEGORIA_DE_TRANSFERENCIA,
   MENSAGEM_CONTA_ARQUIVADA,
+  MENSAGEM_MESMA_CONTA,
   MENSAGEM_MOEDAS_DIFERENTES,
   MENSAGEM_NAO_ESTA_NA_LIXEIRA,
+  MENSAGEM_OUTRA_MOEDA,
+  MENSAGEM_PAGAMENTO_MUDA_DE_CONTA,
+  MENSAGEM_PAGAMENTO_TROCA_SINAL,
   MENSAGEM_PARCELA_MUDA_DE_CONTA,
   MENSAGEM_PARCELAS_SEM_VALOR,
+  MENSAGEM_TRANSFERENCIA_COM_CARTAO,
   MENSAGEM_TRANSFERENCIA_SEM_CATEGORIA,
   mesmoDiaMesesDepois,
   RepositorioLancamentos,
@@ -548,6 +553,181 @@ describe("resumo do mês", () => {
       outrasMoedas: [],
       porCategoria: [],
     });
+  });
+});
+
+describe("categoria de transferência fora da transferência", () => {
+  test('a transferência anterior "Pix Maria" não empresta a categoria: o gasto conta nas saídas', () => {
+    const { servico, contas, corrente } = montar();
+    const poupanca = contas.criarConta({ nome: "Poupança", tipo: "poupanca" });
+    servico.transferir({
+      deContaId: corrente.id,
+      paraContaId: poupanca.id,
+      data: "2026-11-02",
+      valorCentavos: 10_000,
+      descricao: "Pix Maria",
+    });
+    const [gasto] = servico.lancar({
+      contaId: corrente.id,
+      data: "2026-11-05",
+      descricao: "Pix Maria",
+      valorCentavos: -5_000,
+    });
+    expect(gasto?.categoriaId).toBeNull();
+    expect(servico.resumo({ mes: "2026-11" }).totais.saidasCentavos).toBe(5_000);
+  });
+
+  test("a regra PIX → Transferência não categoriza nem conta aplicação: o gasto conta nas saídas", () => {
+    const { servico, categorias, corrente } = montar();
+    const regra = categorias.criarRegra({
+      padrao: "PIX",
+      tipoPadrao: "contem",
+      categoriaId: CATEGORIA_TRANSFERENCIA,
+    });
+    const [gasto] = servico.lancar({
+      contaId: corrente.id,
+      data: "2026-11-05",
+      descricao: "PIX JOAO PADARIA",
+      valorCentavos: -3_000,
+    });
+    expect(gasto?.categoriaId).toBeNull();
+    expect(categorias.regras().find((r) => r.id === regra.id)?.vezesAplicada).toBe(0);
+    expect(servico.resumo({ mes: "2026-11" }).totais.saidasCentavos).toBe(3_000);
+  });
+
+  test("à mão, só num importado sem o outro lado: sai do resumo e não propõe regra", () => {
+    const { db, servico, corrente } = montar();
+    const importado = importar(db, corrente.id, "PIX ENVIADO MINHA POUPANCA", -20_000);
+    expect(servico.resumo({ mes: "2026-11" }).totais.saidasCentavos).toBe(20_000);
+    const editado = servico.definirLancamento({ id: importado, categoriaId: CATEGORIA_TRANSFERENCIA });
+    expect(editado.lancamentos[0]?.categoriaId).toBe(CATEGORIA_TRANSFERENCIA);
+    expect(editado.propostaRegra).toBeNull();
+    expect(servico.resumo({ mes: "2026-11" }).totais.saidasCentavos).toBe(0);
+
+    const [manual] = servico.lancar({
+      contaId: corrente.id,
+      data: "2026-11-05",
+      descricao: "X",
+      valorCentavos: -1,
+    });
+    expect(() =>
+      servico.definirLancamento({ id: manual?.id ?? "", categoriaId: CATEGORIA_TRANSFERENCIA }),
+    ).toThrow(MENSAGEM_CATEGORIA_DE_TRANSFERENCIA);
+  });
+});
+
+describe("cartão e pagamento de fatura", () => {
+  test("transferência não sai nem entra no cartão, nem um lado muda para ele", () => {
+    const { servico, contas, corrente, cartao } = montar();
+    const poupanca = contas.criarConta({ nome: "Poupança", tipo: "poupanca" });
+    const base = { data: "2026-11-10", valorCentavos: 1_000 };
+    expect(() => servico.transferir({ ...base, deContaId: corrente.id, paraContaId: cartao.id })).toThrow(
+      MENSAGEM_TRANSFERENCIA_COM_CARTAO,
+    );
+    expect(() => servico.transferir({ ...base, deContaId: cartao.id, paraContaId: corrente.id })).toThrow(
+      MENSAGEM_TRANSFERENCIA_COM_CARTAO,
+    );
+    const [, entrada] = servico.transferir({ ...base, deContaId: corrente.id, paraContaId: poupanca.id });
+    expect(() => servico.definirLancamento({ id: entrada?.id ?? "", contaId: cartao.id })).toThrow(
+      MENSAGEM_TRANSFERENCIA_COM_CARTAO,
+    );
+  });
+
+  test("o pagamento da fatura e o par dele não mudam de conta nem de sinal", () => {
+    const { servico, contas, corrente, cartao } = montar("2026-11-20T15:00:00.000Z");
+    const poupanca = contas.criarConta({ nome: "Poupança", tipo: "poupanca" });
+    servico.lancar({ contaId: cartao.id, data: "2026-11-10", descricao: "Compra", valorCentavos: -5_000 });
+    const fatura = contas.faturas({ contaId: cartao.id })[0];
+    const paga = contas.pagarFatura({ id: fatura?.id ?? "" });
+    const ladoCartao = paga.pagamentoLancamentoId ?? "";
+    const ladoConta = servico.obterLancamento({ id: ladoCartao }).outroLado?.id ?? "";
+    expect(servico.obterLancamento({ id: ladoConta }).lancamento.contaId).toBe(corrente.id);
+
+    expect(() => servico.definirLancamento({ id: ladoConta, contaId: poupanca.id })).toThrow(
+      MENSAGEM_PAGAMENTO_MUDA_DE_CONTA,
+    );
+    expect(() => servico.definirLancamento({ id: ladoConta, valorCentavos: 5_000 })).toThrow(
+      MENSAGEM_PAGAMENTO_TROCA_SINAL,
+    );
+    expect(() => servico.definirLancamento({ id: ladoCartao, valorCentavos: -5_000 })).toThrow(
+      MENSAGEM_PAGAMENTO_TROCA_SINAL,
+    );
+  });
+
+  test("no pagamento da fatura, data, notas e valor do mesmo sinal continuam editáveis", () => {
+    const { servico, contas, cartao } = montar("2026-11-20T15:00:00.000Z");
+    servico.lancar({ contaId: cartao.id, data: "2026-11-10", descricao: "Compra", valorCentavos: -5_000 });
+    const fatura = contas.faturas({ contaId: cartao.id })[0];
+    const paga = contas.pagarFatura({ id: fatura?.id ?? "" });
+    const ladoCartao = paga.pagamentoLancamentoId ?? "";
+    const editado = servico.definirLancamento({
+      id: ladoCartao,
+      valorCentavos: 4_000,
+      data: "2026-11-21",
+      notas: "pago em parte",
+    });
+    expect(editado.lancamentos.map((l) => [l.data, l.valorCentavos])).toEqual([
+      ["2026-11-21", 4_000],
+      ["2026-11-21", -4_000],
+    ]);
+    expect(contas.faturas({ contaId: cartao.id })[0]?.estado).toBe("paga");
+  });
+});
+
+describe("o que mais a edição e a lixeira conferem", () => {
+  test("apagar e restaurar uma parcela leva só ela", () => {
+    const { db, servico, cartao } = montar();
+    const [p1, p2, p3] = servico.lancar({
+      contaId: cartao.id,
+      data: "2026-11-10",
+      descricao: "Sofá",
+      valorCentavos: -30_000,
+      parcelas: 3,
+    });
+    if (!p1 || !p2 || !p3) throw new Error("sem parcelas");
+    expect(servico.apagarLancamento({ id: p2.id })).toEqual({ ids: [p2.id] });
+    expect([p1, p2, p3].map((p) => apagadoEm(db, p.id) !== null)).toEqual([false, true, false]);
+    expect(servico.obterLancamento({ id: p1.id }).parcelas.map((p) => p.id)).toEqual([p3.id]);
+    expect(servico.restaurarLancamento({ id: p2.id }).map((l) => l.id)).toEqual([p2.id]);
+    expect([p1, p2, p3].map((p) => apagadoEm(db, p.id))).toEqual([null, null, null]);
+  });
+
+  test("a conta nova é da mesma moeda, e o lado da transferência não vai para a conta do outro", () => {
+    const { servico, contas, corrente } = montar();
+    const dolar = contas.criarConta({ nome: "Wise", tipo: "corrente", moeda: "USD" });
+    const poupanca = contas.criarConta({ nome: "Poupança", tipo: "poupanca" });
+    const [gasto] = servico.lancar({
+      contaId: corrente.id,
+      data: "2026-11-10",
+      descricao: "X",
+      valorCentavos: -1,
+    });
+    expect(() => servico.definirLancamento({ id: gasto?.id ?? "", contaId: dolar.id })).toThrow(
+      MENSAGEM_OUTRA_MOEDA,
+    );
+    const [saida] = servico.transferir({
+      deContaId: corrente.id,
+      paraContaId: poupanca.id,
+      data: "2026-11-10",
+      valorCentavos: 100,
+    });
+    expect(() => servico.definirLancamento({ id: saida?.id ?? "", contaId: poupanca.id })).toThrow(
+      MENSAGEM_MESMA_CONTA,
+    );
+  });
+
+  test("o detalhe de um importado traz a importação que o trouxe", () => {
+    const { db, servico, corrente } = montar();
+    const importado = importar(db, corrente.id, "MERCADO BOM PRECO 1234", -4_500);
+    const detalhe = servico.obterLancamento({ id: importado });
+    confere("financas.obterLancamento", detalhe);
+    expect(detalhe.importacao).toEqual({
+      id: "imp1",
+      arquivoNome: "extrato.ofx",
+      criadoEm: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+    });
+    expect(detalhe.lancamento.descricaoOriginal).toBe("MERCADO BOM PRECO 1234");
+    expect(detalhe).toMatchObject({ parcelas: [], outroLado: null });
   });
 });
 

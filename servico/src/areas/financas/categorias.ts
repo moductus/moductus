@@ -206,10 +206,10 @@ function novoContexto(expressoes: RegExp[]): ContextoRegex {
 }
 
 /** Por expressão, se bateu (a inativa conta como não); `null` quando o prazo estourou. */
-function conferirTodas(contexto: ContextoRegex, texto: string): boolean[] | null {
+function conferirTodas(contexto: ContextoRegex, texto: string, prazo: number): boolean[] | null {
   contexto.texto = texto.slice(0, LIMITE_TEXTO_REGEX);
   try {
-    return [...(CONFERIR_TODAS.runInContext(contexto, { timeout: PRAZO_REGEX_MS }) as boolean[])];
+    return [...(CONFERIR_TODAS.runInContext(contexto, { timeout: prazo }) as boolean[])];
   } catch {
     return null;
   }
@@ -287,7 +287,11 @@ export class ConjuntoRegras {
   private readonly expressoes: RegExp[] = [];
   private readonly contexto: ContextoRegex;
 
-  constructor(regras: readonly RegraCategoria[]) {
+  /** `prazoMs` é o de cada conferência; só os testes que não são sobre o prazo o folgam. */
+  constructor(
+    regras: readonly RegraCategoria[],
+    private readonly prazoMs = PRAZO_REGEX_MS,
+  ) {
     for (const regra of [...regras].sort(compararRegras)) {
       if (regra.tipoPadrao === "regex") {
         let expressao: RegExp;
@@ -324,11 +328,11 @@ export class ConjuntoRegras {
   /** Todas de uma vez; se o prazo estourar, uma a uma, e a lenta sai do conjunto. */
   private conferirRegex(texto: string): boolean[] {
     if (this.expressoes.length === 0) return [];
-    const todas = conferirTodas(this.contexto, texto);
+    const todas = conferirTodas(this.contexto, texto, this.prazoMs);
     if (todas) return todas;
     return this.expressoes.map((_, i) => {
       if (!this.contexto.ativas[i]) return false;
-      const r = conferirUma(this.contexto, i, texto);
+      const r = conferirUma(this.contexto, i, texto, this.prazoMs);
       if (r !== null) return r;
       this.contexto.ativas[i] = false;
       const regra = this.prontas.find((p) => p.indiceRegex === i)?.regra;
@@ -559,12 +563,16 @@ export class RepositorioCategorias {
     }
   }
 
-  /** As regras vivas de categoria viva; com `soAtivas`, só as de categoria não arquivada. */
-  regras(soAtivas = false): RegraCategoria[] {
+  /**
+   * As regras vivas de categoria viva; com `soAtivas`, só as de categoria não arquivada; com
+   * `semTransferencia`, sem as que levam a uma categoria do tipo transferência.
+   */
+  regras(soAtivas = false, semTransferencia = false): RegraCategoria[] {
     const linhas = this.db
       .prepare(
         `SELECT ${COLUNAS_REGRA} FROM regras_categoria r JOIN categorias c ON c.id = r.categoria_id
-          WHERE r.apagado_em IS NULL AND c.apagado_em IS NULL ${soAtivas ? "AND c.arquivada = 0" : ""}`,
+          WHERE r.apagado_em IS NULL AND c.apagado_em IS NULL ${soAtivas ? "AND c.arquivada = 0" : ""}
+            ${semTransferencia ? "AND c.tipo <> 'transferencia'" : ""}`,
       )
       .all() as unknown as LinhaRegra[];
     return linhas.map(paraRegra);
@@ -648,8 +656,8 @@ export class RepositorioCategorias {
   }
 
   /**
-   * Os lançamentos vivos com categoria (viva e não arquivada) de uma conta, do mais recente para o
-   * mais antigo: de onde o "igual anterior" empresta.
+   * Os lançamentos vivos com categoria (viva, não arquivada e que não é de transferência) de uma
+   * conta, do mais recente para o mais antigo: de onde o "igual anterior" empresta.
    */
   anterioresComCategoria(
     contaId: string,
@@ -659,6 +667,7 @@ export class RepositorioCategorias {
         `SELECT l.descricao, l.descricao_original, l.categoria_id
            FROM lancamentos l JOIN categorias c ON c.id = l.categoria_id
           WHERE l.conta_id = ? AND l.apagado_em IS NULL AND c.apagado_em IS NULL AND c.arquivada = 0
+            AND c.tipo <> 'transferencia'
           ORDER BY l.data DESC, l.criado_em DESC, l.id DESC
           LIMIT ${LIMITE_ANTERIORES}`,
       )
@@ -712,6 +721,8 @@ export interface AvisosCategorias {
 export interface OpcoesCategorias {
   agora?: () => Date;
   gerarId?: () => string;
+  /** O prazo de cada conferência de regex na categorização; padrão `PRAZO_REGEX_MS`. */
+  prazoRegexMs?: number;
 }
 
 const ORDEM_DO_TIPO: Record<TipoCategoria, number> = { gasto: 0, receita: 1, transferencia: 2 };
@@ -719,6 +730,7 @@ const ORDEM_DO_TIPO: Record<TipoCategoria, number> = { gasto: 0, receita: 1, tra
 export class ServicoCategorias {
   private readonly agora: () => Date;
   private readonly gerarId: () => string;
+  private readonly prazoRegexMs: number;
   /** O último instante usado como marca da lixeira: a marca seguinte é sempre maior. */
   private ultimoInstante = 0;
 
@@ -729,6 +741,7 @@ export class ServicoCategorias {
   ) {
     this.agora = opcoes.agora ?? (() => new Date());
     this.gerarId = opcoes.gerarId ?? novoId;
+    this.prazoRegexMs = opcoes.prazoRegexMs ?? PRAZO_REGEX_MS;
   }
 
   // ----- Categorias -----
@@ -928,13 +941,15 @@ export class ServicoCategorias {
 
   /**
    * A categoria de cada lançamento pela ordem do ADR-0045, só por código: a regra que vence e, sem
-   * ela, o lançamento igual mais recente da mesma conta. O que sobrar volta sem categoria, para a
+   * ela, o lançamento igual mais recente da mesma conta; nunca uma categoria do tipo transferência
+   * (a transferência só nasce com os dois lados). O que sobrar volta sem categoria, para a
    * Tula sugerir em lote. Não conta o uso das regras: quem lança chama `registrarAplicacoes` com o
    * que ficou (a prévia da importação categoriza antes de você confirmar).
    */
   categorizar(lancamentos: readonly ParaCategorizar[]): Categorizacao[] {
     if (lancamentos.length === 0) return [];
-    const regras = new ConjuntoRegras(this.repo.regras(true));
+    // Nunca propõe categoria de transferência: o gasto sumiria do resumo sem o outro lado.
+    const regras = new ConjuntoRegras(this.repo.regras(true, true), this.prazoRegexMs);
     const anteriores = new Map<string, Map<string, string>>();
     return lancamentos.map((l) => {
       const regra = regras.aplicar(l.descricao);
@@ -976,7 +991,7 @@ export class ServicoCategorias {
     const descricao = correcao.descricaoOriginal ?? correcao.descricao;
     const padrao = padraoDaDescricao(descricao);
     if (letrasENumeros(padrao) < MENOR_PADRAO) return null;
-    const vence = new ConjuntoRegras(this.repo.regras(true)).aplicar(descricao);
+    const vence = new ConjuntoRegras(this.repo.regras(true), this.prazoRegexMs).aplicar(descricao);
     if (vence?.categoriaId === categoriaDepois) return null;
     return { padrao, tipoPadrao: "contem", categoriaId: categoriaDepois };
   }

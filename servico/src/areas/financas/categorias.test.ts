@@ -26,6 +26,7 @@ import {
   MENSAGEM_TRANSFERENCIA,
   MENSAGEM_UM_NIVEL,
   padraoDaDescricao,
+  PRAZO_REGEX_MS,
   RepositorioCategorias,
   ServicoCategorias,
   temRepeticaoAninhada,
@@ -41,8 +42,14 @@ afterEach(() => {
 
 const DA_TULA = { origem: "agente", agenteId: "tula", execucaoId: null } as const;
 
+/**
+ * Prazo de regex folgado para os testes que não são sobre o prazo: com a suíte inteira rodando, os
+ * 50 ms de produção estouram por carga e tiram a regex boa do lote.
+ */
+const PRAZO_FOLGADO_MS = 2000;
+
 /** Banco migrado de verdade (categorias semeadas) e um relógio que só anda quando o teste manda. */
-function montar() {
+function montar(prazoRegexMs = PRAZO_FOLGADO_MS) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-categorias-"));
   pastas.push(pasta);
   const db = abrirBanco(pasta, { duravel: false });
@@ -55,7 +62,7 @@ function montar() {
   const servico = new ServicoCategorias(
     new RepositorioCategorias(db),
     { mudou: (m) => eventos.push(m) },
-    { agora: () => relogio.agora },
+    { agora: () => relogio.agora, prazoRegexMs },
   );
   db.prepare("INSERT INTO contas (id, nome, tipo) VALUES ('nubank', 'Nubank', 'corrente')").run();
   db.prepare("INSERT INTO contas (id, nome, tipo) VALUES ('itau', 'Itaú', 'corrente')").run();
@@ -234,7 +241,7 @@ describe("regex com limite de tamanho e de tempo", () => {
   });
 
   test("regex gravada por outro caminho que trava conta como 'não bate', sem travar a categorização", () => {
-    const { servico, db } = montar();
+    const { servico, db } = montar(PRAZO_REGEX_MS);
     servico.criarRegra({ padrao: "AAAA", tipoPadrao: "contem", categoriaId: "lazer" });
     db.prepare(
       `INSERT INTO regras_categoria (id, padrao, tipo_padrao, categoria_id) VALUES ('ruim', '^(A+)+$', 'regex', 'mercado')`,
@@ -425,7 +432,7 @@ describe("volta 1 da revisão", () => {
   });
 
   test("a regex lenta ao lado de uma boa: a boa vale na segunda tentativa e a lenta sai do lote", () => {
-    const { servico, db } = montar();
+    const { servico, db } = montar(PRAZO_REGEX_MS);
     db.prepare(
       `INSERT INTO regras_categoria (id, padrao, tipo_padrao, categoria_id, criado_em)
        VALUES ('lenta', '^(\\d|\\d)*$', 'regex', 'mercado', '2026-01-01T00:00:00.000Z'),

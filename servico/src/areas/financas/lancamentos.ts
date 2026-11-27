@@ -58,6 +58,11 @@ export const MENSAGEM_MOEDAS_DIFERENTES = "a transferência é entre contas da m
 export const MENSAGEM_OUTRA_MOEDA = "o lançamento só muda para uma conta da mesma moeda";
 export const MENSAGEM_PARCELA_MUDA_DE_CONTA = "a parcela fica na conta da compra";
 export const MENSAGEM_PARCELAS_SEM_VALOR = "o valor não chega a um centavo por parcela";
+export const MENSAGEM_TRANSFERENCIA_COM_CARTAO =
+  "transferência não sai nem entra no cartão: para pagar a fatura, use Pagar fatura";
+export const MENSAGEM_PAGAMENTO_MUDA_DE_CONTA =
+  "o pagamento da fatura não muda de conta: desfaça o pagamento e registre de novo";
+export const MENSAGEM_PAGAMENTO_TROCA_SINAL = "o pagamento da fatura não troca de sentido";
 
 /** A página da busca quando o pedido não diz o tamanho. */
 export const LIMITE_PADRAO = 100;
@@ -169,7 +174,8 @@ export interface TotaisDaMoeda {
 
 /**
  * Fora do gasto e da receita (ADR-0046): o lado de uma transferência e o que está numa categoria do
- * tipo `transferencia` (um importado que a Tula ou você marcou assim, sem o outro lado).
+ * tipo `transferencia`. Fora da transferência, essa categoria só chega à mão, pela edição de um
+ * importado sem o outro lado ("Pix para minha poupança"); a categorização por código nunca a propõe.
  */
 const NAO_E_TRANSFERENCIA = `l.transferencia_id IS NULL
   AND NOT EXISTS (SELECT 1 FROM categorias t WHERE t.id = l.categoria_id AND t.tipo = 'transferencia')`;
@@ -296,6 +302,20 @@ export class RepositorioLancamentos {
   /** As parcelas vivas da compra, pela ordem. */
   vivosDaCompra(compraId: string): Lancamento[] {
     return this.onde("l.compra_id = ? AND l.apagado_em IS NULL", compraId);
+  }
+
+  /** O lançamento ou um lado da transferência dele é o pagamento registrado de uma fatura. */
+  ehPagamentoDeFatura(id: string, transferenciaId: string | null): boolean {
+    return (
+      this.db
+        .prepare(
+          `SELECT 1 FROM faturas
+            WHERE pagamento_lancamento_id = ?
+               OR pagamento_lancamento_id IN (SELECT id FROM lancamentos WHERE transferencia_id = ?)
+            LIMIT 1`,
+        )
+        .get(id, transferenciaId) !== undefined
+    );
   }
 
   /** Os lados da transferência que foram à lixeira juntos (a mesma marca). */
@@ -669,13 +689,16 @@ export class ServicoLancamentos {
   /**
    * Transferência entre contas próprias, ativas e da mesma moeda: sai de uma, entra na outra, dois
    * lançamentos com o mesmo `transferencia_id` na categoria de transferência, fora de gasto e de
-   * receita (ADR-0046). Nenhum dos lados cai em fatura: pagar o cartão é "Pagar fatura" (F4-08).
+   * receita (ADR-0046). Cartão não entra: pagar o cartão é só "Pagar fatura" (F4-08).
    */
   transferir(nova: NovaTransferencia, carimbo: Carimbo = DO_USUARIO): Lancamento[] {
     const de = this.exigirContaAtiva(nova.deContaId);
     const para = this.exigirContaAtiva(nova.paraContaId);
     if (de.id === para.id) throw new ErroDosLancamentos(MENSAGEM_MESMA_CONTA);
     if (de.moeda !== para.moeda) throw new ErroDosLancamentos(MENSAGEM_MOEDAS_DIFERENTES);
+    if (de.tipo === "cartao" || para.tipo === "cartao") {
+      throw new ErroDosLancamentos(MENSAGEM_TRANSFERENCIA_COM_CARTAO);
+    }
     const transferenciaId = this.gerarId();
     const agora = this.instante();
     const lado = {
@@ -704,7 +727,7 @@ export class ServicoLancamentos {
       );
     });
     const lados = this.repo.porIds([saidaId, entradaId]);
-    this.avisar(lados, [], de.tipo === "cartao" || para.tipo === "cartao");
+    this.avisar(lados, [], false);
     return lados;
   }
 
@@ -713,9 +736,11 @@ export class ServicoLancamentos {
   /**
    * Mudança parcial. No cartão, a data ou a conta nova refaz a fatura. Num lado da transferência, a
    * data e o valor valem para os dois (o outro com o sinal trocado) e a categoria não sai da de
-   * transferência. Numa parcela, a descrição e a categoria novas valem para as outras parcelas que
-   * ainda tinham as antigas; a conta só muda com a compra. Trocar a categoria de um importado volta
-   * com a regra proposta (ADR-0045).
+   * transferência; a conta nova não é cartão. O pagamento de uma fatura (e o par dele) não muda de
+   * conta nem de sinal: data, notas e valor do mesmo sinal, sim. Numa parcela, a descrição e a
+   * categoria novas valem para as outras parcelas que ainda tinham as antigas; a conta só muda com a
+   * compra. A categoria de transferência só vai à mão num importado sem o outro lado. Trocar a
+   * categoria de um importado volta com a regra proposta (ADR-0045).
    */
   definirLancamento(mudanca: MudancaLancamento, carimbo: Carimbo = DO_USUARIO): LancamentoEditado {
     const atual = this.exigirVivo(mudanca.id);
@@ -726,23 +751,37 @@ export class ServicoLancamentos {
         ? contaAtual
         : this.exigirContaAtiva(mudanca.contaId);
     const contaMudou = conta.id !== atual.contaId;
+    const valorCentavos = mudanca.valorCentavos ?? atual.valorCentavos;
+    if (this.repo.ehPagamentoDeFatura(atual.id, atual.transferenciaId)) {
+      if (contaMudou) throw new ErroDosLancamentos(MENSAGEM_PAGAMENTO_MUDA_DE_CONTA);
+      if (Math.sign(valorCentavos) !== Math.sign(atual.valorCentavos)) {
+        throw new ErroDosLancamentos(MENSAGEM_PAGAMENTO_TROCA_SINAL);
+      }
+    }
     if (contaMudou) {
       if (atual.compraId !== null) throw new ErroDosLancamentos(MENSAGEM_PARCELA_MUDA_DE_CONTA);
       if (conta.moeda !== contaAtual.moeda) throw new ErroDosLancamentos(MENSAGEM_OUTRA_MOEDA);
-      if (outroLado !== null && conta.id === outroLado.contaId)
+      if (outroLado !== null && conta.id === outroLado.contaId) {
         throw new ErroDosLancamentos(MENSAGEM_MESMA_CONTA);
+      }
+      if (atual.transferenciaId !== null && conta.tipo === "cartao") {
+        throw new ErroDosLancamentos(MENSAGEM_TRANSFERENCIA_COM_CARTAO);
+      }
     }
     const categoriaId = mudanca.categoriaId === undefined ? atual.categoriaId : mudanca.categoriaId;
     const categoriaMudou = categoriaId !== atual.categoriaId;
+    let categoriaDeTransferencia = false;
     if (categoriaMudou) {
       if (atual.transferenciaId !== null) throw new ErroDosLancamentos(MENSAGEM_TRANSFERENCIA_SEM_CATEGORIA);
-      if (categoriaId !== null) this.exigirCategoriaDeLancamento(categoriaId);
+      if (categoriaId !== null) {
+        categoriaDeTransferencia = this.exigirCategoriaDeLancamento(categoriaId, atual.importacaoId !== null);
+      }
     }
     const campos: CamposEditaveis = {
       contaId: conta.id,
       data: mudanca.data ?? atual.data,
       descricao: mudanca.descricao ?? atual.descricao,
-      valorCentavos: mudanca.valorCentavos ?? atual.valorCentavos,
+      valorCentavos,
       categoriaId,
       faturaId: atual.faturaId,
       conciliado: mudanca.conciliado ?? atual.conciliado,
@@ -797,15 +836,17 @@ export class ServicoLancamentos {
       }
       return mudados;
     });
-    const propostaRegra = categoriaMudou
-      ? this.deps.categorias.proporRegra({
-          descricao: campos.descricao,
-          descricaoOriginal: atual.descricaoOriginal,
-          importacaoId: atual.importacaoId,
-          categoriaAntes: atual.categoriaId,
-          categoriaDepois: categoriaId,
-        })
-      : null;
+    // A categorização nunca propõe a de transferência: uma regra para ela não valeria.
+    const propostaRegra =
+      categoriaMudou && !categoriaDeTransferencia
+        ? this.deps.categorias.proporRegra({
+            descricao: campos.descricao,
+            descricaoOriginal: atual.descricaoOriginal,
+            importacaoId: atual.importacaoId,
+            categoriaAntes: atual.categoriaId,
+            categoriaDepois: categoriaId,
+          })
+        : null;
     const lancamentos = this.repo.porIds(mudados);
     this.avisar(lancamentos, [], contaAtual.tipo === "cartao" || conta.tipo === "cartao");
     return { lancamentos, propostaRegra };
@@ -890,12 +931,20 @@ export class ServicoLancamentos {
     return conta;
   }
 
-  /** Viva, não arquivada e de gasto ou receita: a de transferência é só dos dois lados dela. */
-  private exigirCategoriaDeLancamento(id: string): void {
+  /**
+   * Viva, não arquivada e de gasto ou receita. A de transferência é dos dois lados dela e, com
+   * `aceitaTransferencia` (a edição de um importado sem o outro lado), também vale. Diz se é de
+   * transferência.
+   */
+  private exigirCategoriaDeLancamento(id: string, aceitaTransferencia = false): boolean {
     const categoria = this.repo.categoria(id);
     if (!categoria) throw new ErroDosLancamentos(MENSAGEM_CATEGORIA_NAO_ENCONTRADA);
-    if (categoria.tipo === "transferencia") throw new ErroDosLancamentos(MENSAGEM_CATEGORIA_DE_TRANSFERENCIA);
+    const deTransferencia = categoria.tipo === "transferencia";
+    if (deTransferencia && !aceitaTransferencia) {
+      throw new ErroDosLancamentos(MENSAGEM_CATEGORIA_DE_TRANSFERENCIA);
+    }
     if (categoria.arquivada === 1) throw new ErroDosLancamentos(MENSAGEM_CATEGORIA_ARQUIVADA);
+    return deTransferencia;
   }
 
   /** Mudou lançamento: o saldo das contas muda junto e, se tocou cartão, o total das faturas. */
