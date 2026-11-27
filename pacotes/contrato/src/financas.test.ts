@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
   CATEGORIA_TRANSFERENCIA,
+  CamposComprovante,
   Centavos,
+  ComprovanteLido,
   Conta,
   DefinicaoOrcamento,
   Fatura,
@@ -387,5 +389,36 @@ describe("mudanças", () => {
     expect(MudancaFinancas.parse(mudanca)).toEqual(mudanca);
     expect(MudancaFinancas.safeParse({ ...mudanca, partes: [] }).success).toBe(false);
     expect(MudancaFinancas.safeParse({ ...mudanca, partes: ["clima"] }).success).toBe(false);
+  });
+});
+
+describe("comprovante", () => {
+  test("a prévia lida leva os campos com o trecho; sem pt-BR e ilegível levam só a mensagem", () => {
+    const lido = {
+      estado: "lido",
+      arquivoNome: "pix.png",
+      texto: "Pix enviado R$ 45,90",
+      campos: { valorCentavos: -4590, data: null, hora: null, nome: null, meio: "pix" },
+      trechos: [{ campo: "valorCentavos", inicio: 12, fim: 20 }],
+      pelaTula: [],
+      jaLancado: lancamento,
+    };
+    expect(ComprovanteLido.parse(lido)).toEqual(lido);
+    expect(METODOS["financas.lerComprovante"].saida.safeParse(lido).success).toBe(true);
+    expect(
+      ComprovanteLido.safeParse({ estado: "sem_idioma", mensagem: "Instale o português." }).success,
+    ).toBe(true);
+    expect(
+      ComprovanteLido.safeParse({ ...lido, trechos: [{ campo: "valorCentavos", inicio: 5, fim: 5 }] })
+        .success,
+    ).toBe(false);
+  });
+
+  test("valor zero, hora fora do formato e meio desconhecido são recusados", () => {
+    const vazio = { valorCentavos: null, data: null, hora: null, nome: null, meio: null };
+    expect(CamposComprovante.parse(vazio)).toEqual(vazio);
+    expect(CamposComprovante.safeParse({ ...vazio, valorCentavos: 0 }).success).toBe(false);
+    expect(CamposComprovante.safeParse({ ...vazio, hora: "9h" }).success).toBe(false);
+    expect(CamposComprovante.safeParse({ ...vazio, meio: "dinheiro" }).success).toBe(false);
   });
 });
