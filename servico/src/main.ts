@@ -38,6 +38,8 @@ import { atendentesDasCategorias } from "./areas/financas/canal-categorias.ts";
 import { RepositorioCategorias, ServicoCategorias } from "./areas/financas/categorias.ts";
 import { atendentesDasContas } from "./areas/financas/canal.ts";
 import { RepositorioContas, ServicoContas } from "./areas/financas/contas.ts";
+import { atendentesDosLancamentos } from "./areas/financas/canal-lancamentos.ts";
+import { RepositorioLancamentos, ServicoLancamentos } from "./areas/financas/lancamentos.ts";
 import { atendentesDoFoco, ouvirAtalhoDoFoco } from "./areas/foco/canal.ts";
 import { RepositorioFoco, ServicoFoco } from "./areas/foco/foco.ts";
 import { RepositorioLembretes, ServicoLembretes } from "./areas/lembretes/lembretes.ts";
@@ -487,6 +489,12 @@ const contas = new ServicoContas(
   { lerFuso: () => repositorioConfig.ler().dia.fuso },
   { mudou: (mudanca) => servidor?.emitir("financas.mudou", mudanca) },
 );
+// Lançamentos (F4-09): transferência com dois lados, parcelas por fatura, busca e resumo do mês.
+const lancamentos = new ServicoLancamentos(
+  new RepositorioLancamentos(banco),
+  { contas, categorias, lerFuso: () => repositorioConfig.ler().dia.fuso },
+  { mudou: (mudanca) => servidor?.emitir("financas.mudou", mudanca) },
+);
 // As ferramentas da Alba sobre as áreas do dia (F3-26); o `tarefas.criar` vale também para o Nuno.
 catalogo.registrar(
   ...ferramentasTarefas(tarefas, tempoDoDia),
@@ -698,17 +706,11 @@ servidor = await abrirServidorWs(token, {
   "rotinas.definir": (mudanca) => rotinas.definir(mudanca),
   "areas.contagens": () => contagens.obter(),
   ...atendentesDasContas(contas),
+  ...atendentesDosLancamentos(lancamentos),
   ...atendentesDosArquivos(autorizacoesDeArquivo),
   // O dinheiro (F4-07): o contrato já tem os métodos e o serviço responde que ainda não estão
   // disponíveis. Cada tarefa que implementa uma área (F4-08 a F4-15, F4-19, F4-20) tira os dela daqui.
   ...semAtendente([
-    "financas.lancamentos",
-    "financas.obterLancamento",
-    "financas.lancar",
-    "financas.transferir",
-    "financas.definirLancamento",
-    "financas.apagarLancamento",
-    "financas.restaurarLancamento",
     "financas.orcamento",
     "financas.definirOrcamento",
     "financas.removerOrcamento",
@@ -721,7 +723,6 @@ servidor = await abrirServidorWs(token, {
     "financas.sugestoesRecorrentes",
     "financas.aceitarRecorrente",
     "financas.recusarRecorrente",
-    "financas.resumo",
     "financas.relatorio",
     "financas.gastoCom",
     "financas.vencimentos",
