@@ -14,6 +14,11 @@ import {
   ErroDoOrcamento,
   MENSAGEM_CATEGORIA_ARQUIVADA,
   MENSAGEM_CATEGORIA_NAO_ENCONTRADA,
+  MENSAGEM_FILHA_DE_MAE_COM_LIMITE,
+  MENSAGEM_JA_DESFEITO,
+  MENSAGEM_MAE_E_FILHA,
+  MENSAGEM_MAE_SEM_LIMITE_COM_FILHA,
+  MENSAGEM_MESMA_CATEGORIA,
   MENSAGEM_ORCAMENTO_MUDOU,
   MENSAGEM_ORCAMENTO_NAO_ENCONTRADO,
   MENSAGEM_ORIGEM_SEM_ORCAMENTO,
@@ -224,6 +229,43 @@ describe("mês sem orçamento", () => {
   });
 });
 
+describe("o que entra no total do mês", () => {
+  test("a filha com limite e a mãe sem limite entra no total", () => {
+    const { servico, categorias, gasto } = montar();
+    const hortifruti = categorias.criarCategoria({
+      nome: "Hortifruti",
+      tipo: "gasto",
+      categoriaPaiId: "mercado",
+    });
+    servico.definirOrcamento({ categoriaId: hortifruti.id, mes: null, limiteCentavos: 20_000 });
+    servico.definirOrcamento({ categoriaId: "lazer", mes: null, limiteCentavos: 40_000 });
+    gasto("2027-02-09", 8_000, hortifruti.id);
+    gasto("2027-02-09", 50_000, "mercado");
+    const mes = servico.orcamento();
+    expect(mes.linhas.map((l) => l.categoriaId)).toEqual(["lazer", hortifruti.id]);
+    // O gasto direto em Mercado, sem limite, não entra: só o da filha.
+    expect(mes).toMatchObject({ limiteCentavos: 60_000, gastoCentavos: 8_000 });
+    expect(mes.semana).toMatchObject({ previstoCentavos: 15_000, gastoCentavos: 8_000 });
+  });
+
+  test("a linha de todo mês da categoria arquivada sai; a linha do mês dela fica", () => {
+    const { servico, categorias } = montar();
+    servico.definirOrcamento({ categoriaId: "lazer", mes: null, limiteCentavos: 40_000 });
+    servico.definirOrcamento({ categoriaId: "pets", mes: null, limiteCentavos: 30_000 });
+    servico.definirOrcamento({ categoriaId: "pets", mes: "2027-01", limiteCentavos: 25_000 });
+    categorias.definirCategoria({ id: "pets", arquivada: true });
+    const fevereiro = servico.orcamento({ mes: "2027-02" });
+    expect(fevereiro.linhas.map((l) => l.categoriaId)).toEqual(["lazer"]);
+    expect(fevereiro.limiteCentavos).toBe(40_000);
+    expect(
+      servico.orcamento({ mes: "2027-01" }).linhas.map((l) => [l.categoriaId, l.limiteCentavos]),
+    ).toEqual([
+      ["lazer", 40_000],
+      ["pets", 25_000],
+    ]);
+  });
+});
+
 describe("a semana dentro do mês", () => {
   test("a semana que começa no mês anterior fica só com os dias deste", () => {
     // Sexta, 01/01/2027: a semana vai de 28/12 a 03/01, 3 dias em janeiro.
@@ -247,6 +289,34 @@ describe("a semana dentro do mês", () => {
     const mes = servico.orcamento();
     // R$ 1.240 × 3 ÷ 31 = R$ 120; o gasto de dezembro não entra na semana.
     expect(mes.semana).toMatchObject({ previstoCentavos: 12_000, gastoCentavos: 3_000, diasRestantes: 3 });
+  });
+
+  test("a semana que acaba no mês seguinte fica só com os dias deste", () => {
+    // Quarta, 31/03/2027: a semana vai de 29/03 a 04/04, 3 dias em março.
+    const { servico, gasto } = montar("2027-03-31T15:00:00.000Z");
+    servico.definirOrcamento({ categoriaId: "mercado", mes: null, limiteCentavos: 124_000 });
+    gasto("2027-03-29", 4_000, "mercado");
+    gasto("2027-04-01", 9_000, "mercado");
+    const mes = servico.orcamento();
+    // R$ 1.240 × 3 ÷ 31 = R$ 120; o gasto de 01/04 não entra.
+    expect(mes.semana).toEqual({
+      inicio: "2027-03-29",
+      fim: "2027-03-31",
+      previstoCentavos: 12_000,
+      gastoCentavos: 4_000,
+      diasRestantes: 1,
+    });
+    expect(mes.linhas[0]?.semana).toEqual({ previstoCentavos: 12_000, gastoCentavos: 4_000 });
+  });
+
+  test("o previsto total arredonda uma vez, sobre o limite total", () => {
+    const { servico } = montar();
+    servico.definirOrcamento({ categoriaId: "lazer", mes: null, limiteCentavos: 10_002 });
+    servico.definirOrcamento({ categoriaId: "pets", mes: null, limiteCentavos: 10_002 });
+    const mes = servico.orcamento();
+    // Cada linha: 2.500,5 → 2.501; o total: R$ 200,04 × 7 ÷ 28 = 5.001, não 2.501 + 2.501.
+    expect(mes.linhas.map((l) => l.semana?.previstoCentavos)).toEqual([2_501, 2_501]);
+    expect(mes.semana?.previstoCentavos).toBe(5_001);
   });
 
   test("o previsto arredonda meio-para-cima no centavo", () => {
@@ -399,10 +469,8 @@ describe("remanejar", () => {
     expect(desfeito).toEqual(antes);
     expect(linhasDoBanco(db)).toEqual(bancoAntes);
     expect(eventos).toEqual([{ partes: ["orcamento"], lancamentos: [], apagados: [] }]);
-    // Uma vez só.
-    expect(() => servico.desfazerRemanejar({ id: r.id })).toThrow(
-      new ErroDoOrcamento(MENSAGEM_REMANEJAR_SUMIU),
-    );
+    // Uma vez só, e o segundo diz que já foi.
+    expect(() => servico.desfazerRemanejar({ id: r.id })).toThrow(new ErroDoOrcamento(MENSAGEM_JA_DESFEITO));
   });
 
   test("com as linhas do mês já existentes, muda as duas e desfazer devolve os limites e o carimbo", () => {
@@ -481,6 +549,34 @@ describe("remanejar", () => {
     expect(linhasDoBanco(db)).toEqual(depois);
   });
 
+  test("não desfaz se a linha foi gravada de novo depois, mesmo só o alerta ou com o mesmo valor", () => {
+    const { servico, andar } = comOQuadro();
+    const pedido = {
+      deCategoriaId: "lazer",
+      paraCategoriaId: "mercado",
+      mes: "2027-02",
+      valorCentavos: 8_000,
+    };
+    const r1 = servico.remanejar(pedido);
+    servico.definirOrcamento({
+      categoriaId: "lazer",
+      mes: "2027-02",
+      limiteCentavos: 32_000,
+      alertaPercentual: 90,
+    });
+    expect(() => servico.desfazerRemanejar({ id: r1.id })).toThrow(
+      new ErroDoOrcamento(MENSAGEM_ORCAMENTO_MUDOU),
+    );
+
+    const r2 = servico.remanejar(pedido);
+    andar(1);
+    // Mesmo limite e mesmo alerta, gravado outra vez: o atualizado_em diz que mexeram.
+    servico.definirOrcamento({ categoriaId: "mercado", mes: "2027-02", limiteCentavos: 136_000 });
+    expect(() => servico.desfazerRemanejar({ id: r2.id })).toThrow(
+      new ErroDoOrcamento(MENSAGEM_ORCAMENTO_MUDOU),
+    );
+  });
+
   test("desfaz por 24 horas; depois, e para id que não conhece, diz por que não dá", () => {
     const { servico, andar } = comOQuadro();
     const pedido = {
@@ -501,6 +597,78 @@ describe("remanejar", () => {
     expect(() => servico.desfazerRemanejar({ id: "nao-existe" })).toThrow(
       new ErroDoOrcamento(MENSAGEM_REMANEJAR_SUMIU),
     );
+  });
+});
+
+describe("remanejar que mudaria o total do mês", () => {
+  const remanejar =
+    (servico: ServicoOrcamento, de: string, para: string, valor = 8_000) =>
+    () =>
+      servico.remanejar({ deCategoriaId: de, paraCategoriaId: para, mes: "2027-02", valorCentavos: valor });
+
+  test("recusa a mesma categoria nos dois lados", () => {
+    const { db, servico } = comOQuadro();
+    const antes = linhasDoBanco(db);
+    expect(remanejar(servico, "lazer", "lazer")).toThrow(new ErroDoOrcamento(MENSAGEM_MESMA_CATEGORIA));
+    expect(linhasDoBanco(db)).toEqual(antes);
+  });
+
+  test("recusa a filha cuja mãe tem limite, como origem ou como destino", () => {
+    const { db, servico, hortifruti } = comOQuadro();
+    const antes = linhasDoBanco(db);
+    const totalAntes = servico.orcamento().limiteCentavos;
+    // Hortifruti → Lazer levaria o total de R$ 2.400 a R$ 2.480 (Lazer ganha, Mercado não perde).
+    expect(remanejar(servico, hortifruti.id, "lazer")).toThrow(
+      new ErroDoOrcamento(MENSAGEM_FILHA_DE_MAE_COM_LIMITE),
+    );
+    expect(remanejar(servico, "lazer", hortifruti.id)).toThrow(
+      new ErroDoOrcamento(MENSAGEM_FILHA_DE_MAE_COM_LIMITE),
+    );
+    expect(linhasDoBanco(db)).toEqual(antes);
+    expect(servico.orcamento().limiteCentavos).toBe(totalAntes);
+  });
+
+  test("recusa dar limite à mãe sem limite que tem filha com limite", () => {
+    const { db, servico, categorias } = montar();
+    const hortifruti = categorias.criarCategoria({
+      nome: "Hortifruti",
+      tipo: "gasto",
+      categoriaPaiId: "mercado",
+    });
+    servico.definirOrcamento({ categoriaId: hortifruti.id, mes: null, limiteCentavos: 20_000 });
+    servico.definirOrcamento({ categoriaId: "lazer", mes: null, limiteCentavos: 40_000 });
+    const antes = linhasDoBanco(db);
+    // Mercado com limite tiraria os R$ 200 da Hortifruti do total.
+    expect(remanejar(servico, "lazer", "mercado")).toThrow(
+      new ErroDoOrcamento(MENSAGEM_MAE_SEM_LIMITE_COM_FILHA),
+    );
+    expect(linhasDoBanco(db)).toEqual(antes);
+  });
+
+  test("recusa entre a mãe e a filha dela, nos dois sentidos", () => {
+    const { db, servico, hortifruti } = comOQuadro();
+    const antes = linhasDoBanco(db);
+    expect(remanejar(servico, "mercado", hortifruti.id)).toThrow(new ErroDoOrcamento(MENSAGEM_MAE_E_FILHA));
+    expect(remanejar(servico, hortifruti.id, "mercado")).toThrow(new ErroDoOrcamento(MENSAGEM_MAE_E_FILHA));
+    expect(linhasDoBanco(db)).toEqual(antes);
+  });
+
+  test("a filha cuja mãe não tem limite remaneja, e o total fica igual", () => {
+    const { servico, categorias } = montar();
+    const hortifruti = categorias.criarCategoria({
+      nome: "Hortifruti",
+      tipo: "gasto",
+      categoriaPaiId: "mercado",
+    });
+    servico.definirOrcamento({ categoriaId: hortifruti.id, mes: null, limiteCentavos: 20_000 });
+    servico.definirOrcamento({ categoriaId: "lazer", mes: null, limiteCentavos: 40_000 });
+    const r = servico.remanejar({
+      deCategoriaId: hortifruti.id,
+      paraCategoriaId: "lazer",
+      mes: "2027-02",
+      valorCentavos: 8_000,
+    });
+    expect(r.orcamento.limiteCentavos).toBe(60_000);
   });
 });
 

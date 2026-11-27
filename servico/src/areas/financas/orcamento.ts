@@ -44,6 +44,14 @@ export const MENSAGEM_REMANEJAR_SUMIU =
   "Este remanejamento não dá mais para desfazer: passou o prazo de 24 horas ou o Moductus reiniciou desde então. Ajuste os limites à mão.";
 export const MENSAGEM_ORCAMENTO_MUDOU =
   "Os limites dessas categorias mudaram depois de remanejar: ajuste à mão para não desfazer a mudança nova.";
+export const MENSAGEM_JA_DESFEITO = "Este remanejamento já foi desfeito.";
+export const MENSAGEM_MESMA_CATEGORIA = "remanejar é entre categorias diferentes";
+export const MENSAGEM_MAE_E_FILHA =
+  "remanejar entre a categoria e a subcategoria dela mudaria o total do mês: ajuste os limites à mão";
+export const MENSAGEM_FILHA_DE_MAE_COM_LIMITE =
+  "a subcategoria já conta no limite da categoria mãe neste mês: remaneje pela categoria mãe";
+export const MENSAGEM_MAE_SEM_LIMITE_COM_FILHA =
+  "dar limite a esta categoria tiraria do total o limite da subcategoria dela: defina o limite da categoria à mão";
 
 /** Quanto do limite já avisa, quando a definição não diz (o padrão da coluna, 031). */
 export const ALERTA_PADRAO = 80;
@@ -114,7 +122,8 @@ export class RepositorioOrcamento {
 
   /**
    * O limite que vale no mês em cada categoria de gasto viva (fora da lixeira): a linha do mês, ou a
-   * de todo mês quando não há a do mês.
+   * de todo mês quando não há a do mês. A de todo mês de categoria arquivada não vale mais; a linha
+   * de um mês, sim (é o que valia naquele mês).
    */
   vigentes(mes: string): Vigente[] {
     const linhas = this.db
@@ -124,7 +133,7 @@ export class RepositorioOrcamento {
            JOIN categorias c ON c.id = o.categoria_id AND c.apagado_em IS NULL AND c.tipo = 'gasto'
            LEFT JOIN categorias p ON p.id = c.categoria_pai_id
           WHERE o.mes = ?
-             OR (o.mes IS NULL AND NOT EXISTS (
+             OR (o.mes IS NULL AND c.arquivada = 0 AND NOT EXISTS (
                    SELECT 1 FROM orcamentos m WHERE m.categoria_id = o.categoria_id AND m.mes = ?))`,
       )
       .all(mes, mes) as unknown as LinhaVigente[];
@@ -137,11 +146,11 @@ export class RepositorioOrcamento {
   }
 
   /** A categoria viva (fora da lixeira), com o que o orçamento confere. */
-  categoria(id: string): { tipo: string; arquivada: boolean } | null {
+  categoria(id: string): { tipo: string; arquivada: boolean; categoriaPaiId: string | null } | null {
     const l = this.db
-      .prepare("SELECT tipo, arquivada FROM categorias WHERE id = ? AND apagado_em IS NULL")
-      .get(id) as { tipo: string; arquivada: number } | undefined;
-    return l ? { tipo: l.tipo, arquivada: l.arquivada === 1 } : null;
+      .prepare("SELECT tipo, arquivada, categoria_pai_id FROM categorias WHERE id = ? AND apagado_em IS NULL")
+      .get(id) as { tipo: string; arquivada: number; categoria_pai_id: string | null } | undefined;
+    return l ? { tipo: l.tipo, arquivada: l.arquivada === 1, categoriaPaiId: l.categoria_pai_id } : null;
   }
 
   criar(
@@ -252,14 +261,15 @@ export interface OpcoesOrcamento {
 /** Uma ponta do remanejamento: a linha do mês como era (vazia se ele a criou) e como ficou. */
 interface PontaRemanejada {
   antes: Orcamento | null;
-  depoisId: string;
-  depoisLimite: number;
+  depois: Orcamento;
 }
 
 interface Remanejado {
   mes: string;
   em: number;
   pontas: [PontaRemanejada, PontaRemanejada];
+  /** Já desfeito: o segundo desfazer diz isso em vez de "não dá mais". */
+  desfeito: boolean;
 }
 
 export class ServicoOrcamento {
@@ -398,8 +408,10 @@ export class ServicoOrcamento {
    */
   remanejar(pedido: PedidoRemanejar, carimbo: Carimbo = DO_USUARIO): Remanejamento {
     const { deCategoriaId, paraCategoriaId, mes, valorCentavos } = pedido;
-    this.exigirCategoria(deCategoriaId);
-    this.exigirCategoria(paraCategoriaId);
+    if (deCategoriaId === paraCategoriaId) throw new ErroDoOrcamento(MENSAGEM_MESMA_CATEGORIA);
+    const de = this.exigirCategoria(deCategoriaId);
+    const para = this.exigirCategoria(paraCategoriaId);
+    this.exigirTotalIgual(deCategoriaId, de.categoriaPaiId, paraCategoriaId, para.categoriaPaiId, mes);
     const agora = this.instante();
     const pontas = this.repo.transacao((): [PontaRemanejada, PontaRemanejada] => {
       const de = this.vigente(deCategoriaId, mes);
@@ -415,15 +427,15 @@ export class ServicoOrcamento {
     });
     const id = this.gerarId();
     this.esquecerVencidos();
-    this.remanejados.set(id, { mes, em: this.agora().getTime(), pontas });
+    this.remanejados.set(id, { mes, em: this.agora().getTime(), pontas, desfeito: false });
     this.avisar();
     return { id, orcamento: this.orcamento({ mes }) };
   }
 
   /**
    * Desfaz o remanejamento: as linhas que ele criou somem e as que ele mudou voltam a ser como eram.
-   * Uma vez só, por 24 horas, e só se ninguém mexeu nos limites dessas linhas depois: aí desfazer
-   * apagaria a mudança nova, e ele diz para ajustar à mão.
+   * Uma vez só, por 24 horas, e só se ninguém mexeu nessas linhas depois (limite, alerta ou
+   * qualquer gravação): aí desfazer apagaria a mudança nova, e ele diz para ajustar à mão.
    */
   desfazerRemanejar(pedido: PedidoDesfazerRemanejar): OrcamentoMes {
     const remanejado = this.remanejados.get(pedido.id);
@@ -431,18 +443,24 @@ export class ServicoOrcamento {
       this.remanejados.delete(pedido.id);
       throw new ErroDoOrcamento(MENSAGEM_REMANEJAR_SUMIU);
     }
+    if (remanejado.desfeito) throw new ErroDoOrcamento(MENSAGEM_JA_DESFEITO);
     this.repo.transacao(() => {
-      for (const ponta of remanejado.pontas) {
-        if (this.repo.orcamento(ponta.depoisId)?.limiteCentavos !== ponta.depoisLimite) {
+      for (const { depois } of remanejado.pontas) {
+        const atual = this.repo.orcamento(depois.id);
+        if (
+          atual?.limiteCentavos !== depois.limiteCentavos ||
+          atual.alertaPercentual !== depois.alertaPercentual ||
+          atual.atualizadoEm !== depois.atualizadoEm
+        ) {
           throw new ErroDoOrcamento(MENSAGEM_ORCAMENTO_MUDOU);
         }
       }
       for (const ponta of remanejado.pontas) {
-        if (ponta.antes === null) this.repo.apagar(ponta.depoisId);
+        if (ponta.antes === null) this.repo.apagar(ponta.depois.id);
         else this.repo.restaurar(ponta.antes);
       }
     });
-    this.remanejados.delete(pedido.id);
+    remanejado.desfeito = true;
     this.avisar();
     return this.orcamento({ mes: remanejado.mes });
   }
@@ -466,12 +484,37 @@ export class ServicoOrcamento {
     const limite = (vigente?.limiteCentavos ?? 0) + delta;
     if (vigente?.mes === mes) {
       this.repo.definir(vigente.id, limite, vigente.alertaPercentual, agora, carimbo);
-      return { antes: vigente, depoisId: vigente.id, depoisLimite: limite };
+      return { antes: vigente, depois: this.exigirOrcamento(vigente.id) };
     }
     const id = this.gerarId();
     const alerta = vigente?.alertaPercentual ?? ALERTA_PADRAO;
     this.repo.criar({ id, categoriaId, mes, limite, alerta }, agora, carimbo);
-    return { antes: null, depoisId: id, depoisLimite: limite };
+    return { antes: null, depois: this.exigirOrcamento(id) };
+  }
+
+  /**
+   * Remanejar só troca limite de lugar: o total do mês fica igual. Recusa o que o mudaria, porque a
+   * filha com limite sai ou entra na conta do total conforme a mãe tem limite: mãe e filha entre
+   * si; a filha cuja mãe tem limite no mês (ela já está no limite da mãe); e dar limite à mãe que
+   * não tem, quando uma filha dela tem (a filha sairia do total).
+   */
+  private exigirTotalIgual(
+    deId: string,
+    dePaiId: string | null,
+    paraId: string,
+    paraPaiId: string | null,
+    mes: string,
+  ): void {
+    if (dePaiId === paraId || paraPaiId === deId) throw new ErroDoOrcamento(MENSAGEM_MAE_E_FILHA);
+    const comLimite = new Map(
+      this.repo.vigentes(mes).map((v) => [v.orcamento.categoriaId, v.categoriaPaiId]),
+    );
+    for (const paiId of [dePaiId, paraPaiId]) {
+      if (paiId !== null && comLimite.has(paiId)) throw new ErroDoOrcamento(MENSAGEM_FILHA_DE_MAE_COM_LIMITE);
+    }
+    if (paraPaiId === null && !comLimite.has(paraId) && [...comLimite.values()].includes(paraId)) {
+      throw new ErroDoOrcamento(MENSAGEM_MAE_SEM_LIMITE_COM_FILHA);
+    }
   }
 
   private esquecerVencidos(): void {
@@ -489,11 +532,12 @@ export class ServicoOrcamento {
     return gastos;
   }
 
-  private exigirCategoria(id: string): void {
+  private exigirCategoria(id: string): { categoriaPaiId: string | null } {
     const categoria = this.repo.categoria(id);
     if (!categoria) throw new ErroDoOrcamento(MENSAGEM_CATEGORIA_NAO_ENCONTRADA);
     if (categoria.tipo !== "gasto") throw new ErroDoOrcamento(MENSAGEM_SO_GASTO);
     if (categoria.arquivada) throw new ErroDoOrcamento(MENSAGEM_CATEGORIA_ARQUIVADA);
+    return categoria;
   }
 
   private exigirOrcamento(id: string): Orcamento {
