@@ -183,8 +183,8 @@ pub fn recusado_para_o_registro(endereco: &str) -> String {
 /* ---------- Arquivo ou pasta ---------- */
 
 /// Caminho completo numa unidade (`C:\…`), sem `..`, sem rede (`\\servidor`), sem `\\?\` e sem
-/// fluxo alternativo (`a.txt:outro`).
-fn caminho_local(caminho: &Path) -> Result<(), String> {
+/// fluxo alternativo (`a.txt:outro`). O OCR (`ocr.rs`) usa a mesma regra.
+pub(crate) fn caminho_local(caminho: &Path) -> Result<(), String> {
     let mut partes = caminho.components();
     let unidade = matches!(partes.next(), Some(Component::Prefix(p)) if matches!(p.kind(), Prefix::Disk(_)));
     if !unidade || partes.next() != Some(Component::RootDir) {

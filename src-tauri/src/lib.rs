@@ -21,6 +21,8 @@ mod material;
 mod midia;
 // O serviço chega aqui pelo canal do sidecar; o clique no aviso volta pelo mesmo canal.
 mod notificacao;
+// Só o serviço pede, pelo canal do sidecar, com o caminho que ele autorizou.
+mod ocr;
 mod registro;
 mod servico;
 // Avisa o serviço pelo canal do sidecar quando a sessão é desbloqueada (a primeira atividade do dia).
