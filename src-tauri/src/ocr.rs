@@ -13,6 +13,7 @@
 use std::{
     ffi::OsStr,
     path::{Path, PathBuf},
+    sync::Mutex,
     thread,
     time::Instant,
 };
@@ -43,6 +44,8 @@ pub const EXTENSOES: &[&str] = &["png", "jpg", "jpeg", "bmp", "gif", "tif", "tif
 /// comprovante, e um PNG pequeno pode dizer que tem 100.000 × 100.000 px.
 const LIMITE_PIXELS: u64 = 200_000_000;
 
+static LEITURA: Mutex<()> = Mutex::new(());
+
 /// Por que a leitura não saiu. Os textos vão à janela como vieram, na voz do produto.
 #[derive(Debug, PartialEq)]
 pub enum Falha {
@@ -61,10 +64,12 @@ pub fn validar_caminho(caminho: &str) -> Result<PathBuf, String> {
     caminho_local(pedido).map_err(|_| "só imagem numa unidade do PC é lida".to_string())?;
     let real = std::fs::canonicalize(pedido).map_err(|_| "a imagem não foi encontrada".to_string())?;
     let real = sem_prefixo_verbatim(real);
+    // A unidade mapeada da rede resolve para `\servidor\…`: o resolvido passa pela mesma regra.
+    caminho_local(&real).map_err(|_| "só imagem numa unidade do PC é lida".to_string())?;
     if !real.is_file() {
         return Err("só um arquivo de imagem é lido".into());
     }
-    if caminho_local(&real).is_err() || !de_imagem(pedido) || !de_imagem(&real) {
+    if !de_imagem(pedido) || !de_imagem(&real) {
         return Err("o Moductus só lê PNG, JPEG, BMP, GIF ou TIFF".into());
     }
     Ok(real)
@@ -97,7 +102,9 @@ fn motor(idioma: &str) -> Result<OcrEngine, Falha> {
     OcrEngine::TryCreateFromLanguage(&idioma).map_err(|_| Falha::SemIdioma)
 }
 
-/// A imagem decodificada em BGRA, já reduzida se passa de `maximo`.
+/// A imagem decodificada em BGRA, já reduzida se passa de `maximo`. `Gray8` gastaria um quarto, mas
+/// o decodificador com transformação não entrega esse formato (`E_INVALIDARG`, "pixel format is
+/// unsupported"), e converter depois só somaria uma cópia.
 fn imagem(caminho: &Path, maximo: u32) -> Result<SoftwareBitmap, Falha> {
     let ilegivel = |_| Falha::Ilegivel("não foi possível abrir a imagem".into());
     let arquivo = StorageFile::GetFileFromPathAsync(&HSTRING::from(caminho.as_os_str())).and_then(|o| o.join()).map_err(ilegivel)?;
@@ -132,7 +139,8 @@ fn ler(caminho: &Path, idioma: &str) -> Result<Vec<String>, Falha> {
     }
     // O idioma antes da imagem: sem ele, nem vale decodificar.
     let motor = motor(idioma)?;
-    let maximo = OcrEngine::MaxImageDimension().map_err(|_| Falha::SemIdioma)?;
+    let maximo = OcrEngine::MaxImageDimension()
+        .map_err(|_| Falha::Ilegivel("o Windows não conseguiu ler o texto da imagem".into()))?;
     let bitmap = imagem(caminho, maximo)?;
     let falhou = |_| Falha::Ilegivel("o Windows não conseguiu ler o texto da imagem".into());
     let resultado = motor.RecognizeAsync(&bitmap).and_then(|o| o.join()).map_err(falhou)?;
@@ -143,6 +151,8 @@ fn ler(caminho: &Path, idioma: &str) -> Result<Vec<String>, Falha> {
 /// As linhas de texto da imagem, de cima para baixo, pelo motor pt-BR.
 pub fn ler_texto_imagem(caminho: &str) -> Result<Vec<String>, Falha> {
     let real = validar_caminho(caminho).map_err(Falha::Recusado)?;
+    // Uma imagem por vez: cada leitura segura a imagem decodificada inteira na memória.
+    let _vez = LEITURA.lock().unwrap_or_else(|e| e.into_inner());
     ler(&real, IDIOMA)
 }
 
@@ -349,7 +359,12 @@ mod testes {
         let p = pasta("grande");
         let imagem = p.join("larga.bmp");
         bmp_com_texto(&imagem, 12_000, 200, [255, 255, 255], [0, 0, 0]);
-        assert_eq!(medida_reduzida(12_000, 200, 10_000), Some((10_000, 166)));
+        // Direto no decodificador, sem depender do idioma: sai reduzida.
+        unsafe {
+            let _ = RoInitialize(RO_INIT_MULTITHREADED);
+        }
+        let bitmap = super::imagem(&imagem, 10_000).unwrap();
+        assert_eq!((bitmap.PixelWidth().unwrap(), bitmap.PixelHeight().unwrap()), (10_000, 166));
         confere_leitura(&imagem);
         let _ = fs::remove_dir_all(&p);
     }
@@ -380,9 +395,8 @@ mod testes {
         let p = pasta("recusa");
         let texto = p.join("segredo.env");
         fs::write(&texto, "x").unwrap();
-        let disfarce = p.join("segredo.png");
         assert!(matches!(ler_texto_imagem(&texto.to_string_lossy()), Err(Falha::Recusado(_))));
-        assert!(matches!(ler_texto_imagem(&disfarce.to_string_lossy()), Err(Falha::Recusado(_))));
+        assert!(matches!(ler_texto_imagem(&p.join("nao-existe.png").to_string_lossy()), Err(Falha::Recusado(_))));
         assert!(matches!(ler_texto_imagem(&p.to_string_lossy()), Err(Falha::Recusado(_))));
         assert!(matches!(ler_texto_imagem("comprovante.png"), Err(Falha::Recusado(_))));
         assert!(matches!(ler_texto_imagem(r"\\servidor\pasta\a.png"), Err(Falha::Recusado(_))));
@@ -391,6 +405,25 @@ mod testes {
         let pasta_png = p.join("pasta.png");
         fs::create_dir_all(&pasta_png).unwrap();
         assert!(matches!(ler_texto_imagem(&pasta_png.to_string_lossy()), Err(Falha::Recusado(_))));
+        let _ = fs::remove_dir_all(&p);
+    }
+
+    #[test]
+    fn link_com_nome_de_imagem_para_outro_tipo_e_recusado() {
+        let p = pasta("link");
+        let texto = p.join("segredo.env");
+        fs::write(&texto, "x").unwrap();
+        let disfarce = p.join("segredo.png");
+        if let Err(e) = std::os::windows::fs::symlink_file(&texto, &disfarce) {
+            eprintln!("sem privilégio para criar link simbólico ({e}): conferência do resolvido não exercitada");
+            let _ = fs::remove_dir_all(&p);
+            return;
+        }
+        // O nome pedido é de imagem; o resolvido (`segredo.env`) não.
+        assert_eq!(
+            ler_texto_imagem(&disfarce.to_string_lossy()),
+            Err(Falha::Recusado("o Moductus só lê PNG, JPEG, BMP, GIF ou TIFF".into()))
+        );
         let _ = fs::remove_dir_all(&p);
     }
 
