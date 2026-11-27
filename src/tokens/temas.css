@@ -176,9 +176,11 @@
   /* Silêncio e prévia lado a lado só com esta largura cada; abaixo, um embaixo do outro */
   --largura-min-coluna-notificacoes: 300px;
   /* O dia (ConfigDia.dc.html): os botões dos dias da semana, o campo da hora, a lista do fuso e a
-     largura mínima de cada cartão nas duas colunas; abaixo dela, um cartão embaixo do outro */
+     largura mínima de cada cartão nas duas colunas; abaixo dela, um cartão embaixo do outro. A
+     hora vai em ch da fonte mono do campo: "00:00" e a folga dos campos do Chromium cabem em
+     qualquer tema e zoom, e a caixa dá os 84 do quadro. */
   --largura-dia-semana: 44px;
-  --largura-campo-hora: 84px;
+  --largura-campo-hora: 9ch;
   --largura-campo-fuso: 300px;
   --largura-min-cartao-dia: 320px;
   /* Modelos e Conexões (ConfigModelos*.dc.html, ConfigConexoes*.dc.html): colunas Estado,

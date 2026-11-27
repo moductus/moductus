@@ -40,18 +40,19 @@ function montar() {
   return { db, repo, rotinas, avisos, rearmes: () => rearmes, atividade: new RepositorioAtividade(db) };
 }
 
-const TODOS = [1, 2, 3, 4, 5, 6, 7];
+/** Os dias de trabalho de fábrica (migração 032): de segunda a sexta. */
+const UTEIS = [1, 2, 3, 4, 5];
 
 describe("rotinas do dia", () => {
-  test("de fábrica: o briefing na primeira atividade e o fechamento às 18:00, todo dia", () => {
+  test("de fábrica: o briefing na primeira atividade e o fechamento às 18:00, de segunda a sexta", () => {
     const m = montar();
     const lista = m.rotinas.listar();
     expect(METODOS["rotinas.listar"].saida.safeParse(lista).success).toBe(true);
     expect(lista).toEqual([
-      { id: "briefing", tipo: "briefing", hora: null, diasSemana: TODOS, ativa: true, curta: false },
-      { id: "fechamento", tipo: "fechamento", hora: "18:00", diasSemana: TODOS, ativa: true, curta: false },
+      { id: "briefing", tipo: "briefing", hora: null, diasSemana: UTEIS, ativa: true, curta: false },
+      { id: "fechamento", tipo: "fechamento", hora: "18:00", diasSemana: UTEIS, ativa: true, curta: false },
     ]);
-    expect(m.repo.diasDeTrabalho()).toEqual(TODOS);
+    expect(m.repo.diasDeTrabalho()).toEqual(UTEIS);
   });
 
   test("a hora de parar nova grava com o carimbo do usuário, avisa as janelas e rearma o relógio", () => {
@@ -61,7 +62,7 @@ describe("rotinas do dia", () => {
       id: "fechamento",
       tipo: "fechamento",
       hora: "18:30",
-      diasSemana: TODOS,
+      diasSemana: UTEIS,
       ativa: true,
       curta: false,
     });
@@ -77,10 +78,10 @@ describe("rotinas do dia", () => {
   test("o briefing vai e volta entre o horário fixo e a primeira atividade, e desliga", () => {
     const m = montar();
     expect(m.rotinas.definir({ id: "briefing", hora: "08:30" }).hora).toBe("08:30");
-    expect(m.atividade.briefing()).toEqual({ hora: "08:30", diasSemana: TODOS, ativa: true });
+    expect(m.atividade.briefing()).toEqual({ hora: "08:30", diasSemana: UTEIS, ativa: true });
     expect(m.rotinas.definir({ id: "briefing", hora: null }).hora).toBeNull();
     expect(m.rotinas.definir({ id: "briefing", ativa: false }).ativa).toBe(false);
-    expect(m.atividade.briefing()).toEqual({ hora: null, diasSemana: TODOS, ativa: false });
+    expect(m.atividade.briefing()).toEqual({ hora: null, diasSemana: UTEIS, ativa: false });
     expect(m.rearmes()).toBe(3);
   });
 
@@ -97,20 +98,20 @@ describe("rotinas do dia", () => {
 
   test("os dias de trabalho valem para as duas rotinas e para a agenda, em ordem e sem repetir", () => {
     const m = montar();
-    const briefing = m.rotinas.definir({ id: "briefing", diasSemana: [5, 1, 3, 2, 4] });
-    expect(briefing.diasSemana).toEqual([1, 2, 3, 4, 5]);
+    const briefing = m.rotinas.definir({ id: "briefing", diasSemana: [6, 5, 1, 3, 2, 4] });
+    expect(briefing.diasSemana).toEqual([1, 2, 3, 4, 5, 6]);
     expect(m.rotinas.listar().map((r) => r.diasSemana)).toEqual([
-      [1, 2, 3, 4, 5],
-      [1, 2, 3, 4, 5],
+      [1, 2, 3, 4, 5, 6],
+      [1, 2, 3, 4, 5, 6],
     ]);
-    expect(m.atividade.fechamento()?.diasSemana).toEqual([1, 2, 3, 4, 5]);
-    expect(m.repo.diasDeTrabalho()).toEqual([1, 2, 3, 4, 5]);
+    expect(m.atividade.fechamento()?.diasSemana).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(m.repo.diasDeTrabalho()).toEqual([1, 2, 3, 4, 5, 6]);
     expect(m.avisos).toHaveLength(1);
   });
 
   test("os mesmos valores não gravam nem avisam", () => {
     const m = montar();
-    m.rotinas.definir({ id: "fechamento", hora: "18:00", diasSemana: TODOS, ativa: true });
+    m.rotinas.definir({ id: "fechamento", hora: "18:00", diasSemana: UTEIS, ativa: true });
     expect(m.avisos).toEqual([]);
     expect(m.rearmes()).toBe(0);
   });
@@ -127,7 +128,7 @@ describe("rotinas do dia", () => {
     expect(() => m.rotinas.definir({ id: "fechamento", diasSemana: [0] })).toThrow();
     expect(() => m.rotinas.definir({ id: "fechamento", diasSemana: [] })).toThrow();
     expect(() => m.rotinas.definir({ id: "fechamento", hora: "24:00" })).toThrow();
-    expect(m.atividade.fechamento()).toEqual({ hora: "18:00", diasSemana: TODOS, ativa: true });
+    expect(m.atividade.fechamento()).toEqual({ hora: "18:00", diasSemana: UTEIS, ativa: true });
     expect(m.avisos).toEqual([]);
   });
 
@@ -135,6 +136,6 @@ describe("rotinas do dia", () => {
     const m = montar();
     m.db.exec("UPDATE rotinas SET dias_semana = '[8]' WHERE id = 'briefing'");
     expect(m.rotinas.listar().map((r) => r.id)).toEqual(["fechamento"]);
-    expect(m.repo.diasDeTrabalho()).toEqual(TODOS);
+    expect(m.repo.diasDeTrabalho()).toEqual(UTEIS);
   });
 });

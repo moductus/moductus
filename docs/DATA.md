@@ -69,7 +69,7 @@ Uma linha por etapa do ciclo. Histórico, sem lixeira.
 - Enquanto o foco corre, o relógio renova o `atualizado_em` da etapa a cada conferência: é o último momento em que se sabe que o PC estava acordado.
 
 ### `rotinas` e `rotinas_registro`
-Briefing e fechamento do dia (ADR-0039). Vêm semeadas com id fixo: `briefing` (sem hora) e `fechamento` (18:00).
+Briefing e fechamento do dia (ADR-0039). Vêm semeadas com id fixo: `briefing` (sem hora) e `fechamento` (18:00), de segunda a sexta (migração `032`; até ela, os sete dias, que ficam para quem já gravou em O dia).
 `rotinas`, com lixeira e configuração: `id`, `tipo` (`briefing`, `fechamento`), `hora` (`HH:MM`; o briefing sem hora sai na primeira atividade do dia; o fechamento sempre tem), `dias_semana` (lista JSON de 1, segunda, a 7, domingo), `ativa`, `curta` (o briefing mais curto, escolhido depois de 3 ignorados seguidos; só o briefing; migração `025`).
 Os `dias_semana` são os **dias de trabalho**, um conjunto só: Configurações › O dia grava nas duas rotinas, e a agenda não procura expediente nem horário livre fora deles.
 `rotinas_registro`, histórico sem lixeira e deste PC: `id`, `rotina_id`, `dia`, `conteudo` (JSON: a abertura, as linhas e as abertas do que foi mostrado), `acao` (o que você escolheu, ou `ignorado` quando fechou sozinha), `acao_em`, `da_execucao_id` (a execução da Alba que redigiu a abertura; vazio quando saiu a frase de molde). Uma por rotina e dia, e a hora em que apareceu é o `criado_em`. Alimenta o "Ontem" e a regra dos 3 dias ignorados.

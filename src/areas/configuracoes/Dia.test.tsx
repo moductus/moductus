@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
 import {
   CONFIG_PADRAO,
   type EstadoConfig,
@@ -38,6 +40,7 @@ vi.mock("../../nativo/eventos.ts", () => ({
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const TODOS = [1, 2, 3, 4, 5, 6, 7];
+const DIAS_DE_FABRICA = [1, 2, 3, 4, 5];
 
 function rotinasPadrao(dias: number[] = TODOS): Rotina[] {
   return [
@@ -169,6 +172,63 @@ describe("Configurações › O dia", () => {
     expect(todos(".config-dia-segmento")).toHaveLength(8);
     expect(texto()).toContain("Uma rodada: 2h10, com 1h40 de foco. Mudar vale a partir do próximo ciclo.");
     expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("os dias de trabalho de fábrica (segunda a sexta) aparecem ligados, e o fim de semana desligado", async () => {
+    // As rotinas como a migração rotinas-dias-uteis deixa quem nunca salvou O dia.
+    servicoQueAceita(rotinasPadrao(DIAS_DE_FABRICA));
+    await montar();
+    const ligados = todos(".config-dia-semana-dia").filter((b) => b.getAttribute("aria-pressed") === "true");
+    expect(ligados.map((b) => b.textContent)).toEqual(["seg", "ter", "qua", "qui", "sex"]);
+    expect(dia("sábado").getAttribute("aria-pressed")).toBe("false");
+    expect(dia("domingo").getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("os campos de hora têm largura em ch da fonte mono, com folga para 00:00, e sem o relógio", async () => {
+    const estilo = document.createElement("style");
+    // Lidos do disco: o vitest não entrega o CSS importado. Caminhos relativos à raiz do repo.
+    estilo.textContent = [
+      "src/tokens/temas.css",
+      "src/componentes/Campo.css",
+      "src/areas/configuracoes/Configuracoes.css",
+    ]
+      .map((arquivo) => readFileSync(arquivo, "utf8"))
+      .join("\n");
+    document.head.appendChild(estilo);
+    try {
+      servicoQueAceita();
+      await montar();
+      const largura = getComputedStyle(document.documentElement)
+        .getPropertyValue("--largura-campo-hora")
+        .trim();
+      const emCh = /^(\d+(?:\.\d+)?)ch$/.exec(largura);
+      expect(emCh, `--largura-campo-hora em ch: ${largura}`).not.toBeNull();
+      // "00:00" são 5 ch na fonte mono; os campos de hora e minuto do Chromium pedem mais uns 0,6.
+      expect(Number(emCh![1])).toBeGreaterThanOrEqual("00:00".length + 1);
+
+      const horas = [
+        "Horário fixo do briefing",
+        "Hora de parar",
+        "Começo do expediente",
+        "Fim do expediente",
+      ];
+      for (const rotulo of horas) {
+        const entrada = controle<HTMLInputElement>(rotulo);
+        const calculado = getComputedStyle(entrada);
+        expect(calculado.width, rotulo).toBe(largura);
+        expect(calculado.flexShrink, rotulo).toBe("0");
+        expect(calculado.fontFamily, rotulo).toContain("Mono");
+      }
+      const semRelogio = [...estilo.sheet!.cssRules].some(
+        (r) =>
+          r instanceof CSSStyleRule &&
+          r.selectorText.includes(".config-dia-hora .campo-entrada::-webkit-calendar-picker-indicator") &&
+          r.style.display === "none",
+      );
+      expect(semRelogio).toBe(true);
+    } finally {
+      estilo.remove();
+    }
   });
 
   it("os dias de trabalho vão ao serviço juntos; o último dia ligado não desliga", async () => {
