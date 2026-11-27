@@ -104,6 +104,7 @@ describe("textos do menu", () => {
     expect(lerClique("pausar:tula:amanha")).toEqual({ acao: "pausar", agenteId: "tula", por: "amanha" });
     expect(lerClique("retomar:*")).toEqual({ acao: "retomar" });
     expect(lerClique("retomar:nuno")).toEqual({ acao: "retomar", agenteId: "nuno" });
+    expect(lerClique("privacidade")).toEqual({ acao: "privacidade" });
     for (const outro of ["pausar:*:2h", "pausar:*", "agente:alba", "pausar-todos", "retomar:", "", 7, null]) {
       expect(lerClique(outro)).toBeNull();
     }
@@ -126,6 +127,8 @@ describe("menu do time", () => {
       "Alba: ativo",
       "Tula: ativo",
       "Nuno: desligado",
+      "---",
+      "Modo privacidade",
     ]);
     expect(rotulos(item(menu, "Pausar todos").itens)).toEqual(["Por 30 minutos", "Por 1 hora", "Até amanhã"]);
     expect(rotulos(item(menu, "Alba").itens)).toEqual([
@@ -152,6 +155,8 @@ describe("menu do time", () => {
       "---",
       "Alba: ativo",
       "Tula: pausado até 15:00, 1 na fila",
+      "---",
+      "Modo privacidade",
     ]);
     expect(rotulos(item(menu, "Tula").itens)).toEqual([
       "Retomar agora",
@@ -160,6 +165,18 @@ describe("menu do time", () => {
       "Pausar por 1 hora",
       "Pausar até amanhã",
     ]);
+  });
+
+  test("o modo privacidade fecha o menu, marcado só quando ligado", () => {
+    const desligado = montarMenu([agente("alba", "Alba")], local(9, 14));
+    expect(item(desligado, "Modo privacidade")).toEqual({
+      id: "privacidade",
+      rotulo: "Modo privacidade",
+      habilitado: true,
+      marcado: false,
+    });
+    const ligado = montarMenu([agente("alba", "Alba")], local(9, 14), true);
+    expect(item(ligado, "Modo privacidade")).toMatchObject({ marcado: true });
   });
 
   test("time inteiro pausado e ninguém ligado", () => {
@@ -279,6 +296,8 @@ describe("pausar pela bandeja", () => {
       "Tula: pausado até 14:30",
       "Faina: pausado até 14:30",
       "Nuno: pausado até 14:30",
+      "---",
+      "Modo privacidade",
     ]);
 
     // O vigia e o agendador continuam anotando: os pedidos entram na fila sem chamar o modelo.
@@ -341,5 +360,27 @@ describe("pausar pela bandeja", () => {
     expect(erros).toHaveBeenCalledWith(expect.stringContaining("bandeja: pausar falhou"));
     erros.mockRestore();
     expect(item(menu(), "Tula")).toMatchObject({ rotulo: "Tula: desligado", habilitado: false });
+  });
+});
+
+describe("modo privacidade pela bandeja", () => {
+  test("se ligar falha, o menu volta à casca com a marca de antes, mesmo sem mudar", async () => {
+    const linhas: string[] = [];
+    const canal = new CanalCasca({ write: (linha) => linhas.push(linha) });
+    const bandeja = ligarBandeja({
+      agentes: { listar: () => [], pausar: () => undefined, retomar: () => undefined },
+      canal,
+      privacidade: { ativo: () => false, alternar: () => Promise.reject(new Error("banco fechado")) },
+    });
+    bandeja.atualizar();
+    expect(linhas).toHaveLength(1);
+    const erros = vi.spyOn(console, "error").mockImplementation(() => {});
+    canal.receber(JSON.stringify({ tipo: CLIQUE_NA_BANDEJA, item: "privacidade" }));
+    await vi.waitFor(() => expect(linhas).toHaveLength(2));
+    expect(erros).toHaveBeenCalledWith(expect.stringContaining("bandeja: modo privacidade falhou"));
+    erros.mockRestore();
+    // O Windows já tinha trocado a marca no clique; a casca redesenha com a do serviço.
+    expect(linhas[1]).toBe(linhas[0]);
+    expect(item(JSON.parse(linhas[1]!) as MenuBandeja, "Modo privacidade")).toMatchObject({ marcado: false });
   });
 });

@@ -73,6 +73,14 @@ describe("config do dia", () => {
     expect(CHAVES_DESTE_PC).toEqual(["privacidade"]);
   });
 
+  test("o modo privacidade tem atalho Ctrl+Alt+H, obrigatório na configuração e que pode ficar vazio", () => {
+    expect(CONFIG_PADRAO.atalhos.privacidade).toBe("Ctrl+Alt+H");
+    const { privacidade: _privacidade, ...antigos } = CONFIG_PADRAO.atalhos;
+    expect(Config.safeParse({ ...CONFIG_PADRAO, atalhos: antigos }).success).toBe(false);
+    const semAtalho = { ...CONFIG_PADRAO.atalhos, privacidade: "" };
+    expect(Config.safeParse({ ...CONFIG_PADRAO, atalhos: semAtalho }).success).toBe(true);
+  });
+
   test("o foco pode ficar sem atalho (vazio); os outros, não", () => {
     const atalhos = CONFIG_PADRAO.atalhos;
     expect(Config.safeParse({ ...CONFIG_PADRAO, atalhos: { ...atalhos, foco: "" } }).success).toBe(true);

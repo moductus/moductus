@@ -12,6 +12,11 @@ const ACOES: readonly { acao: keyof Atalhos; nome: string; descricao: string }[]
     descricao: "Mostra o dock, passa o foco para ele e esconde de novo.",
   },
   { acao: "captura", nome: "Captura rápida", descricao: "Abre a barra para anotar uma tarefa ou ideia." },
+  {
+    acao: "privacidade",
+    nome: "Modo privacidade",
+    descricao: "Esconde valores e textos sensíveis da tela, para compartilhar a tela, e mostra de novo.",
+  },
 ];
 
 /**

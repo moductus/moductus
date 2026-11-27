@@ -28,9 +28,13 @@ const ROTULO_DURACAO: Readonly<Record<DuracaoPausa, string>> = {
   amanha: "amanhã",
 };
 
-/** Um item do menu como a casca recebe: opção (com submenu ou não) ou separador. */
+/**
+ * Um item do menu como a casca recebe: opção (com submenu ou não) ou separador. `marcado` faz do
+ * item uma opção que liga e desliga, com a marca do Windows ao lado.
+ */
 export type ItemBandeja =
-  { id: string; rotulo: string; habilitado: boolean; itens?: ItemBandeja[] } | { separador: true };
+  | { id: string; rotulo: string; habilitado: boolean; marcado?: boolean; itens?: ItemBandeja[] }
+  | { separador: true };
 
 /** O que a casca desenha: a dica do ícone e os itens do serviço, entre os fixos dela. */
 export interface MenuBandeja {
@@ -40,7 +44,12 @@ export interface MenuBandeja {
 
 /** O clique que a bandeja relata, já entendido. `agenteId` ausente é o time todo. */
 export type AcaoBandeja =
-  { acao: "pausar"; agenteId?: string; por: DuracaoPausa } | { acao: "retomar"; agenteId?: string };
+  | { acao: "pausar"; agenteId?: string; por: DuracaoPausa }
+  | { acao: "retomar"; agenteId?: string }
+  | { acao: "privacidade" };
+
+/** O item que liga e desliga o modo privacidade (ConfigPrivacidade.dc.html: "Modo privacidade"). */
+const ID_PRIVACIDADE = "privacidade";
 
 /** No id do item, `*` é o time todo. */
 const TODOS = "*";
@@ -115,9 +124,9 @@ const opcoesDePausa = (alvo: string, comVerbo: boolean): ItemBandeja[] =>
 /**
  * O menu do time: pausar todos (e retomar todos, quando alguém está pausado), depois uma linha
  * por agente com o estado e, no submenu, pausar ou retomar só ele. Desligado aparece, sem ação:
- * ligar de novo é no Sistema.
+ * ligar de novo é no Sistema. Por último, o modo privacidade (ADR-0047), marcado quando ligado.
  */
-export function montarMenu(agentes: readonly Agente[], agora: Date): MenuBandeja {
+export function montarMenu(agentes: readonly Agente[], agora: Date, privacidade = false): MenuBandeja {
   const ligados = agentes.filter((a) => a.situacao.estado !== "desligado");
   const pausados = ligados.filter((a) => a.situacao.estado === "pausado");
   const itens: ItemBandeja[] = [
@@ -151,6 +160,12 @@ export function montarMenu(agentes: readonly Agente[], agora: Date): MenuBandeja
       ],
     });
   }
+  itens.push(SEPARADOR, {
+    id: ID_PRIVACIDADE,
+    rotulo: "Modo privacidade",
+    habilitado: true,
+    marcado: privacidade,
+  });
   return { dica: dicaDoIcone(ligados.length, pausados), itens };
 }
 
@@ -164,6 +179,7 @@ function dicaDoIcone(ligados: number, pausados: readonly Agente[]): string {
 /** O id do item clicado vira a ação; id de outra coisa é `null`. */
 export function lerClique(item: unknown): AcaoBandeja | null {
   if (typeof item !== "string") return null;
+  if (item === ID_PRIVACIDADE) return { acao: "privacidade" };
   const partes = item.split(":");
   const alvo = partes[1];
   if (!alvo) return null;
@@ -183,6 +199,8 @@ export interface DependenciasBandeja {
     retomar(pedido: PedidoRetomar): unknown;
   };
   canal: Pick<CanalCasca, "avisar" | "aoAvisar">;
+  /** O modo privacidade: o estado marca o item e o clique liga ou desliga. */
+  privacidade?: { ativo(): boolean; alternar(): Promise<unknown> };
   agora?: () => Date;
 }
 
@@ -194,7 +212,7 @@ export function ligarBandeja(deps: DependenciasBandeja): { atualizar(): void } {
   const agora = deps.agora ?? (() => new Date());
   let ultimo = "";
   const atualizar = () => {
-    const menu = montarMenu(deps.agentes.listar(), agora());
+    const menu = montarMenu(deps.agentes.listar(), agora(), deps.privacidade?.ativo() ?? false);
     const linha = JSON.stringify(menu);
     if (linha === ultimo) return;
     ultimo = linha;
@@ -203,6 +221,16 @@ export function ligarBandeja(deps: DependenciasBandeja): { atualizar(): void } {
   deps.canal.aoAvisar(CLIQUE_NA_BANDEJA, (aviso) => {
     const acao = lerClique(aviso.item);
     if (!acao) return;
+    if (acao.acao === "privacidade") {
+      // Quem refaz o menu é a mudança do modo, que avisa `atualizar` quando grava. Se falhar, o
+      // Windows já trocou a marca no clique: o menu volta à casca mesmo sem mudar no serviço.
+      deps.privacidade?.alternar().catch((erro: unknown) => {
+        console.error(`bandeja: modo privacidade falhou: ${String(erro)}`);
+        ultimo = "";
+        atualizar();
+      });
+      return;
+    }
     const alvo = acao.agenteId !== undefined ? { agenteId: acao.agenteId } : {};
     try {
       if (acao.acao === "pausar") deps.agentes.pausar({ ...alvo, ate: fimDaPausa(acao.por, agora()) });

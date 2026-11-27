@@ -28,6 +28,19 @@ const ACAO_DO_ATALHO: Readonly<Record<keyof Atalhos, string>> = {
   dock: "mostrar o dock",
   captura: "abrir a captura",
   foco: "iniciar ou pausar o foco",
+  privacidade: "ligar ou desligar o modo privacidade",
+};
+
+/**
+ * As ações que podem ficar sem atalho: chegaram depois e, se o padrão delas colide com um atalho
+ * já salvo pelo usuário, o dele vale e elas ficam vazias.
+ */
+const OPCIONAIS = ["foco", "privacidade"] as const;
+type AtalhoOpcional = (typeof OPCIONAIS)[number];
+
+const NOME_DO_OPCIONAL: Readonly<Record<AtalhoOpcional, string>> = {
+  foco: "o foco",
+  privacidade: "o modo privacidade",
 };
 
 /** A combinação sem caixa, espaço nem ordem dos modificadores: "Alt+Ctrl+p" é "Ctrl+Alt+P". */
@@ -51,18 +64,21 @@ export function atalhoQueUsa(
   return null;
 }
 
-/** Por que o foco está sem atalho, para `falhasAtalhos.foco`. */
-export function motivoDoFocoSemAtalho(atalhos: Atalhos): string {
-  const padrao = CONFIG_PADRAO.atalhos.foco;
-  const outro = atalhoQueUsa(atalhos, padrao, "foco");
-  if (outro === null) return "O foco está sem atalho. Escolha um em Configurações.";
-  return `${padrao} já é o atalho para ${ACAO_DO_ATALHO[outro]}, então o foco ficou sem atalho. Escolha outro em Configurações.`;
+/** Por que a ação está sem atalho, para `falhasAtalhos.<acao>`. */
+export function motivoSemAtalho(atalhos: Atalhos, acao: AtalhoOpcional): string {
+  const padrao = CONFIG_PADRAO.atalhos[acao];
+  const nome = NOME_DO_OPCIONAL[acao];
+  const outro = atalhoQueUsa(atalhos, padrao, acao);
+  if (outro === null)
+    return `${nome.charAt(0).toUpperCase()}${nome.slice(1)} está sem atalho. Escolha um em Configurações.`;
+  return `${padrao} já é o atalho para ${ACAO_DO_ATALHO[outro]}, então ${nome} ficou sem atalho. Escolha outro em Configurações.`;
 }
 
 /**
  * O valor guardado de uma chave por cima do padrão dela, campo a campo: o que foi salvo por uma
- * versão anterior (os atalhos sem o do foco) ganha só o que falta e fica com o resto. O atalho que
- * chega pelo padrão e colide com um que o usuário já tinha salvo fica vazio: o dele vale.
+ * versão anterior (os atalhos sem o do foco ou o da privacidade) ganha só o que falta e fica com o
+ * resto. O atalho que chega pelo padrão e colide com um que o usuário já tinha salvo fica vazio: o
+ * dele vale.
  */
 export function completarComPadrao(chave: keyof Config, valor: unknown): unknown {
   const juntar = (padrao: unknown, salvo: unknown): unknown => {
@@ -72,13 +88,16 @@ export function completarComPadrao(chave: keyof Config, valor: unknown): unknown
     return junto;
   };
   const junto = juntar(CONFIG_PADRAO[chave], valor);
-  if (chave === "atalhos" && ehObjeto(valor) && !("foco" in valor)) {
-    const atalhos = Atalhos.safeParse(junto);
-    if (atalhos.success && atalhoQueUsa(atalhos.data, atalhos.data.foco, "foco") !== null) {
-      return { ...atalhos.data, foco: "" };
+  if (chave !== "atalhos" || !ehObjeto(valor)) return junto;
+  const atalhos = Atalhos.safeParse(junto);
+  if (!atalhos.success) return junto;
+  let completos = atalhos.data;
+  for (const acao of OPCIONAIS) {
+    if (!(acao in valor) && atalhoQueUsa(completos, completos[acao], acao) !== null) {
+      completos = { ...completos, [acao]: "" };
     }
   }
-  return junto;
+  return completos;
 }
 
 /** Leitura e gravação da tabela config: uma linha por chave de primeiro nível. */
@@ -135,11 +154,11 @@ export class ServicoConfig {
 
   obter(): EstadoConfig {
     const config = this.repo.ler();
-    // O foco sem atalho não é recusa da casca (nada foi pedido a ela), mas aparece igual.
-    const falhasAtalhos =
-      config.atalhos.foco === ""
-        ? { ...this.falhasAtalhos, foco: motivoDoFocoSemAtalho(config.atalhos) }
-        : this.falhasAtalhos;
+    // A ação sem atalho não é recusa da casca (nada foi pedido a ela), mas aparece igual.
+    const falhasAtalhos = { ...this.falhasAtalhos };
+    for (const acao of OPCIONAIS) {
+      if (config.atalhos[acao] === "") falhasAtalhos[acao] = motivoSemAtalho(config.atalhos, acao);
+    }
     return { config, portable: this.portable, falhasAtalhos };
   }
 

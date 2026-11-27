@@ -63,6 +63,7 @@ import { CanalCasca } from "./casca/canal.ts";
 import { credenciaisPelaCasca } from "./casca/credenciais.ts";
 import { painelPelaCasca } from "./casca/painel.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
+import { alternarPrivacidade, ouvirAtalhoDaPrivacidade, vigiarPrivacidade } from "./config/privacidade.ts";
 import { RepositorioConexoes, ServicoConexoes } from "./conexoes/conexoes.ts";
 import { RepositorioConversas, ServicoConversas } from "./conversas/conversas.ts";
 import { executorGh } from "./conexoes/github/gh.ts";
@@ -143,12 +144,21 @@ const cotacaoMudou = vigiarCotacao(repositorioConfig.ler().cambio, () => reagirA
 let recontarAreas: () => void = () => {};
 // O relógio do dia (F3-17) nasce mais adiante; o fuso que muda antes disso não tem o que rearmar.
 let rearmarRelogio: () => void = () => {};
+// A bandeja nasce com o time, mais adiante; o modo privacidade que muda antes disso só avisa as janelas.
+let atualizarBandeja: () => void = () => {};
+// O modo privacidade (F4-29, ADR-0047): ligado pelo atalho, pela bandeja ou em Configurações, todos
+// por `config.definir`; as janelas mascaram com o `privacidade.mudou` e a bandeja marca o item.
+const privacidadeMudou = vigiarPrivacidade(repositorioConfig.ler().privacidade, (privacidade) => {
+  servidor?.emitir("privacidade.mudou", privacidade);
+  atualizarBandeja();
+});
 const config = new ServicoConfig(
   repositorioConfig,
   nativo,
   (estado: EstadoConfig) => {
     servidor?.emitir("config.mudou", estado);
     cotacaoMudou(estado.config.cambio);
+    privacidadeMudou(estado.config.privacidade);
     // O fuso pode ter mudado: o "hoje" das tarefas muda junto, e as horas das rotinas e dos
     // lembretes caem em outro instante.
     recontarAreas();
@@ -176,6 +186,8 @@ const notificacoes = new ServicoNotificacoes(
     emFoco: () => foco?.emFoco() ?? false,
     // Com o dia encerrado, o mesmo até a manhã, venha o silêncio ligado ou não.
     diaEncerrado: () => fechamentoDoDia?.diaEncerrado() ?? false,
+    // Com o modo privacidade ligado, o aviso do Windows sai sem o valor; o histórico fica inteiro.
+    privacidade: () => config.obter().config.privacidade.ativo,
   },
   {
     estado: (estado) => servidor?.emitir("notificacoes.mudou", estado),
@@ -371,7 +383,15 @@ function emitirAgente(agenteId: string): void {
   if (agente) servidor?.emitir("agentes.mudou", agente);
 }
 // Pausar pela bandeja (F2-18): o menu do ícone mostra o estado de cada agente e se refaz quando muda.
-const bandeja = ligarBandeja({ agentes, canal });
+const bandeja = ligarBandeja({
+  agentes,
+  canal,
+  privacidade: {
+    ativo: () => config.obter().config.privacidade.ativo,
+    alternar: () => alternarPrivacidade(config),
+  },
+});
+atualizarBandeja = () => bandeja.atualizar();
 // A cotação mudou: o gasto de hoje muda, e o teto vale de novo para cada agente (acorda ou adormece).
 reagirACotacao = () => {
   for (const agente of repositorioAgentes.agentes()) {
@@ -859,6 +879,8 @@ sinalDeAtividade("subida");
 canal.aoAvisar("atividade", (aviso) => sinalDeAtividade(motivoDaCasca(aviso)));
 // O atalho do foco (Ctrl+Alt+P) vem da casca e inicia, pausa ou retoma.
 ouvirAtalhoDoFoco(canal, servicoFoco);
+// O do modo privacidade (Ctrl+Alt+H) liga ou desliga, como a bandeja e Configurações.
+ouvirAtalhoDaPrivacidade(canal, config);
 canal.aoAvisar("retomou", () => {
   sinalDeAtividade("retomada");
   // Na volta da suspensão, os lembretes que venceram com o PC dormindo chegam juntos.

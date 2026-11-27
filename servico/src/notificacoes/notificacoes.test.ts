@@ -19,6 +19,7 @@ import { avisarContexto, avisarDoVigia } from "./nuno.ts";
 import {
   dentroDoHorario,
   entregaPela,
+  esconderValores,
   RepositorioNotificacoes,
   ServicoNotificacoes,
   type AvisoWindows,
@@ -45,6 +46,7 @@ function montar(
     emFoco?: boolean;
     cascaFalha?: boolean;
     diaEncerrado?: () => boolean;
+    privacidade?: () => boolean;
   } = {},
 ) {
   const pasta = mkdtempSync(join(tmpdir(), "moductus-notificacoes-"));
@@ -74,6 +76,7 @@ function montar(
       silencio: () => silencio,
       emFoco: () => opcoes.emFoco ?? false,
       ...(opcoes.diaEncerrado ? { diaEncerrado: opcoes.diaEncerrado } : {}),
+      ...(opcoes.privacidade ? { privacidade: opcoes.privacidade } : {}),
       windows: {
         mostrar: async (aviso) => {
           if (opcoes.cascaFalha) throw new Error("a casca não respondeu");
@@ -783,5 +786,91 @@ describe("aviso do vigia do Nuno", () => {
     expect(carimbo(montado.db)).toEqual([expect.objectContaining({ vista_em: expect.any(String) })]);
     expect(montado.servico.naoVistas()).toEqual([]);
     expect(montado.casca.mostrados).toEqual([]);
+  });
+});
+
+describe("modo privacidade nos avisos do Windows", () => {
+  /** O aviso de exemplo da fatura (ConfigPrivacidade.dc.html), como a Tula vai mandar. */
+  const fatura = (): NovoAviso => ({
+    agenteId: "tula",
+    tipo: "lembrete",
+    titulo: "Fatura do Cartão Cooperativa vence em 2 dias",
+    corpo: "R$ 642,30 até quinta.",
+    semValor: { titulo: "Fatura do Cartão Cooperativa vence em 2 dias", corpo: null },
+  });
+
+  test("ligado, o Windows recebe a fatura sem o valor e o histórico guarda o texto inteiro", async () => {
+    const { servico, casca } = montar({ privacidade: () => true });
+    const n = await servico.avisar(fatura());
+    expect(casca.mostrados).toEqual([
+      expect.objectContaining({
+        agente: "Tula",
+        titulo: "Fatura do Cartão Cooperativa vence em 2 dias",
+        corpo: null,
+      }),
+    ]);
+    expect(JSON.stringify(casca.mostrados)).not.toContain("642");
+    expect(servico.listar({}).itens[0]).toMatchObject({ id: n.id, corpo: "R$ 642,30 até quinta." });
+  });
+
+  test("desligado, o aviso sai inteiro", async () => {
+    const { servico, casca } = montar({ privacidade: () => false });
+    await servico.avisar(fatura());
+    expect(casca.mostrados[0]).toMatchObject({ corpo: "R$ 642,30 até quinta." });
+  });
+
+  test("o estado é lido na hora de mostrar: ligar entre dois avisos já vale para o segundo", async () => {
+    let ligado = false;
+    const { servico, casca } = montar({ privacidade: () => ligado });
+    await servico.avisar({ ...fatura(), referencia: "fatura:1" });
+    ligado = true;
+    await servico.avisar({ ...fatura(), referencia: "fatura:2" });
+    expect(casca.mostrados.map((a) => a.corpo)).toEqual(["R$ 642,30 até quinta.", null]);
+  });
+
+  test("aviso sem a versão sem valor sai com os valores escondidos, de qualquer agente", async () => {
+    const { servico, casca } = montar({ privacidade: () => true });
+    await servico.avisar({
+      agenteId: "alba",
+      tipo: "lembrete",
+      titulo: "Mercado passou R$ 1.312,40 do limite",
+      corpo: "Sobram R$ 80 para 2 dias; a meta é US$ 12,5.",
+    });
+    expect(casca.mostrados[0]).toMatchObject({
+      titulo: "Mercado passou R$ ••• do limite",
+      corpo: "Sobram R$ ••• para 2 dias; a meta é US$ •••.",
+    });
+  });
+
+  test("esconder valores deixa o resto do texto, datas e contagens como estão", () => {
+    expect(esconderValores("− R$ 45,00 em 3 parcelas, dia 12/11")).toBe("− R$ ••• em 3 parcelas, dia 12/11");
+    expect(esconderValores("R$1.000.000,00.")).toBe("R$ •••.");
+    expect(esconderValores("2 tarefas para hoje")).toBe("2 tarefas para hoje");
+  });
+
+  test.each([
+    ["decimal com ponto", "Sobram US$ 12.50 e R$ 45.90.", "Sobram US$ ••• e R$ •••."],
+    ["milhar com vírgula", "Total US$ 1,234.56", "Total US$ •••"],
+    ["outro símbolo com $", "Assinatura CA$ 45,00 e A$ 9", "Assinatura CA$ ••• e A$ •••"],
+    ["iene, euro e libra", "¥ 5.000, € 12,30 e £7", "¥ •••, € ••• e £ •••"],
+    ["código ISO", "Fatura de CHF 120,00 e BRL -45", "Fatura de CHF ••• e BRL •••"],
+    ["vários espaços e sinal", "Saída de R$   -1.312,40 hoje", "Saída de R$ ••• hoje"],
+  ])("esconder valores: %s", (_caso, texto, esperado) => {
+    expect(esconderValores(texto)).toBe(esperado);
+  });
+
+  test("ligado, o rótulo do botão do aviso também sai sem o valor", async () => {
+    const { servico, casca } = montar({ privacidade: () => true });
+    await servico.avisar({
+      ...fatura(),
+      botoes: [
+        { id: "remanejar", rotulo: "Remanejar R$ 150,00" },
+        { id: "deixar", rotulo: "Deixar assim" },
+      ],
+    });
+    expect(casca.mostrados[0]!.botoes).toEqual([
+      { id: "remanejar", rotulo: "Remanejar R$ •••" },
+      { id: "deixar", rotulo: "Deixar assim" },
+    ]);
   });
 });

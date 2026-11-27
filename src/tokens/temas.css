@@ -54,6 +54,9 @@
   --tamanho-capa: 30px;
   --raio-capa: 7px;
   --largura-divisor-dock: 24px;
+  /* Selo do modo privacidade acima do relógio (Dock.dc.html): 36 de altura, contorno no destaque */
+  --altura-selo-privacidade: 36px;
+  --espessura-selo-privacidade: 1.5px;
   /* A janela flutuante tem 80 px (src-tauri/src/dock.rs): 8 de margem em volta dos 64 */
   --margem-dock-flutuante: 8px;
   --tamanho-ponto-estado: 6px;

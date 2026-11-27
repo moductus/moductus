@@ -31,6 +31,12 @@ export interface NovoAviso {
   tipo: TipoNotificacao;
   titulo: string;
   corpo?: string | null;
+  /**
+   * O mesmo aviso sem o valor em dinheiro, para o Windows enquanto o modo privacidade está ligado
+   * ("Fatura do Nubank vence em 2 dias"); o histórico guarda o texto inteiro (ADR-0047). Sem ele,
+   * os valores do texto saem como "R$ •••".
+   */
+  semValor?: { titulo: string; corpo?: string | null };
   /** O que gerou o aviso (`aprovacao:<id>`); enquanto um aviso dela não for visto, não repete. */
   referencia?: string | null;
   /** Os botões do aviso do Windows; a ação de cada um mora na área ({@link registrarAcao}). */
@@ -61,6 +67,32 @@ export interface AvisosDoWindows {
   retirar(id: string): Promise<void>;
   /** Jogo, vídeo ou apresentação em tela cheia agora (`SHQueryUserNotificationState`). */
   telaCheia(): Promise<boolean>;
+}
+
+/**
+ * Um valor em dinheiro escrito no texto: o símbolo (com "$" como R$, US$ e CA$, ou ¥, €, £) ou o
+ * código ISO de 3 letras (CHF), espaços, sinal opcional e o número, com milhar e decimal por ponto
+ * ou vírgula. O número termina num dígito: o ponto final da frase fica.
+ */
+const VALOR_NO_TEXTO = /([A-Z]{0,3}\$|[¥€£]|\b[A-Z]{3}\b)\s*[-−+]?\d(?:[\d.,]*\d)?/g;
+
+/** O texto com cada valor em dinheiro trocado por "R$ •••", como a tela mostra no modo privacidade. */
+export function esconderValores(texto: string): string {
+  return texto.replace(VALOR_NO_TEXTO, (_valor, simbolo: string) => `${simbolo} •••`);
+}
+
+/**
+ * O título e o corpo que vão ao Windows: com o modo privacidade ligado, a versão sem valor que a
+ * área deu, ou o texto com os valores escondidos; desligado, o texto inteiro.
+ */
+export function textoParaOWindows(
+  aviso: { titulo: string; corpo: string | null; semValor?: { titulo: string; corpo?: string | null } },
+  privacidade: boolean,
+): { titulo: string; corpo: string | null } {
+  if (!privacidade) return { titulo: aviso.titulo, corpo: aviso.corpo };
+  const texto = aviso.semValor ?? aviso;
+  const corpo = texto.corpo ?? null;
+  return { titulo: esconderValores(texto.titulo), corpo: corpo === null ? null : esconderValores(corpo) };
 }
 
 /** Como o aviso sai, pela preferência: `avisa` falso é só registro, sem ponto nem Windows. */
@@ -342,6 +374,8 @@ export interface FontesNotificacoes {
   emFoco?: () => boolean;
   /** Se você encerrou o dia e a manhã ainda não chegou (`ServicoFechamento.diaEncerrado`). */
   diaEncerrado?: () => boolean;
+  /** Se o modo privacidade está ligado agora (ADR-0047): o Windows recebe o aviso sem o valor. */
+  privacidade?: () => boolean;
 }
 
 export interface OpcoesNotificacoes {
@@ -471,7 +505,13 @@ export class ServicoNotificacoes {
       this.avisos.naoVistas(this.repo.naoVistas());
     }
     if (entrega.windows) {
-      await this.mostrarNoWindows(notificacao, novo.botoes ?? [], agora, novo.semPainelDoTime === true);
+      await this.mostrarNoWindows(
+        notificacao,
+        novo.botoes ?? [],
+        agora,
+        novo.semPainelDoTime === true,
+        novo.semValor,
+      );
     }
     return notificacao;
   }
@@ -521,6 +561,7 @@ export class ServicoNotificacoes {
     botoes: readonly BotaoAviso[],
     agora: Date,
     semPainelDoTime: boolean,
+    semValor: NovoAviso["semValor"],
   ): Promise<void> {
     try {
       const motivo = await motivoDoSilencio(this.fontes.silencio(), n.tipo, {
@@ -534,12 +575,17 @@ export class ServicoNotificacoes {
       const agente = n.agenteId
         ? (this.fontes.agentes().find((a) => a.id === n.agenteId)?.nome ?? null)
         : null;
+      // O modo é lido na hora de mostrar: ligado no meio, o aviso já sai sem o valor.
+      const privacidade = this.fontes.privacidade?.() ?? false;
       await this.fontes.windows.mostrar({
         id: n.id,
         agente,
-        titulo: n.titulo,
-        corpo: n.corpo,
-        botoes,
+        ...textoParaOWindows(
+          { titulo: n.titulo, corpo: n.corpo, ...(semValor ? { semValor } : {}) },
+          privacidade,
+        ),
+        // O rótulo do botão também pode levar valor ("Remanejar R$ 150,00").
+        botoes: privacidade ? botoes.map((b) => ({ ...b, rotulo: esconderValores(b.rotulo) })) : botoes,
         ...(semPainelDoTime ? { semPainelDoTime } : {}),
       });
       // Resolvido durante o `mostrar`: o `retirar` do `resolvido` pode ter chegado antes do aviso.
