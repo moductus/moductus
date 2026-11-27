@@ -34,6 +34,8 @@ import { ServicoIgnorados } from "./areas/dia/ignorados.ts";
 import { RelogioDoDia } from "./areas/dia/relogio.ts";
 import { RepositorioRegistroRotinas } from "./areas/dia/rotinas.ts";
 import { TempoDoDia } from "./areas/dia/tempo.ts";
+import { atendentesDasCategorias } from "./areas/financas/canal-categorias.ts";
+import { RepositorioCategorias, ServicoCategorias } from "./areas/financas/categorias.ts";
 import { atendentesDasContas } from "./areas/financas/canal.ts";
 import { RepositorioContas, ServicoContas } from "./areas/financas/contas.ts";
 import { atendentesDoFoco, ouvirAtalhoDoFoco } from "./areas/foco/canal.ts";
@@ -473,6 +475,10 @@ const tarefas = new ServicoTarefas(
     },
   },
 );
+// Categorias e regras da Tula (F4-10): a categorização por código do ADR-0045.
+const categorias = new ServicoCategorias(new RepositorioCategorias(banco), {
+  mudou: (mudanca) => servidor?.emitir("financas.mudou", mudanca),
+});
 // Contas e cartões (F4-08): saldo derivado, fatura pelo dia de fechamento e "Pagar fatura".
 const contas = new ServicoContas(
   new RepositorioContas(banco),
@@ -664,6 +670,7 @@ servidor = await abrirServidorWs(token, {
   "notas.buscar": (pedido) => notas.buscar(pedido),
   ...atendentesDasTarefas(tarefas),
   ...atendentesDoFoco(servicoFoco),
+  ...atendentesDasCategorias(categorias),
   "agenda.calendarios": () => agenda.calendarios(),
   "agenda.definirCalendario": (mudanca) => agenda.definirCalendario(mudanca),
   "agenda.consultar": (pedido) => agenda.consultar(pedido),
@@ -695,14 +702,6 @@ servidor = await abrirServidorWs(token, {
     "financas.definirLancamento",
     "financas.apagarLancamento",
     "financas.restaurarLancamento",
-    "financas.categorias",
-    "financas.criarCategoria",
-    "financas.definirCategoria",
-    "financas.apagarCategoria",
-    "financas.regras",
-    "financas.criarRegra",
-    "financas.definirRegra",
-    "financas.apagarRegra",
     "financas.orcamento",
     "financas.definirOrcamento",
     "financas.removerOrcamento",
