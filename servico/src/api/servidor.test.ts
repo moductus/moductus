@@ -205,7 +205,7 @@ describe("canal WebSocket", () => {
       `ws://127.0.0.1:${s.porta}/?token=${TOKEN}&protocolo=${VERSAO_PROTOCOLO}`,
       [
         { metodo: "captura.entender", dados: { texto: "ligar pro banco amanhã 15h" } },
-        { metodo: "financas.resumo", dados: { mes: "2026-10" } },
+        { metodo: "financas.orcamento", dados: { mes: "2026-10" } },
       ],
     );
     expect(respostas[0]).toEqual({
@@ -218,7 +218,7 @@ describe("canal WebSocket", () => {
       tipo: "resposta",
       id: 2,
       ok: false,
-      erro: "financas.resumo ainda não está disponível nesta versão do serviço",
+      erro: "financas.orcamento ainda não está disponível nesta versão do serviço",
     });
   });
 

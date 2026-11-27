@@ -134,7 +134,7 @@ const SELECT_FATURA = `
          f.criado_em, f.atualizado_em
     FROM faturas f`;
 
-interface LinhaLancamento {
+export interface LinhaLancamento {
   id: string;
   conta_id: string;
   data: string;
@@ -161,14 +161,15 @@ interface LinhaLancamento {
   atualizado_em: string;
 }
 
-const SELECT_LANCAMENTO = `
+/** O lançamento com a moeda da conta; os lançamentos (F4-09) leem pelo mesmo `SELECT`. */
+export const SELECT_LANCAMENTO = `
   SELECT l.id, l.conta_id, l.data, l.descricao, l.descricao_original, l.valor_centavos, c.moeda,
          l.categoria_id, l.fatura_id, l.parcela_numero, l.parcela_total, l.compra_id, l.transferencia_id,
          l.recorrencia_id, l.divida_id, l.importacao_id, l.id_externo, l.conciliado, l.notas,
          l.origem, l.agente_id, l.execucao_id, l.criado_em, l.atualizado_em
     FROM lancamentos l JOIN contas c ON c.id = l.conta_id`;
 
-const paraLancamento = (l: LinhaLancamento): Lancamento => ({
+export const paraLancamento = (l: LinhaLancamento): Lancamento => ({
   id: l.id,
   contaId: l.conta_id,
   data: l.data,
