@@ -86,7 +86,13 @@ describe("configuração", () => {
     const escolhida: Config = {
       tema: "papel",
       dock: { lado: "direita", modo: "inteligente", forma: "flutuante" },
-      atalhos: { sistema: "Ctrl+Shift+M", dock: "Ctrl+Alt+J", captura: "Ctrl+Alt+K", foco: "Ctrl+Alt+F" },
+      atalhos: {
+        sistema: "Ctrl+Shift+M",
+        dock: "Ctrl+Alt+J",
+        captura: "Ctrl+Alt+K",
+        foco: "Ctrl+Alt+F",
+        privacidade: "Ctrl+Shift+H",
+      },
       autostart: true,
       silencio: { horario: { ligado: true, inicio: "23:00", fim: "06:45" }, telaCheia: false, foco: true },
       dia: {
@@ -132,7 +138,7 @@ describe("configuração", () => {
     const antigos = { sistema: "Ctrl+Shift+M", dock: "Ctrl+Alt+J", captura: "Ctrl+Alt+K" };
     db.prepare("INSERT INTO config (chave, valor) VALUES (?, ?)").run("atalhos", JSON.stringify(antigos));
     const { config } = servico.obter();
-    expect(config.atalhos).toEqual({ ...antigos, foco: "Ctrl+Alt+P" });
+    expect(config.atalhos).toEqual({ ...antigos, foco: "Ctrl+Alt+P", privacidade: "Ctrl+Alt+H" });
     expect(config.dia).toEqual(CONFIG_PADRAO.dia);
     expect(config.dia.expediente).toEqual({ inicio: "09:00", fim: "18:00" });
     expect(config.dia.foco).toEqual({ focoMin: 25, pausaMin: 5, pausaLongaMin: 15, ciclosAtePausaLonga: 4 });
@@ -145,7 +151,7 @@ describe("configuração", () => {
     db.prepare("INSERT INTO config (chave, valor) VALUES (?, ?)").run("atalhos", JSON.stringify(antigos));
     const estado = servico.obter();
     // O atalho escolhido pelo usuário vale; o do foco fica vazio e não vai ser registrado.
-    expect(estado.config.atalhos).toEqual({ ...antigos, foco: "" });
+    expect(estado.config.atalhos).toEqual({ ...antigos, foco: "", privacidade: "Ctrl+Alt+H" });
     expect(estado.falhasAtalhos).toEqual({
       foco: "Ctrl+Alt+P já é o atalho para abrir o Sistema, então o foco ficou sem atalho. Escolha outro em Configurações.",
     });
@@ -155,6 +161,35 @@ describe("configuração", () => {
     // Escolhido um atalho para o foco, o motivo some.
     const depois = await servico.definir({ atalhos: { ...estado.config.atalhos, foco: "Ctrl+Alt+F" } });
     expect(depois.config.atalhos.foco).toBe("Ctrl+Alt+F");
+    expect(depois.falhasAtalhos).toEqual({});
+  });
+
+  test("o Ctrl+Alt+H do padrão que colide com um atalho já salvo deixa o modo privacidade sem atalho", async () => {
+    const aplicados: Aplicacao[] = [];
+    const { db, servico } = montar(aceita(aplicados));
+    const salvos = {
+      sistema: "Ctrl+Alt+N",
+      dock: "Ctrl+Alt+H",
+      captura: "Ctrl+Alt+Space",
+      foco: "Ctrl+Alt+P",
+    };
+    db.prepare("INSERT INTO config (chave, valor) VALUES (?, ?)").run("atalhos", JSON.stringify(salvos));
+    const estado = servico.obter();
+    expect(estado.config.atalhos).toEqual({ ...salvos, privacidade: "" });
+    expect(estado.falhasAtalhos).toEqual({
+      privacidade:
+        "Ctrl+Alt+H já é o atalho para mostrar o dock, então o modo privacidade ficou sem atalho. Escolha outro em Configurações.",
+    });
+    await servico.aplicarAoSubir();
+    expect(aplicados[0]?.config.atalhos.privacidade).toBe("");
+
+    // O vazio escolhido pelo usuário fica vazio, sem colisão nenhuma: só o motivo muda.
+    const vazio = await servico.definir({ atalhos: { ...CONFIG_PADRAO.atalhos, privacidade: "" } });
+    expect(vazio.falhasAtalhos).toEqual({
+      privacidade: "O modo privacidade está sem atalho. Escolha um em Configurações.",
+    });
+    const depois = await servico.definir({ atalhos: { ...CONFIG_PADRAO.atalhos } });
+    expect(depois.config.atalhos.privacidade).toBe("Ctrl+Alt+H");
     expect(depois.falhasAtalhos).toEqual({});
   });
 

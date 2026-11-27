@@ -17,6 +17,7 @@ pub struct AtalhosConfig {
     pub dock: String,
     pub captura: String,
     pub foco: String,
+    pub privacidade: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -34,13 +35,15 @@ pub struct PedidoAplicar {
 }
 
 /// Atalhos pedidos que diferem dos atuais, na ordem em que serão registrados: primeiro os que
-/// ficam vazios, que soltam a combinação (o Ctrl+Alt+P do foco) para o atalho salvo pelo usuário.
+/// ficam vazios, que soltam a combinação (o Ctrl+Alt+P do foco, o Ctrl+Alt+H da privacidade) para
+/// o atalho salvo pelo usuário.
 pub fn atalhos_mudados(atuais: &atalhos::Atalhos, pedidos: &AtalhosConfig) -> Vec<(Acao, String)> {
     let mut mudados: Vec<(Acao, String)> = [
         (Acao::Sistema, &pedidos.sistema),
         (Acao::Dock, &pedidos.dock),
         (Acao::Captura, &pedidos.captura),
         (Acao::Foco, &pedidos.foco),
+        (Acao::Privacidade, &pedidos.privacidade),
     ]
         .into_iter()
         .filter(|(acao, novo)| atuais.get(acao).map(|a| !a.eq_ignore_ascii_case(novo)).unwrap_or(true))
@@ -93,7 +96,8 @@ mod testes {
     fn le_o_pedido_do_servico() {
         let linha = r#"{"tipo":"aplicar","id":3,"mudou":["dock"],"config":{"tema":"papel",
             "dock":{"lado":"direita","modo":"esconder","forma":"flutuante"},
-            "atalhos":{"sistema":"Ctrl+Alt+N","dock":"Ctrl+Alt+D","captura":"Ctrl+Alt+K","foco":"Ctrl+Alt+P"},
+            "atalhos":{"sistema":"Ctrl+Alt+N","dock":"Ctrl+Alt+D","captura":"Ctrl+Alt+K","foco":"Ctrl+Alt+P",
+            "privacidade":"Ctrl+Alt+H"},
             "autostart":true}}"#;
         let p: PedidoAplicar = serde_json::from_str(linha).unwrap();
         assert_eq!(p.mudou, vec!["dock"]);
@@ -101,6 +105,7 @@ mod testes {
         assert_eq!(p.config.dock.modo, dock::Modo::Esconder);
         assert!(p.config.autostart);
         assert_eq!(p.config.atalhos.foco, "Ctrl+Alt+P");
+        assert_eq!(p.config.atalhos.privacidade, "Ctrl+Alt+H");
     }
 
     #[test]
@@ -111,6 +116,7 @@ mod testes {
             dock: "Ctrl+Alt+D".into(),
             captura: "Ctrl+Alt+K".into(),
             foco: "Ctrl+Alt+P".into(),
+            privacidade: "Ctrl+Alt+H".into(),
         };
         assert_eq!(atalhos_mudados(&atuais, &pedidos), vec![(Acao::Captura, "Ctrl+Alt+K".to_string())]);
         let pedidos = AtalhosConfig { foco: "Ctrl+Alt+F".into(), captura: "Ctrl+Alt+Space".into(), ..pedidos };
@@ -125,10 +131,27 @@ mod testes {
             dock: "Ctrl+Alt+D".into(),
             captura: "Ctrl+Alt+Space".into(),
             foco: String::new(),
+            privacidade: "Ctrl+Alt+H".into(),
         };
         assert_eq!(
             atalhos_mudados(&atuais, &pedidos),
             vec![(Acao::Foco, String::new()), (Acao::Sistema, "Ctrl+Alt+P".to_string())]
+        );
+    }
+
+    #[test]
+    fn a_privacidade_vazia_solta_o_ctrl_alt_h_antes_do_atalho_salvo_que_o_usa() {
+        let atuais = atalhos::padrao();
+        let pedidos = AtalhosConfig {
+            sistema: "Ctrl+Alt+N".into(),
+            dock: "Ctrl+Alt+H".into(),
+            captura: "Ctrl+Alt+Space".into(),
+            foco: "Ctrl+Alt+P".into(),
+            privacidade: String::new(),
+        };
+        assert_eq!(
+            atalhos_mudados(&atuais, &pedidos),
+            vec![(Acao::Privacidade, String::new()), (Acao::Dock, "Ctrl+Alt+H".to_string())]
         );
     }
 }

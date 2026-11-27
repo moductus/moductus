@@ -18,7 +18,7 @@ use serde::Deserialize;
 use tauri::{
     image::Image,
     include_image,
-    menu::{IsMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu},
+    menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Runtime,
 };
@@ -211,7 +211,8 @@ pub struct MenuServico {
     pub itens: Vec<Item>,
 }
 
-/// Um item do serviço: separador ou opção, com submenu quando tem `itens`.
+/// Um item do serviço: separador ou opção, com submenu quando tem `itens` e com a marca do Windows
+/// quando tem `marcado` (o modo privacidade, que liga e desliga).
 #[derive(Debug, Deserialize, PartialEq)]
 pub struct Item {
     #[serde(default)]
@@ -222,6 +223,8 @@ pub struct Item {
     pub rotulo: String,
     #[serde(default = "sim")]
     pub habilitado: bool,
+    #[serde(default)]
+    pub marcado: Option<bool>,
     #[serde(default)]
     pub itens: Option<Vec<Item>>,
 }
@@ -336,12 +339,15 @@ fn nativos<R: Runtime>(app: &AppHandle<R>, itens: &[Item]) -> tauri::Result<Vec<
         }
         let id = format!("{DO_SERVICO}{}", item.id);
         let rotulo = rotulo_nativo(&item.rotulo);
-        match &item.itens {
-            Some(filhos) => {
+        match (&item.itens, item.marcado) {
+            (Some(filhos), _) => {
                 let filhos = nativos(app, filhos)?;
                 saida.push(Submenu::with_id_and_items(app, id, rotulo, item.habilitado, &referencias(&filhos))?.kind());
             }
-            None => saida.push(MenuItem::with_id(app, id, rotulo, item.habilitado, None::<&str>)?.kind()),
+            (None, Some(marcado)) => {
+                saida.push(CheckMenuItem::with_id(app, id, rotulo, item.habilitado, marcado, None::<&str>)?.kind())
+            }
+            (None, None) => saida.push(MenuItem::with_id(app, id, rotulo, item.habilitado, None::<&str>)?.kind()),
         }
     }
     Ok(saida)
@@ -371,6 +377,17 @@ mod testes {
         assert!(menu.itens[1].separador);
         assert!(!menu.itens[2].habilitado);
         assert!(menu.itens[2].itens.is_none());
+        assert_eq!(menu.itens[2].marcado, None);
+    }
+
+    #[test]
+    fn le_o_item_do_modo_privacidade_com_a_marca() {
+        let linha = r#"{"tipo":"bandeja","dica":"Moductus","itens":[
+            {"id":"privacidade","rotulo":"Modo privacidade","habilitado":true,"marcado":true}]}"#;
+        let menu: MenuServico = serde_json::from_str(linha).unwrap();
+        assert_eq!(menu.itens[0].id, "privacidade");
+        assert_eq!(menu.itens[0].marcado, Some(true));
+        assert_eq!(id_do_servico("servico:privacidade"), Some("privacidade"));
     }
 
     #[test]

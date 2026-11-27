@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Icone } from "../../componentes/Icone.tsx";
 import { Marca } from "../../componentes/Marca.tsx";
+import { usePrivacidade } from "../../componentes/privacidade.ts";
 import { AGENTES, DADOS_AGENTES } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
 import { formatarHora } from "../../componentes/personagem/quando.ts";
@@ -21,6 +22,7 @@ import { useCanal } from "../../servico/conexao.ts";
 import { ROTULOS_CONTAGEM, useContagens } from "../../servico/contagens.ts";
 import { minutosDoDock, useEstadoFoco, useSegundosRestantes } from "../../servico/foco.ts";
 import { marcarVistasDe, usePontosTime } from "../../servico/notificacoes.ts";
+import { definirPrivacidade } from "../../servico/privacidade.ts";
 import { useTime } from "../../servico/time.ts";
 import { AREAS_DOCK, DADOS_AREAS } from "../areas.ts";
 import { useTour } from "../tour/tour.ts";
@@ -60,8 +62,8 @@ function useAreaAberta(): string | null {
 }
 
 /**
- * O dock, de cima para baixo (Dock.dc.html): marca, áreas, o time, mídia, Mic, Awake e
- * relógio. A janela não ativa ao clicar; o Ctrl+Alt+D dá o foco a ele (modo teclado), e aí
+ * O dock, de cima para baixo (Dock.dc.html): marca, áreas, o time, mídia, Mic, Awake, o selo do
+ * modo privacidade (só enquanto ligado) e relógio. A janela não ativa ao clicar; o Ctrl+Alt+D dá o foco a ele (modo teclado), e aí
  * setas, Tab, Home e End andam pelos botões e Esc devolve o foco a quem estava antes.
  */
 export function Dock() {
@@ -86,6 +88,8 @@ export function Dock() {
   const nav = useRef<HTMLElement>(null);
   // No tour, o dock é a parada 1 (com o anel) e escurece nas outras; nada nele recebe clique.
   const { parada } = useTour();
+  // O modo privacidade vem do provedor da janela (janelas/ComTema.tsx), o mesmo que mascara os valores.
+  const privacidade = usePrivacidade();
 
   // A casca avisa que o dock ganhou o foco pelo atalho: o teclado começa na primeira área.
   useEffect(() => {
@@ -260,6 +264,19 @@ export function Dock() {
       >
         <Icone nome="awake" tamanho={18} />
       </button>
+
+      {privacidade && (
+        <button
+          type="button"
+          className="dock-botao dock-privacidade"
+          data-privacidade=""
+          aria-label="Modo privacidade ligado. Ctrl Alt H desliga"
+          title="Modo privacidade ligado · Ctrl Alt H"
+          onClick={() => void definirPrivacidade(false).catch(() => undefined)}
+        >
+          <Icone nome="esconder" tamanho={18} />
+        </button>
+      )}
 
       <time className="dock-relogio" aria-label={`Agora são ${hora}`}>
         {hora}

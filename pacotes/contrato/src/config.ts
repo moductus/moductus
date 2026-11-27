@@ -22,6 +22,12 @@ export const Atalhos = z.object({
    * `falhasAtalhos.foco` até ele escolher outro.
    */
   foco: z.string(),
+  /**
+   * Liga e desliga o modo privacidade de qualquer lugar (ADR-0047). Vazio é sem atalho, como o do
+   * foco: o padrão (Ctrl+Alt+H) colidia com um atalho já salvo; a bandeja e Configurações continuam
+   * ligando o modo.
+   */
+  privacidade: z.string(),
 });
 export type Atalhos = z.infer<typeof Atalhos>;
 
@@ -133,7 +139,13 @@ export type Config = z.infer<typeof Config>;
 export const CONFIG_PADRAO: Config = {
   tema: "automatico",
   dock: { lado: "esquerda", modo: "fixo", forma: "colada" },
-  atalhos: { sistema: "Ctrl+Alt+N", dock: "Ctrl+Alt+D", captura: "Ctrl+Alt+Space", foco: "Ctrl+Alt+P" },
+  atalhos: {
+    sistema: "Ctrl+Alt+N",
+    dock: "Ctrl+Alt+D",
+    captura: "Ctrl+Alt+Space",
+    foco: "Ctrl+Alt+P",
+    privacidade: "Ctrl+Alt+H",
+  },
   autostart: false,
   silencio: { horario: { ligado: false, inicio: "22:00", fim: "07:30" }, telaCheia: true, foco: true },
   dia: {

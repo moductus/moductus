@@ -1,15 +1,15 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { StrictMode, type ComponentType } from "react";
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { carregarJanela } from "./janelas/Aplicacao.tsx";
+import { ComTema } from "./janelas/ComTema.tsx";
 import { janelaDoRotulo } from "./janelas/rotas.ts";
-import { useAcessibilidade } from "./nativo/acessibilidade.ts";
 import { registrar } from "./nativo/eventos.ts";
 import altoContraste from "./tokens/alto-contraste.css?inline";
 import base from "./tokens/base.css?inline";
 import fontes from "./tokens/fontes.css?inline";
 import temas from "./tokens/temas.css?inline";
-import { aplicarTema, useTema } from "./tokens/tema.ts";
+import { aplicarTema } from "./tokens/tema.ts";
 
 // Os tokens vêm depois do CSS de cada tela, que chega com o chunk dela no <head>: no <body>, ficam
 // sempre por último, e a base e o alto contraste do Windows ganham das regras de cada componente.
@@ -21,16 +21,6 @@ document.body.append(tokens);
 aplicarTema("automatico");
 const raiz = createRoot(document.getElementById("raiz")!);
 const parametros = new URLSearchParams(window.location.search);
-
-/**
- * Toda janela segue o tema da configuração e a animação do Windows; os componentes só leem
- * os tokens.
- */
-function ComTema({ Tela }: { Tela: ComponentType }) {
-  useTema();
-  useAcessibilidade();
-  return <Tela />;
-}
 
 if (parametros.has("personagens")) {
   // Revisão de design no navegador (`pnpm exec vite`, depois /?personagens): fora da casca,

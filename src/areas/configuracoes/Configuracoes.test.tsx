@@ -8,6 +8,7 @@ import { auditar } from "../../teste/acessibilidade.ts";
 import { SecaoAtalhos } from "./Atalhos.tsx";
 import { SecaoGeral } from "./Geral.tsx";
 import { SecaoOutroPc } from "./OutroPc.tsx";
+import { SecaoPrivacidade } from "./Privacidade.tsx";
 import { SecaoTemaDock } from "./TemaDock.tsx";
 
 // O serviço é falso: cada pedido fica registrado e a resposta vem de `responder`.
@@ -216,6 +217,20 @@ describe("Atalhos", () => {
     expect(campo.textContent).toBe("CtrlAltEspaço");
   });
 
+  it("o modo privacidade tem a linha dele, e sem atalho mostra o motivo que veio do serviço", async () => {
+    const motivo = "Ctrl+Alt+H já é o atalho para mostrar o dock, então o modo privacidade ficou sem atalho.";
+    servicoQueAceita(
+      estadoBase({
+        config: { ...CONFIG_PADRAO, atalhos: { ...CONFIG_PADRAO.atalhos, privacidade: "" } },
+        falhasAtalhos: { privacidade: motivo },
+      }),
+    );
+    await montar(<SecaoAtalhos />);
+    const linha = todos(".config-atalho")[3]!;
+    expect(linha.querySelector('button[aria-label^="Modo privacidade"]')).not.toBeNull();
+    expect(linha.querySelector('[role="alert"]')!.textContent).toBe(motivo);
+  });
+
   it("mostra a falha que a casca informou ao subir, na linha do atalho", async () => {
     servicoQueAceita(
       estadoBase({ falhasAtalhos: { captura: "Ctrl+Alt+Space já está em uso por outro programa" } }),
@@ -226,6 +241,44 @@ describe("Atalhos", () => {
       "Ctrl+Alt+Space já está em uso por outro programa",
     );
     expect(linhas[0]!.querySelector('[role="alert"]')).toBeNull();
+  });
+});
+
+describe("Privacidade", () => {
+  it("a chave liga o modo mandando só a privacidade, e o aviso de ligado aparece com o atalho", async () => {
+    servicoQueAceita();
+    await montar(<SecaoPrivacidade />);
+    const chave = por('[role="switch"][aria-label="Modo privacidade"]');
+    expect(chave.getAttribute("aria-checked")).toBe("false");
+    expect(por('[role="status"]')).toBeNull();
+    await clicar(chave);
+    expect(definicoes()).toEqual([{ privacidade: { ativo: true } }]);
+    expect(chave.getAttribute("aria-checked")).toBe("true");
+    expect(por('[role="status"]').textContent).toBe(
+      "Modo privacidade ligado. O dock mostra o selo enquanto durar.CtrlAltH",
+    );
+  });
+
+  it("acompanha o atalho ou a bandeja de outra janela, e mostra o atalho que estiver configurado", async () => {
+    servicoQueAceita();
+    await montar(<SecaoPrivacidade />);
+    const atalhos = { ...CONFIG_PADRAO.atalhos, privacidade: "Ctrl+Shift+H" };
+    await act(async () =>
+      falso.ouvintes.get("config.mudou")!(
+        estadoBase({ config: { ...CONFIG_PADRAO, atalhos, privacidade: { ativo: true } } }),
+      ),
+    );
+    expect(por('[role="switch"]').getAttribute("aria-checked")).toBe("true");
+    expect(por(".config-privacidade-linha .atalho").textContent).toBe("CtrlShiftH");
+  });
+
+  it("o como fica mostra o antes inteiro e o depois mascarado, com o modo desligado", async () => {
+    servicoQueAceita();
+    await montar(<SecaoPrivacidade />);
+    const exemplos = por(".config-privacidade-exemplos");
+    expect([...exemplos.querySelectorAll("[data-mascarado]")]).toHaveLength(3);
+    expect(exemplos.textContent).toContain("R$ 1.312,40");
+    expect(exemplos.textContent).toContain("Casa › Mercado→Casa › Mercado");
   });
 });
 
@@ -346,6 +399,7 @@ describe("acessibilidade das seções conectadas", () => {
     ["Geral", SecaoGeral],
     ["Tema e dock", SecaoTemaDock],
     ["Atalhos", SecaoAtalhos],
+    ["Privacidade", SecaoPrivacidade],
     ["Levar para outro PC", SecaoOutroPc],
   ] as const)("%s: todo controle com nome e estados ARIA válidos", async (_, Secao) => {
     servicoQueAceita();

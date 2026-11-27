@@ -213,6 +213,15 @@
 }
 
 /* ---------- relógio e estado do serviço ---------- */
+/* Selo do modo privacidade (Dock.dc.html): enquanto o modo durar; clicar desliga. */
+.dock .dock-privacidade {
+  height: var(--altura-selo-privacidade);
+  margin-top: var(--esp-4);
+  border: var(--espessura-selo-privacidade) solid var(--destaque);
+  background: var(--fundo-ativo);
+  color: var(--texto);
+}
+
 .dock-relogio {
   margin-top: var(--esp-6);
   font-family: var(--fonte-mono);

@@ -50,7 +50,14 @@ function pc(nativo: AplicadorNativo = aceita(), portable = false) {
 const MINHA: Config = {
   tema: "vidro",
   dock: { lado: "direita", modo: "inteligente", forma: "flutuante" },
-  atalhos: { sistema: "Ctrl+Alt+M", dock: "Ctrl+Alt+B", captura: "Ctrl+Shift+Space", foco: "Ctrl+Alt+F" },
+  // O atalho do modo privacidade é preferência e vai junto; o estado do modo, não.
+  atalhos: {
+    sistema: "Ctrl+Alt+M",
+    dock: "Ctrl+Alt+B",
+    captura: "Ctrl+Shift+Space",
+    foco: "Ctrl+Alt+F",
+    privacidade: "Ctrl+Shift+H",
+  },
   autostart: true,
   silencio: { horario: { ligado: true, inicio: "22:00", fim: "07:30" }, telaCheia: true, foco: false },
   dia: {
@@ -373,7 +380,11 @@ describe("levar para outro PC: só configurações", () => {
     expect(estado.config).toEqual({
       ...CONFIG_PADRAO,
       tema: "grafite",
-      atalhos: { ...antigos, foco: CONFIG_PADRAO.atalhos.foco },
+      atalhos: {
+        ...antigos,
+        foco: CONFIG_PADRAO.atalhos.foco,
+        privacidade: CONFIG_PADRAO.atalhos.privacidade,
+      },
     });
   });
 

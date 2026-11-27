@@ -1,8 +1,9 @@
 //! Atalhos globais (PRODUCT §8): Ctrl+Alt+N abre o Sistema, Ctrl+Alt+D mostra o dock,
 //! dá o foco a ele (modo teclado) e esconde, nessa ordem (dock::alternar_visivel),
-//! Ctrl+Alt+Espaço abre a captura e Ctrl+Alt+P inicia ou pausa o foco (quem decide é o serviço,
-//! pelo aviso `foco-alternar`). Configuráveis; um atalho em conflito devolve o motivo e o
-//! anterior continua valendo.
+//! Ctrl+Alt+Espaço abre a captura, Ctrl+Alt+P inicia ou pausa o foco (quem decide é o serviço,
+//! pelo aviso `foco-alternar`) e Ctrl+Alt+H liga ou desliga o modo privacidade (também no serviço,
+//! pelo aviso `privacidade-alternar`, ADR-0047). Configuráveis; um atalho em conflito devolve o
+//! motivo e o anterior continua valendo.
 
 use std::{collections::BTreeMap, str::FromStr, sync::Mutex};
 
@@ -17,6 +18,7 @@ pub enum Acao {
     Dock,
     Captura,
     Foco,
+    Privacidade,
 }
 
 impl Acao {
@@ -26,6 +28,7 @@ impl Acao {
             Acao::Dock => "mostrar o dock",
             Acao::Captura => "abrir a captura",
             Acao::Foco => "iniciar ou pausar o foco",
+            Acao::Privacidade => "ligar ou desligar o modo privacidade",
         }
     }
 }
@@ -38,6 +41,7 @@ pub fn padrao() -> Atalhos {
         (Acao::Dock, "Ctrl+Alt+D".to_string()),
         (Acao::Captura, "Ctrl+Alt+Space".to_string()),
         (Acao::Foco, "Ctrl+Alt+P".to_string()),
+        (Acao::Privacidade, "Ctrl+Alt+H".to_string()),
     ])
 }
 
@@ -76,12 +80,20 @@ fn executar(app: &AppHandle, acao: Acao) {
         Acao::Dock => crate::dock::alternar_visivel(),
         // O foco é regra do serviço: a casca só avisa, e a janela fica sabendo pelo `foco.mudou`.
         Acao::Foco => crate::servico::avisar(aviso_do_foco()),
+        // O modo privacidade é estado da configuração, que mora no serviço: a casca só avisa, e as
+        // janelas ficam sabendo pelo `privacidade.mudou`.
+        Acao::Privacidade => crate::servico::avisar(aviso_da_privacidade()),
     }
 }
 
 /// O aviso que leva o atalho do foco ao serviço (`servico/src/areas/foco/canal.ts`).
 fn aviso_do_foco() -> serde_json::Value {
     serde_json::json!({ "tipo": "foco-alternar" })
+}
+
+/// O aviso que leva o atalho do modo privacidade ao serviço (`servico/src/config/privacidade.ts`).
+fn aviso_da_privacidade() -> serde_json::Value {
+    serde_json::json!({ "tipo": "privacidade-alternar" })
 }
 
 pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
@@ -187,13 +199,14 @@ mod testes {
     use super::*;
 
     #[test]
-    fn padrao_tem_os_quatro_atalhos_do_produto() {
+    fn padrao_tem_os_cinco_atalhos_do_produto() {
         let p = padrao();
-        assert_eq!(p.len(), 4);
+        assert_eq!(p.len(), 5);
         assert_eq!(p[&Acao::Sistema], "Ctrl+Alt+N");
         assert_eq!(p[&Acao::Dock], "Ctrl+Alt+D");
         assert_eq!(p[&Acao::Captura], "Ctrl+Alt+Space");
         assert_eq!(p[&Acao::Foco], "Ctrl+Alt+P");
+        assert_eq!(p[&Acao::Privacidade], "Ctrl+Alt+H");
         for (acao, texto) in &p {
             assert!(validar(&p, *acao, texto).is_ok(), "{texto}");
         }
@@ -219,6 +232,18 @@ mod testes {
         assert_eq!(erro, "ctrl+alt+p já é o atalho para iniciar ou pausar o foco");
         assert_eq!(serde_json::to_value(Acao::Foco).unwrap(), "foco");
         assert_eq!(aviso_do_foco(), serde_json::json!({ "tipo": "foco-alternar" }));
+    }
+
+    #[test]
+    fn a_privacidade_conflita_com_os_outros_e_avisa_o_servico() {
+        let erro = validar(&padrao(), Acao::Privacidade, "Ctrl+Alt+N").unwrap_err();
+        assert_eq!(erro, "Ctrl+Alt+N já é o atalho para abrir o Sistema");
+        let erro = validar(&padrao(), Acao::Dock, "ctrl+alt+h").unwrap_err();
+        assert_eq!(erro, "ctrl+alt+h já é o atalho para ligar ou desligar o modo privacidade");
+        assert_eq!(serde_json::to_value(Acao::Privacidade).unwrap(), "privacidade");
+        assert_eq!(aviso_da_privacidade(), serde_json::json!({ "tipo": "privacidade-alternar" }));
+        let atalhos = sem_atalho(padrao(), Acao::Privacidade);
+        assert!(validar(&atalhos, Acao::Sistema, "Ctrl+Alt+H").is_ok());
     }
 
     #[test]
