@@ -10,10 +10,14 @@ import {
   datasDaFatura,
   ErroDasContas,
   impressaoDoLancamento,
+  MENSAGEM_CARTAO_SEM_DIAS,
   MENSAGEM_CONTA_COM_LANCAMENTO,
+  MENSAGEM_FATURA_NAO_PAGA,
   MENSAGEM_FATURA_PAGA,
+  MENSAGEM_FATURA_SEM_VALOR,
   MENSAGEM_MOEDA_COM_LANCAMENTO,
   MENSAGEM_PAGAMENTO_INVALIDO,
+  MENSAGEM_PAGAMENTO_NA_LIXEIRA,
   MENSAGEM_SEM_CONTA_PAGAMENTO,
   MENSAGEM_SO_CARTAO,
   RepositorioContas,
@@ -247,6 +251,81 @@ describe("pagar a fatura", () => {
       n: 0,
     });
   });
+
+  test("com o pagamento na lixeira a fatura não está paga, e restaurar volta a paga", () => {
+    const { contas, db, cartao, fatura } = comFatura();
+    const paga = contas.pagarFatura({ id: fatura.id });
+    const lixeira = (apagadoEm: string | null) =>
+      db.prepare("UPDATE lancamentos SET apagado_em = ? WHERE transferencia_id IS NOT NULL").run(apagadoEm);
+
+    lixeira("2026-11-20T16:00:00.000Z");
+    const naLixeira = contas.faturas({ contaId: cartao.id })[0];
+    confere("financas.faturas", [naLixeira]);
+    expect(naLixeira).toMatchObject({ estado: "fechada", pagamentoLancamentoId: null });
+    expect(() => contas.pagarFatura({ id: fatura.id })).toThrow(MENSAGEM_PAGAMENTO_NA_LIXEIRA);
+
+    lixeira(null);
+    expect(contas.faturas({ contaId: cartao.id })[0]).toMatchObject({
+      estado: "paga",
+      pagamentoLancamentoId: paga.pagamentoLancamentoId,
+    });
+  });
+
+  test("desfazer o que não está pago e pagar fatura sem valor são recusados", () => {
+    const { contas, cartao, fatura } = comFatura();
+    expect(() => contas.desfazerPagamento({ id: fatura.id })).toThrow(MENSAGEM_FATURA_NAO_PAGA);
+    const vazia = contas.faturaDaCompra(cartao.id, "2026-12-01");
+    expect(() => contas.pagarFatura({ id: vazia.id })).toThrow(MENSAGEM_FATURA_SEM_VALOR);
+  });
+});
+
+describe("troca do dia de fechamento", () => {
+  test("a compra depois da troca não cai na fatura paga que fechou com o dia antigo", () => {
+    const { contas, lancar, relogio } = montar("2026-11-11T15:00:00.000Z");
+    const corrente = contas.criarConta({ nome: "Itaú", tipo: "corrente" });
+    const cartao = contas.criarConta({
+      nome: "Nubank",
+      tipo: "cartao",
+      diaFechamento: 10,
+      diaVencimento: 17,
+      contaPagamentoId: corrente.id,
+    });
+    const novembro = contas.faturaDaCompra(cartao.id, "2026-11-05");
+    lancar(cartao.id, "2026-11-05", -5_000, novembro.id);
+    contas.pagarFatura({ id: novembro.id });
+
+    relogio.agora = new Date("2026-11-12T15:00:00.000Z");
+    contas.definirConta({ id: cartao.id, diaFechamento: 25, diaVencimento: 5 });
+    const compra = contas.faturaDaCompra(cartao.id, "2026-11-15");
+    expect(compra.id).not.toBe(novembro.id);
+    expect(compra).toMatchObject({ mesReferencia: "2026-12", fechaEm: "2026-12-25", venceEm: "2027-01-05" });
+    // A paga guarda as datas com que fechou.
+    const paga = contas.faturas({ contaId: cartao.id }).find((f) => f.id === novembro.id);
+    expect(paga).toMatchObject({ estado: "paga", fechaEm: "2026-11-10", venceEm: "2026-11-17" });
+  });
+
+  test("a fatura aberta ganha as datas novas e o que passou do novo fechamento vai para a seguinte", () => {
+    const { contas, lancar, db, eventos } = montar("2026-11-12T15:00:00.000Z");
+    const cartao = contas.criarConta({ nome: "Inter", tipo: "cartao", diaFechamento: 25, diaVencimento: 5 });
+    const novembro = contas.faturaDaCompra(cartao.id, "2026-11-02");
+    const cedo = lancar(cartao.id, "2026-11-02", -1_000, novembro.id);
+    const tarde = lancar(cartao.id, "2026-11-20", -2_000, novembro.id);
+
+    contas.definirConta({ id: cartao.id, diaFechamento: 15, diaVencimento: 22 });
+    const faturas = contas.faturas({ contaId: cartao.id });
+    expect(faturas.map((f) => [f.mesReferencia, f.fechaEm, f.venceEm, f.totalCentavos])).toEqual([
+      ["2026-12", "2026-12-15", "2026-12-22", -2_000],
+      ["2026-11", "2026-11-15", "2026-11-22", -1_000],
+    ]);
+    const faturaDe = (id: string) =>
+      (db.prepare("SELECT fatura_id FROM lancamentos WHERE id = ?").get(id) as { fatura_id: string })
+        .fatura_id;
+    expect(faturaDe(cedo)).toBe(novembro.id);
+    expect(faturaDe(tarde)).not.toBe(novembro.id);
+    const evento = eventos.at(-1);
+    expect(MudancaFinancas.safeParse(evento).success).toBe(true);
+    expect(evento?.lancamentos.map((l) => l.id)).toEqual([tarde]);
+  });
 });
 
 describe("saldo derivado", () => {
@@ -344,6 +423,41 @@ describe("cadastro", () => {
     });
     const editado = contas.definirConta({ id: cartao.id, diaFechamento: 31, limiteCentavos: 500_000 });
     expect(editado).toMatchObject({ diaFechamento: 31, diaVencimento: 17, limiteCentavos: 500_000 });
+    expect(() => contas.criarConta({ nome: "Itaú", tipo: "corrente", limiteCentavos: 100 })).toThrow(
+      MENSAGEM_SO_CARTAO,
+    );
+  });
+
+  test("cartão sem os dias é recusado ao criar e ao editar", () => {
+    const { contas } = montar();
+    expect(() => contas.criarConta({ nome: "Nubank", tipo: "cartao", diaVencimento: 10 })).toThrow(
+      MENSAGEM_CARTAO_SEM_DIAS,
+    );
+    const cartao = contas.criarConta({ nome: "Nubank", tipo: "cartao", diaFechamento: 3, diaVencimento: 10 });
+    expect(() => contas.definirConta({ id: cartao.id, diaFechamento: null })).toThrow(
+      MENSAGEM_CARTAO_SEM_DIAS,
+    );
+  });
+
+  test("trocar para conta de pagamento inválida, ou mudar a moeda contra ela, é recusado", () => {
+    const { contas } = montar();
+    const corrente = contas.criarConta({ nome: "Itaú", tipo: "corrente" });
+    const dolar = contas.criarConta({ nome: "Wise", tipo: "corrente", moeda: "USD" });
+    const cartao = contas.criarConta({
+      nome: "Nubank",
+      tipo: "cartao",
+      diaFechamento: 3,
+      diaVencimento: 10,
+      contaPagamentoId: corrente.id,
+    });
+    expect(() => contas.definirConta({ id: cartao.id, contaPagamentoId: dolar.id })).toThrow(
+      MENSAGEM_PAGAMENTO_INVALIDO,
+    );
+    expect(() => contas.definirConta({ id: cartao.id, moeda: "USD" })).toThrow(MENSAGEM_PAGAMENTO_INVALIDO);
+    expect(contas.obterConta({ id: cartao.id })).toMatchObject({
+      contaPagamentoId: corrente.id,
+      moeda: "BRL",
+    });
   });
 });
 

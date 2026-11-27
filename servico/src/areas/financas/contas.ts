@@ -45,6 +45,8 @@ export const MENSAGEM_SEM_CONTA_PAGAMENTO = "diga de qual conta saiu o pagamento
 export const MENSAGEM_FATURA_PAGA = "a fatura já está paga";
 export const MENSAGEM_FATURA_NAO_PAGA = "a fatura não está paga";
 export const MENSAGEM_FATURA_SEM_VALOR = "a fatura não tem valor a pagar";
+export const MENSAGEM_PAGAMENTO_NA_LIXEIRA =
+  "o pagamento desta fatura está na lixeira: restaure o lançamento ou desfaça o pagamento";
 export const MENSAGEM_MOEDA_COM_LANCAMENTO = "a moeda não muda depois que a conta tem lançamento";
 
 interface LinhaConta {
@@ -110,16 +112,23 @@ interface LinhaFatura {
   mes_referencia: string;
   fecha_em: string;
   vence_em: string;
+  /** O pagamento registrado (coluna); a fatura só está paga com o lado do cartão vivo. */
   paga: number;
   pagamento_lancamento_id: string | null;
+  pagamento_vivo: number;
   total_centavos: number;
   criado_em: string;
   atualizado_em: string;
 }
 
-/** O total não é coluna (ADR-0046): a soma dos lançamentos vivos da fatura, saída negativa. */
+/**
+ * O total não é coluna (ADR-0046): a soma dos lançamentos vivos da fatura, saída negativa. A fatura
+ * só está paga enquanto o lançamento do pagamento existe fora da lixeira (contrato `EstadoFatura`).
+ */
 const SELECT_FATURA = `
   SELECT f.id, f.conta_id, f.mes_referencia, f.fecha_em, f.vence_em, f.paga, f.pagamento_lancamento_id,
+         EXISTS (SELECT 1 FROM lancamentos p
+                  WHERE p.id = f.pagamento_lancamento_id AND p.apagado_em IS NULL) AS pagamento_vivo,
          COALESCE((SELECT SUM(l.valor_centavos) FROM lancamentos l
                     WHERE l.fatura_id = f.id AND l.apagado_em IS NULL), 0) AS total_centavos,
          f.criado_em, f.atualizado_em
@@ -222,11 +231,18 @@ export interface DatasFatura {
 export function datasDaFatura(data: string, diaFechamento: number, diaVencimento: number): DatasFatura {
   let ano = Number(data.slice(0, 4));
   let mes = Number(data.slice(5, 7));
-  let fechaEm = diaNoMes(ano, mes, diaFechamento);
-  if (data >= fechaEm) {
-    [ano, mes] = mesSeguinte(ano, mes);
-    fechaEm = diaNoMes(ano, mes, diaFechamento);
-  }
+  if (data >= diaNoMes(ano, mes, diaFechamento)) [ano, mes] = mesSeguinte(ano, mes);
+  return datasDoMes(ano, mes, diaFechamento, diaVencimento);
+}
+
+/** As datas da fatura que fecha no mês (`ano`, `mes` de 1 a 12), pelos dias do cartão. */
+export function datasDoMes(
+  ano: number,
+  mes: number,
+  diaFechamento: number,
+  diaVencimento: number,
+): DatasFatura {
+  const fechaEm = diaNoMes(ano, mes, diaFechamento);
   let venceEm = diaNoMes(ano, mes, diaVencimento);
   if (venceEm <= fechaEm) {
     const [anoV, mesV] = mesSeguinte(ano, mes);
@@ -235,6 +251,11 @@ export function datasDaFatura(data: string, diaFechamento: number, diaVencimento
   // A 030 só confere a forma do mês; o mês de 01 a 12 é garantido aqui (pendência da revisão da F4-05).
   const mesReferencia = Mes.parse(`${ano}-${doisDigitos(mes)}`);
   return { mesReferencia, fechaEm, venceEm };
+}
+
+/** O ano e o mês (1 a 12) de `AAAA-MM`. */
+function partesDoMes(mesReferencia: string): [number, number] {
+  return [Number(mesReferencia.slice(0, 4)), Number(mesReferencia.slice(5, 7))];
 }
 
 // ---------- Repositório ----------
@@ -383,6 +404,30 @@ export class RepositorioContas {
       .run(id, contaId, datas.mesReferencia, datas.fechaEm, datas.venceEm, agora, agora);
   }
 
+  /** As faturas sem pagamento registrado que ainda não fecharam em `hoje`. */
+  faturasAbertas(contaId: string, hoje: string): LinhaFatura[] {
+    return this.db
+      .prepare(`${SELECT_FATURA} WHERE f.conta_id = ? AND f.paga = 0 AND f.fecha_em > ?`)
+      .all(contaId, hoje) as unknown as LinhaFatura[];
+  }
+
+  mudarDatasDaFatura(id: string, datas: DatasFatura, agora: string): void {
+    this.db
+      .prepare("UPDATE faturas SET fecha_em = ?, vence_em = ?, atualizado_em = ? WHERE id = ?")
+      .run(datas.fechaEm, datas.venceEm, agora, id);
+  }
+
+  /** Os lançamentos da fatura (vivos ou na lixeira) do dia `desde` em diante: ficaram fora dela. */
+  lancamentosDesde(faturaId: string, desde: string): { id: string; data: string }[] {
+    return this.db
+      .prepare("SELECT id, data FROM lancamentos WHERE fatura_id = ? AND data >= ? ORDER BY data, id")
+      .all(faturaId, desde) as unknown as { id: string; data: string }[];
+  }
+
+  moverParaFatura(lancamentoId: string, faturaId: string): void {
+    this.db.prepare("UPDATE lancamentos SET fatura_id = ? WHERE id = ?").run(faturaId, lancamentoId);
+  }
+
   marcarPagamento(id: string, pagamentoLancamentoId: string | null, agora: string, carimbo: Carimbo): void {
     const o = colunasDeOrigem(carimbo);
     this.db
@@ -430,6 +475,11 @@ export class RepositorioContas {
   /** Vivos ou na lixeira: o desfazer do pagamento leva os dois lados de onde estiverem. */
   lancamentosDaTransferencia(transferenciaId: string): Lancamento[] {
     return this.lancamentosOnde("l.transferencia_id = ?", transferenciaId);
+  }
+
+  lancamentosDosIds(ids: readonly string[]): Lancamento[] {
+    if (ids.length === 0) return [];
+    return this.lancamentosOnde(`l.id IN (${ids.map(() => "?").join(", ")})`, ...ids);
   }
 
   lancamento(id: string): Lancamento | null {
@@ -514,6 +564,18 @@ export class ServicoContas {
 
   criarConta(nova: NovaConta, carimbo: Carimbo = DO_USUARIO): Conta {
     const cartao = nova.tipo === "cartao";
+    const camposDeCartao = [
+      nova.diaFechamento,
+      nova.diaVencimento,
+      nova.limiteCentavos,
+      nova.contaPagamentoId,
+    ];
+    if (!cartao && camposDeCartao.some((c) => c !== undefined && c !== null)) {
+      throw new ErroDasContas(MENSAGEM_SO_CARTAO);
+    }
+    if (cartao && (nova.diaFechamento == null || nova.diaVencimento == null)) {
+      throw new ErroDasContas(MENSAGEM_CARTAO_SEM_DIAS);
+    }
     const moeda = nova.moeda ?? MOEDA_PADRAO;
     const contaPagamentoId = nova.contaPagamentoId ?? null;
     if (contaPagamentoId !== null) this.exigirContaDePagamento(contaPagamentoId, null, moeda);
@@ -541,7 +603,8 @@ export class ServicoContas {
   /**
    * Mudança parcial; o tipo não muda. `ativa: false` arquiva, e a conta arquivada some da lista
    * mas guarda os lançamentos. A moeda só muda enquanto a conta não tem lançamento: o valor deles
-   * está na moeda dela.
+   * está na moeda dela. Trocar os dias do cartão refaz as datas das faturas sem pagamento que ainda
+   * não fecharam, e o que ficou do novo fechamento em diante passa para a fatura em que cai agora.
    */
   definirConta(mudanca: MudancaConta, carimbo: Carimbo = DO_USUARIO): Conta {
     const atual = this.exigirConta(mudanca.id);
@@ -575,11 +638,27 @@ export class ServicoContas {
     if (nova.moeda !== atual.moeda && this.repo.temLancamento(atual.id)) {
       throw new ErroDasContas(MENSAGEM_MOEDA_COM_LANCAMENTO);
     }
-    if (nova.contaPagamentoId !== null && nova.contaPagamentoId !== atual.contaPagamentoId) {
+    const pagamentoMudou = nova.contaPagamentoId !== atual.contaPagamentoId || nova.moeda !== atual.moeda;
+    if (nova.contaPagamentoId !== null && pagamentoMudou) {
       this.exigirContaDePagamento(nova.contaPagamentoId, atual.id, nova.moeda);
     }
-    this.repo.definirConta(nova, this.instante(), carimbo);
-    return this.avisarConta(this.exigirConta(atual.id));
+    const diasMudaram =
+      cartao && (nova.diaFechamento !== atual.diaFechamento || nova.diaVencimento !== atual.diaVencimento);
+    if (!diasMudaram) {
+      this.repo.definirConta(nova, this.instante(), carimbo);
+      return this.avisarConta(this.exigirConta(atual.id));
+    }
+    const agora = this.instante();
+    const movidos = this.repo.transacao(() => {
+      this.repo.definirConta(nova, agora, carimbo);
+      return this.refazerFaturas(nova, agora);
+    });
+    this.avisos.mudou({
+      partes: ["contas", "faturas", "lancamentos"],
+      lancamentos: this.repo.lancamentosDosIds(movidos),
+      apagados: [],
+    });
+    return this.exigirConta(atual.id);
   }
 
   /** Manda à lixeira; conta com lançamento (mesmo na lixeira) só arquiva. */
@@ -618,15 +697,51 @@ export class ServicoContas {
    * Os lançamentos chamam ao lançar no cartão, dentro da transação deles.
    */
   faturaDaCompra(contaId: string, data: string): Fatura {
-    const cartao = this.exigirCartao(contaId);
-    const datas = datasDaFatura(data, cartao.diaFechamento as number, cartao.diaVencimento as number);
-    const linha =
-      this.repo.faturaDoMes(cartao.id, datas.mesReferencia) ??
-      this.repo.transacao(() => {
-        this.repo.criarFatura(this.gerarId(), cartao.id, datas, this.instante());
-        return this.repo.faturaDoMes(cartao.id, datas.mesReferencia) as LinhaFatura;
-      });
-    return paraFatura(linha, this.hoje());
+    return paraFatura(this.linhaDaCompra(this.exigirCartao(contaId), data), this.hoje());
+  }
+
+  /**
+   * A fatura do mês pela regra, ou a seguinte se a do mês já fechou antes da compra: acontece quando
+   * o dia de fechamento mudou depois que ela nasceu (a paga e a já fechada guardam as datas antigas).
+   */
+  private linhaDaCompra(cartao: Conta, data: string): LinhaFatura {
+    const diaF = cartao.diaFechamento as number;
+    const diaV = cartao.diaVencimento as number;
+    let datas = datasDaFatura(data, diaF, diaV);
+    let linha = this.repo.faturaDoMes(cartao.id, datas.mesReferencia);
+    while (linha !== null && linha.fecha_em <= data) {
+      const [ano, mes] = partesDoMes(linha.mes_referencia);
+      datas = datasDoMes(...mesSeguinte(ano, mes), diaF, diaV);
+      linha = this.repo.faturaDoMes(cartao.id, datas.mesReferencia);
+    }
+    if (linha !== null) return linha;
+    const novas = datas;
+    return this.repo.transacao(() => {
+      this.repo.criarFatura(this.gerarId(), cartao.id, novas, this.instante());
+      return this.repo.faturaDoMes(cartao.id, novas.mesReferencia) as LinhaFatura;
+    });
+  }
+
+  /**
+   * Os dias do cartão mudaram: as faturas sem pagamento que ainda não fecharam ganham as datas novas,
+   * e o lançamento do novo fechamento em diante vai para a fatura em que cai agora. Devolve os
+   * lançamentos movidos.
+   */
+  private refazerFaturas(cartao: Conta, agora: string): string[] {
+    const diaF = cartao.diaFechamento as number;
+    const diaV = cartao.diaVencimento as number;
+    const refeitas = this.repo
+      .faturasAbertas(cartao.id, this.hoje())
+      .map((f) => ({ id: f.id, datas: datasDoMes(...partesDoMes(f.mes_referencia), diaF, diaV) }));
+    for (const f of refeitas) this.repo.mudarDatasDaFatura(f.id, f.datas, agora);
+    const movidos: string[] = [];
+    for (const f of refeitas) {
+      for (const l of this.repo.lancamentosDesde(f.id, f.datas.fechaEm)) {
+        this.repo.moverParaFatura(l.id, this.linhaDaCompra(cartao, l.data).id);
+        movidos.push(l.id);
+      }
+    }
+    return movidos;
   }
 
   /**
@@ -637,7 +752,11 @@ export class ServicoContas {
    */
   pagarFatura(pedido: PedidoPagarFatura, carimbo: Carimbo = DO_USUARIO): Fatura {
     const fatura = this.exigirFatura(pedido.id);
-    if (fatura.paga === 1) throw new ErroDasContas(MENSAGEM_FATURA_PAGA);
+    if (fatura.paga === 1) {
+      throw new ErroDasContas(
+        fatura.pagamento_vivo === 1 ? MENSAGEM_FATURA_PAGA : MENSAGEM_PAGAMENTO_NA_LIXEIRA,
+      );
+    }
     const cartao = this.exigirCartao(fatura.conta_id);
     const contaPagamentoId = pedido.contaPagamentoId ?? cartao.contaPagamentoId;
     if (contaPagamentoId === null) throw new ErroDasContas(MENSAGEM_SEM_CONTA_PAGAMENTO);
@@ -672,7 +791,8 @@ export class ServicoContas {
 
   /**
    * Desfaz o "Pagar fatura": os dois lados da transferência somem de vez (vivos ou na lixeira, o
-   * pagamento nunca aconteceu) e a fatura volta a aberta ou fechada.
+   * pagamento nunca aconteceu) e a fatura volta a aberta ou fechada. Vale também para o pagamento
+   * que está na lixeira: é o jeito de limpar o que ficou.
    */
   desfazerPagamento(pedido: PedidoFatura, carimbo: Carimbo = DO_USUARIO): Fatura {
     const fatura = this.exigirFatura(pedido.id);
@@ -737,9 +857,17 @@ export class ServicoContas {
   }
 }
 
+/**
+ * Paga só com o lançamento do pagamento vivo: na lixeira, não conta, e restaurar o lançamento volta
+ * a fatura a paga (contrato `EstadoFatura`).
+ */
+function pagaDeFato(f: LinhaFatura): boolean {
+  return f.paga === 1 && f.pagamento_vivo === 1;
+}
+
 /** Aberta até o dia de fechamento; daí, fechada a pagar, até o pagamento. */
 function estadoDaFatura(f: LinhaFatura, hoje: string): EstadoFatura {
-  if (f.paga === 1) return "paga";
+  if (pagaDeFato(f)) return "paga";
   return hoje >= f.fecha_em ? "fechada" : "aberta";
 }
 
@@ -752,7 +880,7 @@ function paraFatura(f: LinhaFatura, hoje: string): Fatura {
     venceEm: f.vence_em,
     totalCentavos: f.total_centavos,
     estado: estadoDaFatura(f, hoje),
-    pagamentoLancamentoId: f.pagamento_lancamento_id,
+    pagamentoLancamentoId: pagaDeFato(f) ? f.pagamento_lancamento_id : null,
     criadoEm: f.criado_em,
     atualizadoEm: f.atualizado_em,
   };
