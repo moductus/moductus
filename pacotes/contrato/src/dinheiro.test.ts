@@ -1,5 +1,12 @@
 import { describe, expect, test } from "vitest";
-import { formatarCentavos, lerValor, MOEDA_PADRAO, simboloDaMoeda } from "./dinheiro.ts";
+import {
+  falarCentavos,
+  formatarCentavos,
+  lerValor,
+  MOEDA_PADRAO,
+  nomeDaMoeda,
+  simboloDaMoeda,
+} from "./dinheiro.ts";
 
 describe("formatar centavos", () => {
   test("real por padrão, milhar com ponto e duas casas com vírgula", () => {
@@ -124,5 +131,39 @@ describe("ler o valor digitado", () => {
       expect(lerValor(formatarCentavos(centavos, { sinal: true }))).toBe(centavos);
       expect(lerValor(formatarCentavos(centavos, { semSimbolo: true }))).toBe(centavos);
     }
+  });
+});
+
+describe("falar centavos", () => {
+  test("real em palavras, com o sinal da tela", () => {
+    expect(falarCentavos(-4500)).toBe("menos 45 reais");
+    expect(falarCentavos(4500)).toBe("45 reais");
+    expect(falarCentavos(1000, { sinal: true })).toBe("mais 10 reais");
+    expect(falarCentavos(-1000, { sinal: true })).toBe("menos 10 reais");
+    expect(falarCentavos(123_456)).toBe("1.234 reais e 56 centavos");
+    expect(falarCentavos(100)).toBe("1 real");
+    expect(falarCentavos(101)).toBe("1 real e 1 centavo");
+    expect(falarCentavos(-1)).toBe("menos 1 centavo");
+    expect(falarCentavos(0, { sinal: true })).toBe("0 reais");
+    expect(falarCentavos(Number.MAX_SAFE_INTEGER)).toBe("90.071.992.547.409 reais e 91 centavos");
+  });
+
+  test("sem centavos arredonda como a tela e zero arredondado não leva sinal", () => {
+    expect(falarCentavos(123_456, { semCentavos: true })).toBe("1.235 reais");
+    expect(falarCentavos(123_449, { semCentavos: true })).toBe("1.234 reais");
+    expect(falarCentavos(-40, { semCentavos: true })).toBe("0 reais");
+    expect(formatarCentavos(-40, { semCentavos: true })).toBe("R$ 0");
+  });
+
+  test("outra moeda pelo nome, no singular ou no plural", () => {
+    expect(falarCentavos(-1999, { moeda: "USD" })).toBe("menos 19,99 dólares americanos");
+    expect(falarCentavos(100, { moeda: "eur", semCentavos: true })).toBe("1 euro");
+    expect(falarCentavos(100, { moeda: "EUR" })).toBe("1,00 euro");
+    expect(nomeDaMoeda("EUR", true)).toBe("euros");
+    expect(nomeDaMoeda("XX1", false)).toBe("XX1");
+  });
+
+  test("recusa o que não é centavo inteiro", () => {
+    expect(() => falarCentavos(1.5)).toThrow(RangeError);
   });
 });

@@ -93,6 +93,9 @@ const DESENHOS = {
     <path d="M3 3l18 18M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4M6.6 6.6C3.9 8.4 2 12 2 12s4 7 10 7a9.6 9.6 0 0 0 5.4-1.6" />
   ),
   mostrar: <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />,
+  // Linha de lançamento (AreaLancamentos.dc.html): setas da transferência e o visto do conciliado.
+  transferencia: <path d="M7 7h13M16 3l4 4-4 4M17 17H4M8 13l-4 4 4 4" />,
+  visto: <path d="M5 12.5l4.5 4.5L19 7.5" />,
 } satisfies Record<string, ReactElement>;
 
 export type NomeIcone = keyof typeof DESENHOS;
