@@ -22,3 +22,18 @@ export function dividirEmParcelas(totalCentavos: number, parcelas: number): numb
   const sinal = totalCentavos < 0 ? -1 : 1;
   return Array.from({ length: parcelas }, (_, i) => sinal * (i === 0 ? base + sobra : base));
 }
+
+/**
+ * `valor × parte ÷ todo` arredondado meio-para-cima, uma vez, no inteiro (ADR-0046): o previsto da
+ * semana (o limite do mês × dias da semana no mês ÷ dias do mês) e o percentual (gasto × 100 ÷
+ * limite). Em `BigInt`, para o produto não perder precisão. Só valores sem sinal.
+ */
+export function proporcional(valor: number, parte: number, todo: number): number {
+  for (const n of [valor, parte, todo]) {
+    if (!Number.isSafeInteger(n) || n < 0) throw new ErroDeValor(`Valor inválido para proporção: ${n}`);
+  }
+  if (todo === 0) throw new ErroDeValor("proporção sobre zero");
+  const dobro = 2n * BigInt(valor) * BigInt(parte);
+  const divisor = 2n * BigInt(todo);
+  return Number((dobro + BigInt(todo)) / divisor);
+}

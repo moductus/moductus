@@ -40,6 +40,8 @@ import { atendentesDasContas } from "./areas/financas/canal.ts";
 import { RepositorioContas, ServicoContas } from "./areas/financas/contas.ts";
 import { atendentesDosLancamentos } from "./areas/financas/canal-lancamentos.ts";
 import { RepositorioLancamentos, ServicoLancamentos } from "./areas/financas/lancamentos.ts";
+import { atendentesDoOrcamento } from "./areas/financas/canal-orcamento.ts";
+import { RepositorioOrcamento, ServicoOrcamento } from "./areas/financas/orcamento.ts";
 import { atendentesDoFoco, ouvirAtalhoDoFoco } from "./areas/foco/canal.ts";
 import { RepositorioFoco, ServicoFoco } from "./areas/foco/foco.ts";
 import { RepositorioLembretes, ServicoLembretes } from "./areas/lembretes/lembretes.ts";
@@ -495,6 +497,12 @@ const lancamentos = new ServicoLancamentos(
   { contas, categorias, lerFuso: () => repositorioConfig.ler().dia.fuso },
   { mudou: (mudanca) => servidor?.emitir("financas.mudou", mudanca) },
 );
+// Orçamento (F4-11): limite por categoria, semana contra o previsto e remanejar com desfazer.
+const orcamento = new ServicoOrcamento(
+  new RepositorioOrcamento(banco),
+  { lancamentos, lerFuso: () => repositorioConfig.ler().dia.fuso },
+  { mudou: (mudanca) => servidor?.emitir("financas.mudou", mudanca) },
+);
 // As ferramentas da Alba sobre as áreas do dia (F3-26); o `tarefas.criar` vale também para o Nuno.
 catalogo.registrar(
   ...ferramentasTarefas(tarefas, tempoDoDia),
@@ -707,15 +715,11 @@ servidor = await abrirServidorWs(token, {
   "areas.contagens": () => contagens.obter(),
   ...atendentesDasContas(contas),
   ...atendentesDosLancamentos(lancamentos),
+  ...atendentesDoOrcamento(orcamento),
   ...atendentesDosArquivos(autorizacoesDeArquivo),
   // O dinheiro (F4-07): o contrato já tem os métodos e o serviço responde que ainda não estão
   // disponíveis. Cada tarefa que implementa uma área (F4-08 a F4-15, F4-19, F4-20) tira os dela daqui.
   ...semAtendente([
-    "financas.orcamento",
-    "financas.definirOrcamento",
-    "financas.removerOrcamento",
-    "financas.remanejar",
-    "financas.desfazerRemanejar",
     "financas.recorrentes",
     "financas.criarRecorrente",
     "financas.definirRecorrente",
