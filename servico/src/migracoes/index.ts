@@ -30,6 +30,7 @@ import { m028 } from "./028-agenda-local.ts";
 import { m029 } from "./029-financas-cadastro.ts";
 import { m030 } from "./030-lancamentos.ts";
 import { m031 } from "./031-planejamento.ts";
+import { m032 } from "./032-rotinas-dias-uteis.ts";
 
 /** Todas as migrações, em ordem. Migração publicada não muda: corrige-se com outra. */
 export const MIGRACOES: readonly Migracao[] = [
@@ -64,4 +65,5 @@ export const MIGRACOES: readonly Migracao[] = [
   m029,
   m030,
   m031,
+  m032,
 ];

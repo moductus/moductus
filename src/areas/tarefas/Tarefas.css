@@ -50,11 +50,17 @@
 }
 
 /* ---------- A vista ---------- */
+/* Com o detalhe aberto, ele encolhe até o mínimo dele antes de a lista ficar abaixo da largura dela
+   (com o respiro dos lados): a frase e a data cabem inteiras. Na janela estreita demais para os dois,
+   a lista fica com o que sobra. */
 .tarefas-conteudo {
   display: flex;
   flex: 1;
   flex-direction: column;
-  min-width: 0;
+  min-width: min(
+    var(--largura-min-lista-tarefas-area) + 2 * var(--esp-32),
+    100% - var(--largura-subnav-tarefas) - var(--largura-min-detalhe-area)
+  );
   padding: var(--espaco-pagina) var(--esp-32);
   overflow-y: auto;
 }
@@ -235,6 +241,12 @@
   box-shadow: var(--sombra-linha-aberta-area) var(--destaque);
 }
 
+/* Com uma tarefa aberta, as linhas ganham o respiro do DetalheTarefa: o fundo da aberta não encosta
+   na caixa nem na data. */
+.tarefas-grupos:has(.tarefa[data-aberta]) .tarefa {
+  padding-inline: var(--esp-8);
+}
+
 .tarefa[data-aberta] .tarefa-titulo {
   font-weight: var(--peso-forte);
 }
@@ -260,9 +272,10 @@
   flex: none;
 }
 
+/* A coluna do quadro; a data mais longa (outro ano) alarga a coluna em vez de vazar da linha. */
 .tarefa-quando {
   flex: none;
-  width: var(--largura-quando-tarefa);
+  min-width: var(--largura-quando-tarefa);
   font-family: var(--fonte-mono);
   font-size: var(--tipo-11);
   color: var(--texto-3);
@@ -271,7 +284,7 @@
 }
 
 .tarefa-quando--larga {
-  width: auto;
+  min-width: 0;
 }
 
 /* ---------- A vista e a coluna Agenda ---------- */

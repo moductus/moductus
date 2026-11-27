@@ -1522,16 +1522,23 @@
   font-weight: var(--peso-forte);
 }
 
-/* A hora em mono, centrada, na largura de "18:30". */
+/* A hora em mono, centrada. A largura vai no campo, em ch da fonte dele, e a caixa cresce com ela:
+   o valor inteiro cabe em qualquer tema e zoom. Sem o relógio do Chromium, que tomava o lugar da
+   hora; ela é digitada e as setas mudam, como no detalhe da tarefa. */
 .config-dia-hora {
   flex: none;
-  width: var(--largura-campo-hora);
 }
 
 .config-dia-hora .campo-entrada {
+  flex: none;
+  width: var(--largura-campo-hora);
   font-family: var(--fonte-mono);
   font-size: var(--tipo-12);
   text-align: center;
+}
+
+.config-dia-hora .campo-entrada::-webkit-calendar-picker-indicator {
+  display: none;
 }
 
 .config-dia-linha {

@@ -48,6 +48,11 @@ const PADROES = {
     { id: "fechamento", tipo: "fechamento", hora: "18:00", dias_semana: "[1,2,3,4,5,6,7]", ativa: 1 },
   ],
 };
+/** Depois de todas: os dias de trabalho de fábrica passam a segunda a sexta (rotinas-dias-uteis). */
+const PADROES_HOJE = {
+  ...PADROES,
+  rotinas: PADROES.rotinas.map((r) => ({ ...r, dias_semana: "[1,2,3,4,5]" })),
+};
 
 function bancoNovo(migracoes = MIGRACOES): DatabaseSync {
   const db = new DatabaseSync(":memory:");
@@ -118,7 +123,7 @@ describe("migração agenda e foco", () => {
     const db = abrirBanco(pasta, { duravel: false });
     expect(versaoAtual(db)).toBe(MIGRACOES.length);
     expect(tabelas(db)).toEqual(TABELAS_HOJE);
-    expect(padroes(db)).toEqual(PADROES);
+    expect(padroes(db)).toEqual(PADROES_HOJE);
     expect(db.prepare("SELECT nome FROM agentes WHERE id = 'alba'").get()).toEqual({ nome: "Albinha" });
     expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
     db.close();
