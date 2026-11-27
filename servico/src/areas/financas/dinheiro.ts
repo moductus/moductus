@@ -22,3 +22,18 @@ export function dividirEmParcelas(totalCentavos: number, parcelas: number): numb
   const sinal = totalCentavos < 0 ? -1 : 1;
   return Array.from({ length: parcelas }, (_, i) => sinal * (i === 0 ? base + sobra : base));
 }
+
+/**
+ * Os juros de um mês sobre um saldo sem sinal, com a taxa em pontos-base (2,1% ao mês é 210),
+ * arredondados meio-para-cima no centavo (ADR-0046). Em `BigInt`: saldo grande vezes a taxa passa
+ * do inteiro seguro antes da divisão. R$ 6.400,00 a 2,1% dá R$ 134,40.
+ */
+export function jurosDoMes(saldoCentavos: number, jurosBp: number): number {
+  if (!Number.isSafeInteger(saldoCentavos) || saldoCentavos < 0)
+    throw new ErroDeValor(`Saldo em centavos inválido: ${saldoCentavos}`);
+  if (!Number.isSafeInteger(jurosBp) || jurosBp < 0) throw new ErroDeValor(`Juros inválidos: ${jurosBp}`);
+  const juros = Number((BigInt(saldoCentavos) * BigInt(jurosBp) * 2n + 10_000n) / 20_000n);
+  if (!Number.isSafeInteger(juros))
+    throw new ErroDeValor("os juros passam do maior valor que dá para contar");
+  return juros;
+}
