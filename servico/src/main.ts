@@ -34,6 +34,8 @@ import { ServicoIgnorados } from "./areas/dia/ignorados.ts";
 import { RelogioDoDia } from "./areas/dia/relogio.ts";
 import { RepositorioRegistroRotinas } from "./areas/dia/rotinas.ts";
 import { TempoDoDia } from "./areas/dia/tempo.ts";
+import { atendentesDasCategorias } from "./areas/financas/canal-categorias.ts";
+import { RepositorioCategorias, ServicoCategorias } from "./areas/financas/categorias.ts";
 import { atendentesDoFoco, ouvirAtalhoDoFoco } from "./areas/foco/canal.ts";
 import { RepositorioFoco, ServicoFoco } from "./areas/foco/foco.ts";
 import { RepositorioLembretes, ServicoLembretes } from "./areas/lembretes/lembretes.ts";
@@ -471,6 +473,10 @@ const tarefas = new ServicoTarefas(
     },
   },
 );
+// Categorias e regras da Tula (F4-10): a categorização por código do ADR-0045.
+const categorias = new ServicoCategorias(new RepositorioCategorias(banco), {
+  mudou: (mudanca) => servidor?.emitir("financas.mudou", mudanca),
+});
 // As ferramentas da Alba sobre as áreas do dia (F3-26); o `tarefas.criar` vale também para o Nuno.
 catalogo.registrar(
   ...ferramentasTarefas(tarefas, tempoDoDia),
@@ -656,6 +662,7 @@ servidor = await abrirServidorWs(token, {
   "notas.buscar": (pedido) => notas.buscar(pedido),
   ...atendentesDasTarefas(tarefas),
   ...atendentesDoFoco(servicoFoco),
+  ...atendentesDasCategorias(categorias),
   "agenda.calendarios": () => agenda.calendarios(),
   "agenda.definirCalendario": (mudanca) => agenda.definirCalendario(mudanca),
   "agenda.consultar": (pedido) => agenda.consultar(pedido),
@@ -694,14 +701,6 @@ servidor = await abrirServidorWs(token, {
     "financas.definirLancamento",
     "financas.apagarLancamento",
     "financas.restaurarLancamento",
-    "financas.categorias",
-    "financas.criarCategoria",
-    "financas.definirCategoria",
-    "financas.apagarCategoria",
-    "financas.regras",
-    "financas.criarRegra",
-    "financas.definirRegra",
-    "financas.apagarRegra",
     "financas.orcamento",
     "financas.definirOrcamento",
     "financas.removerOrcamento",
