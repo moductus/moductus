@@ -23,6 +23,10 @@ const janela = {
   onResized: vi.fn(() => Promise.resolve(() => undefined)),
 };
 vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => janela }));
+// O arrastar e soltar do alvo das Finanças: nada é solto nestes testes.
+vi.mock("@tauri-apps/api/webview", () => ({
+  getCurrentWebview: () => ({ onDragDropEvent: () => Promise.resolve(() => undefined) }),
+}));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn((comando: string) =>
     Promise.resolve(comando === "servico_estado" ? { estado: "parado" } : undefined),

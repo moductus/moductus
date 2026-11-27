@@ -8,6 +8,7 @@ import { DADOS_AREAS, eAreaPainel, type AreaPainel } from "../areas.ts";
 import { CabecalhoPainel } from "./Cabecalho.tsx";
 import { PainelAgentes } from "./PainelAgentes.tsx";
 import { PainelDev } from "./PainelDev.tsx";
+import { PainelFinancas } from "./PainelFinancas.tsx";
 import { PainelHoje } from "./PainelHoje.tsx";
 import { PainelNotas } from "./PainelNotas.tsx";
 import { PainelFoco, type Recusas } from "./PainelFoco.tsx";
@@ -34,6 +35,12 @@ function medirTopoDoCartao() {
 
 /** Um cartão de aprovação ainda sem resposta (ou com a resposta a caminho) no painel. */
 const PEDIDO_ESPERANDO = '.aprovacao[data-estado="pendente"]';
+
+/**
+ * O alvo de soltar do extrato e do comprovante (ADR-0044): arrastar começa com um clique no
+ * Explorer, que fecharia o painel antes de o arquivo chegar.
+ */
+const ALVO_DE_SOLTAR = ".alvo-arquivo";
 
 /** O estado vazio das áreas que ainda não leem o serviço. */
 function Vazio({ area }: { area: AreaPainel }) {
@@ -97,15 +104,22 @@ export function Painel() {
   }, [abertura]);
 
   // Clique em outro app ou na área de trabalho (a casca vê pelo gancho do mouse) fecha o painel,
-  // menos com o tour passando por ele ou com um pedido de aprovação esperando a resposta: quem
-  // vai conferir o comando no terminal volta e encontra o pedido onde estava.
+  // menos com o tour passando por ele, com um pedido de aprovação esperando a resposta (quem vai
+  // conferir o comando no terminal volta e encontra o pedido onde estava) ou com o alvo de soltar
+  // à vista (quem vai buscar o extrato no Explorer arrasta de lá até aqui).
   const emTour = useRef(false);
   useEffect(() => {
     emTour.current = tour.parada !== null;
   }, [tour.parada]);
   useEffect(() => {
     const parar = listen("painel:clique-fora", () => {
-      if (emTour.current || document.querySelector(PEDIDO_ESPERANDO)) return;
+      if (
+        emTour.current ||
+        document.querySelector(PEDIDO_ESPERANDO) ||
+        document.querySelector(ALVO_DE_SOLTAR)
+      ) {
+        return;
+      }
       void invoke("painel_fechar");
     });
     return () => {
@@ -152,6 +166,8 @@ export function Painel() {
             <PainelNotas canal={canal} />
           ) : area === "foco" ? (
             <PainelFoco canal={canal} abertura={abertura?.n ?? 0} recusas={recusas} />
+          ) : area === "financas" ? (
+            <PainelFinancas />
           ) : (
             <>
               <CabecalhoPainel titulo={dados?.nome ?? ""} icone={dados?.icone} />

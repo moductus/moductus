@@ -26,6 +26,10 @@ const eventosCasca = new Map<string, (e: { payload: unknown }) => void>();
 const chamadasCasca: { comando: string; args: unknown }[] = [];
 /** A área que a casca já tinha aberto quando o painel montou (`painel_area_atual`). */
 const casca = { areaAberta: null as string | null };
+// O arrastar e soltar do alvo das Finanças: nada é solto nestes testes.
+vi.mock("@tauri-apps/api/webview", () => ({
+  getCurrentWebview: () => ({ onDragDropEvent: async () => () => undefined }),
+}));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (comando: string, args?: unknown) => {
     chamadasCasca.push({ comando, args });
@@ -342,6 +346,18 @@ describe("painel: encostado no dock e o clique fora", () => {
     await clicarFora();
     expect(fechou()).toBe(false);
     avisar("aprovacoes.mudou", pedido("a1", "npm test -- --watch=false", { estado: "aprovada" }));
+    await clicarFora();
+    expect(fechou()).toBe(true);
+  });
+
+  it("nas Finanças, com o alvo de soltar à vista, o clique fora não fecha: arrastar começa no Explorer", async () => {
+    servidor.pendentes = [];
+    await montar();
+    await abrir("financas");
+    expect(recipiente.querySelector(".alvo-arquivo")).not.toBeNull();
+    await clicarFora();
+    expect(fechou()).toBe(false);
+    await abrir("agentes");
     await clicarFora();
     expect(fechou()).toBe(true);
   });

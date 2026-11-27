@@ -18,6 +18,51 @@ export function cobre(padrao: string, nome: string): boolean {
   return padrao === nome;
 }
 
+/**
+ * As palavras de um campo que leva ao disco (ADR-0044, ADR-0038): o caminho, o arquivo e a
+ * autorização de uso único que a interface recebe pelo `arquivos.autorizar`. O modelo nunca escolhe
+ * o que o serviço lê. `pasta` fica de fora: nas notas é um rótulo, não um lugar no disco.
+ */
+const PALAVRAS_DE_ARQUIVO = new Set([
+  "caminho",
+  "caminhos",
+  "path",
+  "paths",
+  "arquivo",
+  "arquivos",
+  "file",
+  "files",
+  "autorizacao",
+  "autorizacoes",
+]);
+
+/** O primeiro campo da entrada, em qualquer nível, com uma dessas palavras no nome; `null` se nenhum. */
+export function campoDeArquivo(esquema: unknown): string | null {
+  if (Array.isArray(esquema)) {
+    for (const item of esquema) {
+      const achado = campoDeArquivo(item);
+      if (achado) return achado;
+    }
+    return null;
+  }
+  if (!esquema || typeof esquema !== "object") return null;
+  for (const [chave, valor] of Object.entries(esquema)) {
+    if (chave === "properties" && valor && typeof valor === "object") {
+      for (const campo of Object.keys(valor)) {
+        // `autorizacaoId`, `caminho_arquivo`, `filePath`: cada pedaço do nome conta.
+        const palavras = campo
+          .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+          .toLowerCase()
+          .split(/[^a-z0-9]+/);
+        if (palavras.some((p) => PALAVRAS_DE_ARQUIVO.has(p))) return campo;
+      }
+    }
+    const achado = campoDeArquivo(valor);
+    if (achado) return achado;
+  }
+  return null;
+}
+
 /** Uma ação `externo` prestes a rodar: o que a aprovação precisa para montar o cartão. */
 export interface PedidoAutorizacao {
   ferramenta: Ferramenta;
@@ -39,11 +84,20 @@ export class Catalogo {
     this.registrar(...ferramentas);
   }
 
-  /** Cada domínio registra as suas na subida; nome repetido é erro de montagem. */
+  /**
+   * Cada domínio registra as suas na subida; nome repetido é erro de montagem, e campo de caminho
+   * ou de autorização de arquivo também (ADR-0044).
+   */
   registrar(...ferramentas: readonly Ferramenta[]): this {
     for (const f of ferramentas) {
       if (this.porNome.has(f.nome) || this.porNomeModelo.has(f.nomeModelo)) {
         throw new Error(`ferramenta "${f.nome}" registrada duas vezes`);
+      }
+      const campo = campoDeArquivo(f.esquema);
+      if (campo) {
+        throw new Error(
+          `ferramenta "${f.nome}" recebe "${campo}": nenhuma ferramenta de agente recebe caminho nem arquivo`,
+        );
       }
       this.porNome.set(f.nome, f);
       this.porNomeModelo.set(f.nomeModelo, f);

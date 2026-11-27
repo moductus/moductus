@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "painel",
+  "description": "Diálogo de abrir do painel Finanças: o extrato ou o comprovante escolhido vira uma autorização de uso único no serviço (ADR-0044)",
+  "windows": ["painel"],
+  "permissions": ["dialog:allow-open"]
+}
