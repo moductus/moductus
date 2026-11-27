@@ -4,12 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { METODOS, PropostaRegra, type MudancaFinancas } from "@moductus/contrato";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { abrirBanco } from "../../banco/conexao.ts";
 import { limparLixeira } from "../../banco/lixeira.ts";
 import {
   chaveDescricao,
+  compararRegras,
   ErroDasCategorias,
+  MENSAGEM_REGRA_NAO_ENCONTRADA,
+  MENSAGEM_REGRA_REPETIDA,
+  MENSAGEM_TEM_SUBCATEGORIAS,
   MENSAGEM_NOME_REPETIDO,
   MENSAGEM_REGEX_CATASTROFICA,
   MENSAGEM_REGEX_INVALIDA,
@@ -328,7 +332,11 @@ describe("categorias de um nível", () => {
       () => servico.criarCategoria({ nome: "Hortifruti", tipo: "gasto", categoriaPaiId: feira.id }),
       MENSAGEM_UM_NIVEL,
     );
-    erroDaArea(() => servico.definirCategoria({ id: "mercado", categoriaPaiId: "casa" }), MENSAGEM_UM_NIVEL);
+    erroDaArea(
+      () => servico.definirCategoria({ id: "mercado", categoriaPaiId: "casa" }),
+      MENSAGEM_TEM_SUBCATEGORIAS,
+    );
+    erroDaArea(() => servico.definirCategoria({ id: "casa", categoriaPaiId: feira.id }), MENSAGEM_UM_NIVEL);
     erroDaArea(
       () => servico.criarCategoria({ nome: "Bônus", tipo: "receita", categoriaPaiId: "mercado" }),
       MENSAGEM_TIPO_DA_MAE,
@@ -391,5 +399,168 @@ describe("categorias de um nível", () => {
       n: 0,
     });
     expect(db.prepare("SELECT count(*) AS n FROM regras_categoria").get()).toEqual({ n: 0 });
+  });
+});
+
+describe("volta 1 da revisão", () => {
+  test("lançamento só na lixeira não pede confirmação e também fica sem categoria", () => {
+    const { db, servico, lancar } = montar();
+    const l = lancar({ data: "2026-11-01", descricao: "CINEMA", categoria: "lazer" });
+    db.prepare("UPDATE lancamentos SET apagado_em = '2026-11-02T00:00:00.000Z' WHERE id = ?").run(l);
+    const r = servico.apagarCategoria({ id: "lazer" });
+    expect(r).toEqual({ apagada: true, ids: ["lazer"] });
+    expect(db.prepare("SELECT categoria_id FROM lancamentos WHERE id = ?").get(l)).toEqual({
+      categoria_id: null,
+    });
+  });
+
+  test("regex lenta com dígitos e classe vazia é recusada", () => {
+    expect(temRepeticaoAninhada("[]|(\\d+)+$")).toBe(true);
+    expect(temRepeticaoAninhada("[^](A)")).toBe(false);
+    for (const padrao of ["^(\\d|\\d)*$", "(\\w|\\d)*Z", "[]|(\\d+)+$"]) {
+      expect(() => validarRegex(padrao)).toThrow(ErroDasCategorias);
+    }
+    erroDaArea(() => validarRegex("[]|(\\d+)+$"), MENSAGEM_REGEX_CATASTROFICA);
+    erroDaArea(() => validarRegex("^(\\d|\\d)*$"), MENSAGEM_REGEX_LENTA);
+  });
+
+  test("a regex lenta ao lado de uma boa: a boa vale na segunda tentativa e a lenta sai do lote", () => {
+    const { servico, db } = montar();
+    db.prepare(
+      `INSERT INTO regras_categoria (id, padrao, tipo_padrao, categoria_id, criado_em)
+       VALUES ('lenta', '^(\\d|\\d)*$', 'regex', 'mercado', '2026-01-01T00:00:00.000Z'),
+              ('boa', '^1+', 'regex', 'lazer', '2026-01-02T00:00:00.000Z')`,
+    ).run();
+    const erros = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const inicio = performance.now();
+      const r = servico.categorizar([
+        { contaId: "nubank", descricao: `${"1".repeat(40)}!` },
+        { contaId: "nubank", descricao: `${"1".repeat(41)}!` },
+        { contaId: "nubank", descricao: "1111" },
+      ]);
+      expect(r.map((c) => c.regraId)).toEqual(["boa", "boa", "boa"]);
+      expect(performance.now() - inicio).toBeLessThan(2000);
+      expect(erros.mock.calls.filter(([m]) => String(m).includes("saiu do lote"))).toHaveLength(1);
+    } finally {
+      erros.mockRestore();
+    }
+  });
+
+  test("a regex perde os acentos como a descrição comparada", () => {
+    const { servico } = montar();
+    servico.criarRegra({ padrao: "^AÇOUGUE", tipoPadrao: "regex", categoriaId: "mercado" });
+    expect(servico.categorizar([{ contaId: "nubank", descricao: "Açougue do Zé" }])[0]?.categoriaId).toBe(
+      "mercado",
+    );
+  });
+
+  test("o tamanho da ordem é o do padrão normalizado", () => {
+    const base = {
+      tipoPadrao: "contem",
+      categoriaId: "mercado",
+      vezesAplicada: 0,
+      criadaPor: "usuario",
+      origem: "usuario",
+      agenteId: null,
+      execucaoId: null,
+      criadoEm: "2026-11-20T12:00:00.000Z",
+      atualizadoEm: "2026-11-20T12:00:00.000Z",
+    } as const;
+    const espacado = { ...base, id: "a", padrao: "A     B" };
+    const curto = { ...base, id: "b", padrao: "ABCD" };
+    expect([espacado, curto].sort(compararRegras).map((r) => r.id)).toEqual(["b", "a"]);
+  });
+
+  test("o igual anterior só empresta com 2 palavras ou 6 letras na chave", () => {
+    const { servico, lancar } = montar();
+    lancar({ data: "2026-11-01", descricao: "PIX 123", categoria: "lazer" });
+    lancar({ data: "2026-11-01", descricao: "NETFLIX 1", categoria: "assinaturas" });
+    const r = servico.categorizar([
+      { contaId: "nubank", descricao: "PIX 999" },
+      { contaId: "nubank", descricao: "NETFLIX 2" },
+    ]);
+    expect(r.map((c) => c.categoriaId)).toEqual([null, "assinaturas"]);
+  });
+
+  test("a proposta corta o padrão em até 200 caracteres numa fronteira de palavra", () => {
+    const { servico } = montar();
+    const descricao = `${"PALAVRA ".repeat(40)}FIM`;
+    const proposta = servico.proporRegra({
+      descricao,
+      descricaoOriginal: null,
+      importacaoId: "imp1",
+      categoriaAntes: null,
+      categoriaDepois: "mercado",
+    });
+    expect(proposta?.padrao.length).toBeLessThanOrEqual(200);
+    expect(proposta?.padrao.endsWith("PALAVRA")).toBe(true);
+    expect(PropostaRegra.safeParse(proposta).success).toBe(true);
+  });
+
+  test("restaurar recusa nome que colide com irmã viva e deixa na lixeira a regra repetida", () => {
+    const { servico } = montar();
+    const feira = servico.criarCategoria({ nome: "Feira", tipo: "gasto", categoriaPaiId: "mercado" });
+    const regra = servico.criarRegra({ padrao: "HORTIFRUTI", tipoPadrao: "contem", categoriaId: feira.id });
+    const outra = servico.criarRegra({ padrao: "SACOLAO", tipoPadrao: "contem", categoriaId: feira.id });
+    servico.apagarCategoria({ id: feira.id });
+    const nova = servico.criarCategoria({ nome: "feira", tipo: "gasto", categoriaPaiId: "mercado" });
+    erroDaArea(() => servico.restaurarCategoria(feira.id), MENSAGEM_NOME_REPETIDO);
+    servico.definirCategoria({ id: nova.id, nome: "Feira livre" });
+    servico.criarRegra({ padrao: "hortifruti", tipoPadrao: "contem", categoriaId: "casa" });
+    servico.restaurarCategoria(feira.id);
+    const vivas = servico.regras().map((r) => r.id);
+    expect(vivas).toContain(outra.id);
+    expect(vivas).not.toContain(regra.id);
+  });
+
+  test("duas idas à lixeira no mesmo instante têm marcas diferentes e voltam separadas", () => {
+    const { servico } = montar();
+    servico.apagarCategoria({ id: "lazer" });
+    servico.apagarCategoria({ id: "pets" });
+    servico.restaurarCategoria("lazer");
+    const ids = servico.categorias().map((c) => c.id);
+    expect(ids).toContain("lazer");
+    expect(ids).not.toContain("pets");
+  });
+
+  test("categoria com subcategoria na lixeira não vira subcategoria, com mensagem clara", () => {
+    const { servico } = montar();
+    const feira = servico.criarCategoria({ nome: "Feira", tipo: "gasto", categoriaPaiId: "mercado" });
+    servico.apagarCategoria({ id: feira.id });
+    erroDaArea(
+      () => servico.definirCategoria({ id: "mercado", categoriaPaiId: "casa" }),
+      MENSAGEM_TEM_SUBCATEGORIAS,
+    );
+  });
+
+  test("definirRegra muda padrão e categoria, mantém quem ensinou e recusa padrão repetido; apagarRegra manda à lixeira", () => {
+    const { servico, eventos } = montar();
+    const daTula = servico.criarRegra(
+      { padrao: "IFOOD", tipoPadrao: "contem", categoriaId: "mercado" },
+      DA_TULA,
+    );
+    const outra = servico.criarRegra({ padrao: "RAPPI", tipoPadrao: "contem", categoriaId: "restaurantes" });
+    const editada = servico.definirRegra({ id: daTula.id, padrao: "PAG*IFOOD", categoriaId: "restaurantes" });
+    confere("financas.definirRegra", editada);
+    expect(editada).toMatchObject({ padrao: "PAG*IFOOD", categoriaId: "restaurantes", criadaPor: "agente" });
+    erroDaArea(() => servico.definirRegra({ id: daTula.id, padrao: "rappi" }), MENSAGEM_REGRA_REPETIDA);
+    const apagados = servico.apagarRegra({ id: outra.id });
+    confere("financas.apagarRegra", apagados);
+    expect(apagados).toEqual({ ids: [outra.id] });
+    expect(servico.regras().map((r) => r.id)).toEqual([daTula.id]);
+    erroDaArea(() => servico.apagarRegra({ id: outra.id }), MENSAGEM_REGRA_NAO_ENCONTRADA);
+    expect(eventos.at(-1)).toEqual({ partes: ["regras"], lancamentos: [], apagados: [] });
+  });
+
+  test("regra de categoria arquivada é pulada no categorizar", () => {
+    const { servico } = montar();
+    servico.criarRegra({ padrao: "STEAM", tipoPadrao: "contem", categoriaId: "lazer" });
+    servico.criarRegra({ padrao: "STEAM GAMES", tipoPadrao: "contem", categoriaId: "compras" });
+    servico.definirCategoria({ id: "compras", arquivada: true });
+    expect(servico.categorizar([{ contaId: "nubank", descricao: "STEAM GAMES 123" }])[0]).toMatchObject({
+      categoriaId: "lazer",
+      fonte: "regra",
+    });
   });
 });

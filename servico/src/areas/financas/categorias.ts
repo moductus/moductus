@@ -41,6 +41,8 @@ export class ErroDasCategorias extends Error {}
 export const MENSAGEM_CATEGORIA_NAO_ENCONTRADA = "categoria não encontrada";
 export const MENSAGEM_REGRA_NAO_ENCONTRADA = "regra não encontrada";
 export const MENSAGEM_UM_NIVEL = "subcategoria só tem um nível";
+export const MENSAGEM_TEM_SUBCATEGORIAS =
+  "categoria com subcategorias, mesmo na lixeira, não vira subcategoria";
 export const MENSAGEM_TIPO_DA_MAE = "a subcategoria é do mesmo tipo da categoria mãe";
 export const MENSAGEM_NOME_REPETIDO = "já existe uma categoria com esse nome aqui";
 export const MENSAGEM_TRANSFERENCIA =
@@ -72,6 +74,8 @@ const LIMITE_TEXTO_REGEX = 300;
 const MENOR_PADRAO = 2;
 /** Quantos lançamentos com categoria de uma conta o empréstimo lê, do mais novo para trás. */
 const LIMITE_ANTERIORES = 2000;
+/** O tamanho máximo do padrão no contrato (`PadraoRegra`). */
+const LIMITE_PADRAO = 200;
 
 // ---------- Texto ----------
 
@@ -96,11 +100,22 @@ export function chaveDescricao(texto: string): string {
 export function padraoDaDescricao(texto: string): string {
   const normalizado = normalizarTexto(texto);
   const ate = normalizado.search(/\d/);
-  const comeco = ate === -1 ? normalizado : normalizado.slice(0, ate);
+  let comeco = ate === -1 ? normalizado : normalizado.slice(0, ate);
+  // O padrão cabe no contrato (`PadraoRegra`): corta numa fronteira de palavra quando dá.
+  if (comeco.length > LIMITE_PADRAO) {
+    const corte = comeco.lastIndexOf(" ", LIMITE_PADRAO);
+    comeco = comeco.slice(0, corte > 0 ? corte : LIMITE_PADRAO);
+  }
   return comeco.replace(/[^\p{L}\p{N}]+$/u, "").trim();
 }
 
 const letrasENumeros = (t: string) => t.replace(/[^\p{L}\p{N}]/gu, "").length;
+
+/** Só sem acento: a fonte da regex fica como o texto que ela lê, sem mudar caixa (`\d` não é `\D`). */
+const semAcento = (t: string) => t.normalize("NFD").replace(/\p{M}/gu, "");
+
+/** A chave do "igual anterior" só empresta com 2 palavras ou 6 letras: "PIX" sozinho não identifica. */
+const chaveIdentifica = (chave: string) => chave.split(" ").length >= 2 || letrasENumeros(chave) >= 6;
 
 // ---------- Regex com limite de tamanho e de tempo ----------
 
@@ -124,8 +139,9 @@ export function temRepeticaoAninhada(fonte: string): boolean {
       continue;
     }
     if (c === "[") {
+      // Em JS, `[]` é a classe vazia e `[^]` é qualquer coisa: o `]` logo depois já fecha.
       i++;
-      if (fonte[i] === "]") i++;
+      if (fonte[i] === "^") i++;
       while (i < fonte.length && fonte[i] !== "]") i += fonte[i] === "\\" ? 2 : 1;
       i++;
       continue;
@@ -152,43 +168,64 @@ export function temRepeticaoAninhada(fonte: string): boolean {
   return false;
 }
 
-/** Os textos com que a expressão nova é posta à prova: as letras dela repetidas, sem fechar. */
+/** Os textos com que a expressão nova é posta à prova: as letras dela, dígitos e misturas, sem fechar. */
 function textosDeProva(fonte: string): string[] {
+  const n = LIMITE_TEXTO_REGEX;
   const letras = new Set(normalizarTexto(fonte.replace(/\\./g, "")).replace(/[^\p{L}\p{N} ]/gu, ""));
-  letras.add("A");
-  letras.add(" ");
-  const textos = [...letras].map((c) => `${c.repeat(LIMITE_TEXTO_REGEX - 1)}!`);
+  for (const c of ["A", "1", " "]) letras.add(c);
+  const textos = [...letras].map((c) => `${c.repeat(n - 1)}!`);
+  textos.push("1 ".repeat(n / 2), "A1".repeat(n / 2), "A ".repeat(n / 2));
   const literal = normalizarTexto(fonte.replace(/[^\p{L}\p{N} ]/gu, ""));
-  if (literal)
-    textos.push(literal.repeat(Math.ceil(LIMITE_TEXTO_REGEX / literal.length)).slice(0, LIMITE_TEXTO_REGEX));
+  if (literal) textos.push(literal.repeat(Math.ceil(n / literal.length)).slice(0, n));
   return textos;
 }
 
 /**
- * Confere as regex num contexto do `node:vm` com prazo: a regex do JavaScript não para sozinha,
- * mas o prazo do vm interrompe a que travar. Devolve, por expressão, se bateu; `null` quando o
- * prazo estourou.
+ * As regex rodam num contexto do `node:vm` com prazo: a regex do JavaScript não para sozinha, mas o
+ * prazo do vm interrompe a que travar. O contexto é um só por conjunto; muda só o texto.
  */
-const conferirTodas = new Script(
-  "(() => { const r = []; for (let i = 0; i < expressoes.length; i++) r.push(expressoes[i].test(texto)); return r; })()",
+const CONFERIR_TODAS = new Script(
+  "(() => { const r = []; for (let i = 0; i < expressoes.length; i++) r.push(ativas[i] ? expressoes[i].test(texto) : false); return r; })()",
 );
-const conferirUma = new Script("expressoes[0].test(texto)");
+const CONFERIR_UMA = new Script("expressoes[indice].test(texto)");
 
-function conferirRegex(expressoes: readonly RegExp[], texto: string): boolean[] | null {
-  if (expressoes.length === 0) return [];
-  const contexto = createContext({ expressoes, texto: texto.slice(0, LIMITE_TEXTO_REGEX) });
+interface ContextoRegex {
+  expressoes: RegExp[];
+  ativas: boolean[];
+  texto: string;
+  indice: number;
+}
+
+function novoContexto(expressoes: RegExp[]): ContextoRegex {
+  return createContext({
+    expressoes,
+    ativas: expressoes.map(() => true),
+    texto: "",
+    indice: 0,
+  }) as ContextoRegex;
+}
+
+/** Por expressão, se bateu (a inativa conta como não); `null` quando o prazo estourou. */
+function conferirTodas(contexto: ContextoRegex, texto: string): boolean[] | null {
+  contexto.texto = texto.slice(0, LIMITE_TEXTO_REGEX);
   try {
-    return [...(conferirTodas.runInContext(contexto, { timeout: PRAZO_REGEX_MS }) as boolean[])];
+    return [...(CONFERIR_TODAS.runInContext(contexto, { timeout: PRAZO_REGEX_MS }) as boolean[])];
   } catch {
     return null;
   }
 }
 
 /** Uma expressão só; `null` quando o prazo estourou. */
-function conferirUmaRegex(expressao: RegExp, texto: string, prazo = PRAZO_REGEX_MS): boolean | null {
-  const contexto = createContext({ expressoes: [expressao], texto: texto.slice(0, LIMITE_TEXTO_REGEX) });
+function conferirUma(
+  contexto: ContextoRegex,
+  indice: number,
+  texto: string,
+  prazo = PRAZO_REGEX_MS,
+): boolean | null {
+  contexto.texto = texto.slice(0, LIMITE_TEXTO_REGEX);
+  contexto.indice = indice;
   try {
-    return conferirUma.runInContext(contexto, { timeout: prazo }) as boolean;
+    return CONFERIR_UMA.runInContext(contexto, { timeout: prazo }) as boolean;
   } catch {
     return null;
   }
@@ -197,20 +234,21 @@ function conferirUmaRegex(expressao: RegExp, texto: string, prazo = PRAZO_REGEX_
 /**
  * A regex que entra numa regra: no limite de tamanho, válida, sem referência a grupo, sem repetição
  * aninhada e rápida nos textos de prova. A regra compara contra a descrição normalizada (sem acento,
- * em maiúsculas), sem diferença de caixa.
+ * em maiúsculas), sem diferença de caixa; a fonte também perde os acentos.
  */
 export function validarRegex(fonte: string): RegExp {
   if (fonte.length > LIMITE_REGEX) throw new ErroDasCategorias(MENSAGEM_REGEX_LONGA);
   let expressao: RegExp;
   try {
-    expressao = new RegExp(fonte, "i");
+    expressao = new RegExp(semAcento(fonte), "i");
   } catch {
     throw new ErroDasCategorias(MENSAGEM_REGEX_INVALIDA);
   }
   if (/\\[1-9]|\\k</.test(fonte)) throw new ErroDasCategorias(MENSAGEM_REGEX_REFERENCIA);
   if (temRepeticaoAninhada(fonte)) throw new ErroDasCategorias(MENSAGEM_REGEX_CATASTROFICA);
+  const contexto = novoContexto([expressao]);
   for (const texto of textosDeProva(fonte)) {
-    if (conferirUmaRegex(expressao, texto, PRAZO_PROVA_MS) === null)
+    if (conferirUma(contexto, 0, texto, PRAZO_PROVA_MS) === null)
       throw new ErroDasCategorias(MENSAGEM_REGEX_LENTA);
   }
   return expressao;
@@ -219,12 +257,13 @@ export function validarRegex(fonte: string): RegExp {
 // ---------- Ordem e aplicação das regras ----------
 
 /**
- * A ordem do ADR-0045: a regra do usuário antes da do agente, depois o padrão mais longo; empate
- * fica com a mais antiga, para a mesma descrição dar sempre a mesma categoria.
+ * A ordem do ADR-0045: a regra do usuário antes da do agente, depois o padrão mais longo (medido
+ * normalizado, como é comparado); empate fica com a mais antiga, para a mesma descrição dar sempre
+ * a mesma categoria.
  */
 export function compararRegras(a: RegraCategoria, b: RegraCategoria): number {
   if (a.criadaPor !== b.criadaPor) return a.criadaPor === "usuario" ? -1 : 1;
-  const tamanho = b.padrao.trim().length - a.padrao.trim().length;
+  const tamanho = normalizarTexto(b.padrao).length - normalizarTexto(a.padrao).length;
   if (tamanho !== 0) return tamanho;
   if (a.criadoEm !== b.criadoEm) return a.criadoEm < b.criadoEm ? -1 : 1;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
@@ -232,25 +271,28 @@ export function compararRegras(a: RegraCategoria, b: RegraCategoria): number {
 
 interface RegraPronta {
   regra: RegraCategoria;
-  /** O padrão normalizado (`contem`, `comeca_com`) ou a posição em `expressoes` (`regex`). */
+  /** O padrão normalizado (`contem`, `comeca_com`); vazio na regex. */
   padrao: string;
+  /** A posição em `expressoes` (`regex`); -1 nas outras. */
   indiceRegex: number;
 }
 
 /**
- * As regras compiladas na ordem de aplicação. A regex que não compila mais (gravada por outro
- * caminho) fica de fora, e a que estoura o prazo numa descrição conta como "não bate" nela.
+ * As regras compiladas na ordem de aplicação, para um lote. A regex que não compila mais (gravada
+ * por outro caminho) fica de fora, e a que estoura o prazo uma vez sai do conjunto pelo resto do
+ * lote: um extrato de 200 linhas não paga o prazo 200 vezes.
  */
 export class ConjuntoRegras {
   private readonly prontas: RegraPronta[] = [];
   private readonly expressoes: RegExp[] = [];
+  private readonly contexto: ContextoRegex;
 
   constructor(regras: readonly RegraCategoria[]) {
     for (const regra of [...regras].sort(compararRegras)) {
       if (regra.tipoPadrao === "regex") {
         let expressao: RegExp;
         try {
-          expressao = new RegExp(regra.padrao, "i");
+          expressao = new RegExp(semAcento(regra.padrao), "i");
         } catch {
           continue;
         }
@@ -260,12 +302,13 @@ export class ConjuntoRegras {
         this.prontas.push({ regra, padrao: normalizarTexto(regra.padrao), indiceRegex: -1 });
       }
     }
+    this.contexto = novoContexto(this.expressoes);
   }
 
   /** A regra que vence para a descrição, ou `null`. */
   aplicar(descricao: string): RegraCategoria | null {
     const texto = normalizarTexto(descricao);
-    let regex: (boolean | null)[] | null = null;
+    let regex: boolean[] | null = null;
     for (const p of this.prontas) {
       if (p.indiceRegex === -1) {
         const bate = p.regra.tipoPadrao === "contem" ? texto.includes(p.padrao) : texto.startsWith(p.padrao);
@@ -278,17 +321,19 @@ export class ConjuntoRegras {
     return null;
   }
 
-  /** Todas de uma vez; se o prazo estourar, uma a uma, para só a lenta ficar de fora. */
-  private conferirRegex(texto: string): (boolean | null)[] {
-    const todas = conferirRegex(this.expressoes, texto);
+  /** Todas de uma vez; se o prazo estourar, uma a uma, e a lenta sai do conjunto. */
+  private conferirRegex(texto: string): boolean[] {
+    if (this.expressoes.length === 0) return [];
+    const todas = conferirTodas(this.contexto, texto);
     if (todas) return todas;
-    return this.expressoes.map((e, i) => {
-      const r = conferirUmaRegex(e, texto);
-      if (r === null) {
-        const regra = this.prontas.find((p) => p.indiceRegex === i)?.regra;
-        console.error(`categorias: a regex da regra ${regra?.id ?? "?"} estourou o prazo e ficou de fora`);
-      }
-      return r;
+    return this.expressoes.map((_, i) => {
+      if (!this.contexto.ativas[i]) return false;
+      const r = conferirUma(this.contexto, i, texto);
+      if (r !== null) return r;
+      this.contexto.ativas[i] = false;
+      const regra = this.prontas.find((p) => p.indiceRegex === i)?.regra;
+      console.error(`categorias: a regex da regra ${regra?.id ?? "?"} estourou o prazo e saiu do lote`);
+      return false;
     });
   }
 }
@@ -432,12 +477,39 @@ export class RepositorioCategorias {
    * Os lançamentos das categorias (vivos e na lixeira, para restaurar um não apontar para categoria
    * apagada) ficam "sem categoria". A origem fica: é efeito de apagar a categoria, não edição deles.
    */
-  tirarCategoriaDosLancamentos(categorias: readonly string[], agora: string): void {
-    this.db
+  tirarCategoriaDosLancamentos(categorias: readonly string[], agora: string): number {
+    const r = this.db
       .prepare(
         `UPDATE lancamentos SET categoria_id = NULL, atualizado_em = ? WHERE categoria_id IN (${lugares(categorias.length)})`,
       )
       .run(agora, ...categorias);
+    return Number(r.changes);
+  }
+
+  /** Tem subcategoria, viva ou na lixeira (como o gatilho da 029, que conta as duas). */
+  temSubcategorias(id: string): boolean {
+    return (
+      this.db.prepare("SELECT 1 FROM categorias WHERE categoria_pai_id = ? LIMIT 1").get(id) !== undefined
+    );
+  }
+
+  /** As subcategorias que foram à lixeira com a mãe (mesma marca). */
+  subcategoriasDaMarca(id: string, marca: string): Categoria[] {
+    const linhas = this.db
+      .prepare(`SELECT ${COLUNAS_CATEGORIA} FROM categorias WHERE categoria_pai_id = ? AND apagado_em = ?`)
+      .all(id, marca) as unknown as LinhaCategoria[];
+    return linhas.map(paraCategoria);
+  }
+
+  /** As regras que foram à lixeira com as categorias (mesma marca). */
+  regrasDaMarca(categorias: readonly string[], marca: string): RegraCategoria[] {
+    const linhas = this.db
+      .prepare(
+        `SELECT ${COLUNAS_REGRA} FROM regras_categoria r
+          WHERE r.apagado_em = ? AND r.categoria_id IN (${lugares(categorias.length)})`,
+      )
+      .all(marca, ...categorias) as unknown as LinhaRegra[];
+    return linhas.map(paraRegra);
   }
 
   /** As categorias e as regras delas vão à lixeira com a mesma marca. Devolve os ids das regras. */
@@ -464,30 +536,27 @@ export class RepositorioCategorias {
     return regras.map((r) => r.id);
   }
 
-  /** Tira da lixeira a categoria e o que foi com ela (mesma marca): subcategorias e regras. */
-  restaurarCategoria(id: string, marca: string, agora: string, carimbo: Carimbo): void {
+  /** Tira da lixeira as categorias e as regras dadas, que têm a mesma marca. */
+  restaurar(
+    categorias: readonly string[],
+    regras: readonly string[],
+    marca: string,
+    agora: string,
+    carimbo: Carimbo,
+  ): void {
     const o = colunasDeOrigem(carimbo);
-    const ids = [
-      id,
-      ...(
-        this.db
-          .prepare("SELECT id FROM categorias WHERE categoria_pai_id = ? AND apagado_em = ?")
-          .all(id, marca) as { id: string }[]
-      ).map((l) => l.id),
-    ];
-    const em = lugares(ids.length);
-    this.db
-      .prepare(
-        `UPDATE categorias SET apagado_em = NULL, atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
-          WHERE apagado_em = ? AND id IN (${em})`,
-      )
-      .run(agora, o.origem, o.agente_id, o.execucao_id, marca, ...ids);
-    this.db
-      .prepare(
-        `UPDATE regras_categoria SET apagado_em = NULL, atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
-          WHERE apagado_em = ? AND categoria_id IN (${em})`,
-      )
-      .run(agora, o.origem, o.agente_id, o.execucao_id, marca, ...ids);
+    for (const [tabela, ids] of [
+      ["categorias", categorias],
+      ["regras_categoria", regras],
+    ] as const) {
+      if (ids.length === 0) continue;
+      this.db
+        .prepare(
+          `UPDATE ${tabela} SET apagado_em = NULL, atualizado_em = ?, origem = ?, agente_id = ?, execucao_id = ?
+            WHERE apagado_em = ? AND id IN (${lugares(ids.length)})`,
+        )
+        .run(agora, o.origem, o.agente_id, o.execucao_id, marca, ...ids);
+    }
   }
 
   /** As regras vivas de categoria viva; com `soAtivas`, só as de categoria não arquivada. */
@@ -650,6 +719,8 @@ const ORDEM_DO_TIPO: Record<TipoCategoria, number> = { gasto: 0, receita: 1, tra
 export class ServicoCategorias {
   private readonly agora: () => Date;
   private readonly gerarId: () => string;
+  /** O último instante usado como marca da lixeira: a marca seguinte é sempre maior. */
+  private ultimoInstante = 0;
 
   constructor(
     private readonly repo: RepositorioCategorias,
@@ -739,34 +810,45 @@ export class ServicoCategorias {
         .filter((c) => c.categoriaPaiId === atual.id)
         .map((c) => c.id),
     ];
+    // A confirmação olha só os vivos; os da lixeira também ficam sem categoria, para restaurar um
+    // deles não o pôr numa categoria apagada.
     const lancamentos = this.repo.contarLancamentos(categorias);
     if (lancamentos > 0 && pedido.confirmado !== true) return { apagada: false, lancamentos };
-    const agora = this.agora().toISOString();
-    const regras = this.repo.transacao(() => {
-      if (lancamentos > 0) this.repo.tirarCategoriaDosLancamentos(categorias, agora);
-      return this.repo.apagarCategorias(categorias, agora, carimbo);
+    const agora = this.marca();
+    const { regras, tirados } = this.repo.transacao(() => {
+      const tirados = this.repo.tirarCategoriaDosLancamentos(categorias, agora);
+      return { regras: this.repo.apagarCategorias(categorias, agora, carimbo), tirados };
     });
-    this.avisar(lancamentos > 0 ? ["categorias", "regras", "lancamentos"] : ["categorias", "regras"]);
+    this.avisar(tirados > 0 ? ["categorias", "regras", "lancamentos"] : ["categorias", "regras"]);
     return { apagada: true, ids: [...categorias, ...regras] };
   }
 
   /**
    * Tira da lixeira a categoria com as subcategorias e as regras que foram junto com ela. A
    * subcategoria apagada com a mãe volta com a mãe; os lançamentos que ficaram "sem categoria"
-   * continuam sem.
+   * continuam sem. Nome igual ao de uma irmã viva recusa; a regra cujo padrão já tem regra viva
+   * fica na lixeira.
    */
   restaurarCategoria(id: string, carimbo: Carimbo = DO_USUARIO): Categoria[] {
     const linha = this.repo.linhaCategoria(id);
     if (!linha) throw new ErroDasCategorias(MENSAGEM_CATEGORIA_NAO_ENCONTRADA);
     if (linha.apagadoEm === null) throw new ErroDasCategorias(MENSAGEM_NAO_ESTA_NA_LIXEIRA);
-    const pai = linha.categoria.categoriaPaiId;
+    const { categoria } = linha;
+    const pai = categoria.categoriaPaiId;
     if (pai !== null && this.repo.linhaCategoria(pai)?.apagadoEm !== null) {
       throw new ErroDasCategorias(MENSAGEM_RESTAURAR_A_MAE);
     }
     const marca = linha.apagadoEm;
-    this.repo.transacao(() => this.repo.restaurarCategoria(id, marca, this.agora().toISOString(), carimbo));
+    // As filhas que voltam são irmãs só entre si (a mãe estava na lixeira): só a mãe pode colidir.
+    this.conferirNome(categoria.nome, pai, categoria.tipo, categoria.id);
+    const categorias = [id, ...this.repo.subcategoriasDaMarca(id, marca).map((c) => c.id)];
+    const regras = this.repo
+      .regrasDaMarca(categorias, marca)
+      .filter((r) => !this.regraComPadrao(r.padrao, r.tipoPadrao, r.id))
+      .map((r) => r.id);
+    this.repo.transacao(() => this.repo.restaurar(categorias, regras, marca, this.marca(), carimbo));
     this.avisar(["categorias", "regras"]);
-    return this.repo.categorias().filter((c) => c.id === id || c.categoriaPaiId === id);
+    return this.repo.categorias().filter((c) => categorias.includes(c.id));
   }
 
   // ----- Regras -----
@@ -837,7 +919,7 @@ export class ServicoCategorias {
 
   apagarRegra(pedido: PedidoRegraCategoria, carimbo: Carimbo = DO_USUARIO): Apagados {
     const atual = this.exigirRegra(pedido.id);
-    this.repo.apagarRegra(atual.id, this.agora().toISOString(), carimbo);
+    this.repo.apagarRegra(atual.id, this.marca(), carimbo);
     this.avisar(["regras"]);
     return { ids: [atual.id] };
   }
@@ -862,7 +944,8 @@ export class ServicoCategorias {
         daConta = this.anterioresDaConta(l.contaId);
         anteriores.set(l.contaId, daConta);
       }
-      const categoriaId = daConta.get(chaveDescricao(l.descricao)) ?? null;
+      const chave = chaveDescricao(l.descricao);
+      const categoriaId = chaveIdentifica(chave) ? (daConta.get(chave) ?? null) : null;
       return categoriaId
         ? { categoriaId, fonte: "anterior", regraId: null }
         : { categoriaId: null, fonte: null, regraId: null };
@@ -940,12 +1023,15 @@ export class ServicoCategorias {
     );
   }
 
-  /** A mãe existe, é de primeiro nível, é do mesmo tipo e não é a própria categoria nem tem filhas dela. */
+  /**
+   * A mãe existe, é de primeiro nível, é do mesmo tipo e não é a própria categoria; a categoria que
+   * vira filha não tem subcategorias, nem na lixeira (o gatilho da 029 conta as duas).
+   */
   private conferirMae(paiId: string, tipo: TipoCategoria, filhaId: string | null): void {
     const pai = this.exigirCategoria(paiId);
     if (pai.id === filhaId || pai.categoriaPaiId !== null) throw new ErroDasCategorias(MENSAGEM_UM_NIVEL);
-    if (filhaId !== null && this.repo.categorias().some((c) => c.categoriaPaiId === filhaId)) {
-      throw new ErroDasCategorias(MENSAGEM_UM_NIVEL);
+    if (filhaId !== null && this.repo.temSubcategorias(filhaId)) {
+      throw new ErroDasCategorias(MENSAGEM_TEM_SUBCATEGORIAS);
     }
     if (pai.tipo !== tipo) throw new ErroDasCategorias(MENSAGEM_TIPO_DA_MAE);
   }
@@ -981,6 +1067,13 @@ export class ServicoCategorias {
     const regra = this.exigirRegra(id);
     this.avisar(["regras"]);
     return regra;
+  }
+
+  /** Agora, sempre depois da marca anterior: duas idas à lixeira no mesmo ms não se confundem. */
+  private marca(): string {
+    const ms = Math.max(this.agora().getTime(), this.ultimoInstante + 1);
+    this.ultimoInstante = ms;
+    return new Date(ms).toISOString();
   }
 
   private avisar(partes: MudancaFinancas["partes"]): void {
