@@ -69,6 +69,7 @@ import {
 } from "./dividas.ts";
 import {
   Categoria,
+  ComprovanteLido,
   Conta,
   DefinicaoOrcamento,
   DetalheLancamento,
@@ -99,6 +100,7 @@ import {
   PedidoFaturas,
   PedidoGastoCom,
   PedidoLancamento,
+  PedidoLerComprovante,
   PedidoLancamentos,
   PedidoMes,
   PedidoOrcamento,
@@ -432,6 +434,8 @@ export const METODOS = {
   "financas.relatorio": metodo(PedidoMes, RelatorioMes),
   "financas.gastoCom": metodo(PedidoGastoCom, GastoCom),
   "financas.vencimentos": metodo(PedidoVencimentos, Vencimentos),
+  /** Lê a imagem no próprio PC e devolve a prévia; nada é lançado daqui (ADR-0043). */
+  "financas.lerComprovante": metodo(PedidoLerComprovante, ComprovanteLido),
 
   "dividas.listar": metodo(PedidoDividas, z.array(Divida)),
   "dividas.obter": metodo(PedidoDivida, Divida),

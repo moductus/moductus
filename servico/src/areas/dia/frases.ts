@@ -210,7 +210,7 @@ export function entenderFrase(frase: string, tempo: TempoDoDia, opcoes: OpcoesFr
 // ---------------------------------------------------------------------------------------------
 // Palavras
 
-interface Palavra {
+export interface Palavra {
   /** Em minúsculas e sem acento: "Amanhã" é "amanha", "às" é "as". */
   forma: string;
   /** Como foi escrita: a crase de "às" só existe aqui. */
@@ -226,7 +226,7 @@ interface Palavra {
  */
 const PALAVRA = /[Rr]\$|[\p{L}\p{M}\p{N}]+(?:['’.,:/-][\p{L}\p{M}\p{N}]+)*|[^\s\p{Cc}]/gu;
 
-function palavras(texto: string): Palavra[] {
+export function palavras(texto: string): Palavra[] {
   const saida: Palavra[] = [];
   for (const m of texto.matchAll(PALAVRA)) {
     saida.push({ forma: normalizar(m[0]), original: m[0], inicio: m.index, fim: m.index + m[0].length });
@@ -298,7 +298,7 @@ function numero(f: string | undefined): number | null {
 }
 
 /** O mês pelo nome e pelas três primeiras letras ("out", "dez"). */
-const MESES = new Map(
+export const MESES = new Map(
   termos("janeiro fevereiro marco abril maio junho julho agosto setembro outubro novembro dezembro").flatMap(
     (nome, i): [string, number][] => [
       [nome, i + 1],
@@ -1084,7 +1084,7 @@ const DEPOIS_DO_VALOR_SOLTO = new Set(termos("de do da no na em com pro pra pelo
 const MAXIMO_DE_DIGITOS = 9;
 
 /** "45", "45,90", "1.285,00", "45.90": a palavra já vem sem sinal e sem o "R$", que são palavras à parte. */
-function centavos(f: string | undefined): number | null {
+export function centavos(f: string | undefined): number | null {
   const palavra = f ?? "";
   const digitos = palavra.replace(/[.,]\d{1,2}$/, "").replaceAll(".", "");
   if (digitos.length > MAXIMO_DE_DIGITOS) return null;

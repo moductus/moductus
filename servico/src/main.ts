@@ -39,6 +39,8 @@ import { RepositorioCategorias, ServicoCategorias } from "./areas/financas/categ
 import { atendentesDasContas } from "./areas/financas/canal.ts";
 import { RepositorioContas, ServicoContas } from "./areas/financas/contas.ts";
 import { atendentesDosLancamentos } from "./areas/financas/canal-lancamentos.ts";
+import { atendentesDoComprovante } from "./areas/financas/canal-comprovante.ts";
+import { estruturadorPeloRuntime, ServicoComprovante } from "./areas/financas/comprovante.ts";
 import { RepositorioLancamentos, ServicoLancamentos } from "./areas/financas/lancamentos.ts";
 import { atendentesDoFoco, ouvirAtalhoDoFoco } from "./areas/foco/canal.ts";
 import { RepositorioFoco, ServicoFoco } from "./areas/foco/foco.ts";
@@ -52,11 +54,13 @@ import { ligarBandeja } from "./bandeja/bandeja.ts";
 import { converterPelaConfig, ServicoCambio, vigiarCotacao } from "./cambio/cambio.ts";
 import { AutorizacoesDeArquivo } from "./arquivos/autorizacoes.ts";
 import { atendentesDosArquivos } from "./arquivos/canal.ts";
+import { lerTextoDaImagem } from "./arquivos/texto-da-imagem.ts";
 import { abrirPelaCasca, projetosNaCasca } from "./casca/abrir.ts";
 import { ambientePelaCasca } from "./casca/ambiente.ts";
 import { avisosPelaCasca, CLIQUE_NO_AVISO, lerClique } from "./casca/avisos.ts";
 import { CanalCasca } from "./casca/canal.ts";
 import { credenciaisPelaCasca } from "./casca/credenciais.ts";
+import { ocrPelaCasca } from "./casca/ocr.ts";
 import { painelPelaCasca } from "./casca/painel.ts";
 import { RepositorioConfig, ServicoConfig, type AplicadorNativo } from "./config/config.ts";
 import { RepositorioConexoes, ServicoConexoes } from "./conexoes/conexoes.ts";
@@ -604,6 +608,14 @@ conversas
 // Arquivo do usuário (F4-20, ADR-0044): o caminho escolhido vira um id de uso único de 10 min, que a
 // importação e o comprovante consomem; nenhuma ferramenta de agente recebe caminho nem id.
 const autorizacoesDeArquivo = new AutorizacoesDeArquivo();
+// Comprovante (F4-22, ADR-0043): o OCR do Windows na casca lê a imagem autorizada; os campos saem
+// por código e, só sem valor ou data, a Tula estrutura o texto mascarado, sem ferramentas, em 15 s.
+const comprovante = new ServicoComprovante({
+  lerTexto: lerTextoDaImagem(autorizacoesDeArquivo, ocrPelaCasca(canal)),
+  lancamentos,
+  lerFuso: () => repositorioConfig.ler().dia.fuso,
+  estruturar: estruturadorPeloRuntime(runtime, repositorioAgentes),
+});
 
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
@@ -708,6 +720,7 @@ servidor = await abrirServidorWs(token, {
   ...atendentesDasContas(contas),
   ...atendentesDosLancamentos(lancamentos),
   ...atendentesDosArquivos(autorizacoesDeArquivo),
+  ...atendentesDoComprovante(comprovante),
   // O dinheiro (F4-07): o contrato já tem os métodos e o serviço responde que ainda não estão
   // disponíveis. Cada tarefa que implementa uma área (F4-08 a F4-15, F4-19, F4-20) tira os dela daqui.
   ...semAtendente([

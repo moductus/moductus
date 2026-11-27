@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CamposOrigem, Dia, Id, Instante, Recorrencia } from "./comum.ts";
+import { HoraDoDia } from "./config.ts";
 
 /**
  * O dinheiro da Tula (DATA.md §3; migrações 029 a 031; ADR-0045, ADR-0046): contas e cartões,
@@ -690,6 +691,65 @@ export type SugestaoRecorrente = z.infer<typeof SugestaoRecorrente>;
 
 export const PedidoSugestaoRecorrente = z.object({ chave: z.string().min(1) });
 export type PedidoSugestaoRecorrente = z.infer<typeof PedidoSugestaoRecorrente>;
+
+// ---------- Comprovante ----------
+
+/** Como foi pago ou recebido, pelo que o comprovante diz. */
+export const MeioPagamento = z.enum(["pix", "debito", "credito", "boleto", "transferencia"]);
+export type MeioPagamento = z.infer<typeof MeioPagamento>;
+
+/**
+ * Os campos lidos do comprovante (ADR-0043), editáveis antes de lançar. O que não foi achado vem
+ * vazio. `valorCentavos` tem o sinal do lançamento: negativo é o que saiu (Pix enviado, compra,
+ * boleto), positivo o que entrou (Pix recebido). `nome` é quem recebeu, o estabelecimento ou, no
+ * que entrou, quem mandou.
+ */
+export const CamposComprovante = z.object({
+  valorCentavos: Centavos.refine((v) => v !== 0, "comprovante sem valor").nullable(),
+  data: Dia.nullable(),
+  hora: HoraDoDia.nullable(),
+  nome: z.string().trim().min(1).max(200).nullable(),
+  meio: MeioPagamento.nullable(),
+});
+export type CamposComprovante = z.infer<typeof CamposComprovante>;
+
+export const CampoComprovante = CamposComprovante.keyof();
+export type CampoComprovante = z.infer<typeof CampoComprovante>;
+
+/** O pedaço do texto lido que deu um campo, em posições de caractere do `texto`. */
+export const TrechoComprovante = z
+  .object({
+    campo: CampoComprovante,
+    inicio: z.number().int().nonnegative(),
+    fim: z.number().int().positive(),
+  })
+  .refine((t) => t.fim > t.inicio, { path: ["fim"], message: "o trecho termina depois de começar" });
+export type TrechoComprovante = z.infer<typeof TrechoComprovante>;
+
+/** Ler a imagem que o usuário escolheu, pela autorização de uso único (`arquivos.autorizar`). */
+export const PedidoLerComprovante = z.object({ autorizacaoId: Id });
+export type PedidoLerComprovante = z.infer<typeof PedidoLerComprovante>;
+
+/**
+ * A prévia do comprovante, lido no próprio PC. `lido`: o texto reconhecido, os campos com o trecho
+ * de cada um, os que a Tula completou só pelo texto (`pelaTula`, marcados na tela) e o lançamento
+ * que já tem o mesmo valor, dia e nome (`jaLancado`). `sem_idioma`: o Windows não tem o
+ * reconhecimento de texto em português, e a mensagem ensina a instalar. `ilegivel`: não saiu texto.
+ */
+export const ComprovanteLido = z.discriminatedUnion("estado", [
+  z.object({
+    estado: z.literal("lido"),
+    arquivoNome: z.string().min(1),
+    texto: z.string().min(1),
+    campos: CamposComprovante,
+    trechos: z.array(TrechoComprovante),
+    pelaTula: z.array(CampoComprovante),
+    jaLancado: Lancamento.nullable(),
+  }),
+  z.object({ estado: z.literal("sem_idioma"), mensagem: z.string().min(1) }),
+  z.object({ estado: z.literal("ilegivel"), mensagem: z.string().min(1) }),
+]);
+export type ComprovanteLido = z.infer<typeof ComprovanteLido>;
 
 // ---------- Mudanças ----------
 

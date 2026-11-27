@@ -44,7 +44,7 @@ export function metodo<E extends z.ZodType, S extends z.ZodType>(entrada: E, sai
  * teto com a cotação da configuração, e a sessão do Claude Code diz se roda no terminal ou no
  * app Desktop (fase 3).
  * 4: o dinheiro: contas, cartões e faturas, lançamentos, categorias e regras, orçamento,
- * recorrentes, resumo e relatórios, dívidas, planos, importação de extrato, a autorização de arquivo,
+ * recorrentes, resumo e relatórios, dívidas, planos, importação de extrato, a autorização de arquivo, a leitura do comprovante,
  * o modo privacidade na configuração, os vencimentos nas contagens e o gasto lançável pela captura
  * (fase 4).
  */
