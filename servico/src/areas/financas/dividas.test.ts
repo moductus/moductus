@@ -22,7 +22,10 @@ import {
   MENSAGEM_NADA_PARA_SIMULAR,
   MENSAGEM_PAGAMENTO_ANTES_DO_SALDO,
   MENSAGEM_PAGAMENTO_EM_REAL,
+  MENSAGEM_SIMULACAO_SEM_FIM,
   MENSAGEM_VALOR_DO_LANCAMENTO,
+  MENSAGEM_VALOR_GRANDE_DEMAIS,
+  parcelasCobertas,
   proximaParcela,
   RepositorioDividas,
   ServicoDividas,
@@ -267,6 +270,69 @@ describe("simulação mês a mês", () => {
   });
 });
 
+describe("fila e limite da simulação", () => {
+  // Com extra alto, tudo quita no primeiro mês, e as quitações saem na ordem da fila.
+  const ordem = (dividas: DividaParaSimular[], estrategia: "maiorJuro" | "menorSaldo") =>
+    simularQuitacao(dividas, 100_000_000, estrategia).quitacoes.map((q) => q.id);
+
+  test("maior juro primeiro, no empate da taxa, vai o menor saldo; depois, o id", () => {
+    expect(ordem([divida("a", 50_000, 200, 10_000), divida("z", 30_000, 200, 10_000)], "maiorJuro")).toEqual([
+      "z",
+      "a",
+    ]);
+    expect(ordem([divida("z", 30_000, 200, 10_000), divida("a", 30_000, 200, 10_000)], "maiorJuro")).toEqual([
+      "a",
+      "z",
+    ]);
+  });
+
+  test("menor saldo primeiro, no empate do saldo, vai o maior juro; depois, o id", () => {
+    expect(ordem([divida("a", 50_000, 100, 10_000), divida("z", 50_000, 300, 10_000)], "menorSaldo")).toEqual(
+      ["z", "a"],
+    );
+    expect(ordem([divida("z", 50_000, 300, 10_000), divida("a", 50_000, 300, 10_000)], "menorSaldo")).toEqual(
+      ["a", "z"],
+    );
+  });
+
+  test("a simulação que passa de 100 anos recusa com o próprio motivo", () => {
+    // R$ 1.000.000,00 a 0,01% com R$ 100,01: mais de 1200 meses.
+    expect(() => simularQuitacao([divida("x", 100_000_000, 1, 10_001)], 0, "semExtra")).toThrow(
+      new ErroDasDividas(MENSAGEM_SIMULACAO_SEM_FIM),
+    );
+  });
+});
+
+describe("parcelas cobertas por um pagamento", () => {
+  test("os vencimentos depois do saldo até o dia do pagamento", () => {
+    expect(parcelasCobertas("2026-10-20", "2026-11-20", 20)).toEqual({ parcelas: 1, saldoEm: "2026-11-20" });
+    expect(parcelasCobertas("2026-10-20", "2026-12-21", 20)).toEqual({ parcelas: 2, saldoEm: "2026-12-21" });
+    // Fevereiro curto: o vencimento de dia 31 cai em 28/02.
+    expect(parcelasCobertas("2027-01-31", "2027-02-28", 31)).toEqual({ parcelas: 1, saldoEm: "2027-02-28" });
+  });
+
+  test("antes do dia, no mesmo mês, é a parcela do mês; em outro mês ou no dia do saldo, é extra", () => {
+    expect(parcelasCobertas("2026-10-20", "2026-11-18", 20)).toEqual({ parcelas: 1, saldoEm: "2026-11-20" });
+    expect(parcelasCobertas("2026-11-20", "2026-11-25", 20)).toEqual({ parcelas: 0, saldoEm: "2026-11-25" });
+    expect(parcelasCobertas("2026-11-20", "2026-11-20", 20)).toEqual({ parcelas: 0, saldoEm: "2026-11-20" });
+  });
+
+  test("sem dia de vencimento, os meses de calendário", () => {
+    expect(parcelasCobertas("2026-10-15", "2026-11-03", null)).toEqual({
+      parcelas: 1,
+      saldoEm: "2026-11-03",
+    });
+    expect(parcelasCobertas("2026-10-15", "2027-01-01", null)).toEqual({
+      parcelas: 3,
+      saldoEm: "2027-01-01",
+    });
+    expect(parcelasCobertas("2026-11-03", "2026-11-30", null)).toEqual({
+      parcelas: 0,
+      saldoEm: "2026-11-30",
+    });
+  });
+});
+
 /**
  * Banco migrado de verdade, com contas, categorias e lançamentos reais ao lado, e um relógio que anda
  * 1 ms a cada leitura. Hoje é sexta, 27/11/2026, em São Paulo.
@@ -373,6 +439,26 @@ describe("cadastro", () => {
     expect(reaberta).toMatchObject({ quitadaEm: null, saldoCentavos: 10_000 });
   });
 
+  test("saldo editado para zero quita: no dia do saldo que veio, ou hoje", () => {
+    const { servico } = montar();
+    const comDia = servico.criar(EMPRESTIMO);
+    expect(servico.definir({ id: comDia.id, saldoCentavos: 0, saldoEm: "2026-11-22" })).toMatchObject({
+      quitadaEm: "2026-11-22",
+      saldoEm: "2026-11-22",
+      parcelasRestantes: 0,
+      proximaParcelaEm: null,
+    });
+    const semDia = servico.criar(EMPRESTIMO);
+    expect(servico.definir({ id: semDia.id, saldoCentavos: 0 }).quitadaEm).toBe("2026-11-27");
+    expect(servico.listar()).toEqual([]);
+  });
+
+  test("com saldo, há próxima parcela mesmo com as parcelas restantes em zero", () => {
+    const { servico } = montar();
+    const criada = servico.criar({ ...EMPRESTIMO, saldoCentavos: 21_000, parcelasRestantes: 0 });
+    expect(criada.proximaParcelaEm).toBe("2026-11-20");
+  });
+
   test("apagar manda à lixeira: some da lista e de obter", () => {
     const { db, servico, eventos } = montar();
     const criada = servico.criar(EMPRESTIMO);
@@ -427,11 +513,132 @@ describe("pagamento", () => {
       descricao: "Pagamento de Empréstimo pessoal",
     });
     expect(contas.obterConta({ id: corrente.id }).saldoCentavos).toBe(-45_210);
-    expect(eventos.at(-1)).toEqual({
-      partes: ["dividas", "lancamentos", "contas"],
-      lancamentos: [pago.lancamento],
-      apagados: [],
+    // Um aviso só, depois da transação, com o lançamento já ligado à dívida.
+    expect(eventos).toEqual([
+      { partes: ["dividas", "lancamentos", "contas"], lancamentos: [pago.lancamento], apagados: [] },
+    ]);
+  });
+
+  test("lançado no cartão: cai na fatura, e o aviso leva as faturas", () => {
+    const { servico, contas, eventos, corrente } = montar();
+    const cartao = contas.criarConta({
+      nome: "Cartão Nubank",
+      tipo: "cartao",
+      diaFechamento: 15,
+      diaVencimento: 25,
+      contaPagamentoId: corrente.id,
     });
+    const criada = servico.criar(EMPRESTIMO);
+    eventos.length = 0;
+    const pago = servico.registrarPagamento({
+      id: criada.id,
+      valorCentavos: 45_210,
+      data: "2026-11-20",
+      contaId: cartao.id,
+    });
+    expect(pago.lancamento?.faturaId).not.toBeNull();
+    expect(eventos).toEqual([
+      {
+        partes: ["dividas", "lancamentos", "contas", "faturas"],
+        lancamentos: [pago.lancamento],
+        apagados: [],
+      },
+    ]);
+  });
+
+  test("pagamento extra, sem vencimento no meio: sem juros e sem tirar parcela", () => {
+    const { servico } = montar();
+    const criada = servico.criar(EMPRESTIMO);
+    servico.registrarPagamento({ id: criada.id, valorCentavos: 45_210, data: "2026-11-20" });
+    // R$ 1.000,00 em 25/11: 6.082,30 − 1.000,00 = 5.082,30, ainda faltam 16.
+    const { divida: depois } = servico.registrarPagamento({
+      id: criada.id,
+      valorCentavos: 100_000,
+      data: "2026-11-25",
+    });
+    expect(depois).toMatchObject({
+      saldoCentavos: 508_230,
+      saldoEm: "2026-11-25",
+      parcelasRestantes: 16,
+      proximaParcelaEm: "2026-12-20",
+    });
+    // Extra pequeno nunca sobe o saldo: R$ 10,00 tira R$ 10,00. No próprio dia do saldo, também é extra.
+    expect(
+      servico.registrarPagamento({ id: criada.id, valorCentavos: 1_000, data: "2026-11-25" }).divida,
+    ).toMatchObject({ saldoCentavos: 507_230, parcelasRestantes: 16 });
+  });
+
+  test("duas parcelas atrasadas cobram dois meses de juros, compostos, e tiram duas parcelas", () => {
+    const { servico } = montar();
+    const criada = servico.criar(EMPRESTIMO);
+    // Vencimentos de 20/11 e 20/12 desde o saldo de 20/10: 6.400,00 + 134,40 = 6.534,40;
+    // 2,1% de 6.534,40 = 137,2224 → 137,22: 6.671,62. Paga 904,20: 5.767,42.
+    const { divida } = servico.registrarPagamento({
+      id: criada.id,
+      valorCentavos: 90_420,
+      data: "2026-12-21",
+    });
+    expect(divida).toMatchObject({
+      saldoCentavos: 576_742,
+      saldoEm: "2026-12-21",
+      parcelasRestantes: 15,
+      proximaParcelaEm: "2027-01-20",
+    });
+  });
+
+  test("a parcela do mês paga antes do dia cobre o vencimento; a próxima e a simulação vão ao seguinte", () => {
+    const { servico } = montar();
+    const criada = servico.criar(EMPRESTIMO);
+    // Em 18/11, antes do vencimento de 20/11: os juros do mês entram e o saldo passa a ser o de 20/11.
+    const { divida } = servico.registrarPagamento({
+      id: criada.id,
+      valorCentavos: 45_210,
+      data: "2026-11-18",
+    });
+    expect(divida).toMatchObject({
+      saldoCentavos: 608_230,
+      saldoEm: "2026-11-20",
+      parcelasRestantes: 16,
+      proximaParcelaEm: "2026-12-20",
+    });
+    // As 16 que faltam vão de dezembro a março de 2028.
+    expect(servico.simular({ extraMensalCentavos: 0, ids: [criada.id] }).semExtra).toMatchObject({
+      meses: 16,
+      terminaEm: "2028-03",
+    });
+  });
+
+  test("sem dia de vencimento, os meses de calendário entre o saldo e o pagamento", () => {
+    const { servico } = montar();
+    // R$ 1.000,00 a 10%: em novembro, um mês de juros (1.100 − 600 = 500); no mesmo mês, extra.
+    const criada = servico.criar({
+      nome: "Pessoal",
+      tipo: "pessoal",
+      saldoCentavos: 100_000,
+      saldoEm: "2026-10-15",
+      jurosMensalBp: 1000,
+      parcelaCentavos: 60_000,
+    });
+    const um = servico.registrarPagamento({ id: criada.id, valorCentavos: 60_000, data: "2026-11-03" });
+    expect(um.divida).toMatchObject({ saldoCentavos: 50_000, saldoEm: "2026-11-03", proximaParcelaEm: null });
+    const extra = servico.registrarPagamento({ id: criada.id, valorCentavos: 10_000, data: "2026-11-20" });
+    expect(extra.divida.saldoCentavos).toBe(40_000);
+  });
+
+  test("conta que passa do inteiro seguro volta como erro da regra", () => {
+    const { servico } = montar();
+    const enorme = servico.criar({
+      nome: "Enorme",
+      tipo: "outro",
+      saldoCentavos: Number.MAX_SAFE_INTEGER,
+      saldoEm: "2026-10-20",
+      jurosMensalBp: 10_000,
+      diaVencimento: 20,
+    });
+    expect(() => servico.registrarPagamento({ id: enorme.id, valorCentavos: 1, data: "2026-11-20" })).toThrow(
+      new ErroDasDividas(MENSAGEM_VALOR_GRANDE_DEMAIS),
+    );
+    expect(servico.obter({ id: enorme.id }).saldoCentavos).toBe(Number.MAX_SAFE_INTEGER);
   });
 
   test("ligado ao lançamento do extrato: não cria outro e marca a dívida nele", () => {
@@ -444,15 +651,16 @@ describe("pagamento", () => {
       valorCentavos: -45_210,
     });
     const antes = (db.prepare("SELECT count(*) AS n FROM lancamentos").get() as { n: number }).n;
+    // A data do pedido não vale: o pagamento é do dia do lançamento.
     const pago = servico.registrarPagamento({
       id: criada.id,
       valorCentavos: 45_210,
-      data: "2026-11-20",
+      data: "2026-11-26",
       lancamentoId: extrato?.id,
     });
     expect(pago.lancamento).toMatchObject({ id: extrato?.id, dividaId: criada.id });
     expect((db.prepare("SELECT count(*) AS n FROM lancamentos").get() as { n: number }).n).toBe(antes);
-    expect(pago.divida.saldoCentavos).toBe(608_230);
+    expect(pago.divida).toMatchObject({ saldoCentavos: 608_230, saldoEm: "2026-11-20" });
     // O mesmo lançamento não paga duas vezes, nem esta nem outra dívida.
     const outra = servico.criar({ ...EMPRESTIMO, nome: "Outra" });
     for (const id of [criada.id, outra.id]) {
@@ -502,6 +710,14 @@ describe("pagamento", () => {
     expect(pagar(outroValor?.id)).toThrow(MENSAGEM_VALOR_DO_LANCAMENTO);
     expect(pagar(emDolar?.id)).toThrow(MENSAGEM_PAGAMENTO_EM_REAL);
     expect(pagar(saida?.id)).toThrow(MENSAGEM_LANCAMENTO_DE_TRANSFERENCIA);
+    // O lançamento de setembro é de antes do saldo de 20/10, mesmo com o pedido em novembro.
+    const [setembro] = lancamentos.lancar({
+      contaId: corrente.id,
+      data: "2026-09-15",
+      descricao: "PIX EMPRESTIMO",
+      valorCentavos: -45_210,
+    });
+    expect(pagar(setembro?.id)).toThrow(MENSAGEM_PAGAMENTO_ANTES_DO_SALDO);
     // Lançar numa conta em outra moeda também não vale, e nada fica gravado.
     expect(() =>
       servico.registrarPagamento({
@@ -695,9 +911,20 @@ describe("simular", () => {
 
 describe("canal", () => {
   test("erro da regra passa como veio; erro de dentro vira o texto genérico", () => {
-    const { servico } = montar();
+    const { servico, contas, corrente } = montar();
     const atendentes = atendentesDasDividas(servico);
     expect(() => atendentes["dividas.obter"]({ id: "nao-existe" })).toThrow(ErroDasDividas);
+    // O erro dos lançamentos (conta arquivada) também passa como veio.
+    const criada = servico.criar(EMPRESTIMO);
+    contas.definirConta({ id: corrente.id, ativa: false });
+    expect(() =>
+      atendentes["dividas.registrarPagamento"]({
+        id: criada.id,
+        valorCentavos: 45_210,
+        data: "2026-11-20",
+        contaId: corrente.id,
+      }),
+    ).toThrow(ErroDosLancamentos);
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(servico, "listar").mockImplementation(() => {
       throw new Error("SQLITE_BUSY");

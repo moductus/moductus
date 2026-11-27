@@ -49,6 +49,7 @@ export const MENSAGEM_VALOR_DO_LANCAMENTO = "o valor do pagamento é o do lança
 export const MENSAGEM_PAGAMENTO_EM_REAL = "a dívida é em real: o pagamento sai de uma conta em real";
 export const MENSAGEM_NADA_PARA_SIMULAR = "nenhuma dívida em aberto com juros e parcela para simular";
 export const MENSAGEM_VALOR_GRANDE_DEMAIS = "os valores passam do maior que dá para calcular";
+export const MENSAGEM_SIMULACAO_SEM_FIM = "a simulação passa de 100 anos sem quitar tudo";
 
 /** Até quantos meses a conta vai: dívida que leva mais que isso com a parcela não acaba (100 anos). */
 export const LIMITE_MESES = 1200;
@@ -176,7 +177,7 @@ export function simularQuitacao(
   let jurosPagos = 0;
   let ultimo = comeco;
   for (let mes = comeco; ordem.some((d) => saldo(d.id) > 0); mes++) {
-    if (mes - comeco >= LIMITE_MESES) throw new ErroDeValor("a simulação não acaba em 100 anos");
+    if (mes - comeco >= LIMITE_MESES) throw new ErroDasDividas(MENSAGEM_SIMULACAO_SEM_FIM);
     const ativas = ordem.filter((d) => d.comeca <= mes && saldo(d.id) > 0);
     for (const d of ativas) {
       const juros = jurosDoMes(saldo(d.id), d.jurosMensalBp);
@@ -227,6 +228,34 @@ export function proximaParcela(saldoEm: string, diaVencimento: number): string {
   if (mes === 12) [ano, mes] = [ano + 1, 1];
   else mes += 1;
   return noMes();
+}
+
+/**
+ * Quantas parcelas um pagamento no dia `data` cobre, e de que dia passa a ser o saldo. Com dia de
+ * vencimento: os vencimentos depois de `saldoEm` até `data`, inclusive; sem nenhum, a parcela do mês
+ * paga antes do dia (o próximo vencimento cai no mês do pagamento) também conta, e o saldo passa a
+ * ser o do dia dela, para a próxima parcela ir ao mês seguinte. Fora isso, é pagamento extra: nenhuma
+ * parcela. Sem dia de vencimento, os meses de calendário entre o saldo e o pagamento. No próprio dia
+ * do saldo, sempre extra.
+ */
+export function parcelasCobertas(
+  saldoEm: string,
+  data: string,
+  diaVencimento: number | null,
+): { parcelas: number; saldoEm: string } {
+  if (data <= saldoEm) return { parcelas: 0, saldoEm };
+  if (diaVencimento === null) {
+    return { parcelas: indiceDoMes(data.slice(0, 7)) - indiceDoMes(saldoEm.slice(0, 7)), saldoEm: data };
+  }
+  let parcelas = 0;
+  let vencimento = proximaParcela(saldoEm, diaVencimento);
+  while (vencimento <= data) {
+    parcelas += 1;
+    vencimento = proximaParcela(vencimento, diaVencimento);
+  }
+  if (parcelas === 0 && vencimento.slice(0, 7) === data.slice(0, 7))
+    return { parcelas: 1, saldoEm: vencimento };
+  return { parcelas, saldoEm: data };
 }
 
 /** O mês da primeira parcela depois do saldo: pelo vencimento, ou o mês seguinte ao do saldo. */
@@ -407,8 +436,11 @@ export class RepositorioDividas {
 // ---------- Serviço ----------
 
 export interface DepsDividas {
-  /** O pagamento lançado numa conta entra pelos lançamentos (F4-09): fatura, categoria por regra. */
-  lancamentos: Pick<ServicoLancamentos, "lancar">;
+  /**
+   * O pagamento lançado numa conta entra pelos lançamentos (F4-09): fatura, categoria por regra. Sem
+   * o aviso deles: a dívida avisa uma vez, depois da transação.
+   */
+  lancamentos: Pick<ServicoLancamentos, "lancarSemAvisar">;
   /** O fuso de `config`, lido a cada pergunta: "hoje" muda quando o fuso muda. */
   lerFuso: () => string;
 }
@@ -471,7 +503,8 @@ export class ServicoDividas {
 
   /**
    * Mudança parcial. A quitada que volta a ter saldo deixa de estar quitada (foi engano, ou a
-   * dívida voltou).
+   * dívida voltou); a em aberto com o saldo zerado fica quitada, como em `quitar`, no dia do saldo
+   * que veio na mudança ou hoje.
    */
   definir(mudanca: MudancaDivida, carimbo: Carimbo = DO_USUARIO): Divida {
     const atual = camposDe(this.exigir(mudanca.id));
@@ -490,6 +523,12 @@ export class ServicoDividas {
       quitadaEm: atual.quitadaEm,
     };
     if (nova.quitadaEm !== null && nova.saldoCentavos > 0) nova.quitadaEm = null;
+    if (nova.quitadaEm === null && nova.saldoCentavos === 0) {
+      const data = mudanca.saldoEm ?? this.hoje();
+      nova.saldoEm = data;
+      nova.quitadaEm = data;
+      if (nova.parcelasRestantes !== null) nova.parcelasRestantes = 0;
+    }
     this.repo.gravar(mudanca.id, nova, this.instante(), carimbo);
     return this.avisar(this.exigir(mudanca.id));
   }
@@ -503,56 +542,71 @@ export class ServicoDividas {
   }
 
   /**
-   * Registra o pagamento que você fez: primeiro os juros do mês entram sobre o saldo, depois o resto
-   * abate o saldo; falta uma parcela a menos e o saldo passa a ser o do dia do pagamento. O que zera
-   * o saldo quita a dívida. Com `lancamentoId`, liga o lançamento do extrato (uma saída em real, do
-   * mesmo valor, fora de transferência e de outro pagamento), para não contar duas vezes; com
-   * `contaId`, lança a saída na conta. Tudo numa transação.
+   * Registra o pagamento que você fez. Cada vencimento que ele cobre (`parcelasCobertas`: os que
+   * passaram desde a data do saldo, ou a parcela do mês paga antes do dia) põe um mês de juros sobre
+   * o saldo, compostos, e tira uma parcela; depois o valor abate o saldo. Sem vencimento coberto, é
+   * pagamento extra: sem juros e sem tirar parcela. O que zera o saldo quita a dívida. Com
+   * `lancamentoId`, liga o lançamento do extrato (uma saída em real, do mesmo valor, fora de
+   * transferência e de outro pagamento), e o dia dele é o do pagamento; com `contaId`, lança a saída
+   * na conta. Tudo numa transação, e um aviso só, depois dela.
    */
   registrarPagamento(pedido: PedidoPagamentoDivida, carimbo: Carimbo = DO_USUARIO): PagamentoDivida {
     const atual = camposDe(this.exigir(pedido.id));
     const nome = atual.nome;
     if (atual.quitadaEm !== null) throw new ErroDasDividas(MENSAGEM_DIVIDA_QUITADA);
-    if (pedido.data < atual.saldoEm) throw new ErroDasDividas(MENSAGEM_PAGAMENTO_ANTES_DO_SALDO);
-    if (pedido.lancamentoId !== undefined)
-      this.exigirLancamentoParaLigar(pedido.lancamentoId, pedido.valorCentavos);
+    const ligado =
+      pedido.lancamentoId === undefined
+        ? null
+        : this.exigirLancamentoParaLigar(pedido.lancamentoId, pedido.valorCentavos);
+    const data = ligado?.data ?? pedido.data;
+    if (data < atual.saldoEm) throw new ErroDasDividas(MENSAGEM_PAGAMENTO_ANTES_DO_SALDO);
     if (pedido.contaId !== undefined) {
       const moeda = this.repo.moedaDaConta(pedido.contaId);
       if (moeda !== null && moeda !== MOEDA_PADRAO) throw new ErroDasDividas(MENSAGEM_PAGAMENTO_EM_REAL);
     }
-    const saldoNovo = Math.max(
-      0,
-      this.calcular(() => somar(atual.saldoCentavos, jurosDoMes(atual.saldoCentavos, atual.jurosMensalBp))) -
-        pedido.valorCentavos,
-    );
+    const cobertas = parcelasCobertas(atual.saldoEm, data, atual.diaVencimento);
+    const comJuros = this.calcular(() => {
+      let saldo = atual.saldoCentavos;
+      for (let i = 0; i < cobertas.parcelas; i++)
+        saldo = somar(saldo, jurosDoMes(saldo, atual.jurosMensalBp));
+      return saldo;
+    });
+    const saldoNovo = Math.max(0, comJuros - pedido.valorCentavos);
     const quitou = saldoNovo === 0;
     const nova: CamposDivida = {
       ...atual,
       saldoCentavos: saldoNovo,
-      saldoEm: pedido.data,
+      saldoEm: quitou ? data : cobertas.saldoEm,
       parcelasRestantes:
-        atual.parcelasRestantes === null ? null : quitou ? 0 : Math.max(0, atual.parcelasRestantes - 1),
-      quitadaEm: quitou ? pedido.data : null,
+        atual.parcelasRestantes === null
+          ? null
+          : quitou
+            ? 0
+            : Math.max(0, atual.parcelasRestantes - cobertas.parcelas),
+      quitadaEm: quitou ? data : null,
     };
     const agora = this.instante();
+    let contarRegra = () => {};
     const lancamentoId = this.repo.transacao(() => {
-      let id = pedido.lancamentoId ?? null;
+      let id = ligado?.id ?? null;
       if (pedido.contaId !== undefined) {
-        const [lancado] = this.deps.lancamentos.lancar(
+        const lancado = this.deps.lancamentos.lancarSemAvisar(
           {
             contaId: pedido.contaId,
-            data: pedido.data,
+            data,
             descricao: `Pagamento de ${nome}`,
             valorCentavos: -pedido.valorCentavos,
           },
           carimbo,
         );
-        id = lancado?.id ?? null;
+        contarRegra = lancado.contarRegra;
+        id = lancado.lancamentos[0]?.id ?? null;
       }
       if (id !== null) this.repo.ligarLancamento(id, pedido.id, agora, carimbo);
       this.repo.gravar(pedido.id, nova, agora, carimbo);
       return id;
     });
+    contarRegra();
     const lancamento = lancamentoId === null ? null : this.repo.lancamento(lancamentoId);
     const partes: ParteFinancas[] =
       lancamento === null
@@ -706,9 +760,12 @@ function camposDe(l: LinhaDivida): CamposDivida {
   };
 }
 
-/** O custo e a próxima parcela saem da linha na hora; a quitada e a sem parcela a vencer não têm próxima. */
+/**
+ * O custo e a próxima parcela saem da linha na hora. Há próxima parcela enquanto houver saldo e um dia
+ * de vencimento, mesmo que as parcelas restantes já tenham chegado a zero: o que sobrou ainda vence.
+ */
 function paraDivida(l: LinhaDivida): Divida {
-  const emAberto = l.quitada_em === null && l.saldo_centavos > 0 && l.parcelas_restantes !== 0;
+  const emAberto = l.quitada_em === null && l.saldo_centavos > 0;
   return {
     id: l.id,
     nome: l.nome,

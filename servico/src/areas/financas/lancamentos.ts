@@ -619,6 +619,24 @@ export class ServicoLancamentos {
    * no cartão, um por fatura seguida.
    */
   lancar(novo: NovoLancamento, carimbo: Carimbo = DO_USUARIO): Lancamento[] {
+    const { lancamentos, contarRegra } = this.lancarSemAvisar(novo, carimbo);
+    contarRegra();
+    this.avisar(
+      lancamentos,
+      [],
+      lancamentos.some((l) => l.faturaId !== null),
+    );
+    return lancamentos;
+  }
+
+  /**
+   * O `lancar` para quem grava dentro da própria transação (o pagamento de uma dívida): não avisa a
+   * mudança, que fica com quem chamou, e devolve a contagem da regra para depois do commit.
+   */
+  lancarSemAvisar(
+    novo: NovoLancamento,
+    carimbo: Carimbo = DO_USUARIO,
+  ): { lancamentos: Lancamento[]; contarRegra: () => void } {
     const conta = this.exigirContaAtiva(novo.contaId);
     let categoriaId: string | null;
     let regraId: string | null = null;
@@ -679,11 +697,13 @@ export class ServicoLancamentos {
       }
       return ids;
     });
-    // A regra conta uma vez por compra, depois que ela entrou.
-    if (regraId !== null) this.deps.categorias.registrarAplicacoes([regraId]);
-    const criados = this.repo.porIds(ids);
-    this.avisar(criados, [], conta.tipo === "cartao");
-    return criados;
+    return {
+      lancamentos: this.repo.porIds(ids),
+      // A regra conta uma vez por compra, depois que ela entrou.
+      contarRegra: () => {
+        if (regraId !== null) this.deps.categorias.registrarAplicacoes([regraId]);
+      },
+    };
   }
 
   /**
