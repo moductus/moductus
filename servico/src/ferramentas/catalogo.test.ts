@@ -7,8 +7,16 @@ import { z } from "zod";
 import { abrirBanco } from "../banco/conexao.ts";
 import { ProvedorFalso } from "../provedores/falso.ts";
 import type { EventoAgente, PedidoDoAgente } from "../provedores/provedor.ts";
-import { Catalogo, cobre, type Autorizar } from "./catalogo.ts";
+import { ferramentasAgenda } from "./agenda/agenda.ts";
+import { Catalogo, campoDeArquivo, cobre, type Autorizar } from "./catalogo.ts";
 import { ferramenta, type ContextoFerramenta } from "./ferramenta.ts";
+import { ferramentasFoco } from "./foco/foco.ts";
+import { ferramentasGithub } from "./github/github.ts";
+import { ferramentasLembretes } from "./lembretes/lembretes.ts";
+import { ferramentasNotas } from "./notas/notas.ts";
+import { ferramentasSessoes } from "./sessoes/sessoes.ts";
+import { ferramentasTarefas } from "./tarefas/tarefas.ts";
+import { ferramentasUso } from "./uso/uso.ts";
 
 const pastas: string[] = [];
 const bancos: DatabaseSync[] = [];
@@ -379,5 +387,76 @@ describe("execução pelo catálogo", () => {
       { ok: true, valor: { ok: "tarefas.criar" } },
     ]);
     expect(rodou.map((r) => r.nome)).toEqual(["tarefas.criar"]);
+  });
+});
+
+describe("arquivo do usuário fora do catálogo (ADR-0044)", () => {
+  /**
+   * Todas as ferramentas que o serviço registra na subida (`main.ts`), montadas sem as áreas: só a
+   * declaração importa aqui. Quem registrar ferramenta nova no `main.ts` acrescenta a fábrica aqui.
+   */
+  function catalogoDoServico(): Catalogo {
+    const area = {} as never;
+    return new Catalogo([
+      ...ferramentasSessoes(area),
+      ...ferramentasUso(area),
+      ...ferramentasGithub(area),
+      ...ferramentasAgenda(area, area),
+      ...ferramentasTarefas(area, area),
+      ...ferramentasLembretes(area, area),
+      ...ferramentasFoco(area, area),
+      ...ferramentasNotas(area),
+    ]);
+  }
+
+  test("nenhuma ferramenta do catálogo aceita caminho, arquivo ou autorização de arquivo", () => {
+    const todas = catalogoDoServico().todas();
+    expect(todas.length).toBeGreaterThanOrEqual(35);
+    for (const f of todas) {
+      expect(campoDeArquivo(f.esquema), f.nome).toBeNull();
+      // Nem o id que o `arquivos.autorizar` devolve: não há ferramenta de arquivo nem de importação.
+      expect(f.nome, f.nome).not.toMatch(/^(arquivos|importacao)\./);
+    }
+  });
+
+  test("ferramenta com campo de caminho ou de autorização, em qualquer nível, é erro de montagem", () => {
+    const comEntrada = (nome: string, entrada: z.ZodObject) =>
+      ferramenta({ nome, descricao: "Lê um arquivo", entrada, efeito: "leitura", executar: () => null });
+    const recusadas = [
+      comEntrada("financas.importar", z.object({ caminho: z.string() })),
+      comEntrada("financas.ler", z.object({ autorizacaoId: z.string() })),
+      comEntrada("financas.comprovante", z.object({ extrato: z.object({ filePath: z.string() }) })),
+      comEntrada("financas.lote", z.object({ itens: z.array(z.object({ arquivo_id: z.string() })) })),
+      comEntrada(
+        "financas.um_ou_outro",
+        z.object({ de: z.union([z.object({ path: z.string() }), z.object({})]) }),
+      ),
+      comEntrada("financas.sigla", z.object({ OFXPath: z.string() })),
+      comEntrada("financas.nome", z.object({ filename: z.string() })),
+      comEntrada("financas.acento", z.object({ autorizaçãoId: z.string() })),
+      comEntrada("financas.ingles", z.object({ authorization: z.string() })),
+      comEntrada("financas.pasta_disco", z.object({ diretorioDestino: z.string() })),
+    ];
+    for (const f of recusadas) {
+      expect(() => new Catalogo([f]), f.nome).toThrow(/nenhuma ferramenta de agente recebe caminho/);
+    }
+    // "pasta" das notas é rótulo, e campo arquivada não é arquivo.
+    expect(
+      () =>
+        new Catalogo([comEntrada("notas.filtrar", z.object({ pasta: z.string(), arquivada: z.boolean() }))]),
+    ).not.toThrow();
+  });
+
+  test("ferramenta nos domínios arquivos ou importacao é erro de montagem, mesmo sem campo nenhum", () => {
+    for (const nome of ["arquivos.ler", "importacao.confirmar"]) {
+      const f = ferramenta({
+        nome,
+        descricao: "x",
+        entrada: z.object({}),
+        efeito: "leitura",
+        executar: () => null,
+      });
+      expect(() => new Catalogo([f]), nome).toThrow(/nenhuma ferramenta de agente lê arquivo do usuário/);
+    }
   });
 });

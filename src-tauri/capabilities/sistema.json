@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "sistema",
-  "description": "Barra de título própria do Sistema: arrastar, duplo clique, minimizar, maximizar e fechar (que a casca transforma em esconder); diálogos de salvar e abrir o .moductus",
+  "description": "Barra de título própria do Sistema: arrastar, duplo clique, minimizar, maximizar e fechar (que a casca transforma em esconder); diálogos de salvar e abrir o .moductus e de abrir o extrato e o comprovante",
   "windows": ["sistema"],
   "permissions": [
     "core:window:allow-start-dragging",

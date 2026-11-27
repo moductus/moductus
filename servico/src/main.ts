@@ -48,6 +48,8 @@ import { ServicoTarefas } from "./areas/tarefas/tarefas.ts";
 import { abrirBanco, pastaDeDados, portable } from "./banco/conexao.ts";
 import { ligarBandeja } from "./bandeja/bandeja.ts";
 import { converterPelaConfig, ServicoCambio, vigiarCotacao } from "./cambio/cambio.ts";
+import { AutorizacoesDeArquivo } from "./arquivos/autorizacoes.ts";
+import { atendentesDosArquivos } from "./arquivos/canal.ts";
 import { abrirPelaCasca, projetosNaCasca } from "./casca/abrir.ts";
 import { ambientePelaCasca } from "./casca/ambiente.ts";
 import { avisosPelaCasca, CLIQUE_NO_AVISO, lerClique } from "./casca/avisos.ts";
@@ -591,6 +593,10 @@ conversas
   .then((n) => n > 0 && console.error(`falas pendentes retomadas: ${n}`))
   .catch((erro: unknown) => console.error(`falas pendentes não retomadas: ${String(erro)}`));
 
+// Arquivo do usuário (F4-20, ADR-0044): o caminho escolhido vira um id de uso único de 10 min, que a
+// importação e o comprovante consomem; nenhuma ferramenta de agente recebe caminho nem id.
+const autorizacoesDeArquivo = new AutorizacoesDeArquivo();
+
 servidor = await abrirServidorWs(token, {
   "sistema.ping": () => ({ protocolo: VERSAO_PROTOCOLO, pid: process.pid }),
   "config.obter": () => config.obter(),
@@ -692,6 +698,7 @@ servidor = await abrirServidorWs(token, {
   "rotinas.definir": (mudanca) => rotinas.definir(mudanca),
   "areas.contagens": () => contagens.obter(),
   ...atendentesDasContas(contas),
+  ...atendentesDosArquivos(autorizacoesDeArquivo),
   // O dinheiro (F4-07): o contrato já tem os métodos e o serviço responde que ainda não estão
   // disponíveis. Cada tarefa que implementa uma área (F4-08 a F4-15, F4-19, F4-20) tira os dela daqui.
   ...semAtendente([
@@ -733,7 +740,6 @@ servidor = await abrirServidorWs(token, {
     "planos.apagar",
     "planos.movimentar",
     "planos.movimentos",
-    "arquivos.autorizar",
     "importacao.ler",
     "importacao.previa",
     "importacao.confirmar",

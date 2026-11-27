@@ -11,6 +11,10 @@ const chamadas: { comando: string; args: unknown }[] = [];
 const estado: { midia: EstadoMidia | null; mic: boolean | null } = { midia: null, mic: false };
 const ouvintes = new Map<string, Set<(e: { payload: unknown }) => void>>();
 
+// O arrastar e soltar do alvo das Finanças: nada é solto nestes testes.
+vi.mock("@tauri-apps/api/webview", () => ({
+  getCurrentWebview: () => ({ onDragDropEvent: () => Promise.resolve(() => undefined) }),
+}));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (comando: string, args?: unknown) => {
     chamadas.push({ comando, args });
