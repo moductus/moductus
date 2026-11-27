@@ -113,7 +113,8 @@
     background: CanvasText;
   }
 
-  .busca-atalho {
+  .busca-atalho,
+  .linha-lancamento-parcela {
     border: var(--espessura-borda) solid CanvasText;
   }
 

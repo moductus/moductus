@@ -1,0 +1,44 @@
+/* Categoria contra o limite (AreaFinancas): nome e números numa linha, a barra embaixo. */
+.barra-orcamento {
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-5);
+  font-size: var(--tipo-13);
+  color: var(--texto);
+}
+
+.barra-orcamento-cabeca {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--esp-8);
+  min-width: 0;
+}
+
+.barra-orcamento-nome {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barra-orcamento-numeros {
+  display: inline-flex;
+  flex: none;
+  align-items: baseline;
+  gap: var(--esp-4);
+  font-size: var(--tipo-12);
+  color: var(--texto-3);
+}
+
+.barra-orcamento-percentual {
+  font-variant-numeric: tabular-nums;
+}
+
+.barra-orcamento[data-situacao="alerta"] .barra-orcamento-percentual {
+  color: var(--aviso);
+}
+
+.barra-orcamento[data-situacao="estourado"] .barra-orcamento-percentual {
+  color: var(--perigo);
+}

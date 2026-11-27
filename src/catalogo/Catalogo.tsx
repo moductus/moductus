@@ -2,6 +2,7 @@ import type { Aprovacao, PedidoDecidir, SituacaoAgente } from "@moductus/contrat
 import { ServicoIndisponivel } from "@moductus/contrato/cliente";
 import { useState, type ReactNode } from "react";
 import { Atalho } from "../componentes/Atalho.tsx";
+import { BarraOrcamento } from "../componentes/BarraOrcamento.tsx";
 import { Botao, type VarianteBotao } from "../componentes/Botao.tsx";
 import { Caixa } from "../componentes/Caixa.tsx";
 import { Campo } from "../componentes/Campo.tsx";
@@ -11,13 +12,17 @@ import { FalaAgente } from "../componentes/FalaAgente.tsx";
 import { Icone, NOMES_ICONES } from "../componentes/Icone.tsx";
 import { Interruptor } from "../componentes/Interruptor.tsx";
 import { ItemLista, Lista } from "../componentes/ItemLista.tsx";
+import { LinhaLancamento } from "../componentes/LinhaLancamento.tsx";
 import { Marca } from "../componentes/Marca.tsx";
 import { DADOS_AGENTES, type Agente } from "../componentes/personagem/agentes.ts";
 import { Personagem } from "../componentes/personagem/Personagem.tsx";
 import { lerSituacao } from "../componentes/personagem/situacao.ts";
+import { PrivacidadeContexto } from "../componentes/privacidade.ts";
 import { Progresso } from "../componentes/Progresso.tsx";
 import { Seletor } from "../componentes/Seletor.tsx";
 import { Contagem, Selo } from "../componentes/Selo.tsx";
+import { TextoSensivel } from "../componentes/TextoSensivel.tsx";
+import { Valor } from "../componentes/Valor.tsx";
 import type { TemaConcreto } from "../tokens/tema.ts";
 import "./Catalogo.css";
 
@@ -253,6 +258,116 @@ function Progressos() {
         <Progresso rotulo="Orçamento" valor={85} tom="aviso" />
         <Progresso rotulo="Cota" valor={100} tom="perigo" />
       </div>
+    </Grupo>
+  );
+}
+
+/** O que a linha de lançamento usa do lançamento; o resto do contrato não aparece nela. */
+const LANCAMENTO = {
+  moeda: "BRL",
+  parcelaNumero: null,
+  parcelaTotal: null,
+  transferenciaId: null,
+  conciliado: false,
+};
+
+/** Os componentes de dinheiro (AreaFinancas, PainelFinancas, AreaLancamentos). */
+function AmostrasDinheiro() {
+  return (
+    <>
+      <Linha rotulo="Valor: saída, entrada, neutro, transferência, sem centavos, outra moeda">
+        <Valor centavos={-4500} />
+        <Valor centavos={685000} sinal />
+        <Valor centavos={821450} />
+        <Valor centavos={50000} transferencia />
+        <Valor centavos={321477} semCentavos />
+        <Valor centavos={-1999} moeda="USD" />
+      </Linha>
+      <Linha rotulo="Texto sensível">
+        <TextoSensivel>Mercado do bairro</TextoSensivel>
+        <TextoSensivel>Cartão Nubank</TextoSensivel>
+      </Linha>
+      <div className="catalogo-coluna-campos">
+        <BarraOrcamento
+          nome="Transporte"
+          linha={{ gastoCentavos: 18800, limiteCentavos: 40000, percentual: 47, situacao: "ok" }}
+        />
+        <BarraOrcamento
+          nome="Casa › Mercado"
+          linha={{ gastoCentavos: 51200, limiteCentavos: 60000, percentual: 85, situacao: "alerta" }}
+        />
+        <BarraOrcamento
+          nome="Compras"
+          linha={{ gastoCentavos: 38000, limiteCentavos: 35000, percentual: 109, situacao: "estourado" }}
+        />
+      </div>
+      <Cartao>
+        <Lista>
+          <LinhaLancamento
+            lancamento={{ ...LANCAMENTO, descricao: "Mercado Bom Preço", valorCentavos: -5400 }}
+            categoria="Casa › Mercado"
+            origem="Tula, da conversa · 09:40"
+            agente="tula"
+          />
+          <LinhaLancamento
+            lancamento={{ ...LANCAMENTO, descricao: "PAG*JOSEFA ARTES", valorCentavos: -6400 }}
+            categoria={null}
+            origem="importado do Nubank hoje"
+            conta="Cartão Nubank"
+          />
+          <LinhaLancamento
+            lancamento={{ ...LANCAMENTO, descricao: "Salário", valorCentavos: 620000 }}
+            categoria="Renda"
+            origem="importado da Cooperativa ontem"
+          />
+          <LinhaLancamento
+            lancamento={{
+              ...LANCAMENTO,
+              descricao: "Nubank → Poupança",
+              valorCentavos: -50000,
+              transferenciaId: "t",
+            }}
+            categoria={null}
+            origem="você · 10:05"
+          />
+          <LinhaLancamento
+            lancamento={{
+              ...LANCAMENTO,
+              descricao: "Notebook",
+              valorCentavos: -28990,
+              parcelaNumero: 3,
+              parcelaTotal: 10,
+              conciliado: true,
+            }}
+            categoria="Compras"
+            origem="importado do Nubank em 12/11"
+          />
+        </Lista>
+      </Cartao>
+    </>
+  );
+}
+
+function Dinheiro() {
+  const [privacidade, setPrivacidade] = useState(false);
+  return (
+    <Grupo titulo="Dinheiro">
+      <AmostrasDinheiro />
+      <Linha rotulo="Com o modo privacidade ligado">
+        <span className="catalogo-apagado">Mesmo tamanho, sem valor na tela nem no leitor de tela.</span>
+      </Linha>
+      <PrivacidadeContexto value>
+        <AmostrasDinheiro />
+      </PrivacidadeContexto>
+      <Interruptor ligado={privacidade} aoMudar={setPrivacidade}>
+        Modo privacidade (interativo)
+      </Interruptor>
+      <PrivacidadeContexto value={privacidade}>
+        <Linha>
+          <Valor centavos={-4500} />
+          <TextoSensivel>Mercado do bairro</TextoSensivel>
+        </Linha>
+      </PrivacidadeContexto>
     </Grupo>
   );
 }
@@ -565,6 +680,7 @@ function Coluna({ tema, nome }: { tema: TemaConcreto; nome: string }) {
       <Listas />
       <Alternaveis />
       <Progressos />
+      <Dinheiro />
       <Selos />
       <Seletores />
       <SelosDeStatus />

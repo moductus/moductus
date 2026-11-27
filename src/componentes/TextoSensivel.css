@@ -1,0 +1,26 @@
+/* Texto e máscara na mesma célula: a máscara não muda a largura do que esconde (ADR-0047). */
+.sensivel {
+  display: inline-grid;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.sensivel-texto,
+.sensivel-mascara {
+  grid-area: 1 / 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sensivel[data-mascarado] > .sensivel-texto {
+  visibility: hidden;
+}
+
+/* Largura zero esticada à célula: quem dá o tamanho é sempre o texto escondido. */
+.sensivel-mascara {
+  width: 0;
+  min-width: 100%;
+  color: var(--texto-3);
+}

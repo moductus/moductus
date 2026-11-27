@@ -1,0 +1,23 @@
+/* Valor em mono com algarismos de mesma largura, para as colunas alinharem. */
+.valor {
+  font-family: var(--fonte-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.valor > .sensivel-mascara {
+  text-align: end;
+}
+
+.valor[data-tom="entrada"] {
+  color: var(--sucesso);
+}
+
+.valor[data-tom="transferencia"] {
+  color: var(--texto-3);
+}
+
+/* Mascarado, a cor também não conta se entrou ou saiu. */
+.valor[data-mascarado] {
+  color: inherit;
+}
