@@ -129,6 +129,23 @@ describe("alvo de soltar das Finanças (ADR-0044)", () => {
     expect(estado()?.textContent).toMatch(/não é um extrato nem um comprovante/);
   });
 
+  it("a resposta de um arquivo anterior que chega depois é descartada", async () => {
+    const respostas = new Map<string, (a: AutorizacaoArquivo) => void>();
+    falso.responder = (_metodo, dados) =>
+      new Promise((resolver) => respostas.set((dados as { caminho: string }).caminho, resolver));
+    const aoAutorizar = vi.fn();
+    await montar(aoAutorizar);
+
+    await soltar({ type: "drop", paths: ["C:\\primeiro.ofx"] });
+    await soltar({ type: "drop", paths: ["C:\\segundo.csv"] });
+    const segundo = { ...AUTORIZACAO, id: "segundo", nome: "segundo.csv" };
+    await act(async () => respostas.get("C:\\segundo.csv")!(segundo));
+    await act(async () => respostas.get("C:\\primeiro.ofx")!({ ...AUTORIZACAO, id: "primeiro" }));
+
+    expect(estado()?.getAttribute("data-autorizacao")).toBe("segundo");
+    expect(aoAutorizar.mock.calls).toEqual([[segundo]]);
+  });
+
   it("a recusa do serviço aparece como veio", async () => {
     falso.responder = () => Promise.reject(new Error("O arquivo tem 50 MB; o extrato vai até 10 MB."));
     await montar();

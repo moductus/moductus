@@ -1,5 +1,5 @@
 import { TAMANHO_MAXIMO_ARQUIVO, type AutorizacaoArquivo } from "@moductus/contrato";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Botao } from "../../componentes/Botao.tsx";
 import { Icone } from "../../componentes/Icone.tsx";
 import { escolherArquivoDoUsuario, finalidadeDoCaminho } from "../../nativo/arquivos.ts";
@@ -32,9 +32,19 @@ function mensagem(erro: unknown): string {
  */
 export function useArquivoDoUsuario(aoAutorizar?: (autorizacao: AutorizacaoArquivo) => void) {
   const [estado, setEstado] = useState<Estado>({ fase: "parado" });
+  // Cada arquivo solto ou escolhido é um pedido novo: a resposta de um anterior que chegar depois
+  // não troca a tela nem é entregue. Sair de cena também invalida o que estava a caminho.
+  const pedido = useRef(0);
+  useEffect(
+    () => () => {
+      pedido.current++;
+    },
+    [],
+  );
 
   const autorizar = useCallback(
     async (caminho: string) => {
+      const meu = ++pedido.current;
       const finalidade = finalidadeDoCaminho(caminho);
       if (!finalidade) {
         setEstado({
@@ -47,10 +57,11 @@ export function useArquivoDoUsuario(aoAutorizar?: (autorizacao: AutorizacaoArqui
       setEstado({ fase: "conferindo" });
       try {
         const autorizacao = await servico.pedir("arquivos.autorizar", { caminho, finalidade });
+        if (meu !== pedido.current) return;
         setEstado({ fase: "pronto", autorizacao });
         aoAutorizar?.(autorizacao);
       } catch (erro) {
-        setEstado({ fase: "erro", mensagem: mensagem(erro) });
+        if (meu === pedido.current) setEstado({ fase: "erro", mensagem: mensagem(erro) });
       }
     },
     [aoAutorizar],

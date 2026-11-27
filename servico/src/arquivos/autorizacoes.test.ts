@@ -1,4 +1,14 @@
-import { mkdirSync, mkdtempSync, rmSync, truncateSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  truncateSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AutorizacaoArquivo, VALIDADE_AUTORIZACAO_MS } from "@moductus/contrato";
@@ -46,7 +56,7 @@ describe("autorizar (ADR-0044)", () => {
     });
     expect(JSON.stringify(autorizacao)).not.toContain(pastas[0]);
     expect(autorizacoes.usar(autorizacao.id, "extrato")).toEqual({
-      caminho,
+      caminho: realpathSync.native(caminho),
       finalidade: "extrato",
       nome: "Extrato Nubank.OFX",
       bytes: 13,
@@ -143,18 +153,65 @@ describe("autorizar (ADR-0044)", () => {
     ).toThrow(/PNG, JPEG, BMP, GIF ou TIFF/);
   });
 
-  test("arquivo que não existe, caminho de dispositivo e fluxo alternativo são recusados", () => {
+  test("arquivo que não existe, rede, dispositivo e fluxo alternativo são recusados", () => {
     const autorizacoes = new AutorizacoesDeArquivo();
     const p = pasta();
     const casos = [
       [join(p, "sumiu.ofx"), /não foi encontrado/],
-      ["\\\\?\\C:\\Users\\eu\\extrato.ofx", /não é de um arquivo/],
-      ["\\\\.\\PhysicalDrive0.ofx", /não é de um arquivo/],
-      [`${arquivo("extrato.txt")}:escondido.ofx`, /não é de um arquivo/],
+      [join(arquivo("extrato.txt"), "dentro.ofx"), /não foi encontrado/],
+      ["\\\\?\\C:\\Users\\eu\\extrato.ofx", /não é de um arquivo neste PC/],
+      ["\\\\.\\PhysicalDrive0.ofx", /não é de um arquivo neste PC/],
+      ["\\\\servidor\\financas\\extrato.ofx", /não é de um arquivo neste PC/],
+      ["//servidor/financas/extrato.ofx", /não é de um arquivo neste PC/],
+      ["/home/eu/extrato.ofx", /não é de um arquivo neste PC/],
+      [`${arquivo("extrato.txt")}:escondido.ofx`, /não é de um arquivo neste PC/],
     ] as const;
     for (const [caminho, motivo] of casos) {
       expect(() => autorizacoes.autorizar({ caminho, finalidade: "extrato" })).toThrow(motivo);
     }
+  });
+
+  test("o arquivo trocado por outro ou editado depois de autorizado é recusado no uso", () => {
+    const autorizacoes = new AutorizacoesDeArquivo();
+    const caminho = arquivo("extrato.ofx");
+    const trocado = autorizacoes.autorizar({ caminho, finalidade: "extrato" });
+    // Outro arquivo, do mesmo tamanho, no mesmo lugar.
+    const outro = join(pastas.at(-1)!, "outro.ofx");
+    writeFileSync(outro, "OFXHEADER:200");
+    renameSync(outro, caminho);
+    expect(() => autorizacoes.usar(trocado.id, "extrato")).toThrow(/mudou depois de escolhido/);
+
+    const editado = autorizacoes.autorizar({ caminho, finalidade: "extrato" });
+    utimesSync(caminho, new Date("2026-01-01T00:00:00Z"), new Date("2026-01-01T00:00:00Z"));
+    expect(() => autorizacoes.usar(editado.id, "extrato")).toThrow(/mudou depois de escolhido/);
+  });
+
+  test("link com extensão de extrato para arquivo de outro tipo é recusado; para extrato, vale o resolvido", (ctx) => {
+    const p = pasta();
+    const segredo = join(p, "segredo.env");
+    writeFileSync(segredo, "TOKEN=1");
+    const link = join(p, "extrato.ofx");
+    try {
+      symlinkSync(segredo, link, "file");
+    } catch (erro) {
+      const codigo = (erro as NodeJS.ErrnoException).code;
+      if (codigo === "EPERM" || codigo === "EACCES") {
+        ctx.skip("o Windows negou criar link simbólico (sem o Modo de Desenvolvedor nem administrador)");
+      }
+      throw erro;
+    }
+    const autorizacoes = new AutorizacoesDeArquivo();
+    expect(() => autorizacoes.autorizar({ caminho: link, finalidade: "extrato" })).toThrow(
+      "Este arquivo não é um extrato: use OFX, CSV, XML ou TXT.",
+    );
+
+    const real = join(p, "real.csv");
+    writeFileSync(real, "data;valor");
+    const outroLink = join(p, "atalho.ofx");
+    symlinkSync(real, outroLink, "file");
+    const { id, nome } = autorizacoes.autorizar({ caminho: outroLink, finalidade: "extrato" });
+    expect(nome).toBe("atalho.ofx");
+    expect(autorizacoes.usar(id, "extrato").caminho).toBe(realpathSync.native(real));
   });
 
   test("cada autorização tem um id próprio, que não se deduz do anterior", () => {

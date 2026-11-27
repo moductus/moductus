@@ -167,7 +167,7 @@ export function Painel() {
           ) : area === "foco" ? (
             <PainelFoco canal={canal} abertura={abertura?.n ?? 0} recusas={recusas} />
           ) : area === "financas" ? (
-            <PainelFinancas />
+            <PainelFinancas abertura={abertura?.n ?? 0} />
           ) : (
             <>
               <CabecalhoPainel titulo={dados?.nome ?? ""} icone={dados?.icone} />

@@ -32,9 +32,36 @@ const PALAVRAS_DE_ARQUIVO = new Set([
   "arquivos",
   "file",
   "files",
+  "filename",
+  "filenames",
+  "filepath",
+  "filepaths",
+  "pathname",
+  "pathnames",
   "autorizacao",
   "autorizacoes",
+  "authorization",
+  "authorizations",
+  "diretorio",
+  "diretorios",
 ]);
+
+/** Os domínios do arquivo do usuário: nenhuma ferramenta de agente mora neles (ADR-0044). */
+const DOMINIO_DE_ARQUIVO = /^(arquivos|importacao)[.]/;
+
+/**
+ * As palavras de um nome de campo, sem acento e em minúsculas: `autorizaçãoId` dá
+ * `autorizacao id`, `OFXPath` dá `ofx path`, `caminho_arquivo` dá `caminho arquivo`.
+ */
+function palavrasDoCampo(campo: string): string[] {
+  return campo
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/);
+}
 
 /** O primeiro campo da entrada, em qualquer nível, com uma dessas palavras no nome; `null` se nenhum. */
 export function campoDeArquivo(esquema: unknown): string | null {
@@ -50,11 +77,7 @@ export function campoDeArquivo(esquema: unknown): string | null {
     if (chave === "properties" && valor && typeof valor === "object") {
       for (const campo of Object.keys(valor)) {
         // `autorizacaoId`, `caminho_arquivo`, `filePath`: cada pedaço do nome conta.
-        const palavras = campo
-          .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-          .toLowerCase()
-          .split(/[^a-z0-9]+/);
-        if (palavras.some((p) => PALAVRAS_DE_ARQUIVO.has(p))) return campo;
+        if (palavrasDoCampo(campo).some((p) => PALAVRAS_DE_ARQUIVO.has(p))) return campo;
       }
     }
     const achado = campoDeArquivo(valor);
@@ -85,13 +108,16 @@ export class Catalogo {
   }
 
   /**
-   * Cada domínio registra as suas na subida; nome repetido é erro de montagem, e campo de caminho
-   * ou de autorização de arquivo também (ADR-0044).
+   * Cada domínio registra as suas na subida; nome repetido é erro de montagem, e também ferramenta
+   * nos domínios do arquivo do usuário ou com campo de caminho ou de autorização (ADR-0044).
    */
   registrar(...ferramentas: readonly Ferramenta[]): this {
     for (const f of ferramentas) {
       if (this.porNome.has(f.nome) || this.porNomeModelo.has(f.nomeModelo)) {
         throw new Error(`ferramenta "${f.nome}" registrada duas vezes`);
+      }
+      if (DOMINIO_DE_ARQUIVO.test(f.nome)) {
+        throw new Error(`ferramenta "${f.nome}": nenhuma ferramenta de agente lê arquivo do usuário`);
       }
       const campo = campoDeArquivo(f.esquema);
       if (campo) {

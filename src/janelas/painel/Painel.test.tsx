@@ -26,9 +26,17 @@ const eventosCasca = new Map<string, (e: { payload: unknown }) => void>();
 const chamadasCasca: { comando: string; args: unknown }[] = [];
 /** A área que a casca já tinha aberto quando o painel montou (`painel_area_atual`). */
 const casca = { areaAberta: null as string | null };
-// O arrastar e soltar do alvo das Finanças: nada é solto nestes testes.
+// O arrastar e soltar do alvo das Finanças: o teste solta pelo ouvinte guardado aqui.
+const soltura: { ouvinte: ((e: { payload: unknown }) => void) | null } = { ouvinte: null };
 vi.mock("@tauri-apps/api/webview", () => ({
-  getCurrentWebview: () => ({ onDragDropEvent: async () => () => undefined }),
+  getCurrentWebview: () => ({
+    onDragDropEvent: async (fn: (e: { payload: unknown }) => void) => {
+      soltura.ouvinte = fn;
+      return () => {
+        if (soltura.ouvinte === fn) soltura.ouvinte = null;
+      };
+    },
+  }),
 }));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (comando: string, args?: unknown) => {
@@ -153,6 +161,14 @@ const pedir = vi.fn(async (metodo: string, _dados?: unknown): Promise<unknown> =
       return { config: { atalhos: { sistema: "Ctrl+Shift+M" } }, portable: false, falhasAtalhos: {} };
     case "aprovacoes.decidir":
       return new Promise(() => {});
+    case "arquivos.autorizar":
+      return {
+        id: "5f0c9a52-7d1e-4c43-9b8e-2a6f0d1c3b47",
+        finalidade: "extrato",
+        nome: "extrato.ofx",
+        bytes: 2048,
+        valeAte: "2026-11-27T12:10:00.000Z",
+      };
   }
   throw new Error(`método ${metodo} sem atendente`);
 });
@@ -360,6 +376,20 @@ describe("painel: encostado no dock e o clique fora", () => {
     await abrir("agentes");
     await clicarFora();
     expect(fechou()).toBe(true);
+  });
+
+  it("nas Finanças, o arquivo recebido não fica na tela da abertura seguinte", async () => {
+    await montar();
+    await abrir("financas");
+    await act(async () =>
+      soltura.ouvinte?.({
+        payload: { type: "drop", paths: ["C:/Users/eu/extrato.ofx"], position: { x: 0, y: 0 } },
+      }),
+    );
+    expect(recipiente.querySelector(".alvo-arquivo-estado")?.textContent).toBe("extrato.ofx recebido, 2 KB.");
+    await abrir("financas");
+    expect(recipiente.querySelector(".alvo-arquivo")).not.toBeNull();
+    expect(recipiente.querySelector(".alvo-arquivo-estado")).toBeNull();
   });
 
   it("com o tour passando pelo painel, o clique fora não fecha", async () => {

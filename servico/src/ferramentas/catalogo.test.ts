@@ -431,6 +431,11 @@ describe("arquivo do usuário fora do catálogo (ADR-0044)", () => {
         "financas.um_ou_outro",
         z.object({ de: z.union([z.object({ path: z.string() }), z.object({})]) }),
       ),
+      comEntrada("financas.sigla", z.object({ OFXPath: z.string() })),
+      comEntrada("financas.nome", z.object({ filename: z.string() })),
+      comEntrada("financas.acento", z.object({ autorizaçãoId: z.string() })),
+      comEntrada("financas.ingles", z.object({ authorization: z.string() })),
+      comEntrada("financas.pasta_disco", z.object({ diretorioDestino: z.string() })),
     ];
     for (const f of recusadas) {
       expect(() => new Catalogo([f]), f.nome).toThrow(/nenhuma ferramenta de agente recebe caminho/);
@@ -440,5 +445,18 @@ describe("arquivo do usuário fora do catálogo (ADR-0044)", () => {
       () =>
         new Catalogo([comEntrada("notas.filtrar", z.object({ pasta: z.string(), arquivada: z.boolean() }))]),
     ).not.toThrow();
+  });
+
+  test("ferramenta nos domínios arquivos ou importacao é erro de montagem, mesmo sem campo nenhum", () => {
+    for (const nome of ["arquivos.ler", "importacao.confirmar"]) {
+      const f = ferramenta({
+        nome,
+        descricao: "x",
+        entrada: z.object({}),
+        efeito: "leitura",
+        executar: () => null,
+      });
+      expect(() => new Catalogo([f]), nome).toThrow(/nenhuma ferramenta de agente lê arquivo do usuário/);
+    }
   });
 });

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { statSync, type Stats } from "node:fs";
-import { basename, extname, isAbsolute } from "node:path";
+import { realpathSync, statSync, type BigIntStats } from "node:fs";
+import { basename, extname } from "node:path";
 import {
   EXTENSOES_ARQUIVO,
   TAMANHO_MAXIMO_ARQUIVO,
@@ -27,15 +27,46 @@ export interface ArquivoAutorizado {
   bytes: number;
 }
 
+/** O que identifica o arquivo no disco: trocado ou editado depois da escolha, não é mais o mesmo. */
+interface Identidade {
+  dev: bigint;
+  ino: bigint;
+  size: bigint;
+  mtimeMs: bigint;
+}
+
 interface Guardada extends ArquivoAutorizado {
   valeAte: number;
+  identidade: Identidade;
 }
 
 export interface OpcoesAutorizacoes {
   agora?: () => number;
   novoId?: () => string;
-  /** `fs.statSync` por padrão; o teste troca para simular o arquivo grande sem gravá-lo. */
-  stat?: (caminho: string) => Stats;
+}
+
+const MENSAGEM_CAMINHO = "Este caminho não é de um arquivo neste PC que o Moductus possa ler.";
+
+/**
+ * Caminho absoluto numa unidade local (ADR-0038): letra da unidade, sem rede (`\\servidor\…`,
+ * `//servidor/…`), sem dispositivo (`\\?\`, `\\.\`) e sem fluxo alternativo (`extrato.ofx:outro`).
+ * O resolvido passa pela mesma regra: a unidade mapeada da rede volta como `\\servidor\…`.
+ */
+function emUnidadeLocal(caminho: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(caminho) && caminho.indexOf(":", 2) === -1;
+}
+
+/** Só "não existe" vira o aviso de arquivo movido; permissão negada e o resto sobem como erro. */
+function semArquivo<T>(fazer: () => T): T {
+  try {
+    return fazer();
+  } catch (erro) {
+    const codigo = (erro as NodeJS.ErrnoException).code;
+    if (codigo === "ENOENT" || codigo === "ENOTDIR") {
+      throw new ErroDoArquivo("O arquivo não foi encontrado. Ele pode ter sido movido ou apagado.");
+    }
+    throw erro;
+  }
 }
 
 const NOME_DA_FINALIDADE: Readonly<Record<FinalidadeArquivo, string>> = {
@@ -57,22 +88,20 @@ export class AutorizacoesDeArquivo {
   private readonly guardadas = new Map<string, Guardada>();
   private readonly agora: () => number;
   private readonly novoId: () => string;
-  private readonly stat: (caminho: string) => Stats;
 
   constructor(opcoes: OpcoesAutorizacoes = {}) {
     this.agora = opcoes.agora ?? Date.now;
     // UUID aleatório, não ULID: o id é a própria permissão de ler, e o ULID seguinte se adivinha.
     this.novoId = opcoes.novoId ?? randomUUID;
-    this.stat = opcoes.stat ?? ((caminho) => statSync(caminho));
   }
 
   /** Confere o arquivo escolhido e devolve a autorização, sem o caminho. */
   autorizar(pedido: PedidoAutorizarArquivo): AutorizacaoArquivo {
     this.esquecerVencidas();
-    const arquivo = this.conferir(pedido.caminho, pedido.finalidade);
+    const { arquivo, identidade } = this.conferir(pedido.caminho, pedido.finalidade);
     const id = this.novoId();
     const valeAte = this.agora() + VALIDADE_AUTORIZACAO_MS;
-    this.guardadas.set(id, { ...arquivo, valeAte });
+    this.guardadas.set(id, { ...arquivo, valeAte, identidade });
     return {
       id,
       finalidade: arquivo.finalidade,
@@ -84,7 +113,8 @@ export class AutorizacoesDeArquivo {
 
   /**
    * Consome a autorização: a partir daqui o id não vale mais, nem se a leitura falhar. Confere de
-   * novo o arquivo, que pode ter mudado nos 10 minutos (crescido, virado pasta, sumido).
+   * novo o arquivo resolvido, que pode ter mudado nos 10 minutos (crescido, virado pasta, sumido,
+   * trocado por outro ou editado).
    */
   usar(id: string, finalidade: FinalidadeArquivo): ArquivoAutorizado {
     const guardada = this.guardadas.get(id);
@@ -95,37 +125,58 @@ export class AutorizacoesDeArquivo {
     if (this.agora() > guardada.valeAte) {
       throw new ErroDoArquivo("A escolha do arquivo venceu depois de 10 minutos. Escolha ou solte de novo.");
     }
-    return this.conferir(guardada.caminho, finalidade);
+    const { arquivo, identidade } = this.conferir(guardada.caminho, finalidade);
+    const antes = guardada.identidade;
+    if (
+      identidade.dev !== antes.dev ||
+      identidade.ino !== antes.ino ||
+      identidade.size !== antes.size ||
+      identidade.mtimeMs !== antes.mtimeMs
+    ) {
+      throw new ErroDoArquivo("O arquivo mudou depois de escolhido. Escolha ou solte de novo.");
+    }
+    return { ...arquivo, nome: guardada.nome };
   }
 
-  private conferir(caminho: string, finalidade: FinalidadeArquivo): ArquivoAutorizado {
-    // Absoluto, sem dispositivo (`\\?\`, `\\.\`) e sem fluxo alternativo (`extrato.ofx:outro`):
-    // os dois-pontos só valem depois da letra da unidade.
-    if (!isAbsolute(caminho) || /^[\\/]{2}[?.][\\/]/.test(caminho) || caminho.indexOf(":", 2) !== -1) {
-      throw new ErroDoArquivo("Este caminho não é de um arquivo que o Moductus possa ler.");
+  /**
+   * O nome pedido e o resolvido precisam ser da finalidade, como no `abrir.rs`: um link
+   * `extrato.ofx` que aponta para `segredo.env` não passa, nem um que leve à rede. O que fica
+   * guardado e é lido depois é o resolvido.
+   */
+  private conferir(
+    caminho: string,
+    finalidade: FinalidadeArquivo,
+  ): { arquivo: ArquivoAutorizado; identidade: Identidade } {
+    if (!emUnidadeLocal(caminho)) throw new ErroDoArquivo(MENSAGEM_CAMINHO);
+    this.conferirExtensao(caminho, finalidade);
+    const real = semArquivo(() => realpathSync.native(caminho));
+    if (!emUnidadeLocal(real)) throw new ErroDoArquivo(MENSAGEM_CAMINHO);
+    this.conferirExtensao(real, finalidade);
+    const info: BigIntStats = semArquivo(() => statSync(real, { bigint: true }));
+    if (!info.isFile()) {
+      throw new ErroDoArquivo("Escolha um arquivo, não uma pasta.");
     }
+    const bytes = Number(info.size);
+    const maximo = TAMANHO_MAXIMO_ARQUIVO[finalidade];
+    if (bytes > maximo) {
+      throw new ErroDoArquivo(
+        `O arquivo tem ${megas(bytes)}; o ${NOME_DA_FINALIDADE[finalidade]} vai até ${megas(maximo)}.`,
+      );
+    }
+    return {
+      // O nome que a pessoa reconhece é o que ela escolheu; o caminho lido é o resolvido.
+      arquivo: { caminho: real, finalidade, nome: basename(caminho), bytes },
+      identidade: { dev: info.dev, ino: info.ino, size: info.size, mtimeMs: info.mtimeMs },
+    };
+  }
+
+  private conferirExtensao(caminho: string, finalidade: FinalidadeArquivo): void {
     const extensao = extname(caminho).slice(1).toLowerCase();
     if (!EXTENSOES_ARQUIVO[finalidade].includes(extensao)) {
       throw new ErroDoArquivo(
         `Este arquivo não é um ${NOME_DA_FINALIDADE[finalidade]}: use ${EXTENSOES_LEGIVEIS[finalidade]}.`,
       );
     }
-    let info: Stats;
-    try {
-      info = this.stat(caminho);
-    } catch {
-      throw new ErroDoArquivo("O arquivo não foi encontrado. Ele pode ter sido movido ou apagado.");
-    }
-    if (!info.isFile()) {
-      throw new ErroDoArquivo("Escolha um arquivo, não uma pasta.");
-    }
-    const maximo = TAMANHO_MAXIMO_ARQUIVO[finalidade];
-    if (info.size > maximo) {
-      throw new ErroDoArquivo(
-        `O arquivo tem ${megas(info.size)}; o ${NOME_DA_FINALIDADE[finalidade]} vai até ${megas(maximo)}.`,
-      );
-    }
-    return { caminho, finalidade, nome: basename(caminho), bytes: info.size };
   }
 
   private esquecerVencidas(): void {

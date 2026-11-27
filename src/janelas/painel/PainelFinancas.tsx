@@ -6,8 +6,9 @@ import { CabecalhoPainel } from "./Cabecalho.tsx";
 /**
  * O painel Finanças (PainelFinancas.dc.html). Por enquanto, o vazio e o alvo de soltar: o extrato
  * ou comprovante solto aqui, ou escolhido no diálogo, vira a autorização de uso único (ADR-0044).
+ * Cada abertura do painel começa limpa: o arquivo recebido da vez anterior não fica na tela.
  */
-export function PainelFinancas() {
+export function PainelFinancas({ abertura }: { abertura: number }) {
   const { nome, icone, vazio } = DADOS_AREAS.financas;
   return (
     <>
@@ -20,7 +21,7 @@ export function PainelFinancas() {
           <h2 className="painel-vazio-titulo">{vazio.titulo}</h2>
           <p className="painel-vazio-texto">{vazio.texto}</p>
         </div>
-        <AlvoDeArquivo compacto />
+        <AlvoDeArquivo key={abertura} compacto />
       </div>
     </>
   );
