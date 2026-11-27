@@ -24,6 +24,21 @@ export function dividirEmParcelas(totalCentavos: number, parcelas: number): numb
 }
 
 /**
+ * `valor × parte ÷ todo` arredondado meio-para-cima, uma vez, no inteiro (ADR-0046): o previsto da
+ * semana (o limite do mês × dias da semana no mês ÷ dias do mês) e o percentual (gasto × 100 ÷
+ * limite). Em `BigInt`, para o produto não perder precisão. Só valores sem sinal.
+ */
+export function proporcional(valor: number, parte: number, todo: number): number {
+  for (const n of [valor, parte, todo]) {
+    if (!Number.isSafeInteger(n) || n < 0) throw new ErroDeValor(`Valor inválido para proporção: ${n}`);
+  }
+  if (todo === 0) throw new ErroDeValor("proporção sobre zero");
+  const dobro = 2n * BigInt(valor) * BigInt(parte);
+  const divisor = 2n * BigInt(todo);
+  return Number((dobro + BigInt(todo)) / divisor);
+}
+
+/**
  * Os juros de um mês sobre um saldo sem sinal, com a taxa em pontos-base (2,1% ao mês é 210),
  * arredondados meio-para-cima no centavo (ADR-0046). Em `BigInt`: saldo grande vezes a taxa passa
  * do inteiro seguro antes da divisão. R$ 6.400,00 a 2,1% dá R$ 134,40.

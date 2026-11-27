@@ -1,5 +1,27 @@
 import { describe, expect, test } from "vitest";
-import { dividirEmParcelas, ErroDeValor, jurosDoMes } from "./dinheiro.ts";
+import { dividirEmParcelas, ErroDeValor, jurosDoMes, proporcional } from "./dinheiro.ts";
+
+describe("proporcional", () => {
+  test("arredonda meio-para-cima uma vez, no inteiro", () => {
+    // R$ 100,02 × 7 ÷ 28 = 2500,5 centavos → 2501; R$ 100,01 × 7 ÷ 28 = 2500,25 → 2500.
+    expect(proporcional(10_002, 7, 28)).toBe(2501);
+    expect(proporcional(10_001, 7, 28)).toBe(2500);
+    expect(proporcional(240_000, 7, 28)).toBe(60_000);
+    // Percentual: R$ 1.280 de R$ 1.200 dá 106,67% → 107.
+    expect(proporcional(128_000, 100, 120_000)).toBe(107);
+    expect(proporcional(0, 7, 31)).toBe(0);
+  });
+
+  test("não perde precisão perto do maior inteiro seguro", () => {
+    expect(proporcional(Number.MAX_SAFE_INTEGER, 31, 31)).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  test("recusa negativo, fração e divisão por zero", () => {
+    expect(() => proporcional(-1, 7, 28)).toThrow(ErroDeValor);
+    expect(() => proporcional(1.5, 7, 28)).toThrow(ErroDeValor);
+    expect(() => proporcional(100, 7, 0)).toThrow(ErroDeValor);
+  });
+});
 
 describe("juros do mês", () => {
   test("R$ 6.400,00 a 2,1% dá R$ 134,40; sem juros, zero", () => {
