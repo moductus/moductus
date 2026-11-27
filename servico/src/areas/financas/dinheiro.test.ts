@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { dividirEmParcelas, ErroDeValor, proporcional } from "./dinheiro.ts";
+import { dividirEmParcelas, ErroDeValor, jurosDoMes, proporcional } from "./dinheiro.ts";
 
 describe("proporcional", () => {
   test("arredonda meio-para-cima uma vez, no inteiro", () => {
@@ -20,6 +20,35 @@ describe("proporcional", () => {
     expect(() => proporcional(-1, 7, 28)).toThrow(ErroDeValor);
     expect(() => proporcional(1.5, 7, 28)).toThrow(ErroDeValor);
     expect(() => proporcional(100, 7, 0)).toThrow(ErroDeValor);
+  });
+});
+
+describe("juros do mês", () => {
+  test("R$ 6.400,00 a 2,1% dá R$ 134,40; sem juros, zero", () => {
+    expect(jurosDoMes(640_000, 210)).toBe(13_440);
+    expect(jurosDoMes(640_000, 0)).toBe(0);
+    expect(jurosDoMes(0, 210)).toBe(0);
+  });
+
+  test("arredonda meio-para-cima no centavo, uma vez", () => {
+    // 1,49% de R$ 1.138,27 = 16,960223 → 16,96; de R$ 100,00 a 0,5% = 0,50 exato.
+    expect(jurosDoMes(113_827, 149)).toBe(1696);
+    expect(jurosDoMes(10_000, 50)).toBe(50);
+    // 1% de 50 centavos = 0,5 centavo → 1; de 49 centavos = 0,49 → 0.
+    expect(jurosDoMes(50, 100)).toBe(1);
+    expect(jurosDoMes(49, 100)).toBe(0);
+  });
+
+  test("não perde precisão com saldo perto do maior inteiro seguro", () => {
+    // 9.007.199.254.740.991 × 1 bp ÷ 10.000 = 900.719.925.474,0991 → 900.719.925.474.
+    expect(jurosDoMes(Number.MAX_SAFE_INTEGER, 1)).toBe(900_719_925_474);
+  });
+
+  test("recusa saldo negativo, taxa negativa e valor que não é inteiro", () => {
+    expect(() => jurosDoMes(-1, 210)).toThrow(ErroDeValor);
+    expect(() => jurosDoMes(100, -1)).toThrow(ErroDeValor);
+    expect(() => jurosDoMes(10.5, 210)).toThrow(ErroDeValor);
+    expect(() => jurosDoMes(100, 2.1)).toThrow(ErroDeValor);
   });
 });
 

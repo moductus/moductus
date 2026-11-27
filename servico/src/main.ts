@@ -38,6 +38,8 @@ import { atendentesDasCategorias } from "./areas/financas/canal-categorias.ts";
 import { RepositorioCategorias, ServicoCategorias } from "./areas/financas/categorias.ts";
 import { atendentesDasContas } from "./areas/financas/canal.ts";
 import { RepositorioContas, ServicoContas } from "./areas/financas/contas.ts";
+import { atendentesDasDividas } from "./areas/financas/canal-dividas.ts";
+import { RepositorioDividas, ServicoDividas } from "./areas/financas/dividas.ts";
 import { atendentesDosLancamentos } from "./areas/financas/canal-lancamentos.ts";
 import { RepositorioLancamentos, ServicoLancamentos } from "./areas/financas/lancamentos.ts";
 import { atendentesDoOrcamento } from "./areas/financas/canal-orcamento.ts";
@@ -503,6 +505,12 @@ const orcamento = new ServicoOrcamento(
   { lancamentos, lerFuso: () => repositorioConfig.ler().dia.fuso },
   { mudou: (mudanca) => servidor?.emitir("financas.mudou", mudanca) },
 );
+// Dívidas (F4-13): custo total pela amortização, pagamento ligado a lançamento e simulação na hora.
+const dividas = new ServicoDividas(
+  new RepositorioDividas(banco),
+  { lancamentos, lerFuso: () => repositorioConfig.ler().dia.fuso },
+  { mudou: (mudanca) => servidor?.emitir("financas.mudou", mudanca) },
+);
 // As ferramentas da Alba sobre as áreas do dia (F3-26); o `tarefas.criar` vale também para o Nuno.
 catalogo.registrar(
   ...ferramentasTarefas(tarefas, tempoDoDia),
@@ -716,6 +724,7 @@ servidor = await abrirServidorWs(token, {
   ...atendentesDasContas(contas),
   ...atendentesDosLancamentos(lancamentos),
   ...atendentesDoOrcamento(orcamento),
+  ...atendentesDasDividas(dividas),
   ...atendentesDosArquivos(autorizacoesDeArquivo),
   // O dinheiro (F4-07): o contrato já tem os métodos e o serviço responde que ainda não estão
   // disponíveis. Cada tarefa que implementa uma área (F4-08 a F4-15, F4-19, F4-20) tira os dela daqui.
@@ -730,14 +739,6 @@ servidor = await abrirServidorWs(token, {
     "financas.relatorio",
     "financas.gastoCom",
     "financas.vencimentos",
-    "dividas.listar",
-    "dividas.obter",
-    "dividas.criar",
-    "dividas.definir",
-    "dividas.apagar",
-    "dividas.registrarPagamento",
-    "dividas.quitar",
-    "dividas.simular",
     "planos.listar",
     "planos.obter",
     "planos.criar",
