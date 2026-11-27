@@ -362,3 +362,25 @@ describe("pausar pela bandeja", () => {
     expect(item(menu(), "Tula")).toMatchObject({ rotulo: "Tula: desligado", habilitado: false });
   });
 });
+
+describe("modo privacidade pela bandeja", () => {
+  test("se ligar falha, o menu volta à casca com a marca de antes, mesmo sem mudar", async () => {
+    const linhas: string[] = [];
+    const canal = new CanalCasca({ write: (linha) => linhas.push(linha) });
+    const bandeja = ligarBandeja({
+      agentes: { listar: () => [], pausar: () => undefined, retomar: () => undefined },
+      canal,
+      privacidade: { ativo: () => false, alternar: () => Promise.reject(new Error("banco fechado")) },
+    });
+    bandeja.atualizar();
+    expect(linhas).toHaveLength(1);
+    const erros = vi.spyOn(console, "error").mockImplementation(() => {});
+    canal.receber(JSON.stringify({ tipo: CLIQUE_NA_BANDEJA, item: "privacidade" }));
+    await vi.waitFor(() => expect(linhas).toHaveLength(2));
+    expect(erros).toHaveBeenCalledWith(expect.stringContaining("bandeja: modo privacidade falhou"));
+    erros.mockRestore();
+    // O Windows já tinha trocado a marca no clique; a casca redesenha com a do serviço.
+    expect(linhas[1]).toBe(linhas[0]);
+    expect(item(JSON.parse(linhas[1]!) as MenuBandeja, "Modo privacidade")).toMatchObject({ marcado: false });
+  });
+});

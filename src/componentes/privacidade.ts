@@ -8,3 +8,11 @@ import { createContext, useContext } from "react";
 export const PrivacidadeContexto = createContext(false);
 
 export const usePrivacidade = () => useContext(PrivacidadeContexto);
+
+/**
+ * O atalho que liga e desliga o modo, como está na configuração ("Ctrl+Alt+H"; vazio é sem atalho),
+ * para o selo do dock dizer a tecla certa. O mesmo provedor da janela põe aqui.
+ */
+export const AtalhoPrivacidadeContexto = createContext("");
+
+export const useAtalhoPrivacidade = () => useContext(AtalhoPrivacidadeContexto);

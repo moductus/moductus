@@ -10,6 +10,11 @@ import { SecaoAtalhos } from "./Atalhos.tsx";
 import { SecaoPrivacidade } from "./Privacidade.tsx";
 import { SecaoOutroPc } from "./OutroPc.tsx";
 
+/** O que toda seção recebe: ir para outra seção (o "mudar em Atalhos" da Privacidade). */
+export interface PropsSecao {
+  aoEscolherSecao: (secao: string) => void;
+}
+
 /** As 10 seções de Configurações, na ordem da sub-navegação (design, seção E). */
 export const SECOES = [
   { id: "geral", nome: "Geral", Componente: SecaoGeral },
@@ -22,7 +27,7 @@ export const SECOES = [
   { id: "atalhos", nome: "Atalhos", Componente: SecaoAtalhos },
   { id: "privacidade", nome: "Privacidade", Componente: SecaoPrivacidade },
   { id: "outro-pc", nome: "Levar para outro PC", Componente: SecaoOutroPc },
-] as const satisfies readonly { id: string; nome: string; Componente: ComponentType }[];
+] as const satisfies readonly { id: string; nome: string; Componente: ComponentType<PropsSecao> }[];
 
 export type IdSecao = (typeof SECOES)[number]["id"];
 export const SECAO_INICIAL: IdSecao = "geral";

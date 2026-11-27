@@ -3,7 +3,8 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Icone } from "../../componentes/Icone.tsx";
 import { Marca } from "../../componentes/Marca.tsx";
-import { usePrivacidade } from "../../componentes/privacidade.ts";
+import { teclasDoAtalho } from "../../componentes/Atalho.tsx";
+import { useAtalhoPrivacidade, usePrivacidade } from "../../componentes/privacidade.ts";
 import { AGENTES, DADOS_AGENTES } from "../../componentes/personagem/agentes.ts";
 import { Personagem } from "../../componentes/personagem/Personagem.tsx";
 import { formatarHora } from "../../componentes/personagem/quando.ts";
@@ -90,6 +91,28 @@ export function Dock() {
   const { parada } = useTour();
   // O modo privacidade vem do provedor da janela (janelas/ComTema.tsx), o mesmo que mascara os valores.
   const privacidade = usePrivacidade();
+  // O rótulo do selo diz a tecla que está na configuração; sem atalho, só o estado.
+  const teclasPrivacidade = teclasDoAtalho(useAtalhoPrivacidade()).join(" ");
+  const rotuloSelo = teclasPrivacidade
+    ? `Modo privacidade ligado. ${teclasPrivacidade} desliga`
+    : "Modo privacidade ligado";
+  const tituloSelo = teclasPrivacidade
+    ? `Modo privacidade ligado · ${teclasPrivacidade}`
+    : "Modo privacidade ligado";
+
+  /**
+   * O selo some ao desligar: se o foco estava nele (modo teclado), vai para o botão de antes, para
+   * as setas e o Esc continuarem no dock.
+   */
+  const desligarPrivacidade = (selo: HTMLButtonElement) => {
+    if (document.activeElement === selo) {
+      const botoes = Array.from(
+        nav.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [],
+      );
+      botoes[botoes.indexOf(selo) - 1]?.focus();
+    }
+    void definirPrivacidade(false).catch(() => undefined);
+  };
 
   // A casca avisa que o dock ganhou o foco pelo atalho: o teclado começa na primeira área.
   useEffect(() => {
@@ -270,9 +293,9 @@ export function Dock() {
           type="button"
           className="dock-botao dock-privacidade"
           data-privacidade=""
-          aria-label="Modo privacidade ligado. Ctrl Alt H desliga"
-          title="Modo privacidade ligado · Ctrl Alt H"
-          onClick={() => void definirPrivacidade(false).catch(() => undefined)}
+          aria-label={rotuloSelo}
+          title={tituloSelo}
+          onClick={(e) => desligarPrivacidade(e.currentTarget)}
         >
           <Icone nome="esconder" tamanho={18} />
         </button>

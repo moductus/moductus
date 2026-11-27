@@ -69,8 +69,12 @@ export interface AvisosDoWindows {
   telaCheia(): Promise<boolean>;
 }
 
-/** Um valor em dinheiro escrito no texto: símbolo, sinal opcional e o número com milhar e centavos. */
-const VALOR_NO_TEXTO = /(R\$|US\$|€|£)\s?[-−]?\d+(?:\.\d{3})*(?:,\d+)?/g;
+/**
+ * Um valor em dinheiro escrito no texto: o símbolo (com "$" como R$, US$ e CA$, ou ¥, €, £) ou o
+ * código ISO de 3 letras (CHF), espaços, sinal opcional e o número, com milhar e decimal por ponto
+ * ou vírgula. O número termina num dígito: o ponto final da frase fica.
+ */
+const VALOR_NO_TEXTO = /([A-Z]{0,3}\$|[¥€£]|\b[A-Z]{3}\b)\s*[-−+]?\d(?:[\d.,]*\d)?/g;
 
 /** O texto com cada valor em dinheiro trocado por "R$ •••", como a tela mostra no modo privacidade. */
 export function esconderValores(texto: string): string {
@@ -580,7 +584,8 @@ export class ServicoNotificacoes {
           { titulo: n.titulo, corpo: n.corpo, ...(semValor ? { semValor } : {}) },
           privacidade,
         ),
-        botoes,
+        // O rótulo do botão também pode levar valor ("Remanejar R$ 150,00").
+        botoes: privacidade ? botoes.map((b) => ({ ...b, rotulo: esconderValores(b.rotulo) })) : botoes,
         ...(semPainelDoTime ? { semPainelDoTime } : {}),
       });
       // Resolvido durante o `mostrar`: o `retirar` do `resolvido` pode ter chegado antes do aviso.

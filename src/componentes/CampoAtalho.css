@@ -31,3 +31,7 @@
 .campo-atalho-espera {
   color: var(--texto-2);
 }
+
+.campo-atalho-vazio {
+  color: var(--texto-3);
+}

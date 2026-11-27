@@ -30,6 +30,7 @@
   .seletor-opcao[aria-checked="true"],
   .dock-botao[data-ativo],
   .dock-controle[aria-pressed="true"],
+  .dock .dock-privacidade,
   .uso-passo[data-estado="atual"] .uso-passo-marca,
   .contagem,
   .botao--primario:not(:disabled),

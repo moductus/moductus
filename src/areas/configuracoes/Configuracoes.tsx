@@ -24,7 +24,11 @@ export function Configuracoes({ secao, aoEscolherSecao }: PropsConfiguracoes) {
           aoEscolher={aoEscolherSecao}
         />
         <div className="config-conteudo">
-          <Componente />
+          <Componente
+            aoEscolherSecao={(id) => {
+              if (eIdSecao(id)) aoEscolherSecao(id);
+            }}
+          />
         </div>
       </div>
     </Pagina>

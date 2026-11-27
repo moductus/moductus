@@ -847,4 +847,30 @@ describe("modo privacidade nos avisos do Windows", () => {
     expect(esconderValores("R$1.000.000,00.")).toBe("R$ •••.");
     expect(esconderValores("2 tarefas para hoje")).toBe("2 tarefas para hoje");
   });
+
+  test.each([
+    ["decimal com ponto", "Sobram US$ 12.50 e R$ 45.90.", "Sobram US$ ••• e R$ •••."],
+    ["milhar com vírgula", "Total US$ 1,234.56", "Total US$ •••"],
+    ["outro símbolo com $", "Assinatura CA$ 45,00 e A$ 9", "Assinatura CA$ ••• e A$ •••"],
+    ["iene, euro e libra", "¥ 5.000, € 12,30 e £7", "¥ •••, € ••• e £ •••"],
+    ["código ISO", "Fatura de CHF 120,00 e BRL -45", "Fatura de CHF ••• e BRL •••"],
+    ["vários espaços e sinal", "Saída de R$   -1.312,40 hoje", "Saída de R$ ••• hoje"],
+  ])("esconder valores: %s", (_caso, texto, esperado) => {
+    expect(esconderValores(texto)).toBe(esperado);
+  });
+
+  test("ligado, o rótulo do botão do aviso também sai sem o valor", async () => {
+    const { servico, casca } = montar({ privacidade: () => true });
+    await servico.avisar({
+      ...fatura(),
+      botoes: [
+        { id: "remanejar", rotulo: "Remanejar R$ 150,00" },
+        { id: "deixar", rotulo: "Deixar assim" },
+      ],
+    });
+    expect(casca.mostrados[0]!.botoes).toEqual([
+      { id: "remanejar", rotulo: "Remanejar R$ •••" },
+      { id: "deixar", rotulo: "Deixar assim" },
+    ]);
+  });
 });

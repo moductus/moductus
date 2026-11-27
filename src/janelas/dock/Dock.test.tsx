@@ -57,7 +57,7 @@ vi.mock("../../servico/privacidade.ts", () => ({
 }));
 
 const { Dock, CONVITE_AGENTES } = await import("./Dock.tsx");
-const { PrivacidadeContexto } = await import("../../componentes/privacidade.ts");
+const { AtalhoPrivacidadeContexto, PrivacidadeContexto } = await import("../../componentes/privacidade.ts");
 const { Painel } = await import("../painel/Painel.tsx");
 const { formatarHora } = await import("../../componentes/personagem/quando.ts");
 const { proximoIndice } = await import("./navegacao.ts");
@@ -148,12 +148,17 @@ describe("Dock", () => {
     expect(rotulos(nav).every((r) => r && r.length > 0)).toBe(true);
   });
 
-  it("com o modo privacidade, o selo aparece acima do relógio e clicar nele desliga", async () => {
-    const el = await montar(
-      <PrivacidadeContexto value>
+  /** O dock como o ComTema monta, com o modo ligado e o atalho da configuração. */
+  const comPrivacidade = (atalho: string) => (
+    <PrivacidadeContexto value>
+      <AtalhoPrivacidadeContexto value={atalho}>
         <Dock />
-      </PrivacidadeContexto>,
-    );
+      </AtalhoPrivacidadeContexto>
+    </PrivacidadeContexto>
+  );
+
+  it("com o modo privacidade, o selo aparece acima do relógio e clicar nele desliga", async () => {
+    const el = await montar(comPrivacidade("Ctrl+Alt+H"));
     const nav = el.querySelector("nav")!;
     expect(rotulos(nav).slice(-2)).toEqual([
       "Manter acordado",
@@ -163,6 +168,28 @@ describe("Dock", () => {
     expect(selo.nextElementSibling?.className).toBe("dock-relogio");
     await act(async () => selo.click());
     expect(privacidade.definir).toEqual([false]);
+  });
+
+  it("o selo diz o atalho que está configurado e, sem atalho, só o estado", async () => {
+    const el = await montar(comPrivacidade("Ctrl+Shift+H"));
+    const selo = el.querySelector("[data-privacidade]")!;
+    expect(selo.getAttribute("aria-label")).toBe("Modo privacidade ligado. Ctrl Shift H desliga");
+    expect(selo.getAttribute("title")).toBe("Modo privacidade ligado · Ctrl Shift H");
+    act(() => raiz?.unmount());
+    recipiente.remove();
+    const semAtalho = await montar(comPrivacidade(""));
+    const vazio = semAtalho.querySelector("[data-privacidade]")!;
+    expect(vazio.getAttribute("aria-label")).toBe("Modo privacidade ligado");
+    expect(vazio.getAttribute("title")).toBe("Modo privacidade ligado");
+  });
+
+  it("desligar pelo selo no teclado leva o foco ao botão de antes, dentro do dock", async () => {
+    const el = await montar(comPrivacidade("Ctrl+Alt+H"));
+    const selo = el.querySelector<HTMLButtonElement>("[data-privacidade]")!;
+    selo.focus();
+    await act(async () => selo.click());
+    expect(privacidade.definir).toEqual([false]);
+    expect(focado()).toBe("Manter acordado");
   });
 
   it("sem o modo privacidade, o selo não aparece", async () => {

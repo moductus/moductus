@@ -64,7 +64,7 @@ export function CampoAtalho({ rotulo, valor, aoCapturar, desativado }: PropsCamp
       aria-label={
         gravando
           ? `${rotulo}: pressione a nova combinação, Esc cancela`
-          : `${rotulo}: ${textoDoAtalho(valor)}. Enter para trocar`
+          : `${rotulo}: ${valor === "" ? "sem atalho" : textoDoAtalho(valor)}. Enter para trocar`
       }
       disabled={desativado}
       onClick={() => setGravando(true)}
@@ -73,6 +73,9 @@ export function CampoAtalho({ rotulo, valor, aoCapturar, desativado }: PropsCamp
     >
       {gravando ? (
         <span className="campo-atalho-espera">Pressione a combinação…</span>
+      ) : valor === "" ? (
+        // Ação sem atalho (o padrão colidia com outro): diz isso, como em O dia, em vez do chip vazio.
+        <span className="campo-atalho-vazio">sem atalho</span>
       ) : (
         <Atalho teclas={textoDoAtalho(valor)} />
       )}

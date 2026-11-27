@@ -222,9 +222,12 @@ export function ligarBandeja(deps: DependenciasBandeja): { atualizar(): void } {
     const acao = lerClique(aviso.item);
     if (!acao) return;
     if (acao.acao === "privacidade") {
-      // Quem refaz o menu é a mudança do modo, que avisa `atualizar` quando grava.
+      // Quem refaz o menu é a mudança do modo, que avisa `atualizar` quando grava. Se falhar, o
+      // Windows já trocou a marca no clique: o menu volta à casca mesmo sem mudar no serviço.
       deps.privacidade?.alternar().catch((erro: unknown) => {
         console.error(`bandeja: modo privacidade falhou: ${String(erro)}`);
+        ultimo = "";
+        atualizar();
       });
       return;
     }

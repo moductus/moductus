@@ -9,6 +9,7 @@ import { SecaoAtalhos } from "./Atalhos.tsx";
 import { SecaoGeral } from "./Geral.tsx";
 import { SecaoOutroPc } from "./OutroPc.tsx";
 import { SecaoPrivacidade } from "./Privacidade.tsx";
+import { PrivacidadeContexto } from "../../componentes/privacidade.ts";
 import { SecaoTemaDock } from "./TemaDock.tsx";
 
 // O serviço é falso: cada pedido fica registrado e a resposta vem de `responder`.
@@ -227,7 +228,9 @@ describe("Atalhos", () => {
     );
     await montar(<SecaoAtalhos />);
     const linha = todos(".config-atalho")[3]!;
-    expect(linha.querySelector('button[aria-label^="Modo privacidade"]')).not.toBeNull();
+    const campo = linha.querySelector<HTMLElement>(".campo-atalho")!;
+    expect(campo.getAttribute("aria-label")).toBe("Modo privacidade: sem atalho. Enter para trocar");
+    expect(campo.textContent).toBe("sem atalho");
     expect(linha.querySelector('[role="alert"]')!.textContent).toBe(motivo);
   });
 
@@ -272,13 +275,33 @@ describe("Privacidade", () => {
     expect(por(".config-privacidade-linha .atalho").textContent).toBe("CtrlShiftH");
   });
 
-  it("o como fica mostra o antes inteiro e o depois mascarado, com o modo desligado", async () => {
+  it("o como fica mostra o antes inteiro e o depois mascarado, com o modo desligado ou ligado", async () => {
+    for (const ligado of [false, true]) {
+      servicoQueAceita();
+      await montar(
+        <PrivacidadeContexto value={ligado}>
+          <SecaoPrivacidade />
+        </PrivacidadeContexto>,
+      );
+      const exemplos = por(".config-privacidade-exemplos");
+      expect([...exemplos.querySelectorAll("[data-mascarado]")]).toHaveLength(3);
+      expect(exemplos.textContent).toContain("R$ 1.312,40");
+      expect(exemplos.textContent).toContain("Mercado do bairro");
+      expect(exemplos.textContent).toContain("Casa › Mercado→Casa › Mercado");
+      act(() => raiz?.unmount());
+      recipiente.remove();
+    }
+    raiz = null;
+  });
+
+  it("o estado vem antes da chave, e mudar em Atalhos leva à seção Atalhos", async () => {
     servicoQueAceita();
-    await montar(<SecaoPrivacidade />);
-    const exemplos = por(".config-privacidade-exemplos");
-    expect([...exemplos.querySelectorAll("[data-mascarado]")]).toHaveLength(3);
-    expect(exemplos.textContent).toContain("R$ 1.312,40");
-    expect(exemplos.textContent).toContain("Casa › Mercado→Casa › Mercado");
+    const escolher = vi.fn();
+    await montar(<SecaoPrivacidade aoEscolherSecao={escolher} />);
+    const chave = por('[role="switch"][aria-label="Modo privacidade"]');
+    expect(chave.previousElementSibling!.textContent).toBe("desligado");
+    await clicar(botao("mudar em Atalhos"));
+    expect(escolher).toHaveBeenCalledWith("atalhos");
   });
 });
 

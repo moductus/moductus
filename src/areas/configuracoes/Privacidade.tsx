@@ -8,6 +8,7 @@ import { TextoSensivel } from "../../componentes/TextoSensivel.tsx";
 import { Valor } from "../../componentes/Valor.tsx";
 import { Aviso, Carregando } from "./Partes.tsx";
 import { Secao } from "./Secao.tsx";
+import type { PropsSecao } from "./secoes.ts";
 import { useConfig } from "./useConfig.ts";
 
 const INTRO = "O que a tela mostra quando outras pessoas podem ver, e onde ficam os seus dados.";
@@ -58,7 +59,7 @@ function ComoFica() {
  * textos sensíveis no dock, nos painéis e no Sistema, o aviso do Windows sem o valor, o que vai para
  * o modelo e onde ficam os dados. A chave grava pelo serviço, que avisa todas as janelas.
  */
-export function SecaoPrivacidade() {
+export function SecaoPrivacidade({ aoEscolherSecao }: Partial<PropsSecao>) {
   const { estado, conectado, erro, definir } = useConfig();
   if (!estado) {
     return (
@@ -76,14 +77,16 @@ export function SecaoPrivacidade() {
         <Cartao como="section" aria-label="Modo privacidade" className="config-privacidade-cartao">
           <div className="config-privacidade-cabeca">
             <h3 className="config-cartao-titulo">Modo privacidade</h3>
-            <Interruptor
-              aria-label="Modo privacidade"
-              ligado={ligado}
-              desativado={!conectado}
-              aoMudar={(ativo) => void definir({ privacidade: { ativo } })}
-            >
-              {ligado ? "ligado" : "desligado"}
-            </Interruptor>
+            {/* O estado em texto à esquerda da chave, como no quadro e em O dia. */}
+            <span className="config-privacidade-ligado">
+              <span aria-hidden="true">{ligado ? "ligado" : "desligado"}</span>
+              <Interruptor
+                aria-label="Modo privacidade"
+                ligado={ligado}
+                desativado={!conectado}
+                aoMudar={(ativo) => void definir({ privacidade: { ativo } })}
+              />
+            </span>
           </div>
           <p className="config-privacidade-texto">
             Esconde valores em dinheiro, descrições de lançamento e nomes de conta no dock, nos painéis e no
@@ -93,7 +96,14 @@ export function SecaoPrivacidade() {
           <dl className="config-privacidade-linhas">
             <Linha rotulo="Atalho">
               {atalho ? <Atalho teclas={atalho} /> : "sem atalho"}
-              <span className="config-privacidade-rotulo">mudar em Atalhos</span>
+              <button
+                type="button"
+                className="config-privacidade-link"
+                disabled={!aoEscolherSecao}
+                onClick={() => aoEscolherSecao?.("atalhos")}
+              >
+                mudar em Atalhos
+              </button>
             </Linha>
             <Linha rotulo="Pela bandeja">botão direito no ícone, &quot;Modo privacidade&quot;</Linha>
             <Linha rotulo="Depois de reiniciar">continua ligado até você desligar</Linha>

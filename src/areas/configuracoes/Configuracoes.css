@@ -508,6 +508,26 @@
   color: var(--texto-2);
 }
 
+/* "mudar em Atalhos": link de texto miúdo, como os dos quadros. */
+.config-privacidade-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--texto-3);
+  font: inherit;
+  font-size: var(--tipo-12);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.config-privacidade-link:hover:not(:disabled) {
+  color: var(--texto);
+}
+
+.config-privacidade-link:disabled {
+  cursor: default;
+}
+
 .config-privacidade-seta {
   color: var(--texto-3);
 }
@@ -1429,7 +1449,8 @@
 }
 
 .config-dia-ligado,
-.config-dia-atalho {
+.config-dia-atalho,
+.config-privacidade-ligado {
   display: inline-flex;
   align-items: center;
   gap: var(--esp-8);
