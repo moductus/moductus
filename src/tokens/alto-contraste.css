@@ -152,3 +152,9 @@
     background: Highlight;
   }
 }
+
+@media (forced-colors: active) {
+  .config-dia-semana-dia[aria-pressed="true"] {
+    border-color: Highlight;
+  }
+}
