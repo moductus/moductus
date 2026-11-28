@@ -28,6 +28,7 @@
   /* ---------- selecionado, ativo, marcado: Highlight com HighlightText ---------- */
   .navegacao-item[aria-current="page"],
   .seletor-opcao[aria-checked="true"],
+  .config-dia-semana-dia[aria-pressed="true"],
   .dock-botao[data-ativo],
   .dock-controle[aria-pressed="true"],
   .dock .dock-privacidade,

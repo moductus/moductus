@@ -167,6 +167,7 @@ export function DetalheTarefa({
         />
         <ListaSuspensa
           rotulo="Lembrete"
+          className="tarefas-detalhe-lembrete"
           valor={tarefa.lembreteMinutosAntes === null ? "" : String(tarefa.lembreteMinutosAntes)}
           opcoes={opcoesLembrete(tarefa.lembreteMinutosAntes, tarefa.hora)}
           desativada={tarefa.hora === null}

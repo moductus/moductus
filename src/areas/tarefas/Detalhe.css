@@ -144,10 +144,25 @@
   resize: vertical;
 }
 
+/* Dois campos por linha, como no quadro. Em linha que quebra, o campo que sobra ocupa a largura. */
 .tarefas-detalhe-grade {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--esp-10) var(--esp-12);
+}
+
+.tarefas-detalhe-grade > * {
+  flex: 1 1 calc(50% - var(--esp-12));
+}
+
+/* O lembrete diz a hora em que toca ("15 min antes · 16:45"): não encolhe abaixo da opção mais
+   longa. Com o detalhe estreito, desce para uma linha inteira em vez de cortar o valor. */
+.tarefas-detalhe-campo.tarefas-detalhe-lembrete {
+  min-width: min-content;
+}
+
+.tarefas-detalhe-lembrete select {
+  min-width: max-content;
 }
 
 /* ---------- Título e origem ---------- */

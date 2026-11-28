@@ -184,6 +184,52 @@ describe("Configurações › O dia", () => {
     expect(dia("domingo").getAttribute("aria-pressed")).toBe("false");
   });
 
+  it("no alto contraste do Windows, o dia ligado ganha o Highlight e o desligado não", async () => {
+    const aparelho = (window as unknown as { happyDOM: { settings: { device: { forcedColors: string } } } })
+      .happyDOM.settings.device;
+    const altoContraste = readFileSync("src/tokens/alto-contraste.css", "utf8");
+    const estilo = document.createElement("style");
+    estilo.textContent = [
+      readFileSync("src/tokens/temas.css", "utf8"),
+      readFileSync("src/areas/configuracoes/Configuracoes.css", "utf8"),
+      altoContraste,
+    ].join("\n");
+    document.head.appendChild(estilo);
+    aparelho.forcedColors = "active";
+    try {
+      expect(matchMedia("(forced-colors: active)").matches).toBe(true);
+      servicoQueAceita(rotinasPadrao(DIAS_DE_FABRICA));
+      await montar();
+      const ligado = dia("segunda");
+      const desligado = dia("sábado");
+      // O happy-dom aplica o @media (forced-colors) mas descarta as cores do sistema: o
+      // forced-color-adjust mostra que a regra pega o dia; o seletor dela, que ela pinta de Highlight.
+      expect(getComputedStyle(ligado).getPropertyValue("forced-color-adjust")).toBe("none");
+      expect(getComputedStyle(desligado).getPropertyValue("forced-color-adjust")).not.toBe("none");
+      const realce = [...altoContraste.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+        .filter(
+          ([, , corpo]) => /background: Highlight;/.test(corpo!) && /color: HighlightText;/.test(corpo!),
+        )
+        .flatMap(([, seletores]) =>
+          seletores!.split(",").map((s) => s.replace(/\/\*[\s\S]*?\*\//g, "").trim()),
+        );
+      // Seletor que o happy-dom não entende (:has, :hover) não é o do dia.
+      const casa = (b: HTMLElement, seletor: string) => {
+        try {
+          return b.matches(seletor);
+        } catch {
+          return false;
+        }
+      };
+      const pintado = (b: HTMLElement) => realce.some((seletor) => casa(b, seletor));
+      expect(pintado(ligado)).toBe(true);
+      expect(pintado(desligado)).toBe(false);
+    } finally {
+      aparelho.forcedColors = "none";
+      estilo.remove();
+    }
+  });
+
   it("os campos de hora têm largura em ch da fonte mono, com folga para 00:00, e sem o relógio", async () => {
     const estilo = document.createElement("style");
     // Lidos do disco: o vitest não entrega o CSS importado. Caminhos relativos à raiz do repo.
