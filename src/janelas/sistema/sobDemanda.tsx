@@ -13,19 +13,28 @@ export interface SobDemanda<P> {
  * chamada a `carregar()` tenta de novo.
  */
 export function sobDemanda<P extends object>(importar: () => Promise<ComponentType<P>>): SobDemanda<P> {
-  let pronto: ComponentType<P> | null = null;
   let pedido: Promise<ComponentType<P>> | null = null;
-  const carregar = () =>
-    (pedido ??= importar().then(
-      (componente) => (pronto = componente),
-      (erro: unknown) => {
-        pedido = null;
-        throw erro;
-      },
-    ));
+  const carregar = () => {
+    if (!pedido) {
+      const novo = importar().then(
+        (componente) => {
+          // Marcado como cumprido, o `use` lê o componente na hora, sem suspender de novo.
+          Object.assign(novo, { status: "fulfilled", value: componente });
+          return componente;
+        },
+        (erro: unknown) => {
+          pedido = null;
+          throw erro;
+        },
+      );
+      pedido = novo;
+    }
+    return pedido;
+  };
   function Tela(props: P) {
-    // Um import que falhou chega aqui como erro: sem fronteira de erro acima, a tela cai.
-    const Componente = pronto ?? use(carregar());
+    // Sempre pelo `use`: a tela que suspendeu precisa chamá-lo de novo ao retomar, ou o React em dev
+    // acusa uso condicional. Um import que falhou chega aqui como erro: sem fronteira acima, a tela cai.
+    const Componente = use(carregar());
     return <Componente {...props} />;
   }
   return Object.assign(Tela, { carregar });

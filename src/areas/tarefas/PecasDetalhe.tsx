@@ -200,16 +200,18 @@ export function ListaSuspensa({
   opcoes,
   aoMudar,
   desativada,
+  className,
 }: {
   rotulo: string;
   valor: string;
   opcoes: readonly Opcao[];
   aoMudar: (valor: string) => void;
   desativada?: boolean;
+  className?: string;
 }) {
   const id = useId();
   return (
-    <div className="tarefas-detalhe-campo">
+    <div className={["tarefas-detalhe-campo", className].filter(Boolean).join(" ")}>
       <label htmlFor={id} className="tarefas-detalhe-rot">
         {rotulo}
       </label>

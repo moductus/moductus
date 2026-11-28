@@ -56,6 +56,36 @@ afterEach(() => {
 });
 
 describe("sobDemanda", () => {
+  // Fica em primeiro: o React em dev avisa uma vez só por módulo e não avisa na primeira suspensão.
+  it("ao retomar depois de suspender, chama use() de novo e o React não avisa de uso condicional", async () => {
+    // Fora do act, como no app: o import chega num quadro seguinte e a tela é desenhada de novo.
+    const ambiente = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    ambiente.IS_REACT_ACT_ENVIRONMENT = false;
+    const erros = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      for (const nome of ["Alba", "Tula"]) {
+        const Tela = sobDemanda(
+          () => new Promise<typeof Saudacao>((resolver) => setTimeout(() => resolver(Saudacao), 5)),
+        );
+        montar();
+        raiz!.render(
+          <Suspense fallback={<Carregando />}>
+            <Tela nome={nome} />
+          </Suspense>,
+        );
+        await vi.waitFor(() => expect(recipiente.textContent).toBe(`Olá, ${nome}`));
+        raiz!.unmount();
+        recipiente.remove();
+      }
+      const avisos = erros.mock.calls.filter((chamada) => String(chamada[0]).includes("use()"));
+      expect(avisos).toEqual([]);
+    } finally {
+      raiz = null;
+      erros.mockRestore();
+      ambiente.IS_REACT_ACT_ENVIRONMENT = true;
+    }
+  });
+
   it("só importa quando aparece, suspende enquanto baixa e depois desenha com as props", async () => {
     const { importar, pedidos } = importManual();
     const Tela = sobDemanda(importar);

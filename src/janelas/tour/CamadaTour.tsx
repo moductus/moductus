@@ -13,21 +13,46 @@ interface Retangulo {
   height: number;
 }
 
+const mesmoRetangulo = (a: Retangulo | null, b: Retangulo | null) =>
+  a === b ||
+  (a !== null &&
+    b !== null &&
+    a.left === b.left &&
+    a.top === b.top &&
+    a.width === b.width &&
+    a.height === b.height);
+
 /**
- * O retângulo do que a parada aponta, refeito quando a janela muda de tamanho. `medir` precisa ser
- * estável (função do módulo), senão a medida se refaz a cada desenho.
+ * O retângulo do que a parada aponta, refeito quando a janela muda de tamanho e quando a página
+ * muda: no painel, a parada 2 chega antes da área Hoje, e o primeiro bloco cresce quando os dados
+ * do serviço chegam. `medir` precisa ser estável (função do módulo), senão a medida se refaz a
+ * cada desenho.
  */
 function useRetangulo(medir: (() => Retangulo | null) | undefined): Retangulo | null {
   const [medido, setMedido] = useState<{ de: () => Retangulo | null; ret: Retangulo | null } | null>(null);
   useEffect(() => {
     if (!medir) return;
-    const refazer = () => setMedido({ de: medir, ret: medir() });
+    let quadro = 0;
+    const refazer = () => {
+      quadro = 0;
+      const ret = medir();
+      // A mesma medida não desenha de novo: o anel e a bolha também mudam a página.
+      setMedido((atual) =>
+        atual?.de === medir && mesmoRetangulo(atual.ret, ret) ? atual : { de: medir, ret },
+      );
+    };
     // Depois de pintar: a janela da parada acabou de aparecer e a área acabou de montar.
-    const quadro = requestAnimationFrame(refazer);
-    window.addEventListener("resize", refazer);
+    const agendar = () => {
+      if (quadro === 0) quadro = requestAnimationFrame(refazer);
+    };
+    agendar();
+    window.addEventListener("resize", agendar);
+    const mudancas = new MutationObserver(agendar);
+    mudancas.observe(document.body, { childList: true, subtree: true });
     return () => {
       cancelAnimationFrame(quadro);
-      window.removeEventListener("resize", refazer);
+      window.removeEventListener("resize", agendar);
+      mudancas.disconnect();
     };
   }, [medir]);
   // A medida de outro alvo (a parada mudou) não vale até a nova chegar.

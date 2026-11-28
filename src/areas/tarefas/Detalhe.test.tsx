@@ -1,4 +1,6 @@
 // @vitest-environment happy-dom
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
 import type { Calendario, EventoAgenda, Lista, Ocorrencia, Tarefa } from "@moductus/contrato";
 import { RecusaDoServico } from "@moductus/contrato/cliente";
 import { act } from "react";
@@ -286,6 +288,31 @@ describe("o detalhe da tarefa", () => {
     expect(todos(".tarefas-detalhe-chip").map((c) => c.textContent)).toEqual(["pr-142"]);
     expect(por(".tarefas-detalhe-salvo")?.textContent).toBe("salvo há 16 h");
     expect(auditar(recipiente)).toEqual([]);
+  });
+
+  it("o Lembrete não encolhe abaixo da opção mais longa: no detalhe estreito, desce inteiro para a linha de baixo", async () => {
+    // Lido do disco: o vitest não entrega o CSS importado. A quebra em si foi medida no Edge.
+    const estilo = document.createElement("style");
+    estilo.textContent = readFileSync("src/areas/tarefas/Detalhe.css", "utf8");
+    document.head.appendChild(estilo);
+    try {
+      responder();
+      await montar();
+      await abrirTarefa("t1");
+      const grade = getComputedStyle(por(".tarefas-detalhe-grade")!);
+      expect([grade.display, grade.flexWrap]).toEqual(["flex", "wrap"]);
+      const lembrete = campo<HTMLSelectElement>("Lembrete");
+      const caixa = lembrete.closest<HTMLElement>(".tarefas-detalhe-campo")!;
+      expect(caixa.classList.contains("tarefas-detalhe-lembrete")).toBe(true);
+      expect(getComputedStyle(caixa).minWidth).toBe("min-content");
+      expect(getComputedStyle(lembrete).minWidth).toBe("max-content");
+      // Os outros campos seguem encolhendo com a coluna (a lista corta com reticências).
+      const lista = campo<HTMLSelectElement>("Lista").closest<HTMLElement>(".tarefas-detalhe-campo")!;
+      expect(getComputedStyle(lista).minWidth).toBe("0");
+      expect(getComputedStyle(campo<HTMLSelectElement>("Lista")).minWidth).not.toBe("max-content");
+    } finally {
+      estilo.remove();
+    }
   });
 
   it("cada campo grava sozinho: título no Enter, hora ao sair, lembrete e prioridade na escolha", async () => {

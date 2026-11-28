@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { auditar } from "../../teste/acessibilidade.ts";
@@ -109,11 +109,11 @@ function JanelaDeTeste() {
 }
 const medir = () => ({ left: 0, top: 40, width: 232, height: 600 });
 
-async function montar() {
+async function montar(Janela: (props: Record<string, never>) => ReactNode = JanelaDeTeste) {
   recipiente = document.createElement("div");
   document.body.appendChild(recipiente);
   raiz = createRoot(recipiente);
-  await act(async () => raiz!.render(<JanelaDeTeste />));
+  await act(async () => raiz!.render(<Janela />));
 }
 
 async function naParada(p: 1 | 2 | 3 | 4 | null) {
@@ -212,5 +212,50 @@ describe("a camada do tour numa janela", () => {
     await teclar("Escape");
     expect(daJanela).not.toHaveBeenCalled();
     window.removeEventListener("keydown", daJanela);
+  });
+});
+
+/*
+ * Como o painel na parada 2: a parada chega antes da área Hoje (o painel ainda mostra só a bolha da
+ * parada 1), e o primeiro bloco cresce quando os dados do serviço chegam. A medida vem do alvo.
+ */
+function JanelaDoPainel({ alvo = false }: { alvo?: boolean }) {
+  const tour = useTour();
+  return (
+    <>
+      {alvo && (
+        <section className="alvo-do-tour">
+          <h2>Hoje</h2>
+        </section>
+      )}
+      <CamadaTour parada={tour.parada} ir={tour.ir} minha={2} medir={medirAlvo} lado="abaixo" />
+    </>
+  );
+}
+// Cada filho do alvo soma 40 de altura, a partir do topo 12.
+function medirAlvo() {
+  const alvo = document.querySelector(".alvo-do-tour");
+  return alvo ? { left: 0, top: 12, width: 400, height: 40 * alvo.children.length } : null;
+}
+const quadroSeguinte = () => act(async () => new Promise((r) => requestAnimationFrame(() => r(undefined))));
+
+describe("a bolha abaixo do que a parada aponta", () => {
+  it("o alvo que chega ou cresce depois da parada é medido de novo: a bolha nunca fica por cima dele", async () => {
+    await montar(JanelaDoPainel);
+    await naParada(2);
+    expect(por(".tour-anel")).toBeNull();
+
+    await act(async () => raiz!.render(<JanelaDoPainel alvo />));
+    await quadroSeguinte();
+    const anel = por(".tour-anel")!;
+    expect([anel.style.top, anel.style.height]).toEqual(["12px", "40px"]);
+    expect(por(".tour-bolha")!.style.top).toBe("52px");
+
+    await act(async () => {
+      por(".alvo-do-tour")!.append(document.createElement("div"));
+    });
+    await quadroSeguinte();
+    expect(por(".tour-anel")!.style.height).toBe("80px");
+    expect(por(".tour-bolha")!.style.top).toBe("92px");
   });
 });
